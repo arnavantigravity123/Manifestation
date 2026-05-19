@@ -890,9 +890,84 @@ function useActiveItem() {
     removeItem(activeSlot);
   } else if (item === "Thermal Camera") {
     triggerNotification("thermal camera is passively active when held.");
+  } else if (item === "Ghost Claws") {
+    if (myTeam !== 'Ghost') return;
+    let closestId = null;
+    let closestDist = 4.0;
+    Object.keys(players3D).forEach(id => {
+      const dist = camera.position.distanceTo(players3D[id].position);
+      const isHuman = players3D[id].material.color.getHex() === 0x3b82f6;
+      if (isHuman && dist < closestDist) {
+        closestDist = dist;
+        closestId = id;
+      }
+    });
+    if (closestId) {
+      socketClient.emit('capture_human', { targetId: closestId });
+      triggerNotification("Captured a survivor!");
+    } else {
+      triggerNotification("No survivor in range.");
+    }
+  } else if (item === "Scent Tracker") {
+    triggerNotification("Scent tracking active.");
+    let closestDist = 9999;
+    let closestPos = null;
+    Object.keys(players3D).forEach(id => {
+      const dist = camera.position.distanceTo(players3D[id].position);
+      const isHuman = players3D[id].material.color.getHex() === 0x3b82f6;
+      if (isHuman && dist < closestDist) {
+        closestDist = dist;
+        closestPos = players3D[id].position;
+      }
+    });
+    if (closestPos) {
+      const material = new THREE.LineBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0.8 });
+      const points = [new THREE.Vector3(camera.position.x, 0.1, camera.position.z), new THREE.Vector3(closestPos.x, 0.1, closestPos.z)];
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material);
+      scene.add(line);
+      setTimeout(() => scene.remove(line), 5000);
+    }
+    removeItem(activeSlot);
+  } else if (item === "Infiltration Clone") {
+    triggerNotification("Mimic clone active! You appear human.");
+    socketClient.emit('mimic_clone');
+    removeItem(activeSlot);
+  } else if (item === "Audio Amplifiers") {
+    triggerNotification("Audio Amplifiers engaged! Extreme speed.");
+    speedBoostTimer = 10;
+    removeItem(activeSlot);
+  } else if (item === "Vapor Leap") {
+    triggerNotification("Vapor Leap!");
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
+    camera.position.addScaledVector(forward, 12);
+    removeItem(activeSlot);
+  } else if (item === "Breaker Siphon") {
+    triggerNotification("Breaker Siphon deployed!");
+    socketClient.emit('breaker_siphon');
+    removeItem(activeSlot);
+  } else if (item === "Sound Scrambler") {
+    triggerNotification("Scrambler unleashed!");
+    socketClient.emit('sound_scramble');
+    removeItem(activeSlot);
+  } else if (item === "Chalk / UV Spray") {
+    deployChalkDecal(camera.position);
+    socketClient.emit('chalk_spray', { position: { x: camera.position.x, z: camera.position.z } });
+    removeItem(activeSlot);
   } else {
     triggerNotification(`${item} cannot be deployed yet.`);
   }
+}
+
+function deployChalkDecal(pos) {
+  const geo = new THREE.PlaneGeometry(1.5, 1.5);
+  const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.8 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.set(pos.x, 0.02, pos.z);
+  scene.add(mesh);
 }
 
 function removeItem(index) {
@@ -1119,6 +1194,56 @@ function setupSocketListeners() {
   
   socketClient.on('sound_beacon', ({ producerId, volume, position }) => {
     latestSoundBeacon = { position, time: performance.now() };
+  });
+
+  socketClient.on('human_captured', ({ targetId }) => {
+    if (targetId === myId) {
+      isCaptured = true;
+      document.exitPointerLock();
+      window.mobileGameActive = false;
+      document.getElementById('hud-overlay').style.display = 'none';
+      document.getElementById('captured-overlay').style.display = 'flex';
+      socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) was captured by a Ghost.` });
+    } else if (players3D[targetId]) {
+      scene.remove(players3D[targetId]);
+      delete players3D[targetId];
+    }
+  });
+
+  socketClient.on('ghost_mimic_clone', ({ id }) => {
+    if (players3D[id]) {
+      // Disguise the ghost as a human for 15 seconds
+      const originalMat = players3D[id].material;
+      players3D[id].material = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.2, metalness: 0.5 });
+      setTimeout(() => {
+        if (players3D[id]) players3D[id].material = originalMat;
+      }, 15000);
+    }
+  });
+
+  socketClient.on('ghost_breaker_siphon', () => {
+    if (myTeam === 'Human') {
+      if (flashLight) flashLight.intensity = 0;
+      triggerNotification("Breaker Siphon! Flashlights disabled (15s)");
+      setTimeout(() => {
+        if (flashLight && inventory.includes('Battery Pack')) flashLight.intensity = 200;
+        else if (flashLight) flashLight.intensity = 80;
+      }, 15000);
+    }
+  });
+
+  socketClient.on('ghost_sound_scramble', () => {
+    if (myTeam === 'Human') {
+      triggerNotification("Signal scrambled! Sensors offline (10s)");
+      document.body.style.filter = "invert(1) hue-rotate(180deg)";
+      setTimeout(() => {
+        document.body.style.filter = "none";
+      }, 10000);
+    }
+  });
+
+  socketClient.on('human_chalk_spray', ({ id, position }) => {
+    deployChalkDecal(position);
   });
 }
 

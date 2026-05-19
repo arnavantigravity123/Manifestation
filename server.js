@@ -305,6 +305,31 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('player_panicked', { id: socket.id });
   });
 
+  socket.on('capture_human', ({ targetId }) => {
+    console.log(`[Lobby ${socket.roomId}] Player ${targetId} captured by ${socket.id}.`);
+    socket.to(socket.roomId).emit('human_captured', { targetId, capturerId: socket.id });
+  });
+
+  socket.on('mimic_clone', () => {
+    console.log(`[Lobby ${socket.roomId}] Player ${socket.id} (Mimic) engaged Clone.`);
+    socket.to(socket.roomId).emit('ghost_mimic_clone', { id: socket.id });
+  });
+
+  socket.on('breaker_siphon', () => {
+    console.log(`[Lobby ${socket.roomId}] Player ${socket.id} (Poltergeist) used Breaker Siphon.`);
+    socket.to(socket.roomId).emit('ghost_breaker_siphon', { id: socket.id });
+  });
+
+  socket.on('sound_scramble', () => {
+    console.log(`[Lobby ${socket.roomId}] Player ${socket.id} (Banshee) used Sound Scramble.`);
+    socket.to(socket.roomId).emit('ghost_sound_scramble', { id: socket.id });
+  });
+
+  socket.on('chalk_spray', ({ position }) => {
+    console.log(`[Lobby ${socket.roomId}] Player ${socket.id} used Chalk Spray at [${position.x.toFixed(1)}, ${position.z.toFixed(1)}].`);
+    socket.to(socket.roomId).emit('human_chalk_spray', { id: socket.id, position });
+  });
+
   socket.on('sound_produced', ({ volume, position }) => {
     console.log(`[Lobby ${socket.roomId}] Microphone Audio detected (Volume: ${volume.toFixed(2)}) - Ghosts alerted to [X:${position.x.toFixed(1)}, Z:${position.z.toFixed(1)}]`);
     socket.to(socket.roomId).emit('sound_beacon', { producerId: socket.id, volume, position });
