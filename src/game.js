@@ -1193,7 +1193,7 @@ function setupSocketListeners() {
   });
   
   socketClient.on('sound_beacon', ({ producerId, volume, position }) => {
-    latestSoundBeacon = { position, time: performance.now() };
+    latestSoundBeacon = { position, volume, time: performance.now() };
   });
 
   socketClient.on('human_captured', ({ targetId }) => {
@@ -1482,10 +1482,18 @@ function animate() {
 
       // Check Sound Beacons
       if (latestSoundBeacon && latestSoundBeacon.time > ghost.userData.lastSoundTime && ghost.userData.aiState !== 'CHASE') {
-        ghost.userData.aiState = 'INVESTIGATE';
-        ghost.userData.targetGrid = worldToGrid(latestSoundBeacon.position.x, latestSoundBeacon.position.z);
+        const distToSound = ghost.position.distanceTo(new THREE.Vector3(latestSoundBeacon.position.x, ghost.position.y, latestSoundBeacon.position.z));
+        let hearingRadius = 0;
+        if (latestSoundBeacon.volume <= 1.0) hearingRadius = 10 * mazeBlockSize; // Footsteps
+        else if (latestSoundBeacon.volume <= 35) hearingRadius = 20 * mazeBlockSize; // Whisper
+        else hearingRadius = 50 * mazeBlockSize; // Scream
+
+        if (distToSound <= hearingRadius) {
+          ghost.userData.aiState = 'INVESTIGATE';
+          ghost.userData.targetGrid = worldToGrid(latestSoundBeacon.position.x, latestSoundBeacon.position.z);
+          ghost.userData.pathTime = 0; // Force immediate repath
+        }
         ghost.userData.lastSoundTime = latestSoundBeacon.time;
-        ghost.userData.pathTime = 0; // Force immediate repath
       }
 
       // BFS Pathfinding — recalculate path every 2 seconds or when target changes
@@ -1587,6 +1595,7 @@ function animate() {
           volume: 0.5,
           position: { x: camera.position.x, z: camera.position.z }
         });
+        latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, volume: 0.5, time: performance.now() };
       }
       networkTimer = 0;
     }
@@ -1604,7 +1613,7 @@ function animate() {
           position: { x: camera.position.x, z: camera.position.z }
         });
         // Immediately alert local ghost AI
-        latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, time: performance.now() };
+        latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, volume: avgVolume, time: performance.now() };
       }
     }
 
