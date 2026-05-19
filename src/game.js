@@ -1462,7 +1462,7 @@ function animate() {
       const path = ghost.userData.path;
       const pathIdx = ghost.userData.pathIdx || 1;
 
-      if (distToPlayer > 2.0 && path && path.length > 0 && pathIdx < path.length) {
+      if (distToPlayer > 0.5 && path && path.length > 0 && pathIdx < path.length) {
         const waypoint = path[pathIdx];
         const dx = waypoint.x - ghost.position.x;
         const dz = waypoint.z - ghost.position.z;
@@ -1476,7 +1476,7 @@ function animate() {
           const dir = new THREE.Vector3(dx, 0, dz).normalize();
           ghost.position.addScaledVector(dir, delta * moveSpeed);
         }
-      } else if (distToPlayer > 2.0 && (!path || path.length === 0)) {
+      } else if (distToPlayer > 0.5 && (!path || path.length === 0)) {
         // Fallback: no path found, move directly (shouldn't happen often)
         const dir = new THREE.Vector3(camera.position.x - ghost.position.x, 0, camera.position.z - ghost.position.z).normalize();
         ghost.position.addScaledVector(dir, delta * moveSpeed);
