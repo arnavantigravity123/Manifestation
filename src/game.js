@@ -554,6 +554,7 @@ function realignMazeCorridors(realignmentState) {
 }
 
 function setupControls() {
+  const container = document.getElementById('canvas-container');
   const onKeyDown = (event) => {
     switch (event.code) {
       case 'ArrowUp':
@@ -640,8 +641,15 @@ function setupControls() {
     let lastLookX = 0;
     let lastLookY = 0;
 
-    container.addEventListener('touchstart', (e) => {
+    // Listen on document to bypass pointer-events touch bugs in mobile viewports
+    document.addEventListener('touchstart', (e) => {
       if (isCaptured || !window.gameReady) return;
+      
+      // Ignore touch starts on joystick or action buttons
+      if (e.target.closest('#mobile-joystick') || e.target.closest('#mobile-actions') || e.target.closest('#btn-mobile-pause')) {
+        return;
+      }
+
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (t.clientX < window.innerWidth * 0.45 && t.clientY > window.innerHeight * 0.45) {
@@ -656,7 +664,7 @@ function setupControls() {
       }
     }, { passive: false });
 
-    container.addEventListener('touchmove', (e) => {
+    document.addEventListener('touchmove', (e) => {
       if (isCaptured || !window.gameReady) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
@@ -685,8 +693,8 @@ function setupControls() {
         }
       }
     };
-    container.addEventListener('touchend', clearLookTouch);
-    container.addEventListener('touchcancel', clearLookTouch);
+    document.addEventListener('touchend', clearLookTouch);
+    document.addEventListener('touchcancel', clearLookTouch);
 
     // Joystick logic
     const joystickBase = document.getElementById('joystick-base');
@@ -767,27 +775,45 @@ function setupControls() {
       moveRight = joyX > 0.2;
     }
 
-    // Action button bindings
-    document.getElementById('btn-mobile-use').addEventListener('click', (e) => {
+    // Action button bindings using touchstart & click for instant response
+    const useBtn = document.getElementById('btn-mobile-use');
+    const interactBtn = document.getElementById('btn-mobile-interact');
+    const specialBtn = document.getElementById('btn-mobile-special');
+    const pauseBtn = document.getElementById('btn-mobile-pause');
+    const ptrOverlay = document.getElementById('pointer-lock-overlay');
+
+    const handleUse = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       if (!isCaptured && window.gameReady) useActiveItem();
-    });
+    };
+    useBtn.addEventListener('touchstart', handleUse, { passive: false });
+    useBtn.addEventListener('click', handleUse);
 
-    document.getElementById('btn-mobile-interact').addEventListener('click', (e) => {
+    const handleInteract = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       if (!isCaptured && window.gameReady) checkInteractions();
-    });
+    };
+    interactBtn.addEventListener('touchstart', handleInteract, { passive: false });
+    interactBtn.addEventListener('click', handleInteract);
 
-    document.getElementById('btn-mobile-special').addEventListener('click', (e) => {
+    const handleSpecial = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       if (!isCaptured && window.gameReady) triggerPanicHide();
-    });
+    };
+    specialBtn.addEventListener('touchstart', handleSpecial, { passive: false });
+    specialBtn.addEventListener('click', handleSpecial);
 
-    document.getElementById('btn-mobile-pause').addEventListener('click', (e) => {
+    const handlePause = (e) => {
+      e.preventDefault();
       e.stopPropagation();
       window.mobileGameActive = false;
       ptrOverlay.style.display = 'flex';
-    });
+    };
+    pauseBtn.addEventListener('touchstart', handlePause, { passive: false });
+    pauseBtn.addEventListener('click', handlePause);
   }
 }
 
