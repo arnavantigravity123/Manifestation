@@ -195,6 +195,7 @@ soloBtn.addEventListener('click', () => {
   // Auto-start solo flow
   setTimeout(() => {
     s.emit('update_settings', { botsEnabled: true });
+    s.emit('update_player', { team: currentSelectedTeam, characterClass: subclassSelect.value });
     setTimeout(() => {
       s.emit('start_match');
       soloLoadingOverlay.style.display = 'none';
