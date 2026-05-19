@@ -1,0 +1,1214 @@
+import * as THREE from 'three';
+
+let scene, camera, renderer;
+let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+let prevTime = performance.now();
+
+// Game Data
+let socketClient = null;
+let myId = null;
+let currentLobby = null;
+let currentHP = 100;
+let currentSanity = 100;
+let inventory = [];
+let activeSlot = 0;
+let players3D = {}; // id -> mesh
+let ghosts3D = [];  // bot meshes
+let walls = [];
+let itemsInMaze = [];
+let keysInMaze = [];
+let saltTraps = [];
+
+// Player Config
+let myTeam = 'Human';
+let myClass = 'Locksmith';
+let isPanicked = false;
+let isCaptured = false;
+let panicTimer = 0;
+let flashLight = null;
+
+// Puzzle configuration
+let gateCoordinates = { x: 0, z: -35 };
+let gateSolved = false;
+let codeEntered = "";
+let functionalKeysRevealed = [];
+let foundKeysList = [];
+
+// Audio variables for EMF & static
+let audioCtx = null;
+let emfOscillator = null;
+let micStream = null;
+let audioAnalyser = null;
+let audioDataArray = null;
+
+let speedBoostTimer = 0;
+let latestSoundBeacon = null;
+
+export function initGame(socket, socketId, matchConfig) {
+  socketClient = socket;
+  myId = socketId;
+  currentLobby = matchConfig;
+
+  const me = matchConfig.players[myId];
+  myTeam = me.team;
+  myClass = me.characterClass;
+
+  // Setup HUD inventory based on subclass data
+  setupInventory();
+
+  // Hide cursor and handle pointer lock overlay
+  const container = document.getElementById('canvas-container');
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  ptrOverlay.style.display = 'flex';
+  
+  container.addEventListener('click', () => {
+    container.requestPointerLock();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  });
+  document.getElementById('resume-click-target').addEventListener('click', () => {
+    container.requestPointerLock();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  });
+
+  document.addEventListener('pointerlockchange', () => {
+    if (document.pointerLockElement === container) {
+      ptrOverlay.style.display = 'none';
+    } else {
+      ptrOverlay.style.display = 'flex';
+    }
+  });
+
+  // Display Role Splash
+  const roleSplash = document.getElementById('role-splash-screen');
+  document.getElementById('splash-role-title').textContent = `${myTeam.toUpperCase()}: ${myClass.toUpperCase()}`;
+  document.getElementById('splash-role-desc').textContent = "Survive the labyrinth. Find the twin keys. Enter the Master Gate code.";
+  roleSplash.style.display = 'flex';
+  window.gameReady = false;
+  setTimeout(() => { 
+    roleSplash.style.display = 'none'; 
+    window.gameReady = true;
+  }, 4500);
+
+  // Setup ThreeJS scene
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(myTeam === 'Human' ? 0x030712 : 0x1e1b4b, 0.05);
+
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
+  camera.position.set(0, 1.6, 0); // Eye-level
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  container.appendChild(renderer.domElement);
+
+  // Setup Audio Context for procedural EMF sound
+  setupProceduralAudio();
+
+  // Lightings
+  const ambient = new THREE.AmbientLight(0x222233, 1.5); // Slightly dark, not pitch black
+  scene.add(ambient);
+
+  if (myTeam === 'Human') {
+    // Add player flashlight
+    flashLight = new THREE.SpotLight(0xffffff, 80, 45, Math.PI / 3, 0.5, 1.5);
+    flashLight.position.set(0, 0, 0);
+    flashLight.castShadow = true;
+    camera.add(flashLight);
+    camera.add(flashLight.target);
+    flashLight.target.position.set(0, 0, -1);
+    scene.add(camera);
+  } else {
+    // Ghost gets dynamic spooky pointlight aura around them
+    const ghostAura = new THREE.PointLight(0xa855f7, 100, 15);
+    camera.add(ghostAura);
+    scene.add(camera);
+  }
+
+  // Create Labyrinth
+  generateMaze(matchConfig.puzzleState.keysCount);
+
+  // Keyboard controls
+  setupControls();
+
+  // Socket listener in-game
+  setupSocketListeners();
+  
+  // Setup Microphone for audio mechanics
+  setupMicrophone();
+
+  // Window Resize
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // Start loop
+  animate();
+}
+
+function setupInventory() {
+  const humanClasses = {
+    Locksmith: ["EMF Radar", "Thermal Camera", "Breaker Remote", "Battery Pack"],
+    Trapper: ["Salt Cannister", "Chalk / UV Spray", "Battery Pack", "Adrenaline Shot"],
+    Scout: ["EMF Radar", "Sanity Pills", "Battery Pack", "Adrenaline Shot"],
+    Medic: ["EMF Radar", "Sanity Pills", "Adrenaline Shot", "Battery Pack"],
+    "Flashlight Expert": ["EMF Radar", "Thermal Camera", "Battery Pack", "Battery Pack"],
+    Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Battery Pack", "Battery Pack", "Battery Pack"]
+  };
+
+  const ghostClasses = {
+    Stalker: ["Ghost Claws", "Scent Tracker"],
+    Mimic: ["Ghost Claws", "Infiltration Clone"],
+    Juggernaut: ["Ghost Claws", "Audio Amplifiers"],
+    Phantom: ["Ghost Claws", "Vapor Leap"],
+    Poltergeist: ["Ghost Claws", "Breaker Siphon"],
+    Banshee: ["Ghost Claws", "Sound Scrambler"]
+  };
+
+  inventory = myTeam === 'Human' ? (humanClasses[myClass] || []) : (ghostClasses[myClass] || []);
+  renderHUDInventory();
+  
+  // Set Class Display
+  const clsBadge = document.getElementById('hud-subclass-badge');
+  if (clsBadge) {
+    clsBadge.textContent = `CLASS: ${myClass.toUpperCase()} (${myTeam.toUpperCase()})`;
+    clsBadge.style.color = myTeam === 'Ghost' ? 'var(--ghost-accent)' : 'var(--human-accent)';
+  }
+}
+
+function renderHUDInventory() {
+  const invGrid = document.getElementById('hud-inventory');
+  if (!invGrid) return;
+  invGrid.innerHTML = '';
+
+  inventory.forEach((item, index) => {
+    const slot = document.createElement('div');
+    slot.className = index === activeSlot ? 'inventory-slot active' : 'inventory-slot';
+    
+    const idxSpan = document.createElement('span');
+    idxSpan.className = 'inventory-slot-index';
+    idxSpan.textContent = index + 1;
+    slot.appendChild(idxSpan);
+
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = getIconOrShortName(item);
+    nameSpan.style.fontSize = '0.7rem';
+    nameSpan.style.textAlign = 'center';
+    nameSpan.style.color = index === activeSlot ? 'white' : 'var(--text-muted)';
+    slot.appendChild(nameSpan);
+
+    invGrid.appendChild(slot);
+  });
+}
+
+function getIconOrShortName(itemName) {
+  switch (itemName) {
+    case "EMF Radar": return "EMF";
+    case "Thermal Camera": return "THERM";
+    case "Breaker Remote": return "REMOTE";
+    case "Battery Pack": return "BATT";
+    case "Salt Cannister": return "SALT";
+    case "Chalk / UV Spray": return "SPRAY";
+    case "Adrenaline Shot": return "ADRN";
+    case "Sanity Pills": return "PILLS";
+    case "Ghost Claws": return "CLAW";
+    case "Scent Tracker": return "SCENT";
+    case "Infiltration Clone": return "CLONE";
+    case "Audio Amplifiers": return "AUDIO";
+    case "Vapor Leap": return "LEAP";
+    case "Breaker Siphon": return "SIPHON";
+    case "Sound Scrambler": return "SCRAM";
+    default: return itemName;
+  }
+}
+
+// Procedural audio context to emulate active sensors/static
+function setupProceduralAudio() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioContextClass();
+  } catch (e) {
+    console.warn("Web Audio API not supported on this browser.");
+  }
+}
+
+function playEMFSound(frequency) {
+  if (!audioCtx) return;
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  
+  // Beep sound
+  const osc = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+  
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(800 + frequency * 400, audioCtx.currentTime); // Pitch gets higher as they get closer
+  
+  // Crank the volume all the way up so it's clearly audible
+  gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+  
+  osc.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+  
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.3);
+}
+
+async function setupMicrophone() {
+  if (myTeam !== 'Human') return;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    const source = audioCtx.createMediaStreamSource(micStream);
+    audioAnalyser = audioCtx.createAnalyser();
+    audioAnalyser.fftSize = 256;
+    source.connect(audioAnalyser);
+    audioDataArray = new Uint8Array(audioAnalyser.frequencyBinCount);
+  } catch (err) {
+    console.warn("Microphone access denied. Voice mechanics disabled.");
+  }
+}
+
+// Generate Maze Geometry
+let slidingWallSegments = [];
+let openCorridors = []; // World positions of open corridor cells for ghost spawning
+let mazeLayout = [];    // Grid layout for pathfinding (0=open, 1=wall, 2=sliding)
+let mazeBlockSize = 4.5;
+let mazeSizeGlobal = 35;
+
+// Pathfinding helpers
+function worldToGrid(wx, wz) {
+  const col = Math.round((wx - mazeBlockSize/2) / mazeBlockSize + mazeSizeGlobal / 2);
+  const row = Math.round((wz - mazeBlockSize/2) / mazeBlockSize + mazeSizeGlobal / 2);
+  return { col: Math.max(0, Math.min(mazeSizeGlobal-1, col)), row: Math.max(0, Math.min(mazeSizeGlobal-1, row)) };
+}
+
+function gridToWorld(col, row) {
+  const x = (col - mazeSizeGlobal / 2) * mazeBlockSize + mazeBlockSize/2;
+  const z = (row - mazeSizeGlobal / 2) * mazeBlockSize + mazeBlockSize/2;
+  return { x, z };
+}
+
+function bfsPath(startCol, startRow, endCol, endRow) {
+  if (startCol === endCol && startRow === endRow) return [];
+  
+  const visited = Array(mazeSizeGlobal).fill(0).map(() => Array(mazeSizeGlobal).fill(false));
+  const parent = Array(mazeSizeGlobal).fill(0).map(() => Array(mazeSizeGlobal).fill(null));
+  const queue = [{ col: startCol, row: startRow }];
+  visited[startRow][startCol] = true;
+  
+  const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+  
+  while (queue.length > 0) {
+    const curr = queue.shift();
+    
+    if (curr.col === endCol && curr.row === endRow) {
+      // Reconstruct path
+      const path = [];
+      let c = curr;
+      while (c) {
+        path.unshift(gridToWorld(c.col, c.row));
+        c = parent[c.row][c.col];
+      }
+      return path;
+    }
+    
+    for (const [dc, dr] of dirs) {
+      const nc = curr.col + dc, nr = curr.row + dr;
+      if (nc >= 0 && nc < mazeSizeGlobal && nr >= 0 && nr < mazeSizeGlobal 
+          && !visited[nr][nc] && mazeLayout[nr][nc] === 0) {
+        visited[nr][nc] = true;
+        parent[nr][nc] = curr;
+        queue.push({ col: nc, row: nr });
+      }
+    }
+  }
+  
+  return []; // No path found
+}
+function generateMaze(keysCount = 8) {
+  // Clear any existing walls
+  walls.forEach(w => scene.remove(w));
+  walls = [];
+  slidingWallSegments = [];
+
+  // Ground plane
+  const floorGeo = new THREE.PlaneGeometry(100, 100);
+  const floorMat = new THREE.MeshStandardMaterial({ 
+    color: 0x111827, 
+    roughness: 0.8,
+    metalness: 0.1
+  });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  // Ceiling
+  const ceilGeo = new THREE.PlaneGeometry(100, 100);
+  const ceilMat = new THREE.MeshStandardMaterial({ color: 0x070b14, roughness: 0.9 });
+  const ceiling = new THREE.Mesh(ceilGeo, ceilMat);
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.y = 3.5;
+  scene.add(ceiling);
+
+  // Grid layout for corridors (Massive Procedural Generation)
+  const blockSize = 4.5;
+  const mazeSize = 35; // 35x35 blocks = massive
+  const layout = Array(mazeSize).fill(0).map(() => Array(mazeSize).fill(1));
+  
+  function carve(x, z) {
+    layout[z][x] = 0;
+    const dirs = [[0,-2], [0,2], [-2,0], [2,0]];
+    dirs.sort(() => Math.random() - 0.5);
+    for (let [dx, dz] of dirs) {
+      const nx = x + dx, nz = z + dz;
+      if (nx > 0 && nx < mazeSize-1 && nz > 0 && nz < mazeSize-1 && layout[nz][nx] === 1) {
+        layout[z + dz/2][x + dx/2] = 0;
+        carve(nx, nz);
+      }
+    }
+  }
+  
+  // Start carving from center
+  const centerCoord = Math.floor(mazeSize/2) | 1;
+  carve(centerCoord, centerCoord);
+  layout[Math.floor(mazeSize/2)][Math.floor(mazeSize/2)] = 0; // Ensure true center spawn is safe
+
+  // Scatter sliding doors (type 2)
+  for(let i=0; i < 40; i++) {
+    const rx = 1 + Math.floor(Math.random() * (mazeSize-2));
+    const rz = 1 + Math.floor(Math.random() * (mazeSize-2));
+    if (layout[rz][rx] === 1) layout[rz][rx] = 2; 
+  }
+
+  // Store layout globally for ghost pathfinding
+  mazeLayout = layout.map(row => row.map(cell => cell === 0 ? 0 : 1)); // 0=open, 1=wall (treat sliding doors as walls for pathfinding)
+
+  function createWallTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, 512, 512);
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 4;
+    for(let i=0; i<=512; i+=64) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+    }
+    for(let i=0; i<150; i++) {
+      ctx.fillStyle = Math.random() > 0.7 ? '#450a0a' : '#020617';
+      ctx.beginPath();
+      ctx.arc(Math.random()*512, Math.random()*512, Math.random()*15, 0, Math.PI*2);
+      ctx.fill();
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2, 2);
+    return tex;
+  }
+  
+  const generatedTex = createWallTexture();
+
+  const wallMat = new THREE.MeshStandardMaterial({ 
+    map: generatedTex,
+    color: 0x64748b, 
+    roughness: 0.8,
+    bumpScale: 0.2
+  });
+  
+  const slidingWallMat = new THREE.MeshStandardMaterial({
+    map: generatedTex,
+    color: 0xd97706, // Neon orange warning stripe pattern
+    roughness: 0.4,
+  });
+
+  const wallGeo = new THREE.BoxGeometry(blockSize, 4.5, blockSize);
+
+  openCorridors = []; // Reset for new maze
+  for (let r = 0; r < layout.length; r++) {
+    for (let c = 0; c < layout[r].length; c++) {
+      const type = layout[r][c];
+      const xPos = (c - layout[r].length / 2) * blockSize + blockSize/2;
+      const zPos = (r - layout.length / 2) * blockSize + blockSize/2;
+
+      if (type === 1 || type === 2) {
+        const wallMesh = new THREE.Mesh(wallGeo, type === 2 ? slidingWallMat : wallMat);
+        wallMesh.position.set(xPos, 4.5 / 2, zPos);
+        wallMesh.castShadow = true;
+        wallMesh.receiveShadow = true;
+        scene.add(wallMesh);
+        walls.push(wallMesh);
+
+        if (type === 2) {
+          // Keep track of sliding corridors for realignments
+          slidingWallSegments.push(wallMesh);
+        }
+      } else {
+        // type === 0 means open corridor — record world position for ghost spawning
+        openCorridors.push({ x: xPos, z: zPos });
+      }
+    }
+  }
+
+  // Draw the Master Gate
+  gateCoordinates = { x: 0, z: - (mazeSize/2 * blockSize) + 4 };
+  const gateGeo = new THREE.BoxGeometry(10, 4, 1);
+  const gateMat = new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.8, roughness: 0.2 });
+  const gateMesh = new THREE.Mesh(gateGeo, gateMat);
+  gateMesh.position.set(gateCoordinates.x, 2, gateCoordinates.z);
+  scene.add(gateMesh);
+  walls.push(gateMesh);
+
+  // Spawn key collectibles in chests/lockers represented by boxes
+  generateCollectibles(keysCount);
+}
+
+function generateCollectibles(keysCount) {
+  // Clear any existing keys
+  keysInMaze.forEach(k => scene.remove(k));
+  keysInMaze = [];
+
+  const keyGeo = new THREE.SphereGeometry(0.3, 8, 8);
+  const keyMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.5 });
+
+  for (let i = 0; i < keysCount; i++) {
+    // Generate key locations in empty paths
+    const angle = (i / keysCount) * Math.PI * 2;
+    const radius = 15 + Math.random() * 20;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+
+    const key = new THREE.Mesh(keyGeo, keyMat);
+    key.position.set(x, 0.4, z);
+    scene.add(key);
+
+    keysInMaze.push({
+      mesh: key,
+      symbol: ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa'][i % 10],
+      index: i
+    });
+  }
+}
+
+// Corridor shifting alignment
+function realignMazeCorridors(realignmentState) {
+  const solvedCount = realignmentState.puzzleRoomsSolved;
+  
+  // Display shifting alert
+  triggerNotification(`maze realignment triggered! walls shifting...`);
+
+  // Move sliding wall pieces either up into the ceiling or sliding sideways
+  slidingWallSegments.forEach((segment, idx) => {
+    // Odd/Even shift patterns
+    const targetY = (solvedCount % 2 === 0) ? (idx % 2 === 0 ? 3.5 / 2 : -3) : (idx % 2 === 0 ? -3 : 3.5 / 2);
+    
+    // Smooth sliding animation
+    let currentY = segment.position.y;
+    const anim = () => {
+      if (Math.abs(segment.position.y - targetY) > 0.05) {
+        segment.position.y += (targetY - segment.position.y) * 0.1;
+        requestAnimationFrame(anim);
+      } else {
+        segment.position.y = targetY;
+      }
+    };
+    anim();
+  });
+}
+
+function setupControls() {
+  const onKeyDown = (event) => {
+    switch (event.code) {
+      case 'ArrowUp':
+      case 'KeyW':
+        moveForward = true;
+        break;
+      case 'ArrowLeft':
+      case 'KeyA':
+        moveLeft = true;
+        break;
+      case 'ArrowDown':
+      case 'KeyS':
+        moveBackward = true;
+        break;
+      case 'ArrowRight':
+      case 'KeyD':
+        moveRight = true;
+        break;
+      case 'KeyE':
+        // Interact key
+        checkInteractions();
+        break;
+      case 'KeyQ':
+      case 'Space':
+        // Risk/Reward Ability: Panic Hide
+        triggerPanicHide();
+        break;
+      case 'Digit1': activeSlot = 0; renderHUDInventory(); break;
+      case 'Digit2': activeSlot = 1; renderHUDInventory(); break;
+      case 'Digit3': activeSlot = 2; renderHUDInventory(); break;
+      case 'Digit4': activeSlot = 3; renderHUDInventory(); break;
+      case 'Digit5': if (inventory.length > 4) { activeSlot = 4; renderHUDInventory(); } break;
+      case 'Digit6': if (inventory.length > 5) { activeSlot = 5; renderHUDInventory(); } break;
+      case 'Digit7': if (inventory.length > 6) { activeSlot = 6; renderHUDInventory(); } break;
+      case 'Digit8': if (inventory.length > 7) { activeSlot = 7; renderHUDInventory(); } break;
+    }
+  };
+
+  const onKeyUp = (event) => {
+    switch (event.code) {
+      case 'ArrowUp':
+      case 'KeyW':
+        moveForward = false;
+        break;
+      case 'ArrowLeft':
+      case 'KeyA':
+        moveLeft = false;
+        break;
+      case 'ArrowDown':
+      case 'KeyS':
+        moveBackward = false;
+        break;
+      case 'ArrowRight':
+      case 'KeyD':
+        moveRight = false;
+        break;
+    }
+  };
+
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
+  
+  document.addEventListener('mousedown', (e) => {
+    if (document.pointerLockElement !== document.getElementById('canvas-container') || isCaptured) return;
+    if (e.button === 0) { // Left click
+      useActiveItem();
+    }
+  });
+
+  // Mouse camera rotation controller
+  document.addEventListener('mousemove', (e) => {
+    if (document.pointerLockElement === document.getElementById('canvas-container')) {
+      camera.rotation.y -= e.movementX * 0.002;
+      camera.rotation.x -= e.movementY * 0.002;
+      camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
+    }
+  });
+}
+
+function checkInteractions() {
+  // 1. Check proximity to Keypad Terminal (Master Gate)
+  const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
+  if (distToGate < 4) {
+    // Open keypad overlay UI!
+    openKeypadModal();
+    return;
+  }
+
+  // 2. Check proximity to Collectible Keys
+  for (let i = 0; i < keysInMaze.length; i++) {
+    const key = keysInMaze[i];
+    const distToKey = camera.position.distanceTo(key.mesh.position);
+    if (distToKey < 3.0) {
+      // Picked up!
+      scene.remove(key.mesh);
+      foundKeysList.push(key.symbol);
+      triggerNotification(`Retrieved key [${key.symbol}]`);
+      
+      const keyHud = document.getElementById('keys-hud-info');
+      if (keyHud) {
+        keyHud.textContent = `KEYS: ${foundKeysList.length} / 2 RETRIEVED`;
+      }
+
+      // Check if we retrieved the exact matching real keys
+      checkWinCondition();
+
+      // Emit event
+      socketClient.emit('solve_puzzle_room'); // Triggers alignment shift too
+      keysInMaze.splice(i, 1);
+      break;
+    }
+  }
+}
+
+function useActiveItem() {
+  const item = inventory[activeSlot];
+  if (!item) return;
+
+  if (item === "Sanity Pills") {
+    currentSanity = 100;
+    triggerNotification("sanity restored.");
+    removeItem(activeSlot);
+  } else if (item === "Adrenaline Shot") {
+    speedBoostTimer = 10;
+    triggerNotification("adrenaline engaged! speed increased.");
+    removeItem(activeSlot);
+  } else if (item === "Salt Cannister") {
+    deploySaltTrap();
+    removeItem(activeSlot);
+  } else if (item === "EMF Radar") {
+    triggerNotification("EMF radar is passively active when held.");
+  } else if (item === "Battery Pack") {
+    if (flashLight) flashLight.intensity = 200;
+    triggerNotification("flashlight battery recharged.");
+    removeItem(activeSlot);
+  } else if (item === "Breaker Remote") {
+    // Freeze all ghosts and disable their auras for 10 seconds
+    window.ghostsFrozen = true;
+    ghosts3D.forEach(g => {
+      g.children.forEach(c => { if (c.isPointLight) c.intensity = 0; });
+    });
+    triggerNotification("breaker remote used. ghosts frozen (10s).");
+    setTimeout(() => {
+      window.ghostsFrozen = false;
+      ghosts3D.forEach(g => {
+        g.children.forEach(c => { if (c.isPointLight) c.intensity = 80; });
+      });
+      triggerNotification("ghosts reactivated!");
+    }, 10000);
+    removeItem(activeSlot);
+  } else if (item === "Thermal Camera") {
+    triggerNotification("thermal camera is passively active when held.");
+  } else {
+    triggerNotification(`${item} cannot be deployed yet.`);
+  }
+}
+
+function removeItem(index) {
+  inventory.splice(index, 1);
+  renderHUDInventory();
+  if (activeSlot >= inventory.length) activeSlot = Math.max(0, inventory.length - 1);
+}
+
+function deploySaltTrap() {
+  const saltGeo = new THREE.CylinderGeometry(2.0, 2.0, 0.05, 16);
+  const saltMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const salt = new THREE.Mesh(saltGeo, saltMat);
+  salt.position.set(camera.position.x, 0.05, camera.position.z);
+  scene.add(salt);
+  saltTraps.push(salt);
+  triggerNotification("salt barrier deployed.");
+}
+
+// Keypad dialog helpers
+const keypadUI = document.getElementById('keypad-modal-ui');
+const keypadScreen = document.getElementById('keypad-screen-display');
+const keypadBtns = document.querySelectorAll('.keypad-grid .keypad-btn');
+const keypadClearBtn = document.getElementById('keypad-clear');
+const keypadSubmitBtn = document.getElementById('keypad-submit');
+const keypadCloseBtn = document.getElementById('keypad-close');
+
+function openKeypadModal() {
+  if (gateSolved) {
+    triggerNotification("Master Gate protocol already bypassed.");
+    return;
+  }
+  
+  keypadUI.style.display = 'flex';
+  document.exitPointerLock();
+  codeEntered = "";
+  keypadScreen.textContent = "----";
+}
+
+keypadCloseBtn.addEventListener('click', () => {
+  keypadUI.style.display = 'none';
+});
+
+keypadClearBtn.addEventListener('click', () => {
+  codeEntered = "";
+  keypadScreen.textContent = "----";
+});
+
+keypadBtns.forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    const val = e.target.textContent;
+    if (val === 'CLR' || val === 'ENT') return;
+    if (codeEntered.length < 4) {
+      codeEntered += val;
+      keypadScreen.textContent = codeEntered.padEnd(4, '-');
+    }
+  });
+});
+
+keypadSubmitBtn.addEventListener('click', () => {
+  if (codeEntered.length === 4) {
+    socketClient.emit('try_cipher', codeEntered);
+    keypadUI.style.display = 'none';
+  } else {
+    alert("Must enter a 4-digit code combination.");
+  }
+});
+
+// Trigger risk/reward: Panic Hide
+function triggerPanicHide() {
+  if (isPanicked || currentHP <= 5 || myTeam !== 'Human') return;
+
+  isPanicked = true;
+  panicTimer = 20; // 20 seconds duration
+
+  // Deduct 5 HP
+  currentHP -= 5;
+  document.getElementById('hp-value').textContent = `${currentHP} HP`;
+  document.getElementById('hp-bar').style.width = `${currentHP}%`;
+
+  // Make invisible (Panic Hide)
+  if (flashLight) flashLight.intensity = 30; // Dim, but not pitch black
+  camera.fog = new THREE.FogExp2(0x7c3aed, 0.03); // Lighter purple haze so you can still see walls
+
+  triggerNotification("Panic Hide active: Invisibility engaged (20s)");
+
+  // Emit event to network
+  socketClient.emit('panic_hide');
+}
+
+// Procedural EMF Loop pings
+let emfPingTimer = 0;
+function processEMFSensors(delta) {
+  if (myTeam !== 'Human' || inventory[activeSlot] !== 'EMF Radar') return;
+
+  // Track closest ghost
+  let closestDist = 9999;
+  ghosts3D.forEach(g => {
+    const dist = camera.position.distanceTo(g.position);
+    if (dist < closestDist) closestDist = dist;
+  });
+
+  // Check closest human players if playing as ghost, but here we check distance to enemy
+  if (closestDist < 50) { // Increased from 25 to 50 so EMF detects ghosts earlier
+    // Proximity scaling sound pings frequency
+    emfPingTimer += delta;
+    
+    // Scale ping frequency (close = fast pings, far = slow pings)
+    const pingDelay = Math.max(0.1, (closestDist / 50) * 1.5);
+    
+    if (emfPingTimer >= pingDelay) {
+      const normalizedProximity = Math.max(0, 1 - (closestDist / 50)); // 0.0 to 1.0
+      playEMFSound(normalizedProximity);
+      emfPingTimer = 0;
+    }
+
+    // Dynamic HUD blip sweep frequency matching proximity
+    const blip = document.getElementById('radar-blip-element');
+    if (blip) {
+      blip.style.opacity = '1';
+      // Scale position randomly close to center relative to proximity
+      const angle = Math.random() * Math.PI * 2;
+      const offset = (closestDist / 25) * 50; // Max 50px offset
+      blip.style.left = `calc(50% + ${Math.cos(angle) * offset}px)`;
+      blip.style.top = `calc(50% + ${Math.sin(angle) * offset}px)`;
+    }
+  }
+}
+
+// Proximity micro-vibrations and sanity regression
+function processSanity(delta) {
+  if (myTeam !== 'Human') return;
+
+  // If near any active ghost, sanity decays!
+  let nearGhost = false;
+  ghosts3D.forEach(g => {
+    if (camera.position.distanceTo(g.position) < 8) nearGhost = true;
+  });
+
+  if (nearGhost) {
+    currentSanity = Math.max(0, currentSanity - delta * 4); // Fast decay
+  } else {
+    currentSanity = Math.max(0, currentSanity - delta * 0.2); // Idle slow decay in labyrinth
+  }
+
+  // Update HUD
+  document.getElementById('sanity-value').textContent = `${Math.floor(currentSanity)}%`;
+  document.getElementById('sanity-bar').style.width = `${currentSanity}%`;
+
+  if (currentSanity < 30) {
+    // Hallucinations overlay
+    document.body.style.filter = `hue-rotate(${Math.sin(performance.now() * 0.01) * 30}deg) contrast(1.2)`;
+  } else {
+    document.body.style.filter = 'none';
+  }
+}
+
+function checkWinCondition() {
+  if (!gateSolved) return;
+  
+  // Humans win if they retrieve the 2 functional keys and reach the Gate
+  const hasFirstKey = foundKeysList.includes(functionalKeysRevealed[0]);
+  const hasSecondKey = foundKeysList.includes(functionalKeysRevealed[1]);
+
+  if (hasFirstKey && hasSecondKey) {
+    const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
+    if (distToGate < 4) {
+      triggerNotification("master gate breached! escape successful!");
+      socketClient.emit('chat_message', { msg: "=== VICTORY: HUMANS HAVE ESCAPED THE LABYRINTH ===" });
+      setTimeout(() => {
+        location.reload();
+      }, 5000);
+    }
+  }
+}
+
+// Setup network synchronization
+function setupSocketListeners() {
+  socketClient.on('player_moved', ({ id, position, rotation, team, characterClass }) => {
+    if (!players3D[id]) {
+      // Spawn new network player representer (simple capsules)
+      const isGhost = team === 'Ghost';
+      const capGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.8, 12);
+      const capMat = new THREE.MeshStandardMaterial({ 
+        color: isGhost ? 0xa855f7 : 0x3b82f6, 
+        roughness: 0.2,
+        metalness: 0.5
+      });
+      const capMesh = new THREE.Mesh(capGeo, capMat);
+      capMesh.position.set(position.x, 0.9, position.z);
+      scene.add(capMesh);
+      players3D[id] = capMesh;
+    } else {
+      // Update pos
+      players3D[id].position.set(position.x, 0.9, position.z);
+      players3D[id].rotation.y = rotation.y;
+    }
+  });
+
+  // Cipher successfully solved!
+  socketClient.on('cipher_solved', ({ realKeySymbols }) => {
+    gateSolved = true;
+    functionalKeysRevealed = realKeySymbols;
+
+    triggerNotification(`cipher solved! twin keys revealed: [${realKeySymbols.join(', ')}]`);
+    
+    const lockLabel = document.getElementById('terminal-lock-label');
+    lockLabel.textContent = "Twin Keys Required";
+    lockLabel.style.color = "var(--secondary-accent)";
+    lockLabel.style.textShadow = "0 0 10px rgba(245, 158, 11, 0.6)";
+
+    const cipherHUD = document.getElementById('hud-cipher-info');
+    cipherHUD.textContent = `Keys: ${realKeySymbols.join(' & ')}`;
+  });
+
+  // Keypad failure penalty trigger
+  socketClient.on('cipher_failed_penalty', ({ cooldownSeconds, revealSeconds }) => {
+    triggerAlarmFlashing();
+    triggerNotification(`terminal lockout active (${cooldownSeconds}s) | outlines exposed (${revealSeconds}s)`);
+  });
+
+  socketClient.on('corridor_realignment', (realignmentState) => {
+    realignMazeCorridors(realignmentState);
+  });
+  
+  socketClient.on('sound_beacon', ({ producerId, volume, position }) => {
+    latestSoundBeacon = { position, time: performance.now() };
+  });
+}
+
+function triggerAlarmFlashing() {
+  const flash = document.getElementById('alarm-flash');
+  flash.style.display = 'block';
+  
+  setTimeout(() => {
+    flash.style.display = 'none';
+  }, 10000); // Pulse alarm for 10 seconds
+}
+
+function triggerNotification(text) {
+  const box = document.getElementById('game-notification');
+  box.textContent = text.toUpperCase();
+  box.style.display = 'block';
+  
+  setTimeout(() => {
+    box.style.display = 'none';
+  }, 4000);
+}
+
+function spawnGhostAIs(count) {
+  ghosts3D.forEach(g => scene.remove(g));
+  ghosts3D = [];
+
+  const bodyGeo = new THREE.ConeGeometry(0.7, 2.5, 16);
+  const bodyMat = new THREE.MeshStandardMaterial({ 
+    color: 0xccccff, emissive: 0x7c3aed, emissiveIntensity: 0.8, 
+    roughness: 0.2, side: THREE.DoubleSide 
+  });
+  const headGeo = new THREE.SphereGeometry(0.5, 16, 16);
+  const eyeGeo = new THREE.SphereGeometry(0.12, 8, 8);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
+
+  for (let i = 0; i < count; i++) {
+    const ghostGroup = new THREE.Group();
+    
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.y = 1.25;
+    const head = new THREE.Mesh(headGeo, bodyMat);
+    head.position.y = 2.5;
+    
+    const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
+    eye1.position.set(-0.2, 2.6, 0.4);
+    const eye2 = new THREE.Mesh(eyeGeo, eyeMat);
+    eye2.position.set(0.2, 2.6, 0.4);
+    
+    const aura = new THREE.PointLight(0xa855f7, 80, 15);
+    aura.position.y = 1.5;
+
+    ghostGroup.add(body, head, eye1, eye2, aura);
+    
+    // Thermal materials for X-Ray
+    const thermalMat = new THREE.MeshBasicMaterial({ 
+      color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
+    });
+    ghostGroup.children.forEach(c => {
+      if (c.isMesh) {
+        c.userData.normalMat = c.material;
+        c.userData.thermalMat = thermalMat;
+      }
+    });
+
+    // Spawn in random open corridor cells away from the player
+    let spawnPos = { x: 10, z: 10 };
+    const candidates = openCorridors.filter(c => {
+      const dx = c.x - camera.position.x;
+      const dz = c.z - camera.position.z;
+      const d = Math.sqrt(dx*dx + dz*dz);
+      return d > 15 && d < 50;
+    });
+    if (candidates.length > 0) spawnPos = candidates[Math.floor(Math.random() * candidates.length)];
+    ghostGroup.position.set(spawnPos.x, 0, spawnPos.z);
+
+    scene.add(ghostGroup);
+    ghosts3D.push(ghostGroup);
+  }
+}
+
+// 3D Game Loop rendering
+let networkTimer = 0;
+function animate() {
+  requestAnimationFrame(animate);
+
+  const time = performance.now();
+  const delta = (time - prevTime) / 1000;
+  prevTime = time;
+
+  if (document.pointerLockElement === document.getElementById('canvas-container') && !isCaptured) {
+    // 1. Process movement physics with friction
+    velocity.x -= velocity.x * 10.0 * delta;
+    velocity.z -= velocity.z * 10.0 * delta;
+
+    direction.z = Number(moveForward) - Number(moveBackward);
+    direction.x = Number(moveRight) - Number(moveLeft);
+    direction.normalize(); // Ensure consistent speed
+
+    // Speed details (Adrenaline boosts or Juggernaut movement)
+    let speed = myTeam === 'Ghost' ? 85.0 : 60.0; // Lowered to prevent collision tunneling
+    
+    if (speedBoostTimer > 0) {
+      speedBoostTimer -= delta;
+      speed *= 1.5;
+    }
+
+    if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
+    if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
+
+    camera.translateX(-velocity.x * delta);
+    camera.translateZ(velocity.z * delta);
+    camera.position.y = 1.6; // Lock height
+
+    // Simple wall collision checking (2D check)
+    walls.forEach(wall => {
+      const dx = camera.position.x - wall.position.x;
+      const dz = camera.position.z - wall.position.z;
+      const dist2D = Math.sqrt(dx*dx + dz*dz);
+      if (dist2D < 2.8) { // Increased to 2.8 to prevent near-clipping the camera through walls
+        const pushForce = (2.8 - dist2D) * 1.0; 
+        const pushDir = new THREE.Vector2(dx, dz).normalize();
+        camera.position.x += pushDir.x * pushForce;
+        camera.position.z += pushDir.y * pushForce;
+      }
+    });
+
+    // 2. Active sensors & sanity ticks
+    processEMFSensors(delta);
+    processSanity(delta);
+
+    // 3. Process panic timer cooldown & Thermal Camera overrides
+    if (isPanicked) {
+      panicTimer -= delta;
+      if (panicTimer <= 0) {
+        isPanicked = false;
+        if (inventory[activeSlot] !== "Thermal Camera") {
+          camera.fog = new THREE.FogExp2(myTeam === 'Human' ? 0x030712 : 0x1e1b4b, 0.05);
+        }
+        if (flashLight) flashLight.intensity = 200;
+        triggerNotification("invisibility ended. sensors active.");
+      }
+    } 
+    
+    // Process Thermal Camera regardless of panic
+    if (myTeam === 'Human') {
+      // Thermal Camera passive effect
+      if (inventory[activeSlot] === "Thermal Camera") {
+        scene.fog = new THREE.FogExp2(0x330000, 0.02); // Red thermal vision
+
+        // Make ghosts bright and glowing
+        ghosts3D.forEach(g => {
+          g.children.forEach(c => {
+            if (c.isMesh && c.material !== c.userData.thermalMat) {
+              c.material = c.userData.thermalMat;
+              c.renderOrder = 999;
+            }
+          });
+        });
+      } else {
+        scene.fog = new THREE.FogExp2(0x030712, 0.05); // Normal dark
+
+        // Disable X-Ray vision
+        ghosts3D.forEach(g => {
+          g.children.forEach(c => {
+            if (c.isMesh && c.material !== c.userData.normalMat) {
+              c.material = c.userData.normalMat;
+              c.renderOrder = 0;
+            }
+          });
+        });
+      }
+    }
+
+    // 4. Update AI Bots pathing behaviors toward nearest human
+    ghosts3D.forEach((ghost, idx) => {
+      // Breaker Remote freezes all ghost movement
+      if (window.ghostsFrozen) return;
+
+      // Damage check uses actual distance to PLAYER
+      const distToPlayer = ghost.position.distanceTo(new THREE.Vector3(camera.position.x, ghost.position.y, camera.position.z));
+
+      if (distToPlayer < 1.5 && myTeam === 'Human' && !isPanicked) {
+        currentHP = Math.max(0, currentHP - delta * 45);
+        document.getElementById('hp-value').textContent = `${Math.floor(currentHP)} HP`;
+        document.getElementById('hp-bar').style.width = `${currentHP}%`;
+        
+        if (currentHP <= 0 && !isCaptured) {
+          isCaptured = true;
+          document.exitPointerLock();
+          document.getElementById('hud-overlay').style.display = 'none';
+          document.getElementById('captured-overlay').style.display = 'flex';
+          socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) has been captured by the void.` });
+        }
+      }
+
+      // Check salt traps
+      let moveSpeed = 6.0;
+      saltTraps.forEach(trap => {
+        if (ghost.position.distanceTo(trap.position) < 2.5) {
+          moveSpeed = 1.0;
+        }
+      });
+
+      // BFS Pathfinding — recalculate path every 2 seconds
+      if (!ghost.userData.path || !ghost.userData.pathTime || time - ghost.userData.pathTime > 2000) {
+        ghost.userData.pathTime = time;
+        const ghostGrid = worldToGrid(ghost.position.x, ghost.position.z);
+        const playerGrid = worldToGrid(camera.position.x, camera.position.z);
+        ghost.userData.path = bfsPath(ghostGrid.col, ghostGrid.row, playerGrid.col, playerGrid.row);
+        ghost.userData.pathIdx = 1; // Skip first waypoint (ghost's current cell)
+      }
+
+      // Follow the path waypoints
+      const path = ghost.userData.path;
+      const pathIdx = ghost.userData.pathIdx || 1;
+
+      if (distToPlayer > 2.0 && path && path.length > 0 && pathIdx < path.length) {
+        const waypoint = path[pathIdx];
+        const dx = waypoint.x - ghost.position.x;
+        const dz = waypoint.z - ghost.position.z;
+        const distToWaypoint = Math.sqrt(dx*dx + dz*dz);
+
+        if (distToWaypoint < 1.5) {
+          // Reached waypoint, advance to next
+          ghost.userData.pathIdx = pathIdx + 1;
+        } else {
+          // Move toward current waypoint
+          const dir = new THREE.Vector3(dx, 0, dz).normalize();
+          ghost.position.addScaledVector(dir, delta * moveSpeed);
+        }
+      } else if (distToPlayer > 2.0 && (!path || path.length === 0)) {
+        // Fallback: no path found, move directly (shouldn't happen often)
+        const dir = new THREE.Vector3(camera.position.x - ghost.position.x, 0, camera.position.z - ghost.position.z).normalize();
+        ghost.position.addScaledVector(dir, delta * moveSpeed);
+      }
+      
+      // Face the player
+      ghost.lookAt(camera.position.x, ghost.position.y, camera.position.z);
+
+      // Wall collision — push ghost out if clipping
+      walls.forEach(wall => {
+        const dx = ghost.position.x - wall.position.x;
+        const dz = ghost.position.z - wall.position.z;
+        const dist2D = Math.sqrt(dx*dx + dz*dz);
+        if (dist2D < 2.5) {
+          const pushForce = (2.5 - dist2D);
+          const pushDir = new THREE.Vector2(dx, dz).normalize();
+          ghost.position.x += pushDir.x * pushForce;
+          ghost.position.z += pushDir.y * pushForce;
+        }
+      });
+    });
+
+
+
+    // 5. Emit movement states
+    networkTimer += delta;
+    if (networkTimer >= 0.05) { // 20Hz update
+      socketClient.emit('player_movement', {
+        position: { x: camera.position.x, z: camera.position.z },
+        rotation: { y: camera.rotation.y },
+        team: myTeam,
+        characterClass: myClass
+      });
+
+      // Emit walking sound frequency
+      if (Math.abs(velocity.x) > 1 || Math.abs(velocity.z) > 1) {
+        socketClient.emit('sound_produced', {
+          volume: 0.5,
+          position: { x: camera.position.x, z: camera.position.z }
+        });
+      }
+      networkTimer = 0;
+    }
+
+    // Process Microphone volume
+    if (audioAnalyser && !isCaptured) {
+      audioAnalyser.getByteFrequencyData(audioDataArray);
+      let sum = 0;
+      for(let i=0; i<audioDataArray.length; i++) sum += audioDataArray[i];
+      const avgVolume = sum / audioDataArray.length;
+      
+      if (avgVolume > 20) { // Threshold for talking/yelling
+        socketClient.emit('sound_produced', {
+          volume: avgVolume,
+          position: { x: camera.position.x, z: camera.position.z }
+        });
+        // Immediately alert local ghost AI
+        latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, time: performance.now() };
+      }
+    }
+
+    // Check key win triggers
+    checkWinCondition();
+  }
+
+  // Handle ghost initial spawning — only after splash screen and pointer lock
+  if (ghosts3D.length === 0 && currentLobby && currentLobby.settings.ghostsCount > 0
+      && window.gameReady
+      && document.pointerLockElement === document.getElementById('canvas-container')) {
+    spawnGhostAIs(currentLobby.settings.ghostsCount);
+  }
+
+  renderer.render(scene, camera);
+}

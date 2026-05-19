@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MANIFESTATION - The Labyrinth Escape</title>
+    <meta name="description" content="A 3D browser-based multiplayer survival horror game. Work together to escape the shifting maze before the ghosts consume you." />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <!-- 3D Render Area -->
+    <div id="canvas-container"></div>
+    
+    <!-- Surveillance/CRT Monitor Filter Effect -->
+    <div class="scanlines-overlay"></div>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-overlay">
+      
+      <!-- 1. Authentication / Main Menu View -->
+      <div id="auth-view" class="glass-panel">
+        <div class="logo-container">
+          <h1>Manifestation</h1>
+          <p>Labyrinth Escape Protocol</p>
+        </div>
+        
+        <div class="form-group">
+          <label for="username-input">Operative Call-Sign</label>
+          <input type="text" id="username-input" placeholder="e.g., Locksmith_01" value="" />
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 0.8rem; margin-top: 1rem;">
+          <button id="solo-btn" class="action-btn" style="background: linear-gradient(135deg, #4f46e5, #312e81); border: 1px solid #6366f1;">Deploy Solo Protocol</button>
+          
+          <div style="border-top: 1px dashed rgba(255,255,255,0.2); margin: 0.5rem 0;"></div>
+          
+          <button id="join-public-btn" class="action-btn">Join Public Match</button>
+          <button id="create-public-btn" class="action-btn" style="background: linear-gradient(135deg, #059669, #064e3b);">Create Public Lobby</button>
+          
+          <div style="border-top: 1px dashed rgba(255,255,255,0.2); margin: 0.5rem 0;"></div>
+          
+          <button id="create-private-btn" class="action-btn" style="background: linear-gradient(135deg, #d97706, #78350f);">Create Private Lobby</button>
+          
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="private-room-input" placeholder="Room Code" style="flex-grow: 1; padding: 0.5rem; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px;" />
+            <button id="join-private-btn" class="action-btn" style="width: auto; padding: 0.5rem 1rem;">Join</button>
+          </div>
+        </div>
+        
+        <!-- Loading overlay for Solo mode -->
+        <div id="solo-loading-overlay" style="display: none; text-align: center; color: var(--primary-accent); margin-top: 1rem; font-family: 'Orbitron', sans-serif;">
+          INITIALIZING SOLO CONTAINMENT...
+        </div>
+      </div>
+
+      <!-- 2. Interactive Lobby Deck -->
+      <div id="lobby-view" class="glass-panel" style="display: none;">
+        
+        <!-- Left Side: Roster & Host Customizer -->
+        <div class="lobby-main">
+          <div class="lobby-header">
+            <div>
+              <h2>Lobby Control Deck</h2>
+              <p id="lobby-type-label" style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.2rem;">Configure parameters before breaching the maze</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <div class="room-id-tag">Code: <span id="lobby-room-display" style="color: white; font-weight: bold; letter-spacing: 2px;">...</span></div>
+              <button id="quit-lobby-btn" class="action-btn" style="width: auto; padding: 0.4rem 0.8rem; background: rgba(239, 68, 68, 0.2); border: 1px solid red; font-size: 0.7rem;">Quit</button>
+            </div>
+          </div>
+
+          <!-- Dynamic Scaling Matrix Metrics -->
+          <div class="scaling-matrix-card">
+            <div class="scaling-header">
+              <span>LOBBY THREAT & SCALING ENGINE</span>
+              <span>Formula: [Humans × 2 = Min Ghosts]</span>
+            </div>
+            <div class="scaling-metrics">
+              <div class="metric-box">
+                <h4 id="human-count-display">0</h4>
+                <p>Humans</p>
+              </div>
+              <div class="metric-box">
+                <h4 id="min-ghosts-display">0</h4>
+                <p>Ghosts Required</p>
+              </div>
+              <div class="metric-box">
+                <h4 id="bot-count-display">0</h4>
+                <p>AI Bots Spawned</p>
+              </div>
+              <div class="metric-box">
+                <h4 id="total-ghosts-display">0</h4>
+                <p>Total Active Ghosts</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Players Grid list -->
+          <h3 style="font-family: 'Orbitron', sans-serif; font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Active Operatives:</h3>
+          <div id="players-list" class="players-grid">
+            <!-- Populated dynamically via socket events -->
+          </div>
+
+          <!-- Host Configuration Panel -->
+          <div id="host-settings-panel" class="config-group" style="display: none;">
+            <div class="config-card">
+              <h3>AI Bot Population</h3>
+              <div class="switch-control">
+                <span>Master Bot Toggle</span>
+                <input type="checkbox" id="bot-toggle" checked style="width: 20px; height: 20px; cursor: pointer;" />
+              </div>
+            </div>
+            <div class="config-card">
+              <h3>Role Selection</h3>
+              <select id="role-mode-select" class="select-control">
+                <option value="manual">Manual Classes Selection</option>
+                <option value="random">Fully Randomized Teams</option>
+                <option value="hidden">Hidden Random (Notify primary team)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Side: Player subclass Customization & Chat -->
+        <div class="lobby-sidebar">
+          
+          <div class="customizer-box">
+            <h3>Team & Sub-Class selection</h3>
+            <div class="btn-toggle-group">
+              <button id="choose-human" class="toggle-btn active human">Human</button>
+              <button id="choose-ghost" class="toggle-btn ghost">Ghost</button>
+            </div>
+            
+            <div id="class-select-wrapper">
+              <label for="subclass-select" style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase;">Designated Subclass</label>
+              <select id="subclass-select" class="select-control" style="margin-top: 0.4rem;">
+                <!-- Filled dynamically based on team choice -->
+              </select>
+            </div>
+            
+            <p id="class-desc" style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.4; background: rgba(0, 0, 0, 0.2); padding: 0.8rem; border-radius: 6px;">
+              Loading class abilities...
+            </p>
+          </div>
+
+          <!-- Chat Deck -->
+          <div class="lobby-chat">
+            <div id="chat-box" class="chat-output">
+              <div class="chat-msg chat-system">Secure channel initialized. Awaiting commands...</div>
+            </div>
+            <div class="chat-input-wrapper">
+              <input type="text" id="chat-input" placeholder="Type message..." />
+            </div>
+          </div>
+
+          <button id="ready-start-btn" class="action-btn" style="margin-top: auto;">Ready Up</button>
+        </div>
+
+      </div>
+
+      <!-- 3. Active Game HUD Overlay -->
+      <div id="hud-overlay" style="display: none;">
+        
+        <!-- Top row: Status indicators & inventory gauges -->
+        <div class="hud-top">
+          <!-- Vitals / Sanity -->
+          <div class="vitals-box hud-panel">
+            <div class="gauge-row">
+              <div class="gauge-label">
+                <span>Vital Status (HP)</span>
+                <span id="hp-value">100 HP</span>
+              </div>
+              <div class="gauge-bar-bg">
+                <div id="hp-bar" class="gauge-bar-fill hp" style="width: 100%;"></div>
+              </div>
+            </div>
+            <div class="gauge-row">
+              <div class="gauge-label">
+                <span>Sanity Stable Index</span>
+                <span id="sanity-value">100%</span>
+              </div>
+              <div class="gauge-bar-bg">
+                <div id="sanity-bar" class="gauge-bar-fill fear" style="width: 100%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Escape Tracker -->
+          <div class="terminal-status hud-panel">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+               <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Master Gate Protocol</div>
+               <button id="quit-game-btn" style="pointer-events: auto; padding: 0.2rem 0.6rem; background: rgba(239, 68, 68, 0.2); border: 1px solid red; color: white; cursor: pointer; border-radius: 4px; font-family: inherit; font-size: 0.7rem;">ABORT</button>
+            </div>
+            <div id="terminal-lock-label" class="status-indicator">SECURED (3-TIER LOCK)</div>
+            <div id="hud-cipher-info" class="terminal-clues">FIND HINTS FOR 4-DIGIT CODE</div>
+            <div id="keys-hud-info" style="font-size: 0.75rem; margin-top: 0.4rem; color: var(--secondary-accent);">KEYS: 0 / 2 RETRIEVED</div>
+          </div>
+        </div>
+
+        <!-- Center: Interactive Crosshair -->
+        <div class="crosshair"></div>
+
+        <!-- Bottom row: Sensor sweep & Active inventory hotbar -->
+        <div class="hud-bottom">
+          <!-- Spatial Sound Radar -->
+          <div class="hud-panel" style="padding: 0.5rem; border-radius: 50%;">
+            <div class="sensor-widget">
+              <div class="radar-sweep"></div>
+              <div id="radar-blip-element" class="radar-blip"></div>
+            </div>
+          </div>
+
+          <!-- Hotbar Inventory -->
+          <div class="hud-panel interactive-hud">
+            <div id="hud-inventory" class="inventory-grid">
+              <!-- Grid slots of current items -->
+            </div>
+            <div id="hud-subclass-badge" style="text-align: center; font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem; text-transform: uppercase; letter-spacing: 2px;">
+              CLASS: LOCKSMITH
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 4. Dynamic Terminal Cipher Keypad Interface (Interactive in-game) -->
+      <div id="keypad-modal-ui" class="keypad-modal" style="display: none;">
+        <div style="text-align: center; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">KEYPAD CIPHER TERMINAL</div>
+        <div id="keypad-screen-display" class="keypad-screen">----</div>
+        <div class="keypad-grid">
+          <button class="keypad-btn">1</button>
+          <button class="keypad-btn">2</button>
+          <button class="keypad-btn">3</button>
+          <button class="keypad-btn">4</button>
+          <button class="keypad-btn">5</button>
+          <button class="keypad-btn">6</button>
+          <button class="keypad-btn">7</button>
+          <button class="keypad-btn">8</button>
+          <button class="keypad-btn">9</button>
+          <button id="keypad-clear" class="keypad-btn" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3);">CLR</button>
+          <button class="keypad-btn">0</button>
+          <button id="keypad-submit" class="keypad-btn" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">ENT</button>
+        </div>
+        <button id="keypad-close" class="action-btn" style="padding: 0.5rem; font-size: 0.8rem;">Disengage Device</button>
+      </div>
+
+      <!-- 5. Pointer Lock & Intro Splash -->
+      <div id="pointer-lock-overlay" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; color: white;">
+        <h2 id="resume-click-target" style="font-family: 'Orbitron', sans-serif; font-size: 2rem; color: var(--primary-accent); text-shadow: 0 0 10px var(--primary-accent); cursor: pointer; padding: 20px;">CLICK TO RESUME LABYRINTH</h2>
+        <p style="color: var(--text-muted); margin-top: 10px;">(Press ESC to Pause | WASD to Move | Mouse to Look)</p>
+        <button onclick="window.location.reload()" class="action-btn" style="margin-top: 2rem; background: rgba(139,0,0,0.8); padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto;">ABORT MATCH</button>
+      </div>
+
+      <div id="role-splash-screen" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); z-index: 999; flex-direction: column; justify-content: center; align-items: center; color: white;">
+        <h1 id="splash-role-title" style="font-family: 'Orbitron', sans-serif; font-size: 3rem; color: var(--primary-accent); margin-bottom: 10px; text-transform: uppercase;">ROLE</h1>
+        <p id="splash-role-desc" style="font-size: 1.2rem; color: var(--text-muted); max-width: 600px; text-align: center;">Perk desc</p>
+      </div>
+      
+      <div id="captured-overlay" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(139,0,0,0.6); z-index: 9999; flex-direction: column; justify-content: center; align-items: center; color: white; backdrop-filter: blur(10px); pointer-events: auto;">
+        <h1 style="font-family: 'Orbitron', sans-serif; font-size: 4rem; color: #ff4444; text-shadow: 0 0 20px red; letter-spacing: 5px;">CAPTURED</h1>
+        <p style="font-size: 1.2rem; color: #ffcccc; max-width: 600px; text-align: center;">You have been dragged into the void...</p>
+        <button onclick="window.location.reload()" class="action-btn" style="margin-top: 2rem; background: rgba(0,0,0,0.8); padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto;">Return to Main Menu</button>
+      </div>
+
+    </div>
+
+    <!-- Alert triggers -->
+    <div id="alarm-flash" class="fullscreen-alarm-overlay"></div>
+    <div id="game-notification" class="notification-box">WARNING: INCORRECT CIPHER CODE! OUTLINES REVEALED!</div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
