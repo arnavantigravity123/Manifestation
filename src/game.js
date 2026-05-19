@@ -1449,41 +1449,111 @@ function animate() {
         }
       });
 
-      // BFS Pathfinding — recalculate path every 2 seconds
+      // AI State Machine Initialization
+      if (!ghost.userData.aiState) {
+        ghost.userData.aiState = 'WANDER';
+        ghost.userData.targetGrid = null;
+        ghost.userData.loseSightTimer = 0;
+        ghost.userData.lastSoundTime = 0;
+      }
+
+      // Check Line of Sight (LOS)
+      let canSeePlayer = false;
+      if (distToPlayer < 13.5 && myTeam === 'Human' && !isPanicked) { // 3 blocks max sight range
+        const directionToPlayer = new THREE.Vector3().subVectors(camera.position, ghost.position).normalize();
+        const raycaster = new THREE.Raycaster(ghost.position, directionToPlayer, 0, 15);
+        const intersects = raycaster.intersectObjects(walls);
+        if (intersects.length === 0 || intersects[0].distance > distToPlayer) {
+          canSeePlayer = true;
+        }
+      }
+
+      // State Transitions
+      if (canSeePlayer) {
+        ghost.userData.aiState = 'CHASE';
+        ghost.userData.loseSightTimer = 0;
+      } else if (ghost.userData.aiState === 'CHASE') {
+        ghost.userData.loseSightTimer += delta;
+        if (ghost.userData.loseSightTimer > 3.0) {
+          ghost.userData.aiState = 'WANDER'; // Lost player
+          ghost.userData.targetGrid = null;
+        }
+      }
+
+      // Check Sound Beacons
+      if (latestSoundBeacon && latestSoundBeacon.time > ghost.userData.lastSoundTime && ghost.userData.aiState !== 'CHASE') {
+        ghost.userData.aiState = 'INVESTIGATE';
+        ghost.userData.targetGrid = worldToGrid(latestSoundBeacon.position.x, latestSoundBeacon.position.z);
+        ghost.userData.lastSoundTime = latestSoundBeacon.time;
+        ghost.userData.pathTime = 0; // Force immediate repath
+      }
+
+      // BFS Pathfinding — recalculate path every 2 seconds or when target changes
       if (!ghost.userData.path || !ghost.userData.pathTime || time - ghost.userData.pathTime > 2000) {
         ghost.userData.pathTime = time;
         const ghostGrid = worldToGrid(ghost.position.x, ghost.position.z);
-        const playerGrid = worldToGrid(camera.position.x, camera.position.z);
-        ghost.userData.path = bfsPath(ghostGrid.col, ghostGrid.row, playerGrid.col, playerGrid.row);
-        ghost.userData.pathIdx = 1; // Skip first waypoint (ghost's current cell)
+        
+        let destGrid;
+        if (ghost.userData.aiState === 'CHASE') {
+          destGrid = worldToGrid(camera.position.x, camera.position.z);
+          ghost.userData.targetGrid = destGrid;
+        } else if (ghost.userData.aiState === 'INVESTIGATE') {
+          destGrid = ghost.userData.targetGrid;
+          if (!destGrid) destGrid = ghostGrid;
+          if (ghostGrid.col === destGrid.col && ghostGrid.row === destGrid.row) {
+             ghost.userData.aiState = 'WANDER';
+             ghost.userData.targetGrid = null;
+          }
+        } 
+
+        if (ghost.userData.aiState === 'WANDER') {
+          if (!ghost.userData.targetGrid || (ghostGrid.col === ghost.userData.targetGrid.col && ghostGrid.row === ghost.userData.targetGrid.row)) {
+            let rx, rz, attempts = 0;
+            do {
+              rx = Math.floor(Math.random() * mazeSizeGlobal);
+              rz = Math.floor(Math.random() * mazeSizeGlobal);
+              attempts++;
+            } while (mazeLayout[rz] && mazeLayout[rz][rx] !== 0 && attempts < 50);
+            ghost.userData.targetGrid = { col: rx, row: rz };
+          }
+          destGrid = ghost.userData.targetGrid;
+        }
+        
+        if (destGrid) {
+          ghost.userData.path = bfsPath(ghostGrid.col, ghostGrid.row, destGrid.col, destGrid.row);
+          ghost.userData.pathIdx = 1; // Skip first waypoint
+        }
       }
 
       // Follow the path waypoints
       const path = ghost.userData.path;
       const pathIdx = ghost.userData.pathIdx || 1;
 
-      if (distToPlayer > 0.5 && path && path.length > 0 && pathIdx < path.length) {
+      if (path && path.length > 0 && pathIdx < path.length) {
         const waypoint = path[pathIdx];
         const dx = waypoint.x - ghost.position.x;
         const dz = waypoint.z - ghost.position.z;
         const distToWaypoint = Math.sqrt(dx*dx + dz*dz);
 
         if (distToWaypoint < 1.5) {
-          // Reached waypoint, advance to next
-          ghost.userData.pathIdx = pathIdx + 1;
-        } else {
+          ghost.userData.pathIdx = pathIdx + 1; // Advance waypoint
+        } else if (distToPlayer > 0.5 || ghost.userData.aiState !== 'CHASE') {
           // Move toward current waypoint
           const dir = new THREE.Vector3(dx, 0, dz).normalize();
           ghost.position.addScaledVector(dir, delta * moveSpeed);
         }
-      } else if (distToPlayer > 0.5 && (!path || path.length === 0)) {
-        // Fallback: no path found, move directly (shouldn't happen often)
+      } else if (ghost.userData.aiState === 'CHASE' && distToPlayer > 0.5) {
+        // Fallback: Chase direct line of sight
         const dir = new THREE.Vector3(camera.position.x - ghost.position.x, 0, camera.position.z - ghost.position.z).normalize();
         ghost.position.addScaledVector(dir, delta * moveSpeed);
       }
       
-      // Face the player
-      ghost.lookAt(camera.position.x, ghost.position.y, camera.position.z);
+      // Face the player if chasing, otherwise face movement direction
+      if (ghost.userData.aiState === 'CHASE') {
+        ghost.lookAt(camera.position.x, ghost.position.y, camera.position.z);
+      } else if (path && path.length > 0 && pathIdx < path.length) {
+        ghost.lookAt(path[pathIdx].x, ghost.position.y, path[pathIdx].z);
+      }
 
       // Wall collision — push ghost out if clipping
       walls.forEach(wall => {
