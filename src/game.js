@@ -6,6 +6,9 @@ let velocity = new THREE.Vector3();
 let direction = new THREE.Vector3();
 let prevTime = performance.now();
 const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia("(max-width: 768px)").matches;
+if (isMobileDevice) {
+  document.body.classList.add('is-mobile');
+}
 
 // Game Data
 let socketClient = null;
