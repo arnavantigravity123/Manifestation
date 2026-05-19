@@ -5,6 +5,7 @@ let moveForward = false, moveBackward = false, moveLeft = false, moveRight = fal
 let velocity = new THREE.Vector3();
 let direction = new THREE.Vector3();
 let prevTime = performance.now();
+const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia("(max-width: 768px)").matches;
 
 // Game Data
 let socketClient = null;
@@ -63,16 +64,34 @@ export function initGame(socket, socketId, matchConfig) {
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
   ptrOverlay.style.display = 'flex';
   
+  if (isMobileDevice) {
+    const resumeTarget = document.getElementById('resume-click-target');
+    if (resumeTarget) resumeTarget.textContent = 'TAP TO ENTER LABYRINTH';
+    const subtext = document.querySelector('#pointer-lock-overlay p');
+    if (subtext) subtext.textContent = '(Drag Screen to Look | Joystick to Move | Tap UI to Act)';
+  }
+
   container.addEventListener('click', () => {
-    container.requestPointerLock();
+    if (isMobileDevice) {
+      window.mobileGameActive = true;
+      ptrOverlay.style.display = 'none';
+    } else {
+      container.requestPointerLock();
+    }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   });
   document.getElementById('resume-click-target').addEventListener('click', () => {
-    container.requestPointerLock();
+    if (isMobileDevice) {
+      window.mobileGameActive = true;
+      ptrOverlay.style.display = 'none';
+    } else {
+      container.requestPointerLock();
+    }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   });
 
   document.addEventListener('pointerlockchange', () => {
+    if (isMobileDevice) return;
     if (document.pointerLockElement === container) {
       ptrOverlay.style.display = 'none';
     } else {
@@ -189,6 +208,12 @@ function renderHUDInventory() {
   inventory.forEach((item, index) => {
     const slot = document.createElement('div');
     slot.className = index === activeSlot ? 'inventory-slot active' : 'inventory-slot';
+    slot.style.pointerEvents = 'auto';
+    slot.addEventListener('click', (e) => {
+      e.stopPropagation();
+      activeSlot = index;
+      renderHUDInventory();
+    });
     
     const idxSpan = document.createElement('span');
     idxSpan.className = 'inventory-slot-index';
@@ -589,6 +614,7 @@ function setupControls() {
   document.addEventListener('keyup', onKeyUp);
   
   document.addEventListener('mousedown', (e) => {
+    if (isMobileDevice) return;
     if (document.pointerLockElement !== document.getElementById('canvas-container') || isCaptured) return;
     if (e.button === 0) { // Left click
       useActiveItem();
@@ -597,12 +623,169 @@ function setupControls() {
 
   // Mouse camera rotation controller
   document.addEventListener('mousemove', (e) => {
+    if (isMobileDevice) return;
     if (document.pointerLockElement === document.getElementById('canvas-container')) {
       camera.rotation.y -= e.movementX * 0.002;
       camera.rotation.x -= e.movementY * 0.002;
       camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
     }
   });
+
+  // Mobile Touch Controls
+  if (isMobileDevice) {
+    let lookTouchId = null;
+    let lastLookX = 0;
+    let lastLookY = 0;
+
+    container.addEventListener('touchstart', (e) => {
+      if (isCaptured || !window.gameReady) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.clientX < window.innerWidth * 0.45 && t.clientY > window.innerHeight * 0.45) {
+          continue;
+        }
+        if (lookTouchId === null) {
+          lookTouchId = t.identifier;
+          lastLookX = t.clientX;
+          lastLookY = t.clientY;
+          break;
+        }
+      }
+    }, { passive: false });
+
+    container.addEventListener('touchmove', (e) => {
+      if (isCaptured || !window.gameReady) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === lookTouchId) {
+          const dx = t.clientX - lastLookX;
+          const dy = t.clientY - lastLookY;
+
+          camera.rotation.y -= dx * 0.004;
+          camera.rotation.x -= dy * 0.004;
+          camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
+
+          lastLookX = t.clientX;
+          lastLookY = t.clientY;
+          e.preventDefault();
+          break;
+        }
+      }
+    }, { passive: false });
+
+    const clearLookTouch = (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === lookTouchId) {
+          lookTouchId = null;
+          break;
+        }
+      }
+    };
+    container.addEventListener('touchend', clearLookTouch);
+    container.addEventListener('touchcancel', clearLookTouch);
+
+    // Joystick logic
+    const joystickBase = document.getElementById('joystick-base');
+    const joystickKnob = document.getElementById('joystick-knob');
+    let joystickTouchId = null;
+    let joystickStart = { x: 0, y: 0 };
+    const maxJoystickDistance = 35;
+
+    joystickBase.addEventListener('touchstart', (e) => {
+      if (joystickTouchId !== null) return;
+      const touch = e.targetTouches[0];
+      joystickTouchId = touch.identifier;
+      const rect = joystickBase.getBoundingClientRect();
+      joystickStart.x = rect.left + rect.width / 2;
+      joystickStart.y = rect.top + rect.height / 2;
+      updateJoystick(touch.clientX, touch.clientY);
+      e.preventDefault();
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+      if (joystickTouchId === null) return;
+      for (let i = 0; i < e.touches.length; i++) {
+        const touch = e.touches[i];
+        if (touch.identifier === joystickTouchId) {
+          updateJoystick(touch.clientX, touch.clientY);
+          e.preventDefault();
+        }
+      }
+    }, { passive: false });
+
+    const resetJoystick = () => {
+      joystickTouchId = null;
+      joystickKnob.style.transform = 'translate(0px, 0px)';
+      moveForward = false;
+      moveBackward = false;
+      moveLeft = false;
+      moveRight = false;
+    };
+
+    window.addEventListener('touchend', (e) => {
+      if (joystickTouchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === joystickTouchId) {
+          resetJoystick();
+        }
+      }
+    });
+
+    window.addEventListener('touchcancel', (e) => {
+      if (joystickTouchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === joystickTouchId) {
+          resetJoystick();
+        }
+      }
+    });
+
+    function updateJoystick(clientX, clientY) {
+      let dx = clientX - joystickStart.x;
+      let dy = clientY - joystickStart.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+
+      if (dist > maxJoystickDistance) {
+        dx = (dx / dist) * maxJoystickDistance;
+        dy = (dy / dist) * maxJoystickDistance;
+      }
+
+      joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+
+      const joyX = dx / maxJoystickDistance;
+      const joyY = dy / maxJoystickDistance;
+
+      moveForward = joyY < -0.2;
+      moveBackward = joyY > 0.2;
+      moveLeft = joyX < -0.2;
+      moveRight = joyX > 0.2;
+    }
+
+    // Action button bindings
+    document.getElementById('btn-mobile-use').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!isCaptured && window.gameReady) useActiveItem();
+    });
+
+    document.getElementById('btn-mobile-interact').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!isCaptured && window.gameReady) checkInteractions();
+    });
+
+    document.getElementById('btn-mobile-special').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!isCaptured && window.gameReady) triggerPanicHide();
+    });
+
+    document.getElementById('btn-mobile-pause').addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.mobileGameActive = false;
+      ptrOverlay.style.display = 'flex';
+    });
+  }
 }
 
 function checkInteractions() {
@@ -996,7 +1179,8 @@ function animate() {
   const delta = (time - prevTime) / 1000;
   prevTime = time;
 
-  if (document.pointerLockElement === document.getElementById('canvas-container') && !isCaptured) {
+  const isActive = isMobileDevice ? (window.mobileGameActive && !isCaptured) : (document.pointerLockElement === document.getElementById('canvas-container') && !isCaptured);
+  if (isActive) {
     // 1. Process movement physics with friction
     velocity.x -= velocity.x * 10.0 * delta;
     velocity.z -= velocity.z * 10.0 * delta;
@@ -1096,6 +1280,7 @@ function animate() {
         if (currentHP <= 0 && !isCaptured) {
           isCaptured = true;
           document.exitPointerLock();
+          window.mobileGameActive = false;
           document.getElementById('hud-overlay').style.display = 'none';
           document.getElementById('captured-overlay').style.display = 'flex';
           socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) has been captured by the void.` });
@@ -1203,10 +1388,9 @@ function animate() {
     checkWinCondition();
   }
 
-  // Handle ghost initial spawning — only after splash screen and pointer lock
-  if (ghosts3D.length === 0 && currentLobby && currentLobby.settings.ghostsCount > 0
-      && window.gameReady
-      && document.pointerLockElement === document.getElementById('canvas-container')) {
+  // Handle ghost initial spawning — only after splash screen and pointer lock / active game
+  const readyToSpawn = isMobileDevice ? (window.gameReady && window.mobileGameActive) : (window.gameReady && document.pointerLockElement === document.getElementById('canvas-container'));
+  if (ghosts3D.length === 0 && currentLobby && currentLobby.settings.ghostsCount > 0 && readyToSpawn) {
     spawnGhostAIs(currentLobby.settings.ghostsCount);
   }
 

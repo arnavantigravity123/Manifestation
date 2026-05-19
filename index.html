@@ -203,7 +203,7 @@
         <!-- Bottom row: Sensor sweep & Active inventory hotbar -->
         <div class="hud-bottom">
           <!-- Spatial Sound Radar -->
-          <div class="hud-panel" style="padding: 0.5rem; border-radius: 50%;">
+          <div id="radar-panel" class="hud-panel" style="padding: 0.5rem; border-radius: 50%;">
             <div class="sensor-widget">
               <div class="radar-sweep"></div>
               <div id="radar-blip-element" class="radar-blip"></div>
@@ -219,6 +219,21 @@
               CLASS: LOCKSMITH
             </div>
           </div>
+        </div>
+
+        <!-- Mobile Controls (Visible only on mobile/touch screens) -->
+        <div id="mobile-controls-container" class="interactive-hud">
+          <div id="mobile-joystick">
+            <div id="joystick-base">
+              <div id="joystick-knob"></div>
+            </div>
+          </div>
+          <div id="mobile-actions">
+            <button id="btn-mobile-use" class="mobile-action-btn btn-use">USE</button>
+            <button id="btn-mobile-interact" class="mobile-action-btn btn-interact">INTERACT</button>
+            <button id="btn-mobile-special" class="mobile-action-btn btn-special">SPECIAL</button>
+          </div>
+          <button id="btn-mobile-pause">PAUSE</button>
         </div>
 
       </div>
