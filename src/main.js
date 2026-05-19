@@ -128,7 +128,15 @@ function initializeSocketConnection() {
   });
 
   socket.on('joined_room_success', ({ roomId, isPublic }) => {
-    if (isSoloMode) return;
+    if (isSoloMode) {
+      socket.emit('update_settings', { botsEnabled: true });
+      socket.emit('update_player', { team: currentSelectedTeam, characterClass: subclassSelect.value });
+      setTimeout(() => {
+        socket.emit('start_match');
+        soloLoadingOverlay.style.display = 'none';
+      }, 200);
+      return;
+    }
     authView.style.display = 'none';
     lobbyView.style.display = 'grid';
     roomDisplay.textContent = roomId.toUpperCase();
@@ -187,20 +195,8 @@ soloBtn.addEventListener('click', () => {
   soloLoadingOverlay.style.display = 'block';
   const s = initializeSocketConnection();
   
-  // Need to wait slightly if socket isn't connected yet, but socket.io buffers emit.
   const roomId = `solo-${Math.floor(1000 + Math.random() * 9000)}`;
-  
   s.emit('join_room', { roomId, username: getUsername(), isPublic: false });
-  
-  // Auto-start solo flow
-  setTimeout(() => {
-    s.emit('update_settings', { botsEnabled: true });
-    s.emit('update_player', { team: currentSelectedTeam, characterClass: subclassSelect.value });
-    setTimeout(() => {
-      s.emit('start_match');
-      soloLoadingOverlay.style.display = 'none';
-    }, 400);
-  }, 400);
 });
 
 createPublicBtn.addEventListener('click', () => {
