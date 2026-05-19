@@ -129,8 +129,10 @@ function initializeSocketConnection() {
 
   socket.on('joined_room_success', ({ roomId, isPublic }) => {
     if (isSoloMode) {
+      const soloHumanClasses = ['Locksmith', 'Trapper', 'Scout', 'Medic', 'Flashlight Expert', 'Quartermaster'];
+      const randomClass = soloHumanClasses[Math.floor(Math.random() * soloHumanClasses.length)];
       socket.emit('update_settings', { botsEnabled: true });
-      socket.emit('update_player', { team: currentSelectedTeam, characterClass: subclassSelect.value });
+      socket.emit('update_player', { team: 'Human', characterClass: randomClass });
       setTimeout(() => {
         socket.emit('start_match');
         soloLoadingOverlay.style.display = 'none';
