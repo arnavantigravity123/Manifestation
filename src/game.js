@@ -1013,6 +1013,7 @@ function deploySaltTrap() {
   const saltMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const salt = new THREE.Mesh(saltGeo, saltMat);
   salt.position.set(camera.position.x, 0.05, camera.position.z);
+  salt.userData = { triggered: false };
   scene.add(salt);
   saltTraps.push(salt);
   triggerNotification("salt barrier deployed.");
@@ -1465,17 +1466,54 @@ function animate() {
       speed *= 1.5;
     }
 
-    // Salt trap slow down for human Ghost players
+    // Salt trap slow down and Flashlight Blinding for human Ghost players
     if (myTeam === 'Ghost') {
       let nearSalt = false;
-      saltTraps.forEach(trap => {
+      for (let i = saltTraps.length - 1; i >= 0; i--) {
+        const trap = saltTraps[i];
         const dist = camera.position.distanceTo(trap.position);
         if (dist < 2.5) {
           nearSalt = true;
+          if (!trap.userData || !trap.userData.triggered) {
+            trap.userData = trap.userData || {};
+            trap.userData.triggered = true;
+            triggerNotification("Stepped in salt! You are slowed!");
+            setTimeout(() => {
+              scene.remove(trap);
+              const idx = saltTraps.indexOf(trap);
+              if (idx > -1) saltTraps.splice(idx, 1);
+            }, 3000);
+          }
         }
-      });
+      }
       if (nearSalt) {
         speed *= 0.2; // 80% slow down, matching AI slow down ratio
+      }
+
+      // Check if blinded by any human player's flashlight cone
+      let blindedByHuman = false;
+      Object.keys(players3D).forEach(id => {
+        const pMesh = players3D[id];
+        const isHuman = pMesh.material.color.getHex() === 0x3b82f6;
+        if (isHuman) {
+          const dist = camera.position.distanceTo(pMesh.position);
+          if (dist < 15) {
+            // Reconstruct human forward vector based on network rotation
+            const humanForward = new THREE.Vector3(-Math.sin(pMesh.rotation.y), 0, -Math.cos(pMesh.rotation.y)).normalize();
+            const dirToGhost = new THREE.Vector3().subVectors(camera.position, pMesh.position).normalize();
+            const dot = humanForward.dot(dirToGhost);
+            if (dot > 0.88) { // 25 degree cone
+              blindedByHuman = true;
+            }
+          }
+        }
+      });
+
+      if (blindedByHuman) {
+        speed *= 0.5; // 50% slow down when blinded by flashlight
+        if (Math.random() < 0.01) { // Throttle warning notification
+          triggerNotification("BLINDED BY FLASHLIGHT! Speed reduced.");
+        }
       }
 
       // Breaker Remote freeze for human Ghost players
@@ -1576,13 +1614,45 @@ function animate() {
         }
       }
 
-      // Check salt traps
+      // Check salt traps (triggering & consumption)
       let moveSpeed = 6.0;
-      saltTraps.forEach(trap => {
+      for (let i = saltTraps.length - 1; i >= 0; i--) {
+        const trap = saltTraps[i];
         if (ghost.position.distanceTo(trap.position) < 2.5) {
           moveSpeed = 1.0;
+          if (!trap.userData || !trap.userData.triggered) {
+            trap.userData = trap.userData || {};
+            trap.userData.triggered = true;
+            if (myTeam === 'Human') {
+              triggerNotification("Salt barrier disturbed by a ghost!");
+            }
+            setTimeout(() => {
+              scene.remove(trap);
+              const idx = saltTraps.indexOf(trap);
+              if (idx > -1) saltTraps.splice(idx, 1);
+            }, 3000);
+          }
         }
-      });
+      }
+
+      // Check if blinded by player's flashlight
+      let isBlinded = false;
+      if (myTeam === 'Human' && flashLight && flashLight.intensity > 50) {
+        const dist = camera.position.distanceTo(ghost.position);
+        if (dist < 15) {
+          const dirToGhost = new THREE.Vector3().subVectors(ghost.position, camera.position).normalize();
+          const forward = new THREE.Vector3();
+          camera.getWorldDirection(forward);
+          const dot = forward.dot(dirToGhost);
+          if (dot > 0.88) { // 25 degree cone
+            isBlinded = true;
+          }
+        }
+      }
+
+      if (isBlinded) {
+        moveSpeed *= 0.5; // 50% slow down when blinded by flashlight
+      }
 
       // AI State Machine Initialization
       if (!ghost.userData.aiState) {
