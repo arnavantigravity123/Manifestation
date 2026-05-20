@@ -274,6 +274,9 @@ export function initGame(socket, socketId, matchConfig) {
   // Setup Microphone for audio mechanics
   setupMicrophone();
 
+  // Setup keypad button listeners now that the game DOM is visible
+  setupKeypadListeners();
+
   // Window Resize
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -1351,20 +1354,15 @@ function deploySaltTrap() {
   triggerNotification("salt barrier deployed.");
 }
 
-// Keypad dialog helpers
-const keypadUI = document.getElementById('keypad-modal-ui');
-const keypadScreen = document.getElementById('keypad-screen-display');
-const keypadBtns = document.querySelectorAll('.keypad-grid .keypad-btn');
-const keypadClearBtn = document.getElementById('keypad-clear');
-const keypadSubmitBtn = document.getElementById('keypad-submit');
-const keypadCloseBtn = document.getElementById('keypad-close');
+// Keypad dialog helpers — queried lazily to avoid null refs at module load time
+let keypadUI, keypadScreen, keypadBtns, keypadClearBtn, keypadSubmitBtn, keypadCloseBtn;
 
 function getKeypadDisplayString() {
   const digits = window.cipherCodeDigits || [null, null, null, null];
   return digits.map((d, i) => {
     const clueNote = codeClueNotes.find(n => n.digitIndex === i && n.collected);
     if (clueNote && d !== null) return d.toString(); // Known from clue
-    if (i < codeEntered.length) return codeEntered[i];    // Player typed
+    if (i < codeEntered.length) return codeEntered[i];  // Player typed
     return '_';
   }).join(' ');
 }
@@ -1374,57 +1372,67 @@ function openKeypadModal() {
     triggerNotification("Master Gate protocol already bypassed.");
     return;
   }
-  
+  if (!keypadUI) return;
   keypadUI.style.display = 'flex';
   document.exitPointerLock();
-  // Reset only the user-typed portion; keep clue-revealed digits
   codeEntered = "";
   keypadScreen.textContent = getKeypadDisplayString();
 }
 
-keypadCloseBtn.addEventListener('click', () => {
-  keypadUI.style.display = 'none';
-});
+function setupKeypadListeners() {
+  keypadUI        = document.getElementById('keypad-modal-ui');
+  keypadScreen    = document.getElementById('keypad-screen-display');
+  keypadBtns      = document.querySelectorAll('.keypad-grid .keypad-btn');
+  keypadClearBtn  = document.getElementById('keypad-clear');
+  keypadSubmitBtn = document.getElementById('keypad-submit');
+  keypadCloseBtn  = document.getElementById('keypad-close');
 
-keypadClearBtn.addEventListener('click', () => {
-  codeEntered = "";
-  keypadScreen.textContent = getKeypadDisplayString();
-});
+  if (!keypadUI) return; // guard: element not in DOM yet
 
-keypadBtns.forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    const val = e.target.textContent;
-    if (val === 'CLR' || val === 'ENT') return;
-    // Count how many digits are NOT pre-filled by clues
+  keypadCloseBtn.addEventListener('click', () => {
+    keypadUI.style.display = 'none';
+  });
+
+  keypadClearBtn.addEventListener('click', () => {
+    codeEntered = "";
+    keypadScreen.textContent = getKeypadDisplayString();
+  });
+
+  keypadBtns.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const val = e.target.textContent;
+      if (val === 'CLR' || val === 'ENT') return;
+      // Only type into positions not already revealed by clue notes
+      const digits = window.cipherCodeDigits || [null, null, null, null];
+      const unknownCount = digits.filter((d, i) => {
+        const clue = codeClueNotes.find(n => n.digitIndex === i && n.collected);
+        return !clue;
+      }).length;
+      if (codeEntered.length < unknownCount) {
+        codeEntered += val;
+        keypadScreen.textContent = getKeypadDisplayString();
+      }
+    });
+  });
+
+  keypadSubmitBtn.addEventListener('click', () => {
+    // Build final code: clue digits take priority, typed digits fill remaining slots
     const digits = window.cipherCodeDigits || [null, null, null, null];
-    const unknownCount = digits.filter((d, i) => {
+    let typedIdx = 0;
+    const finalCode = digits.map((d, i) => {
       const clue = codeClueNotes.find(n => n.digitIndex === i && n.collected);
-      return !clue;
-    }).length;
-    if (codeEntered.length < unknownCount) {
-      codeEntered += val;
-      keypadScreen.textContent = getKeypadDisplayString();
+      if (clue && d !== null) return d.toString();
+      return codeEntered[typedIdx++] || '0';
+    }).join('');
+
+    if (finalCode.length === 4) {
+      socketClient.emit('try_cipher', finalCode);
+      keypadUI.style.display = 'none';
+    } else {
+      triggerNotification("Enter all 4 digits first.");
     }
   });
-});
-
-keypadSubmitBtn.addEventListener('click', () => {
-  // Build final code: clue digits take priority, then typed digits fill remaining slots
-  const digits = window.cipherCodeDigits || [null, null, null, null];
-  let typedIdx = 0;
-  const finalCode = digits.map((d, i) => {
-    const clue = codeClueNotes.find(n => n.digitIndex === i && n.collected);
-    if (clue && d !== null) return d.toString();
-    return codeEntered[typedIdx++] || '0';
-  }).join('');
-  
-  if (finalCode.length === 4) {
-    socketClient.emit('try_cipher', finalCode);
-    keypadUI.style.display = 'none';
-  } else {
-    triggerNotification("Enter all 4 digits first.");
-  }
-});
+}
 
 // Trigger risk/reward: Panic Hide
 function triggerPanicHide() {
