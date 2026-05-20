@@ -400,6 +400,11 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('ghost_sound_scramble', { id: socket.id });
   });
 
+  socket.on('item_dropped', (data) => {
+    console.log(`[Lobby ${socket.roomId}] Player ${socket.id} dropped item ${data.name}.`);
+    socket.to(socket.roomId).emit('item_dropped_sync', data);
+  });
+
   socket.on('chalk_spray', ({ position }) => {
     console.log(`[Lobby ${socket.roomId}] Player ${socket.id} used Chalk Spray at [${position.x.toFixed(1)}, ${position.z.toFixed(1)}].`);
     socket.to(socket.roomId).emit('human_chalk_spray', { id: socket.id, position });

@@ -816,7 +816,7 @@ function generateConsumableItems() {
 
   const itemTypes = [
     { name: 'Battery Pack', color: 0x22c55e },
-    { name: 'EMF Reader', color: 0x3b82f6 },
+    { name: 'EMF Radar', color: 0x3b82f6 },
     { name: 'Thermal Camera', color: 0xf97316 },
     { name: 'Sanity Pills', color: 0xec4899 }
   ];
@@ -916,14 +916,29 @@ function setupControls() {
         // Risk/Reward Ability: Panic Hide
         triggerPanicHide();
         break;
-      case 'Digit1': activeSlot = 0; renderHUDInventory(); break;
-      case 'Digit2': activeSlot = 1; renderHUDInventory(); break;
-      case 'Digit3': activeSlot = 2; renderHUDInventory(); break;
-      case 'Digit4': activeSlot = 3; renderHUDInventory(); break;
+      case 'KeyG':
+        dropActiveItem();
+        break;
+      case 'BracketLeft':
+        activeSlot = (activeSlot - 1 + inventory.length) % inventory.length;
+        renderHUDInventory();
+        break;
+      case 'BracketRight':
+        activeSlot = (activeSlot + 1) % inventory.length;
+        renderHUDInventory();
+        break;
+      case 'Digit1': if (inventory.length > 0) { activeSlot = 0; renderHUDInventory(); } break;
+      case 'Digit2': if (inventory.length > 1) { activeSlot = 1; renderHUDInventory(); } break;
+      case 'Digit3': if (inventory.length > 2) { activeSlot = 2; renderHUDInventory(); } break;
+      case 'Digit4': if (inventory.length > 3) { activeSlot = 3; renderHUDInventory(); } break;
       case 'Digit5': if (inventory.length > 4) { activeSlot = 4; renderHUDInventory(); } break;
       case 'Digit6': if (inventory.length > 5) { activeSlot = 5; renderHUDInventory(); } break;
       case 'Digit7': if (inventory.length > 6) { activeSlot = 6; renderHUDInventory(); } break;
       case 'Digit8': if (inventory.length > 7) { activeSlot = 7; renderHUDInventory(); } break;
+      case 'Digit9': if (inventory.length > 8) { activeSlot = 8; renderHUDInventory(); } break;
+      case 'Digit0': if (inventory.length > 9) { activeSlot = 9; renderHUDInventory(); } break;
+      case 'Minus':  if (inventory.length > 10) { activeSlot = 10; renderHUDInventory(); } break;
+      case 'Equal':  if (inventory.length > 11) { activeSlot = 11; renderHUDInventory(); } break;
     }
   };
 
@@ -1166,6 +1181,18 @@ function setupControls() {
       dropBtn.addEventListener('click', handleDrop);
     }
 
+    const dropItemBtn = document.getElementById('btn-mobile-drop-item');
+    if (dropItemBtn) {
+      const handleDropItem = (e) => {
+        if (!isMobileDevice) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isCaptured && window.gameReady) dropActiveItem();
+      };
+      dropItemBtn.addEventListener('touchstart', handleDropItem, { passive: false });
+      dropItemBtn.addEventListener('click', handleDropItem);
+    }
+
     const handlePause = (e) => {
       if (!isMobileDevice) return;
       e.preventDefault();
@@ -1175,6 +1202,18 @@ function setupControls() {
     };
     pauseBtn.addEventListener('touchstart', handlePause, { passive: false });
     pauseBtn.addEventListener('click', handlePause);
+
+    // Mouse scroll wheel for cycling active slot
+    document.addEventListener('wheel', (e) => {
+      if (isCaptured || !window.gameReady) return;
+      if (e.deltaY > 0) {
+        activeSlot = (activeSlot + 1) % inventory.length;
+        renderHUDInventory();
+      } else if (e.deltaY < 0) {
+        activeSlot = (activeSlot - 1 + inventory.length) % inventory.length;
+        renderHUDInventory();
+      }
+    });
   }
 }
 
@@ -1389,16 +1428,29 @@ function checkInteractions() {
     }
   }
 
-  // 5. Check proximity to Pick-up Items (no hard cap — class loadout + floor finds can stack)
+  // 5. Check proximity to Pick-up Items (find empty slot & check unique items)
   for (let i = 0; i < itemsInMaze.length; i++) {
     const item = itemsInMaze[i];
     const dist = camera.position.distanceTo(item.mesh.position);
     if (dist < 4.5) {
-      inventory.push(item.name);
-      scene.remove(item.mesh);
-      itemsInMaze.splice(i, 1);
-      triggerNotification(`Picked up ${item.name}`);
-      renderHUDInventory();
+      // UNIQUE EQUIPMENT CHECK: Prevent carrying duplicates of passive/reusable items
+      const uniqueEquipment = ["EMF Radar", "Thermal Camera", "Breaker Remote"];
+      if (uniqueEquipment.includes(item.name) && inventory.includes(item.name)) {
+        triggerNotification(`You already have a ${item.name}!`);
+        break;
+      }
+
+      // Look for the first empty slot to place the item
+      const emptyIndex = inventory.indexOf('');
+      if (emptyIndex !== -1) {
+        inventory[emptyIndex] = item.name;
+        scene.remove(item.mesh);
+        itemsInMaze.splice(i, 1);
+        triggerNotification(`Picked up ${item.name}`);
+        renderHUDInventory();
+      } else {
+        triggerNotification("Inventory full! Drop an item first.");
+      }
       break;
     }
   }
@@ -1624,6 +1676,65 @@ function setupKeypadListeners() {
     }
     socketClient.emit('try_cipher', codeEntered);
     closeKeypad();
+  });
+}
+
+// Drop the active item in inventory
+function dropActiveItem() {
+  const item = inventory[activeSlot];
+  if (!item || item === "") {
+    triggerNotification("No item in active slot to drop.");
+    return;
+  }
+  
+  if (myTeam === 'Ghost') {
+    triggerNotification("Ghosts cannot drop items.");
+    return;
+  }
+
+  // Remove from inventory
+  inventory[activeSlot] = "";
+  renderHUDInventory();
+
+  // Calculate spawn position in front of player
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const spawnPos = new THREE.Vector3()
+    .copy(camera.position)
+    .addScaledVector(dir, 1.8);
+  spawnPos.y = 0.3; // Floor height
+
+  // Emit event to network so teammates see it
+  socketClient.emit('item_dropped', {
+    name: item,
+    position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z }
+  });
+
+  // Spawn it locally
+  spawnDroppedItemLocal(item, spawnPos);
+  triggerNotification(`Dropped ${item}`);
+}
+
+function spawnDroppedItemLocal(name, pos) {
+  let color = 0xffffff;
+  if (name === 'Battery Pack') color = 0x22c55e;
+  else if (name === 'EMF Radar') color = 0x3b82f6;
+  else if (name === 'Thermal Camera') color = 0xf97316;
+  else if (name === 'Sanity Pills') color = 0xec4899;
+  else if (name === 'Breaker Remote') color = 0xa855f7;
+  else if (name === 'Adrenaline Shot') color = 0xe11d48;
+  else if (name === 'Salt Cannister') color = 0xf8fafc;
+  else if (name === 'Chalk / UV Spray') color = 0xfef08a;
+
+  const itemGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.6, 8);
+  const itemMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.2 });
+  const mesh = new THREE.Mesh(itemGeo, itemMat);
+  mesh.position.copy(pos);
+  scene.add(mesh);
+
+  itemsInMaze.push({
+    mesh: mesh,
+    name: name
   });
 }
 
@@ -2008,6 +2119,12 @@ function setupSocketListeners() {
         window.location.reload();
       };
     }
+  });
+
+  // Sync dropped items dynamically across all teammates in the lobby
+  socketClient.on('item_dropped_sync', ({ name, position }) => {
+    const pos = new THREE.Vector3(position.x, position.y, position.z);
+    spawnDroppedItemLocal(name, pos);
   });
 }
 

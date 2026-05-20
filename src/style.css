@@ -953,6 +953,16 @@ body.is-mobile .btn-special {
   border: 1px solid rgba(168, 85, 247, 0.4);
 }
 
+body.is-mobile .btn-drop {
+  background: linear-gradient(135deg, #ea580c, #9a3412);
+  border: 1px solid rgba(234, 88, 12, 0.4);
+}
+
+body.is-mobile .btn-drop-item {
+  background: linear-gradient(135deg, #4b5563, #1f2937);
+  border: 1px solid rgba(75, 85, 99, 0.4);
+}
+
 body.is-mobile #btn-mobile-pause {
   position: absolute;
   top: 1.5rem;
