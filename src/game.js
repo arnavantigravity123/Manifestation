@@ -28,6 +28,13 @@ let circuitBreakers = [];
 let fixedBreakersCount = 0;
 const totalBreakersRequired = 3;
 
+// Sprint / Stamina
+let isSprinting = false;
+let stamina = 100; // 0-100
+const STAMINA_DRAIN_RATE = 20;  // per second while sprinting
+const STAMINA_REGEN_RATE  = 12; // per second while not sprinting
+const SPRINT_MIN_STAMINA  = 5;  // can't start sprint below this
+
 // Player Config
 let myTeam = 'Human';
 let myClass = 'Locksmith';
@@ -103,6 +110,11 @@ export function initGame(socket, socketId, matchConfig) {
   const flRow = document.getElementById('flashlight-gauge-row');
   if (flRow) {
     flRow.style.display = myTeam === 'Ghost' ? 'none' : 'block';
+  }
+  // Hide stamina for ghosts (they don't sprint)
+  const stRow = document.getElementById('stamina-gauge-row');
+  if (stRow) {
+    stRow.style.display = myTeam === 'Ghost' ? 'none' : 'block';
   }
 
   // Setup HUD inventory based on subclass data
@@ -671,6 +683,10 @@ function setupControls() {
         // Interact key
         checkInteractions();
         break;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        if (myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA) isSprinting = true;
+        break;
       case 'KeyQ':
       case 'Space':
         // Risk/Reward Ability: Panic Hide
@@ -704,6 +720,10 @@ function setupControls() {
       case 'ArrowRight':
       case 'KeyD':
         moveRight = false;
+        break;
+      case 'ShiftLeft':
+      case 'ShiftRight':
+        isSprinting = false;
         break;
     }
   };
@@ -1617,6 +1637,9 @@ function spawnGhostAIs(count) {
     ghostGroup.position.set(spawnPos.x, 0, spawnPos.z);
 
     scene.add(ghostGroup);
+    // Assign a randomized ghost class to vary AI behavior
+    const AI_GHOST_TYPES = ['Stalker', 'Mimic', 'Juggernaut', 'Phantom', 'Poltergeist', 'Banshee'];
+    ghostGroup.userData.ghostClass = AI_GHOST_TYPES[Math.floor(Math.random() * AI_GHOST_TYPES.length)];
     ghosts3D.push(ghostGroup);
   }
 }
@@ -1640,9 +1663,33 @@ function animate() {
     direction.x = Number(moveRight) - Number(moveLeft);
     direction.normalize(); // Ensure consistent speed
 
-    // Speed details (Adrenaline boosts or Juggernaut movement)
-    let speed = myTeam === 'Ghost' ? 85.0 : 60.0; // Lowered to prevent collision tunneling
-    
+    // Speed details
+    // Human walk: 68 | Juggernaut ghost: 76 (only ghost faster than human)
+    // All other ghosts: 55 (slower than human walk)
+    let baseGhostSpeed = 55.0;
+    if (myTeam === 'Ghost' && myClass === 'Juggernaut') baseGhostSpeed = 76.0;
+    let speed = myTeam === 'Ghost' ? baseGhostSpeed : 68.0;
+
+    // --- Sprint logic (humans only) ---
+    if (myTeam === 'Human') {
+      const moving = moveForward || moveBackward || moveLeft || moveRight;
+      if (isSprinting && moving && stamina > 0) {
+        speed *= 1.55; // sprint multiplier
+        stamina = Math.max(0, stamina - STAMINA_DRAIN_RATE * delta);
+        if (stamina <= 0) isSprinting = false;
+      } else {
+        isSprinting = false;
+        stamina = Math.min(100, stamina + STAMINA_REGEN_RATE * delta);
+        // Prevent starting sprint if stamina too low
+        if (stamina <= SPRINT_MIN_STAMINA) isSprinting = false;
+      }
+      // Update stamina bar
+      const stBar = document.getElementById('stamina-bar');
+      const stVal = document.getElementById('stamina-value');
+      if (stBar) stBar.style.width = `${stamina}%`;
+      if (stVal) stVal.textContent = `${Math.ceil(stamina)}%`;
+    }
+
     if (speedBoostTimer > 0) {
       speedBoostTimer -= delta;
       speed *= 1.5;
@@ -1799,7 +1846,8 @@ function animate() {
       }
 
       // Check salt traps (triggering & consumption)
-      let moveSpeed = 6.0;
+      // Juggernaut is the only ghost type faster than humans; others are slower
+      let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? 9.5 : 5.5;
       for (let i = saltTraps.length - 1; i >= 0; i--) {
         const trap = saltTraps[i];
         if (ghost.position.distanceTo(trap.position) < 2.5) {
