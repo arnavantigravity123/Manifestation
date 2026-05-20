@@ -247,6 +247,14 @@ io.on('connection', (socket) => {
           p.characterClass = ghostClasses[Math.floor(Math.random() * ghostClasses.length)];
         }
       });
+
+      // Ensure there is at least one Human player in the match to prevent 0 humans lobbies
+      const humanCountAfterRandom = playersList.filter(p => p.team === 'Human').length;
+      if (humanCountAfterRandom === 0 && playersList.length > 0) {
+        const luckyPlayer = playersList[Math.floor(Math.random() * playersList.length)];
+        luckyPlayer.team = 'Human';
+        luckyPlayer.characterClass = humanClasses[Math.floor(Math.random() * humanClasses.length)];
+      }
     }
 
     const code = Math.floor(1000 + Math.random() * 9000).toString();

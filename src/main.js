@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import { initGame } from './game.js';
+import { initGame, setMobileMode } from './game.js';
 
 let socket = null;
 let currentLobby = null;
@@ -430,4 +430,32 @@ window.addEventListener('DOMContentLoaded', () => {
       isPublic: rejoinPublicStr === 'true'
     });
   }
+
+  // Settings UI Integration
+  const settingsModal = document.getElementById('settings-modal');
+  const controlSelect = document.getElementById('control-scheme-select');
+  
+  const savedControlMode = localStorage.getItem('control_mode') || 'auto';
+  controlSelect.value = savedControlMode;
+  setMobileMode(savedControlMode);
+
+  const showSettings = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    settingsModal.style.display = 'flex';
+  };
+
+  const hideSettings = () => {
+    settingsModal.style.display = 'none';
+    const selectedMode = controlSelect.value;
+    localStorage.setItem('control_mode', selectedMode);
+    setMobileMode(selectedMode);
+  };
+
+  document.getElementById('auth-settings-btn').addEventListener('click', showSettings);
+  document.getElementById('lobby-settings-btn').addEventListener('click', showSettings);
+  document.getElementById('pause-settings-btn').addEventListener('click', showSettings);
+  document.getElementById('close-settings-btn').addEventListener('click', hideSettings);
 });

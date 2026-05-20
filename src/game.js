@@ -5,9 +5,37 @@ let moveForward = false, moveBackward = false, moveLeft = false, moveRight = fal
 let velocity = new THREE.Vector3();
 let direction = new THREE.Vector3();
 let prevTime = performance.now();
-const isMobileDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia("(max-width: 768px)").matches;
+const defaultMobileDetect = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia("(max-width: 768px)").matches;
+export let isMobileDevice = defaultMobileDetect;
 if (isMobileDevice) {
   document.body.classList.add('is-mobile');
+}
+
+export function setMobileMode(mode) {
+  if (mode === 'touch') {
+    isMobileDevice = true;
+  } else if (mode === 'keyboard') {
+    isMobileDevice = false;
+  } else {
+    isMobileDevice = defaultMobileDetect;
+  }
+  
+  if (isMobileDevice) {
+    document.body.classList.add('is-mobile');
+    if (document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+    const resumeTarget = document.getElementById('resume-click-target');
+    if (resumeTarget) resumeTarget.textContent = 'TAP TO ENTER LABYRINTH';
+    const subtext = document.querySelector('#pointer-lock-overlay p');
+    if (subtext) subtext.textContent = '(Drag Screen to Look | Joystick to Move | Tap UI to Act)';
+  } else {
+    document.body.classList.remove('is-mobile');
+    const resumeTarget = document.getElementById('resume-click-target');
+    if (resumeTarget) resumeTarget.textContent = 'CLICK TO RESUME LABYRINTH';
+    const subtext = document.querySelector('#pointer-lock-overlay p');
+    if (subtext) subtext.textContent = '(Press ESC to Pause | WASD to Move | Mouse to Look)';
+  }
 }
 
 // Game Data
@@ -794,13 +822,14 @@ function setupControls() {
   });
 
   // Mobile Touch Controls
-  if (isMobileDevice) {
+  {
     let lookTouchId = null;
     let lastLookX = 0;
     let lastLookY = 0;
 
     // Listen on document to bypass pointer-events touch bugs in mobile viewports
     document.addEventListener('touchstart', (e) => {
+      if (!isMobileDevice) return;
       if (isCaptured || !window.gameReady) return;
       
       // Ignore touch starts on joystick or action buttons
@@ -823,6 +852,7 @@ function setupControls() {
     }, { passive: false });
 
     document.addEventListener('touchmove', (e) => {
+      if (!isMobileDevice) return;
       if (isCaptured || !window.gameReady) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
@@ -843,6 +873,7 @@ function setupControls() {
     }, { passive: false });
 
     const clearLookTouch = (e) => {
+      if (!isMobileDevice) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (t.identifier === lookTouchId) {
@@ -862,6 +893,7 @@ function setupControls() {
     const maxJoystickDistance = 35;
 
     joystickBase.addEventListener('touchstart', (e) => {
+      if (!isMobileDevice) return;
       if (joystickTouchId !== null) return;
       const touch = e.targetTouches[0];
       joystickTouchId = touch.identifier;
@@ -873,6 +905,7 @@ function setupControls() {
     }, { passive: false });
 
     window.addEventListener('touchmove', (e) => {
+      if (!isMobileDevice) return;
       if (joystickTouchId === null) return;
       for (let i = 0; i < e.touches.length; i++) {
         const touch = e.touches[i];
@@ -893,6 +926,7 @@ function setupControls() {
     };
 
     window.addEventListener('touchend', (e) => {
+      if (!isMobileDevice) return;
       if (joystickTouchId === null) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
@@ -903,6 +937,7 @@ function setupControls() {
     });
 
     window.addEventListener('touchcancel', (e) => {
+      if (!isMobileDevice) return;
       if (joystickTouchId === null) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
@@ -941,6 +976,7 @@ function setupControls() {
     const ptrOverlay = document.getElementById('pointer-lock-overlay');
 
     const handleUse = (e) => {
+      if (!isMobileDevice) return;
       e.preventDefault();
       e.stopPropagation();
       if (!isCaptured && window.gameReady) useActiveItem();
@@ -949,6 +985,7 @@ function setupControls() {
     useBtn.addEventListener('click', handleUse);
 
     const handleInteract = (e) => {
+      if (!isMobileDevice) return;
       e.preventDefault();
       e.stopPropagation();
       if (!isCaptured && window.gameReady) checkInteractions();
@@ -957,6 +994,7 @@ function setupControls() {
     interactBtn.addEventListener('click', handleInteract);
 
     const handleSpecial = (e) => {
+      if (!isMobileDevice) return;
       e.preventDefault();
       e.stopPropagation();
       if (!isCaptured && window.gameReady) triggerPanicHide();
@@ -965,6 +1003,7 @@ function setupControls() {
     specialBtn.addEventListener('click', handleSpecial);
 
     const handlePause = (e) => {
+      if (!isMobileDevice) return;
       e.preventDefault();
       e.stopPropagation();
       window.mobileGameActive = false;

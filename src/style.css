@@ -1108,3 +1108,134 @@ body.is-mobile .lobby-chat {
   opacity: 0.5;
   pointer-events: none !important;
 }
+
+/* Settings Modal & Panel Styles */
+.settings-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  z-index: 20000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.settings-panel {
+  width: 90%;
+  max-width: 440px;
+  background: rgba(17, 24, 39, 0.9);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 15px var(--panel-border-glow);
+  text-align: center;
+}
+
+.settings-panel h2 {
+  font-family: 'Orbitron', sans-serif;
+  color: var(--primary-accent);
+  letter-spacing: 2px;
+  font-size: 1.6rem;
+  margin-bottom: 0.2rem;
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+
+.settings-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 1.8rem;
+  letter-spacing: 1px;
+}
+
+.settings-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  width: 100%;
+}
+
+.settings-option label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.settings-option select {
+  width: 100%;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.settings-option select:focus {
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+}
+
+/* Gear toggle button for main menu (auth view) */
+.settings-gear-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  font-size: 1.25rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 10;
+}
+
+.settings-gear-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: var(--primary-accent);
+  box-shadow: 0 0 10px var(--panel-border-glow);
+  transform: rotate(90deg);
+}
+
+/* Gear button inline for lobby view */
+.settings-gear-btn-inline {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid var(--human-accent);
+  color: white;
+  border-radius: 4px;
+  padding: 0.4rem 0.8rem;
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s ease;
+}
+
+.settings-gear-btn-inline:hover {
+  background: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+

@@ -18,7 +18,8 @@
     <div id="ui-overlay">
       
       <!-- 1. Authentication / Main Menu View -->
-      <div id="auth-view" class="glass-panel">
+      <div id="auth-view" class="glass-panel" style="position: relative;">
+        <button id="auth-settings-btn" class="settings-gear-btn" title="System Settings">⚙️</button>
         <div class="logo-container">
           <h1>Manifestation</h1>
           <p>Labyrinth Escape Protocol</p>
@@ -65,6 +66,7 @@
             </div>
             <div style="display: flex; align-items: center; gap: 1rem;">
               <div class="room-id-tag">Code: <span id="lobby-room-display" style="color: white; font-weight: bold; letter-spacing: 2px;">...</span></div>
+              <button id="lobby-settings-btn" class="settings-gear-btn-inline" title="System Settings">⚙️ Settings</button>
               <button id="quit-lobby-btn" class="action-btn" style="width: auto; padding: 0.4rem 0.8rem; background: rgba(239, 68, 68, 0.2); border: 1px solid red; font-size: 0.7rem;">Quit</button>
             </div>
           </div>
@@ -281,7 +283,10 @@
       <div id="pointer-lock-overlay" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; color: white;">
         <h2 id="resume-click-target" style="font-family: 'Orbitron', sans-serif; font-size: 2rem; color: var(--primary-accent); text-shadow: 0 0 10px var(--primary-accent); cursor: pointer; padding: 20px;">CLICK TO RESUME LABYRINTH</h2>
         <p style="color: var(--text-muted); margin-top: 10px;">(Press ESC to Pause | WASD to Move | Mouse to Look)</p>
-        <button onclick="window.location.reload()" class="action-btn" style="margin-top: 2rem; background: rgba(139,0,0,0.8); padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto;">ABORT MATCH</button>
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+          <button id="pause-settings-btn" class="action-btn" style="width: auto; background: rgba(59, 130, 246, 0.6); padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto; border: 1px solid var(--human-accent);">SETTINGS</button>
+          <button onclick="window.location.reload()" class="action-btn" style="width: auto; background: rgba(139,0,0,0.8); padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto;">ABORT MATCH</button>
+        </div>
       </div>
 
       <div id="role-splash-screen" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); z-index: 999; flex-direction: column; justify-content: center; align-items: center; color: white;">
@@ -309,6 +314,25 @@
     <!-- Alert triggers -->
     <div id="alarm-flash" class="fullscreen-alarm-overlay"></div>
     <div id="game-notification" class="notification-box">WARNING: INCORRECT CIPHER CODE! OUTLINES REVEALED!</div>
+
+    <!-- 7. Settings Modal Overlay -->
+    <div id="settings-modal" class="settings-modal" style="display: none;">
+      <div class="settings-panel">
+        <h2>SYSTEM SETTINGS</h2>
+        <p class="settings-subtitle">Configure Input Interface</p>
+        
+        <div class="settings-option">
+          <label for="control-scheme-select">Control Interface</label>
+          <select id="control-scheme-select">
+            <option value="auto">Auto-Detect Mode</option>
+            <option value="keyboard">Keyboard & Mouse (PC)</option>
+            <option value="touch">Touch Controls (Mobile)</option>
+          </select>
+        </div>
+        
+        <button id="close-settings-btn" class="action-btn" style="margin-top: 1rem; background: linear-gradient(135deg, #10b981, #047857);">Save & Apply</button>
+      </div>
+    </div>
 
     <script type="module" src="/src/main.js"></script>
   </body>
