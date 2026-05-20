@@ -55,6 +55,37 @@ export function initGame(socket, socketId, matchConfig) {
   myId = socketId;
   currentLobby = matchConfig;
 
+  // Reset core game state variables for clean start/re-entry
+  currentHP = 100;
+  currentSanity = 100;
+  isPanicked = false;
+  isCaptured = false;
+  panicTimer = 0;
+  speedBoostTimer = 0;
+  latestSoundBeacon = null;
+  gateSolved = false;
+  codeEntered = "";
+  functionalKeysRevealed = [];
+  foundKeysList = [];
+  inventory = [];
+  activeSlot = 0;
+
+  // Reset HUD visuals
+  const hpVal = document.getElementById('hp-value');
+  const hpBar = document.getElementById('hp-bar');
+  const sanityVal = document.getElementById('sanity-value');
+  const sanityBar = document.getElementById('sanity-bar');
+  if (hpVal) hpVal.textContent = "100 HP";
+  if (hpBar) hpBar.style.width = "100%";
+  if (sanityVal) sanityVal.textContent = "100%";
+  if (sanityBar) sanityBar.style.width = "100%";
+
+  const capturedOverlay = document.getElementById('captured-overlay');
+  if (capturedOverlay) capturedOverlay.style.display = 'none';
+
+  const hudOverlay = document.getElementById('hud-overlay');
+  if (hudOverlay) hudOverlay.style.display = 'flex';
+
   const me = matchConfig.players[myId];
   myTeam = me.team;
   myClass = me.characterClass;
@@ -1043,8 +1074,8 @@ function triggerPanicHide() {
   panicTimer = 20; // 20 seconds duration
 
   // Deduct 5 HP
-  currentHP -= 5;
-  document.getElementById('hp-value').textContent = `${currentHP} HP`;
+  currentHP = Math.max(0, currentHP - 5);
+  document.getElementById('hp-value').textContent = `${Math.ceil(currentHP)} HP`;
   document.getElementById('hp-bar').style.width = `${currentHP}%`;
 
   // Make invisible (Panic Hide)
@@ -1428,7 +1459,7 @@ function animate() {
 
       if (distToPlayer < 1.5 && myTeam === 'Human' && !isPanicked) {
         currentHP = Math.max(0, currentHP - delta * 45);
-        document.getElementById('hp-value').textContent = `${Math.floor(currentHP)} HP`;
+        document.getElementById('hp-value').textContent = `${Math.ceil(currentHP)} HP`;
         document.getElementById('hp-bar').style.width = `${currentHP}%`;
         
         if (currentHP <= 0 && !isCaptured) {
