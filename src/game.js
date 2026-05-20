@@ -77,6 +77,7 @@ let flashlightBattery = 100;
 
 // Puzzle configuration
 let gateCoordinates = { x: 0, z: -35 };
+let gateMeshRef = null;  // Global ref so we can toggle visibility
 let gateSolved = false;
 let codeEntered = "";
 let functionalKeysRevealed = [];
@@ -691,12 +692,14 @@ function generateMaze(keysCount = 8) {
     }
   }
 
-  // Draw the Master Gate
+  // Draw the Master Gate — hidden until all escape conditions are met
   gateCoordinates = { x: 0, z: - (mazeSize/2 * blockSize) + 4 };
   const gateGeo = new THREE.BoxGeometry(10, 4, 1);
-  const gateMat = new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.8, roughness: 0.2 });
+  const gateMat = new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.8, roughness: 0.2, transparent: true, opacity: 0.0 });
   const gateMesh = new THREE.Mesh(gateGeo, gateMat);
   gateMesh.position.set(gateCoordinates.x, 2, gateCoordinates.z);
+  gateMesh.visible = false;
+  gateMeshRef = gateMesh;
   scene.add(gateMesh);
   walls.push(gateMesh);
 
@@ -1534,14 +1537,31 @@ function deploySaltTrap() {
 // Keypad dialog helpers — queried lazily to avoid null refs at module load time
 let keypadUI, keypadScreen, keypadBtns, keypadClearBtn, keypadSubmitBtn, keypadCloseBtn;
 
+// Show the exit gate with an animation effect
+function showExitGate() {
+  if (!gateMeshRef) return;
+  gateMeshRef.visible = true;
+  gateMeshRef.material.opacity = 1.0;
+  gateMeshRef.material.transparent = false;
+  // Flash the gate into existence with a growing emissive glow
+  gateMeshRef.material.emissive = new THREE.Color(0xef4444);
+  gateMeshRef.material.emissiveIntensity = 2.0;
+  setTimeout(() => {
+    if (gateMeshRef) {
+      gateMeshRef.material.emissiveIntensity = 0.5;
+    }
+  }, 1500);
+  triggerNotification("⚠️ EXIT GATE UNLOCKED — Race to the Gate!");
+}
+
+// Keypad display — always show exactly what the player has typed, no auto-fill
 function getKeypadDisplayString() {
-  const digits = window.cipherCodeDigits || [null, null, null, null];
-  return digits.map((d, i) => {
-    const clueNote = codeClueNotes.find(n => n.digitIndex === i && n.collected);
-    if (clueNote && d !== null) return d.toString(); // Known from clue
-    if (i < codeEntered.length) return codeEntered[i];  // Player typed
-    return '_';
-  }).join(' ');
+  let display = '';
+  for (let i = 0; i < 4; i++) {
+    display += (i < codeEntered.length ? codeEntered[i] : '_');
+    if (i < 3) display += ' ';
+  }
+  return display;
 }
 
 function openKeypadModal() {
@@ -1566,8 +1586,18 @@ function setupKeypadListeners() {
 
   if (!keypadUI) return; // guard: element not in DOM yet
 
-  keypadCloseBtn.addEventListener('click', () => {
+  const closeKeypad = () => {
     keypadUI.style.display = 'none';
+    codeEntered = '';
+  };
+
+  keypadCloseBtn.addEventListener('click', closeKeypad);
+
+  // ESC key closes the keypad
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape' && keypadUI && keypadUI.style.display !== 'none') {
+      closeKeypad();
+    }
   });
 
   keypadClearBtn.addEventListener('click', () => {
@@ -1579,13 +1609,8 @@ function setupKeypadListeners() {
     btn.addEventListener('click', (e) => {
       const val = e.target.textContent;
       if (val === 'CLR' || val === 'ENT') return;
-      // Only type into positions not already revealed by clue notes
-      const digits = window.cipherCodeDigits || [null, null, null, null];
-      const unknownCount = digits.filter((d, i) => {
-        const clue = codeClueNotes.find(n => n.digitIndex === i && n.collected);
-        return !clue;
-      }).length;
-      if (codeEntered.length < unknownCount) {
+      // Let players type all 4 digits freely — no auto-fill from clue notes
+      if (codeEntered.length < 4) {
         codeEntered += val;
         keypadScreen.textContent = getKeypadDisplayString();
       }
@@ -1593,21 +1618,12 @@ function setupKeypadListeners() {
   });
 
   keypadSubmitBtn.addEventListener('click', () => {
-    // Build final code: clue digits take priority, typed digits fill remaining slots
-    const digits = window.cipherCodeDigits || [null, null, null, null];
-    let typedIdx = 0;
-    const finalCode = digits.map((d, i) => {
-      const clue = codeClueNotes.find(n => n.digitIndex === i && n.collected);
-      if (clue && d !== null) return d.toString();
-      return codeEntered[typedIdx++] || '0';
-    }).join('');
-
-    if (finalCode.length === 4) {
-      socketClient.emit('try_cipher', finalCode);
-      keypadUI.style.display = 'none';
-    } else {
+    if (codeEntered.length < 4) {
       triggerNotification("Enter all 4 digits first.");
+      return;
     }
+    socketClient.emit('try_cipher', codeEntered);
+    closeKeypad();
   });
 }
 
@@ -1784,15 +1800,17 @@ function processFlashlightBattery(delta) {
 }
 
 function checkWinCondition() {
-  if (!gateSolved) return;
-  
-  // Humans win if they carry the 2 functional keys, fix circuit breakers, and reach the Gate
   const carriedSymbols = carriedKeys.map(k => k.symbol);
-  const hasFirstKey = carriedSymbols.includes(functionalKeysRevealed[0]);
-  const hasSecondKey = carriedSymbols.includes(functionalKeysRevealed[1]);
+  const hasFirstKey = functionalKeysRevealed.length > 0 && carriedSymbols.includes(functionalKeysRevealed[0]);
+  const hasSecondKey = functionalKeysRevealed.length > 1 && carriedSymbols.includes(functionalKeysRevealed[1]);
   const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
-  if (hasFirstKey && hasSecondKey && breakersFixed) {
+  // Reveal the exit gate when ALL conditions are satisfied for the first time
+  if (gateSolved && hasFirstKey && hasSecondKey && breakersFixed) {
+    if (gateMeshRef && !gateMeshRef.visible) {
+      showExitGate();
+    }
+
     const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
     if (distToGate < 6) {
       triggerNotification("master gate breached! escape successful!");
