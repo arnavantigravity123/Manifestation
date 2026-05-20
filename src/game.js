@@ -87,13 +87,26 @@ let micStream = null;
 let audioAnalyser = null;
 let audioDataArray = null;
 
-let speedBoostTimer = 0;
-let latestSoundBeacon = null;
+let seededRandom = Math.random;
+
+function mulberry32(a) {
+  return function() {
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 export function initGame(socket, socketId, matchConfig) {
   socketClient = socket;
   myId = socketId;
   currentLobby = matchConfig;
+
+  // Initialize seededRandom using server-provided mazeGeometrySeed
+  const seed = (matchConfig.puzzleState && matchConfig.puzzleState.mazeGeometrySeed) || 0.12345;
+  const seedInt = Math.floor(seed * 2147483647);
+  seededRandom = mulberry32(seedInt);
 
   // Reset core game state variables for clean start/re-entry
   currentHP = 100;
@@ -490,7 +503,7 @@ function generateMaze(keysCount = 8) {
   function carve(x, z) {
     layout[z][x] = 0;
     const dirs = [[0,-2], [0,2], [-2,0], [2,0]];
-    dirs.sort(() => Math.random() - 0.5);
+    dirs.sort(() => seededRandom() - 0.5);
     for (let [dx, dz] of dirs) {
       const nx = x + dx, nz = z + dz;
       if (nx > 0 && nx < mazeSize-1 && nz > 0 && nz < mazeSize-1 && layout[nz][nx] === 1) {
@@ -507,8 +520,8 @@ function generateMaze(keysCount = 8) {
 
   // Scatter sliding doors (type 2)
   for(let i=0; i < 40; i++) {
-    const rx = 1 + Math.floor(Math.random() * (mazeSize-2));
-    const rz = 1 + Math.floor(Math.random() * (mazeSize-2));
+    const rx = 1 + Math.floor(seededRandom() * (mazeSize-2));
+    const rz = 1 + Math.floor(seededRandom() * (mazeSize-2));
     if (layout[rz][rx] === 1) layout[rz][rx] = 2; 
   }
 
@@ -528,9 +541,9 @@ function generateMaze(keysCount = 8) {
       ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
     }
     for(let i=0; i<150; i++) {
-      ctx.fillStyle = Math.random() > 0.7 ? '#450a0a' : '#020617';
+      ctx.fillStyle = seededRandom() > 0.7 ? '#450a0a' : '#020617';
       ctx.beginPath();
-      ctx.arc(Math.random()*512, Math.random()*512, Math.random()*15, 0, Math.PI*2);
+      ctx.arc(seededRandom()*512, seededRandom()*512, seededRandom()*15, 0, Math.PI*2);
       ctx.fill();
     }
     const tex = new THREE.CanvasTexture(canvas);
@@ -625,13 +638,13 @@ function generateCollectibles(keysCount) {
 
     let x = 0, z = 0;
     if (openCorridors.length > 0) {
-      const randIdx = Math.floor(Math.random() * openCorridors.length);
+      const randIdx = Math.floor(seededRandom() * openCorridors.length);
       x = openCorridors[randIdx].x;
       z = openCorridors[randIdx].z;
     } else {
       const angle = (i / keysCount) * Math.PI * 2;
-      x = Math.cos(angle) * (15 + Math.random() * 20);
-      z = Math.sin(angle) * (15 + Math.random() * 20);
+      x = Math.cos(angle) * (15 + seededRandom() * 20);
+      z = Math.sin(angle) * (15 + seededRandom() * 20);
     }
     mesh.position.set(x, 0.45, z);
     // Store key type label in userData for HUD hints
@@ -654,15 +667,15 @@ function generateCodeClues() {
     const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
     let x = 0, z = 0;
     if (openCorridors.length > 4) {
-      const randIdx = Math.floor(Math.random() * openCorridors.length);
+      const randIdx = Math.floor(seededRandom() * openCorridors.length);
       x = openCorridors[randIdx].x;
       z = openCorridors[randIdx].z;
     } else {
-      x = (Math.random() - 0.5) * 60;
-      z = (Math.random() - 0.5) * 60;
+      x = (seededRandom() - 0.5) * 60;
+      z = (seededRandom() - 0.5) * 60;
     }
     noteMesh.position.set(x, 1.0, z);
-    noteMesh.rotation.y = Math.random() * Math.PI;
+    noteMesh.rotation.y = seededRandom() * Math.PI;
     scene.add(noteMesh);
     codeClueNotes.push({ mesh: noteMesh, digitIndex: i, collected: false });
   }
@@ -681,12 +694,12 @@ function generateCircuitBreakers() {
     
     let x = 0; let z = 0;
     if (openCorridors.length > 0) {
-      const randIdx = Math.floor(Math.random() * openCorridors.length);
+      const randIdx = Math.floor(seededRandom() * openCorridors.length);
       x = openCorridors[randIdx].x;
       z = openCorridors[randIdx].z;
     } else {
-      x = (Math.random() - 0.5) * 40;
-      z = (Math.random() - 0.5) * 40;
+      x = (seededRandom() - 0.5) * 40;
+      z = (seededRandom() - 0.5) * 40;
     }
     
     mesh.position.set(x, 1.0, z);
@@ -1744,13 +1757,13 @@ function spawnGhostAIs(count) {
       const d = Math.sqrt(dx*dx + dz*dz);
       return d > 15 && d < 50;
     });
-    if (candidates.length > 0) spawnPos = candidates[Math.floor(Math.random() * candidates.length)];
+    if (candidates.length > 0) spawnPos = candidates[Math.floor(seededRandom() * candidates.length)];
     ghostGroup.position.set(spawnPos.x, 0, spawnPos.z);
 
     scene.add(ghostGroup);
     // Assign a randomized ghost class to vary AI behavior
     const AI_GHOST_TYPES = ['Stalker', 'Mimic', 'Juggernaut', 'Phantom', 'Poltergeist', 'Banshee'];
-    ghostGroup.userData.ghostClass = AI_GHOST_TYPES[Math.floor(Math.random() * AI_GHOST_TYPES.length)];
+    ghostGroup.userData.ghostClass = AI_GHOST_TYPES[Math.floor(seededRandom() * AI_GHOST_TYPES.length)];
     ghosts3D.push(ghostGroup);
   }
 }
@@ -2067,9 +2080,13 @@ function animate() {
         if (ghost.userData.aiState === 'WANDER') {
           if (!ghost.userData.targetGrid || (ghostGrid.col === ghost.userData.targetGrid.col && ghostGrid.row === ghost.userData.targetGrid.row)) {
             let rx, rz, attempts = 0;
+            ghost.userData.wanderCount = (ghost.userData.wanderCount || 0) + 1;
+            const baseSeed = (currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.mazeGeometrySeed) || 0.12345;
+            const seedInt = Math.floor(baseSeed * 2147483647);
+            const tempRand = mulberry32(seedInt + idx * 1000 + ghost.userData.wanderCount * 17);
             do {
-              rx = Math.floor(Math.random() * mazeSizeGlobal);
-              rz = Math.floor(Math.random() * mazeSizeGlobal);
+              rx = Math.floor(tempRand() * mazeSizeGlobal);
+              rz = Math.floor(tempRand() * mazeSizeGlobal);
               attempts++;
             } while (mazeLayout[rz] && mazeLayout[rz][rx] !== 0 && attempts < 50);
             ghost.userData.targetGrid = { col: rx, row: rz };
