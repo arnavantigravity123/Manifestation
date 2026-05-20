@@ -78,6 +78,43 @@ function updateLobbyState(roomId) {
   io.to(roomId).emit('lobby_update', lobby);
 }
 
+function checkMatchEndCondition(roomId) {
+  const lobby = lobbies[roomId];
+  if (!lobby || !lobby.gameStarted) return;
+
+  const playersList = Object.values(lobby.players);
+  const humans = playersList.filter(p => p.team === 'Human');
+  const humanCount = humans.length;
+  
+  if (humanCount > 0) {
+    const activeHumans = humans.filter(p => !p.isCaptured);
+    if (activeHumans.length === 0) {
+      // All humans captured! Ghosts win!
+      endMatch(roomId, 'Ghost');
+    }
+  }
+}
+
+function endMatch(roomId, winner) {
+  const lobby = lobbies[roomId];
+  if (!lobby || !lobby.gameStarted) return;
+
+  lobby.gameStarted = false;
+
+  const summary = Object.values(lobby.players).map(p => ({
+    username: p.username,
+    team: p.team,
+    isCaptured: !!p.isCaptured
+  }));
+
+  // Reset captured state on players
+  Object.values(lobby.players).forEach(p => {
+    p.isCaptured = false;
+  });
+
+  io.to(roomId).emit('match_ended', { winner, summary });
+}
+
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`);
 
@@ -190,6 +227,10 @@ io.on('connection', (socket) => {
     lobby.gameStarted = true;
 
     const playersList = Object.values(lobby.players);
+    playersList.forEach(p => {
+      p.isCaptured = false;
+    });
+
     const mode = lobby.settings.roleSelectionMode;
 
     const humanClasses = ['Locksmith', 'Trapper', 'Scout', 'Medic', 'Flashlight Expert', 'Quartermaster'];
@@ -309,8 +350,20 @@ io.on('connection', (socket) => {
   });
 
   socket.on('capture_human', ({ targetId }) => {
-    console.log(`[Lobby ${socket.roomId}] Player ${targetId} captured by ${socket.id}.`);
+    console.log(`[Lobby ${socket.roomId}] Player ${targetId} captured.`);
+    const lobby = lobbies[socket.roomId];
+    if (lobby && lobby.players[targetId]) {
+      lobby.players[targetId].isCaptured = true;
+    }
     socket.to(socket.roomId).emit('human_captured', { targetId, capturerId: socket.id });
+    checkMatchEndCondition(socket.roomId);
+  });
+
+  socket.on('human_escaped', () => {
+    const { roomId } = socket;
+    if (roomId && lobbies[roomId]) {
+      endMatch(roomId, 'Human');
+    }
   });
 
   socket.on('mimic_clone', () => {
@@ -377,6 +430,9 @@ io.on('connection', (socket) => {
           io.to(roomId).emit('host_changed', { hostId: newHostId });
         }
         updateLobbyState(roomId);
+        if (lobby.gameStarted) {
+          checkMatchEndCondition(roomId);
+        }
       }
     }
   });

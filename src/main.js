@@ -139,6 +139,13 @@ function initializeSocketConnection() {
       }, 200);
       return;
     }
+
+    // Save to sessionStorage for auto-rejoin upon match end
+    sessionStorage.setItem('rejoinLobbyId', roomId);
+    sessionStorage.setItem('rejoinUsername', getUsername());
+    sessionStorage.setItem('rejoinIsPublic', isPublic ? 'true' : 'false');
+    sessionStorage.setItem('rejoinIsSolo', isSoloMode ? 'true' : 'false');
+
     authView.style.display = 'none';
     lobbyView.style.display = 'grid';
     roomDisplay.textContent = roomId.toUpperCase();
@@ -230,6 +237,10 @@ joinPrivateBtn.addEventListener('click', () => {
 
 // ====== Quit Handlers ======
 function quitToMenu() {
+  sessionStorage.removeItem('rejoinLobbyId');
+  sessionStorage.removeItem('rejoinUsername');
+  sessionStorage.removeItem('rejoinIsPublic');
+  sessionStorage.removeItem('rejoinIsSolo');
   // Reload window completely resets socket connection and game state. Best for browser games.
   window.location.reload();
 }
@@ -391,3 +402,32 @@ function logSystemMessage(text) {
   chatBox.appendChild(sysEl);
   chatBox.scrollTop = chatBox.scrollHeight;
 }
+
+window.addEventListener('DOMContentLoaded', () => {
+  const rejoinId = sessionStorage.getItem('rejoinLobbyId');
+  const rejoinUser = sessionStorage.getItem('rejoinUsername');
+  const rejoinPublicStr = sessionStorage.getItem('rejoinIsPublic');
+  const rejoinSoloStr = sessionStorage.getItem('rejoinIsSolo');
+
+  if (rejoinId && rejoinUser) {
+    sessionStorage.removeItem('rejoinLobbyId');
+    sessionStorage.removeItem('rejoinUsername');
+    sessionStorage.removeItem('rejoinIsPublic');
+    sessionStorage.removeItem('rejoinIsSolo');
+
+    usernameInput.value = rejoinUser;
+    isSoloMode = rejoinSoloStr === 'true';
+
+    if (isSoloMode) {
+      isSoloMode = false;
+      return;
+    }
+
+    const s = initializeSocketConnection();
+    s.emit('join_room', {
+      roomId: rejoinId,
+      username: rejoinUser,
+      isPublic: rejoinPublicStr === 'true'
+    });
+  }
+});

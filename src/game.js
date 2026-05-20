@@ -1217,9 +1217,7 @@ function checkWinCondition() {
     if (distToGate < 4) {
       triggerNotification("master gate breached! escape successful!");
       socketClient.emit('chat_message', { msg: "=== VICTORY: HUMANS HAVE ESCAPED THE LABYRINTH ===" });
-      setTimeout(() => {
-        location.reload();
-      }, 5000);
+      socketClient.emit('human_escaped');
     }
   }
 }
@@ -1355,6 +1353,65 @@ function setupSocketListeners() {
 
   socketClient.on('breaker_remote_triggered', () => {
     freezeGhosts();
+  });
+
+  socketClient.on('match_ended', ({ winner, summary }) => {
+    // Exit pointer lock
+    document.exitPointerLock();
+    window.mobileGameActive = false;
+
+    // Show the End Game Overlay
+    const overlay = document.getElementById('end-game-overlay');
+    const title = document.getElementById('end-game-title');
+    const details = document.getElementById('end-game-details');
+
+    if (overlay && title && details) {
+      overlay.style.display = 'flex';
+      
+      if (winner === 'Human') {
+        title.textContent = "VICTORY";
+        title.style.color = "#10b981";
+        title.style.textShadow = "0 0 20px rgba(16, 185, 129, 0.6)";
+        details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 1rem; font-size: 1.3rem;">SURVIVORS ESCAPED!</div>`;
+      } else {
+        title.textContent = "DEFEAT";
+        title.style.color = "#ef4444";
+        title.style.textShadow = "0 0 20px rgba(239, 68, 68, 0.6)";
+        details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 1rem; font-size: 1.3rem;">ALL SURVIVORS ELIMINATED!</div>`;
+      }
+
+      // Add detailed player status list
+      let summaryHTML = `<div style="text-align: left; font-size: 0.95rem; line-height: 1.6; max-height: 200px; overflow-y: auto; padding-right: 10px;">`;
+      summary.forEach(p => {
+        const teamColor = p.team === 'Ghost' ? '#a855f7' : '#3b82f6';
+        const statusText = p.team === 'Ghost' ? 'Spectral Threat' : (p.isCaptured ? 'Captured' : 'Escaped');
+        const statusColor = p.team === 'Ghost' ? '#a855f7' : (p.isCaptured ? '#ef4444' : '#10b981');
+        summaryHTML += `<div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom:0.2rem;">
+          <span style="font-weight: bold; color: ${teamColor};">${p.username}</span> 
+          <span style="font-weight: bold; color: ${statusColor};">${statusText.toUpperCase()}</span>
+        </div>`;
+      });
+      summaryHTML += `</div>`;
+      details.innerHTML += summaryHTML;
+    }
+
+    const endLobbyBtn = document.getElementById('end-game-lobby-btn');
+    if (endLobbyBtn) {
+      endLobbyBtn.onclick = () => {
+        if (currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-')) {
+          sessionStorage.setItem('rejoinLobbyId', currentLobby.id);
+          sessionStorage.setItem('rejoinUsername', currentLobby.players[myId]?.username || `Operative_${Math.floor(100 + Math.random() * 900)}`);
+          sessionStorage.setItem('rejoinIsPublic', currentLobby.isPublic ? 'true' : 'false');
+          sessionStorage.setItem('rejoinIsSolo', 'false');
+        } else {
+          sessionStorage.removeItem('rejoinLobbyId');
+          sessionStorage.removeItem('rejoinUsername');
+          sessionStorage.removeItem('rejoinIsPublic');
+          sessionStorage.removeItem('rejoinIsSolo');
+        }
+        window.location.reload();
+      };
+    }
   });
 }
 
@@ -1662,6 +1719,7 @@ function animate() {
           document.getElementById('hud-overlay').style.display = 'none';
           document.getElementById('captured-overlay').style.display = 'flex';
           socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) has been captured by the void.` });
+          socketClient.emit('capture_human', { targetId: myId });
         }
       }
 
