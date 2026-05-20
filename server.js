@@ -71,7 +71,7 @@ function updateLobbyState(roomId) {
   lobby.settings.botGhostsCount = botGhostsCount;
 
   // Check start validation
-  const isQuotaFulfilled = activeGhostsCount >= minRequiredGhosts && (humanCount > 0 || playersList.length > 0);
+  const isQuotaFulfilled = activeGhostsCount >= minRequiredGhosts && humanCount > 0;
   lobby.canStart = isQuotaFulfilled;
 
   // Broadcast updated lobby
@@ -321,6 +321,11 @@ io.on('connection', (socket) => {
   socket.on('breaker_siphon', () => {
     console.log(`[Lobby ${socket.roomId}] Player ${socket.id} (Poltergeist) used Breaker Siphon.`);
     socket.to(socket.roomId).emit('ghost_breaker_siphon', { id: socket.id });
+  });
+
+  socket.on('breaker_remote', () => {
+    console.log(`[Lobby ${socket.roomId}] Player ${socket.id} used Breaker Remote.`);
+    socket.to(socket.roomId).emit('breaker_remote_triggered');
   });
 
   socket.on('sound_scramble', () => {

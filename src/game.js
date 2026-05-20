@@ -894,6 +894,11 @@ function useActiveItem() {
   const item = inventory[activeSlot];
   if (!item) return;
 
+  if (myTeam === 'Ghost' && window.ghostsFrozen) {
+    triggerNotification("You are frozen by a Breaker Remote!");
+    return;
+  }
+
   if (item === "Sanity Pills") {
     currentSanity = 100;
     triggerNotification("sanity restored.");
@@ -912,19 +917,8 @@ function useActiveItem() {
     triggerNotification("flashlight battery recharged.");
     removeItem(activeSlot);
   } else if (item === "Breaker Remote") {
-    // Freeze all ghosts and disable their auras for 10 seconds
-    window.ghostsFrozen = true;
-    ghosts3D.forEach(g => {
-      g.children.forEach(c => { if (c.isPointLight) c.intensity = 0; });
-    });
-    triggerNotification("breaker remote used. ghosts frozen (10s).");
-    setTimeout(() => {
-      window.ghostsFrozen = false;
-      ghosts3D.forEach(g => {
-        g.children.forEach(c => { if (c.isPointLight) c.intensity = 80; });
-      });
-      triggerNotification("ghosts reactivated!");
-    }, 10000);
+    freezeGhosts();
+    socketClient.emit('breaker_remote');
     removeItem(activeSlot);
   } else if (item === "Thermal Camera") {
     triggerNotification("thermal camera is passively active when held.");
@@ -1307,6 +1301,10 @@ function setupSocketListeners() {
   socketClient.on('human_chalk_spray', ({ id, position }) => {
     deployChalkDecal(position);
   });
+
+  socketClient.on('breaker_remote_triggered', () => {
+    freezeGhosts();
+  });
 }
 
 function triggerSoundPing(position, soundType) {
@@ -1346,6 +1344,21 @@ function triggerSoundPing(position, soundType) {
     }
   }
   animatePing();
+}
+
+function freezeGhosts() {
+  window.ghostsFrozen = true;
+  ghosts3D.forEach(g => {
+    g.children.forEach(c => { if (c.isPointLight) c.intensity = 0; });
+  });
+  triggerNotification("breaker remote used. ghosts frozen (10s).");
+  setTimeout(() => {
+    window.ghostsFrozen = false;
+    ghosts3D.forEach(g => {
+      g.children.forEach(c => { if (c.isPointLight) c.intensity = 80; });
+    });
+    triggerNotification("ghosts reactivated!");
+  }, 10000);
 }
 
 function triggerAlarmFlashing() {
@@ -1463,6 +1476,12 @@ function animate() {
       });
       if (nearSalt) {
         speed *= 0.2; // 80% slow down, matching AI slow down ratio
+      }
+
+      // Breaker Remote freeze for human Ghost players
+      if (window.ghostsFrozen) {
+        speed = 0;
+        velocity.set(0, 0, 0);
       }
     }
 
