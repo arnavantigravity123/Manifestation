@@ -72,6 +72,7 @@ let panicTimer = 0;
 let speedBoostTimer = 0;
 let latestSoundBeacon = null;
 let flashLight = null;
+let ambientLight = null;
 let flashlightBattery = 100;
 
 // Puzzle configuration
@@ -237,8 +238,8 @@ export function initGame(socket, socketId, matchConfig) {
   setupProceduralAudio();
 
   // Lightings
-  const ambient = new THREE.AmbientLight(0x222233, 1.5); // Slightly dark, not pitch black
-  scene.add(ambient);
+  ambientLight = new THREE.AmbientLight(0x222233, 1.5); // Slightly dark, not pitch black
+  scene.add(ambientLight);
 
   if (myTeam === 'Human') {
     // Add player flashlight
@@ -702,6 +703,7 @@ function generateMaze(keysCount = 8) {
   // Spawn key collectibles in chests/lockers represented by boxes
   generateCollectibles(keysCount);
   generateCircuitBreakers();
+  generateConsumableItems();
 }
 
 // 4 distinct key type definitions: shape + color + name
@@ -805,6 +807,45 @@ function generateCircuitBreakers() {
   }
 }
 
+function generateConsumableItems() {
+  itemsInMaze.forEach(item => scene.remove(item.mesh));
+  itemsInMaze = [];
+
+  const itemTypes = [
+    { name: 'Battery Pack', color: 0x22c55e },
+    { name: 'EMF Reader', color: 0x3b82f6 },
+    { name: 'Thermal Camera', color: 0xf97316 },
+    { name: 'Sanity Pills', color: 0xec4899 }
+  ];
+
+  const itemGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.6, 8);
+
+  // Spawn 10 random items
+  for (let i = 0; i < 10; i++) {
+    const type = itemTypes[Math.floor(seededRandom() * itemTypes.length)];
+    const itemMat = new THREE.MeshStandardMaterial({ color: type.color, emissive: type.color, emissiveIntensity: 0.2 });
+    const mesh = new THREE.Mesh(itemGeo, itemMat);
+
+    let x = 0, z = 0;
+    if (openCorridors.length > 0) {
+      const randIdx = Math.floor(seededRandom() * openCorridors.length);
+      x = openCorridors[randIdx].x;
+      z = openCorridors[randIdx].z;
+    } else {
+      x = (seededRandom() - 0.5) * 40;
+      z = (seededRandom() - 0.5) * 40;
+    }
+
+    mesh.position.set(x, 0.3, z);
+    scene.add(mesh);
+
+    itemsInMaze.push({
+      mesh: mesh,
+      name: type.name
+    });
+  }
+}
+
 // Corridor shifting alignment
 function realignMazeCorridors(realignmentState) {
   const solvedCount = realignmentState.puzzleRoomsSolved;
@@ -866,6 +907,8 @@ function setupControls() {
         if (myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA) isSprinting = true;
         break;
       case 'KeyQ':
+        dropKey();
+        break;
       case 'Space':
         // Risk/Reward Ability: Panic Hide
         triggerPanicHide();
@@ -1108,6 +1151,18 @@ function setupControls() {
     specialBtn.addEventListener('touchstart', handleSpecial, { passive: false });
     specialBtn.addEventListener('click', handleSpecial);
 
+    const dropBtn = document.getElementById('btn-mobile-drop');
+    if (dropBtn) {
+      const handleDrop = (e) => {
+        if (!isMobileDevice) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isCaptured && window.gameReady) dropKey();
+      };
+      dropBtn.addEventListener('touchstart', handleDrop, { passive: false });
+      dropBtn.addEventListener('click', handleDrop);
+    }
+
     const handlePause = (e) => {
       if (!isMobileDevice) return;
       e.preventDefault();
@@ -1185,6 +1240,12 @@ function checkInteractions() {
       breaker.isFixed = true;
       breaker.mesh.material.color.setHex(0x10b981); // Turn green
       fixedBreakersCount++;
+      
+      // Increase global ambient light slightly with each fixed breaker
+      if (ambientLight) {
+        ambientLight.intensity = 1.5 + (fixedBreakersCount * 1.5);
+      }
+
       triggerNotification(`circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
       
       checkWinCondition();
@@ -1220,6 +1281,24 @@ function checkInteractions() {
       // Also live-update the keypad screen if it's currently open
       if (keypadUI && keypadUI.style.display !== 'none') {
         keypadScreen.textContent = getKeypadDisplayString();
+      }
+      break;
+    }
+  }
+
+  // 5. Check proximity to Pick-up Items
+  for (let i = 0; i < itemsInMaze.length; i++) {
+    const item = itemsInMaze[i];
+    const dist = camera.position.distanceTo(item.mesh.position);
+    if (dist < 4.5) {
+      if (inventory.length < 8) {
+        inventory.push(item.name);
+        scene.remove(item.mesh);
+        itemsInMaze.splice(i, 1);
+        triggerNotification(`Picked up ${item.name}`);
+        renderHUDInventory();
+      } else {
+        triggerNotification(`Inventory full! Cannot pick up ${item.name}.`);
       }
       break;
     }
@@ -1436,6 +1515,48 @@ function setupKeypadListeners() {
   });
 }
 
+// Drop the most recently collected key
+function dropKey() {
+  if (carriedKeys.length === 0) {
+    triggerNotification("No keys to drop.");
+    return;
+  }
+
+  const poppedKey = carriedKeys.pop();
+  
+  // Remove from foundKeysList so it doesn't count towards the win condition anymore
+  const symbolIndex = foundKeysList.indexOf(poppedKey.symbol);
+  if (symbolIndex > -1) {
+    foundKeysList.splice(symbolIndex, 1);
+  }
+
+  // Re-instantiate the 3D mesh
+  const kt = KEY_TYPES.find(k => k.label === poppedKey.typeName) || KEY_TYPES[0];
+  const mat = new THREE.MeshStandardMaterial({ 
+    color: kt.color, 
+    emissive: kt.emissive, 
+    emissiveIntensity: 0.8,
+    metalness: 0.8,
+    roughness: 0.2
+  });
+  const mesh = new THREE.Mesh(kt.geo(), mat);
+  
+  // Drop it slightly in front of the player
+  const dropPos = new THREE.Vector3(0, 0, -2).applyQuaternion(camera.quaternion).add(camera.position);
+  mesh.position.set(dropPos.x, 1.0, dropPos.z);
+  scene.add(mesh);
+
+  keysInMaze.push({
+    mesh: mesh,
+    symbol: poppedKey.symbol,
+    typeName: poppedKey.typeName
+  });
+
+  renderCarriedKeysHUD();
+  checkWinCondition();
+  triggerNotification(`Dropped [${poppedKey.typeName}]`);
+}
+
 // Trigger risk/reward: Panic Hide
 function triggerPanicHide() {
   if (isPanicked || currentHP <= 5 || myTeam !== 'Human') return;
@@ -1531,8 +1652,8 @@ function processFlashlightBattery(delta) {
 
   // Drains battery if flashlight has intensity > 0
   if (flashLight.intensity > 0) {
-    // 1% per second = 100 seconds total battery life
-    flashlightBattery = Math.max(0, flashlightBattery - delta * 1.0);
+    // 1% per second = 80 seconds total battery life (drops to 20%)
+    flashlightBattery = Math.max(20, flashlightBattery - delta * 1.0);
     
     // Update battery bar UI
     const flBar = document.getElementById('flashlight-bar');
@@ -1542,12 +1663,12 @@ function processFlashlightBattery(delta) {
 
     const baseIntensity = inventory.includes('Battery Pack') ? 200 : 80;
 
-    // If battery is empty, turn off the light
-    if (flashlightBattery <= 0) {
+    // If battery is empty (hits 20% reserve limit), turn off the light
+    if (flashlightBattery <= 20) {
       flashLight.intensity = 0;
-      triggerNotification("Flashlight battery dead!");
-    } else if (flashlightBattery < 20) {
-      // Flicker the flashlight when low battery (< 20%)
+      if (Math.random() < 0.05) triggerNotification("Flashlight battery dead! (20% reserve limit)");
+    } else if (flashlightBattery < 35) {
+      // Flicker the flashlight when low battery (< 35%)
       if (Math.random() < 0.15) {
         flashLight.intensity = 0; // Temporary flicker off
       } else {
