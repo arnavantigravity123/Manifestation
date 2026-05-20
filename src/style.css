@@ -755,6 +755,28 @@ input[type="text"]:focus {
   object-fit: contain;
 }
 
+/* Key pocket — carried keys display */
+.key-pocket-grid {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.1rem;
+  justify-content: center;
+}
+
+.key-slot {
+  width: 52px;
+  height: 58px;
+  background: rgba(10, 15, 30, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
 /* Global warning overlays & notifications */
 .fullscreen-alarm-overlay {
   position: absolute;

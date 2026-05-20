@@ -258,7 +258,7 @@ io.on('connection', (socket) => {
     }
 
     const code = Math.floor(1000 + Math.random() * 9000).toString();
-    const keysCount = Math.floor(6 + Math.random() * 5);
+    const keysCount = 4; // Always exactly 4 keys, 2 real
     const realKeyIndexes = [];
     while (realKeyIndexes.length < 2) {
       const idx = Math.floor(Math.random() * keysCount);
@@ -296,7 +296,8 @@ io.on('connection', (socket) => {
       puzzleState: {
         keysCount: keys.length,
         cipherSolved: false,
-        realKeySymbols: mode === 'hidden' ? [] : undefined,
+        // Always send which 2 symbols are the real functional keys
+        realKeySymbols: lobby.puzzleState.realKeySymbols,
         // Each index is one digit of the 4-digit code, revealed by clue notes in the maze
         codeDigits: code.split('').map(Number),
         mazeGeometrySeed: lobby.puzzleState.mazeGeometrySeed,

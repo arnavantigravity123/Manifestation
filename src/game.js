@@ -78,6 +78,8 @@ let gateSolved = false;
 let codeEntered = "";
 let functionalKeysRevealed = [];
 let foundKeysList = [];
+let carriedKeys = [];      // Keys currently carried (max 3)
+const MAX_CARRIED_KEYS = 3;
 let codeClueNotes = []; // Clue objects in the maze
 
 // Audio variables for EMF & static
@@ -120,6 +122,7 @@ export function initGame(socket, socketId, matchConfig) {
   codeEntered = "";
   functionalKeysRevealed = [];
   foundKeysList = [];
+  carriedKeys = [];
   codeClueNotes = [];
   inventory = [];
   activeSlot = 0;
@@ -254,6 +257,11 @@ export function initGame(socket, socketId, matchConfig) {
   // Store the cipher code digits (revealed one at a time by clue notes in the maze)
   window.cipherCodeDigits = matchConfig.puzzleState.codeDigits || [null, null, null, null];
 
+  // Know which 2 keys are functional from the start (players must find them via trial/error or clues)
+  if (matchConfig.puzzleState.realKeySymbols && matchConfig.puzzleState.realKeySymbols.length > 0) {
+    functionalKeysRevealed = matchConfig.puzzleState.realKeySymbols;
+  }
+
   // Create Labyrinth
   generateMaze(matchConfig.puzzleState.keysCount);
 
@@ -317,6 +325,7 @@ function renderHUDInventory() {
   if (!invGrid) return;
   invGrid.innerHTML = '';
 
+  // --- Class ability items ---
   inventory.forEach((item, index) => {
     const slot = document.createElement('div');
     slot.className = index === activeSlot ? 'inventory-slot active' : 'inventory-slot';
@@ -341,6 +350,85 @@ function renderHUDInventory() {
 
     invGrid.appendChild(slot);
   });
+
+  // --- Carried Keys pocket (only for Humans) ---
+  if (myTeam === 'Human') {
+    renderCarriedKeysHUD();
+  }
+}
+
+function renderCarriedKeysHUD() {
+  let keysPanel = document.getElementById('hud-carried-keys');
+  if (!keysPanel) return;
+  keysPanel.innerHTML = '';
+
+  const keyColors = {
+    'Amber Orb':     '#f59e0b',
+    'Sapphire Shard':'#60a5fa',
+    'Violet Prism':  '#a78bfa',
+    'Emerald Gem':   '#34d399',
+  };
+  const keyIcons = {
+    'Amber Orb':     '🔶',
+    'Sapphire Shard':'🔷',
+    'Violet Prism':  '💜',
+    'Emerald Gem':   '💚',
+  };
+
+  // Show 3 slots always (empty ones greyed out)
+  for (let i = 0; i < MAX_CARRIED_KEYS; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'key-slot';
+
+    if (i < carriedKeys.length) {
+      const k = carriedKeys[i];
+      const isReal = functionalKeysRevealed.includes(k.symbol);
+      const color = keyColors[k.typeName] || '#ffffff';
+      slot.style.borderColor = color;
+      slot.style.background = `${color}18`;
+      slot.style.boxShadow = isReal ? `0 0 8px ${color}` : 'none';
+
+      const icon = document.createElement('div');
+      icon.textContent = keyIcons[k.typeName] || '🗝️';
+      icon.style.fontSize = '1rem';
+      slot.appendChild(icon);
+
+      const label = document.createElement('div');
+      label.textContent = k.typeName.split(' ')[0]; // "Amber", "Sapphire", etc.
+      label.style.fontSize = '0.55rem';
+      label.style.color = color;
+      label.style.textAlign = 'center';
+      label.style.lineHeight = '1.1';
+      slot.appendChild(label);
+
+      if (isReal) {
+        const star = document.createElement('div');
+        star.textContent = '★';
+        star.style.fontSize = '0.5rem';
+        star.style.color = '#fbbf24';
+        star.title = 'Functional key!';
+        slot.appendChild(star);
+      }
+    } else {
+      // Empty slot
+      slot.style.borderColor = 'rgba(255,255,255,0.1)';
+      slot.style.background = 'rgba(255,255,255,0.02)';
+      const empty = document.createElement('div');
+      empty.textContent = i < MAX_CARRIED_KEYS ? '—' : '';
+      empty.style.fontSize = '1.2rem';
+      empty.style.color = 'rgba(255,255,255,0.15)';
+      slot.appendChild(empty);
+    }
+
+    keysPanel.appendChild(slot);
+  }
+
+  // Update keys-hud-info count
+  const keyHud = document.getElementById('keys-hud-info');
+  if (keyHud) {
+    const realCarried = carriedKeys.filter(k => functionalKeysRevealed.includes(k.symbol)).length;
+    keyHud.textContent = `KEYS: ${carriedKeys.length}/${MAX_CARRIED_KEYS} carried  •  ${realCarried}/2 functional`;
+  }
 }
 
 function getIconOrShortName(itemName) {
@@ -1034,12 +1122,14 @@ function checkInteractions() {
     if (!gateSolved) {
       openKeypadModal();
     } else {
-      const hasFirstKey = foundKeysList.includes(functionalKeysRevealed[0]);
-      const hasSecondKey = foundKeysList.includes(functionalKeysRevealed[1]);
+      const carriedSymbols = carriedKeys.map(k => k.symbol);
+      const hasFirstKey = carriedSymbols.includes(functionalKeysRevealed[0]);
+      const hasSecondKey = carriedSymbols.includes(functionalKeysRevealed[1]);
       const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
       
       if (!hasFirstKey || !hasSecondKey) {
-        triggerNotification(`need twin keys to open gate! (${foundKeysList.length}/2 found)`);
+        const realCarried = carriedKeys.filter(k => functionalKeysRevealed.includes(k.symbol)).length;
+        triggerNotification(`need both functional keys! (${realCarried}/2 in hand)`);
       } else if (!breakersFixed) {
         triggerNotification(`master gate needs power! fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
       } else {
@@ -1054,21 +1144,27 @@ function checkInteractions() {
     const key = keysInMaze[i];
     const distToKey = camera.position.distanceTo(key.mesh.position);
     if (distToKey < 5.0) {
+      // Enforce carry limit
+      if (carriedKeys.length >= MAX_CARRIED_KEYS) {
+        triggerNotification(`Hands full! Max ${MAX_CARRIED_KEYS} keys — drop one first.`);
+        break;
+      }
       // Picked up!
       scene.remove(key.mesh);
+      carriedKeys.push({ symbol: key.symbol, typeName: key.typeName });
       foundKeysList.push(key.symbol);
-      triggerNotification(`Retrieved [${key.typeName}] — symbol: ${key.symbol}`);
-      
-      const keyHud = document.getElementById('keys-hud-info');
-      if (keyHud) {
-        keyHud.textContent = `KEYS: ${foundKeysList.length} / 2 RETRIEVED`;
-      }
+
+      const isReal = functionalKeysRevealed.includes(key.symbol);
+      triggerNotification(`Picked up [${key.typeName}]${isReal ? ' ★ FUNCTIONAL KEY!' : ''} (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
+
+      // Refresh the carried-keys HUD
+      renderCarriedKeysHUD();
 
       // Check if we retrieved the exact matching real keys
       checkWinCondition();
 
-      // Emit event
-      socketClient.emit('solve_puzzle_room'); // Triggers alignment shift too
+      // Emit event (triggers maze realignment)
+      socketClient.emit('solve_puzzle_room');
       keysInMaze.splice(i, 1);
       break;
     }
@@ -1114,6 +1210,11 @@ function checkInteractions() {
           return collected ? d : '_';
         }).join(' ');
         cipherHUD.textContent = `CODE: ${display}`;
+      }
+
+      // Also live-update the keypad screen if it's currently open
+      if (keypadUI && keypadUI.style.display !== 'none') {
+        keypadScreen.textContent = getKeypadDisplayString();
       }
       break;
     }
@@ -1258,6 +1359,16 @@ const keypadClearBtn = document.getElementById('keypad-clear');
 const keypadSubmitBtn = document.getElementById('keypad-submit');
 const keypadCloseBtn = document.getElementById('keypad-close');
 
+function getKeypadDisplayString() {
+  const digits = window.cipherCodeDigits || [null, null, null, null];
+  return digits.map((d, i) => {
+    const clueNote = codeClueNotes.find(n => n.digitIndex === i && n.collected);
+    if (clueNote && d !== null) return d.toString(); // Known from clue
+    if (i < codeEntered.length) return codeEntered[i];    // Player typed
+    return '_';
+  }).join(' ');
+}
+
 function openKeypadModal() {
   if (gateSolved) {
     triggerNotification("Master Gate protocol already bypassed.");
@@ -1266,8 +1377,9 @@ function openKeypadModal() {
   
   keypadUI.style.display = 'flex';
   document.exitPointerLock();
+  // Reset only the user-typed portion; keep clue-revealed digits
   codeEntered = "";
-  keypadScreen.textContent = "----";
+  keypadScreen.textContent = getKeypadDisplayString();
 }
 
 keypadCloseBtn.addEventListener('click', () => {
@@ -1276,26 +1388,41 @@ keypadCloseBtn.addEventListener('click', () => {
 
 keypadClearBtn.addEventListener('click', () => {
   codeEntered = "";
-  keypadScreen.textContent = "----";
+  keypadScreen.textContent = getKeypadDisplayString();
 });
 
 keypadBtns.forEach(btn => {
   btn.addEventListener('click', (e) => {
     const val = e.target.textContent;
     if (val === 'CLR' || val === 'ENT') return;
-    if (codeEntered.length < 4) {
+    // Count how many digits are NOT pre-filled by clues
+    const digits = window.cipherCodeDigits || [null, null, null, null];
+    const unknownCount = digits.filter((d, i) => {
+      const clue = codeClueNotes.find(n => n.digitIndex === i && n.collected);
+      return !clue;
+    }).length;
+    if (codeEntered.length < unknownCount) {
       codeEntered += val;
-      keypadScreen.textContent = codeEntered.padEnd(4, '-');
+      keypadScreen.textContent = getKeypadDisplayString();
     }
   });
 });
 
 keypadSubmitBtn.addEventListener('click', () => {
-  if (codeEntered.length === 4) {
-    socketClient.emit('try_cipher', codeEntered);
+  // Build final code: clue digits take priority, then typed digits fill remaining slots
+  const digits = window.cipherCodeDigits || [null, null, null, null];
+  let typedIdx = 0;
+  const finalCode = digits.map((d, i) => {
+    const clue = codeClueNotes.find(n => n.digitIndex === i && n.collected);
+    if (clue && d !== null) return d.toString();
+    return codeEntered[typedIdx++] || '0';
+  }).join('');
+  
+  if (finalCode.length === 4) {
+    socketClient.emit('try_cipher', finalCode);
     keypadUI.style.display = 'none';
   } else {
-    alert("Must enter a 4-digit code combination.");
+    triggerNotification("Enter all 4 digits first.");
   }
 });
 
@@ -1426,9 +1553,10 @@ function processFlashlightBattery(delta) {
 function checkWinCondition() {
   if (!gateSolved) return;
   
-  // Humans win if they retrieve the 2 functional keys, fix circuit breakers, and reach the Gate
-  const hasFirstKey = foundKeysList.includes(functionalKeysRevealed[0]);
-  const hasSecondKey = foundKeysList.includes(functionalKeysRevealed[1]);
+  // Humans win if they carry the 2 functional keys, fix circuit breakers, and reach the Gate
+  const carriedSymbols = carriedKeys.map(k => k.symbol);
+  const hasFirstKey = carriedSymbols.includes(functionalKeysRevealed[0]);
+  const hasSecondKey = carriedSymbols.includes(functionalKeysRevealed[1]);
   const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
   if (hasFirstKey && hasSecondKey && breakersFixed) {
