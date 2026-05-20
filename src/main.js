@@ -240,7 +240,9 @@ quitGameBtn.addEventListener('click', quitToMenu);
 // ====== Lobby Interactions ======
 
 function updatePlayerSettings() {
-  if (!socket) return;
+  if (!socket || !currentLobby) return;
+  const roleMode = currentLobby.settings?.roleSelectionMode;
+  if (roleMode === 'random' || roleMode === 'hidden') return;
   socket.emit('update_player', {
     team: currentSelectedTeam,
     characterClass: subclassSelect.value
@@ -255,6 +257,7 @@ function renderLobby() {
 
   if (myPlayer.isHost) {
     hostSettingsPanel.style.display = 'grid';
+    roleModeSelect.value = currentLobby.settings.roleSelectionMode;
     readyStartBtn.textContent = currentLobby.canStart ? "Start Breach" : "Awaiting Quota";
   } else {
     hostSettingsPanel.style.display = 'none';
@@ -267,6 +270,27 @@ function renderLobby() {
   minGhostsDisplay.textContent = currentLobby.settings.minGhostsRequired;
   botCountDisplay.textContent = currentLobby.settings.botGhostsCount;
   totalGhostsDisplay.textContent = currentLobby.settings.ghostsCount;
+
+  // Lock subclass customization if host has set random/hidden roles
+  const customizerBox = document.querySelector('.customizer-box');
+  const roleMode = currentLobby.settings.roleSelectionMode;
+  if (roleMode === 'random' || roleMode === 'hidden') {
+    chooseHumanBtn.disabled = true;
+    chooseGhostBtn.disabled = true;
+    subclassSelect.disabled = true;
+    customizerBox.classList.add('disabled-locked');
+    if (roleMode === 'random') {
+      classDesc.textContent = "LOBBY SECURED: Teams and classes will be completely randomized at breach start.";
+    } else {
+      classDesc.textContent = "LOBBY SECURED: Teams and classes will be assigned secretly at breach start.";
+    }
+  } else {
+    chooseHumanBtn.disabled = false;
+    chooseGhostBtn.disabled = false;
+    subclassSelect.disabled = false;
+    customizerBox.classList.remove('disabled-locked');
+    updateSubclassDesc();
+  }
 
   playersList.innerHTML = '';
   players.forEach(p => {
@@ -290,14 +314,24 @@ function renderLobby() {
     row.appendChild(nameWrap);
 
     const teamB = document.createElement('span');
-    teamB.className = p.team === 'Ghost' ? 'badge team-ghost' : 'badge team-human';
-    teamB.textContent = p.team;
-    row.appendChild(teamB);
-
     const classSpan = document.createElement('span');
-    classSpan.textContent = p.characterClass;
     classSpan.style.fontSize = '0.9rem';
     classSpan.style.color = 'var(--text-muted)';
+
+    if (roleMode === 'random') {
+      teamB.className = 'badge team-random';
+      teamB.textContent = 'Random';
+      classSpan.textContent = 'Random Class';
+    } else if (roleMode === 'hidden') {
+      teamB.className = 'badge team-hidden';
+      teamB.textContent = 'Hidden';
+      classSpan.textContent = 'Hidden Class';
+    } else {
+      teamB.className = p.team === 'Ghost' ? 'badge team-ghost' : 'badge team-human';
+      teamB.textContent = p.team;
+      classSpan.textContent = p.characterClass;
+    }
+    row.appendChild(teamB);
     row.appendChild(classSpan);
 
     const readyB = document.createElement('span');

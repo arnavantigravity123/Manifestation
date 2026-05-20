@@ -153,11 +153,14 @@ io.on('connection', (socket) => {
     const { roomId } = socket;
     if (!roomId || !lobbies[roomId]) return;
 
-    const player = lobbies[roomId].players[socket.id];
+    const lobby = lobbies[roomId];
+    const player = lobby.players[socket.id];
     if (!player) return;
 
-    if (updates.team !== undefined) player.team = updates.team;
-    if (updates.characterClass !== undefined) player.characterClass = updates.characterClass;
+    if (lobby.settings.roleSelectionMode === 'manual') {
+      if (updates.team !== undefined) player.team = updates.team;
+      if (updates.characterClass !== undefined) player.characterClass = updates.characterClass;
+    }
     if (updates.isReady !== undefined) player.isReady = updates.isReady;
 
     updateLobbyState(roomId);

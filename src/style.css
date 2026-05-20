@@ -1078,3 +1078,28 @@ body.is-mobile .player-row > :nth-child(3) {
 body.is-mobile .lobby-chat {
   height: 180px;
 }
+
+/* Random/Hidden Role Lobbies */
+.badge.team-random {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid #f59e0b;
+  color: #f59e0b;
+}
+
+.badge.team-hidden {
+  background: rgba(107, 114, 128, 0.2);
+  border: 1px solid #9ca3af;
+  color: #9ca3af;
+}
+
+.customizer-box.disabled-locked {
+  opacity: 0.6;
+  position: relative;
+}
+
+.customizer-box.disabled-locked select,
+.customizer-box.disabled-locked button {
+  cursor: not-allowed !important;
+  opacity: 0.5;
+  pointer-events: none !important;
+}
