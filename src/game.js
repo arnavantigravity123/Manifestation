@@ -1175,6 +1175,106 @@ function setupControls() {
   }
 }
 
+// Dynamically render on-screen keys/breaker/item interaction prompts in HUD
+function updateInteractionPrompt() {
+  const promptEl = document.getElementById('interaction-prompt');
+  if (!promptEl) return;
+
+  if (myTeam !== 'Human' || isCaptured || !window.gameReady) {
+    promptEl.style.display = 'none';
+    return;
+  }
+
+  let minDistance = Infinity;
+  let promptText = "";
+
+  // 1. Check Master Gate
+  const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
+  if (distToGate < 6.0) {
+    if (distToGate < minDistance) {
+      minDistance = distToGate;
+      if (!gateSolved) {
+        promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
+      } else {
+        const carriedSymbols = carriedKeys.map(k => k.symbol);
+        const hasFirstKey = carriedSymbols.includes(functionalKeysRevealed[0]);
+        const hasSecondKey = carriedSymbols.includes(functionalKeysRevealed[1]);
+        const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+        if (hasFirstKey && hasSecondKey && breakersFixed) {
+          promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
+        } else {
+          promptText = `Master Gate: Need 2 Keys & 3 Breakers (${fixedBreakersCount}/${totalBreakersRequired})`;
+        }
+      }
+    }
+  }
+
+  // 2. Check Keys in Maze
+  for (let i = 0; i < keysInMaze.length; i++) {
+    const key = keysInMaze[i];
+    const distToKey = camera.position.distanceTo(key.mesh.position);
+    if (distToKey < 5.0) {
+      if (distToKey < minDistance) {
+        minDistance = distToKey;
+        if (carriedKeys.length < MAX_CARRIED_KEYS) {
+          promptText = isMobileDevice ? `Tap INTERACT to collect ${key.typeName}` : `Press <kbd>E</kbd> to collect ${key.typeName}`;
+        } else {
+          promptText = isMobileDevice ? `Hands Full! Tap DROP KEY to replace` : `Hands Full! Press <kbd>Q</kbd> to drop a key first`;
+        }
+      }
+    }
+  }
+
+  // 3. Check Circuit Breakers
+  for (let i = 0; i < circuitBreakers.length; i++) {
+    const breaker = circuitBreakers[i];
+    if (breaker.isFixed) continue;
+    const distToBreaker = camera.position.distanceTo(breaker.mesh.position);
+    if (distToBreaker < 4.5) {
+      if (distToBreaker < minDistance) {
+        minDistance = distToBreaker;
+        promptText = isMobileDevice ? "Tap INTERACT to repair breaker" : "Press <kbd>E</kbd> to repair breaker";
+      }
+    }
+  }
+
+  // 4. Check Code Clue Notes
+  for (let i = 0; i < codeClueNotes.length; i++) {
+    const note = codeClueNotes[i];
+    if (note.collected) continue;
+    const distToNote = camera.position.distanceTo(note.mesh.position);
+    if (distToNote < 4.5) {
+      if (distToNote < minDistance) {
+        minDistance = distToNote;
+        promptText = isMobileDevice ? "Tap INTERACT to collect clue" : "Press <kbd>E</kbd> to collect clue";
+      }
+    }
+  }
+
+  // 5. Check Pick-up Items
+  for (let i = 0; i < itemsInMaze.length; i++) {
+    const item = itemsInMaze[i];
+    const distToItem = camera.position.distanceTo(item.mesh.position);
+    if (distToItem < 4.5) {
+      if (distToItem < minDistance) {
+        minDistance = distToItem;
+        if (inventory.length < 8) {
+          promptText = isMobileDevice ? `Tap INTERACT to pick up ${item.name}` : `Press <kbd>E</kbd> to pick up ${item.name}`;
+        } else {
+          promptText = `Inventory Full! Cannot pick up ${item.name}`;
+        }
+      }
+    }
+  }
+
+  if (promptText) {
+    promptEl.innerHTML = promptText;
+    promptEl.style.display = 'block';
+  } else {
+    promptEl.style.display = 'none';
+  }
+}
+
 function checkInteractions() {
   // 1. Check proximity to Keypad Terminal (Master Gate)
   const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
@@ -2444,8 +2544,14 @@ function animate() {
       }
     }
 
+    // Update on-screen interaction cues
+    updateInteractionPrompt();
+
     // Check key win triggers
     checkWinCondition();
+  } else {
+    const promptEl = document.getElementById('interaction-prompt');
+    if (promptEl) promptEl.style.display = 'none';
   }
 
   // Handle ghost initial spawning — only after splash screen and pointer lock / active game
