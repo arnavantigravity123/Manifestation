@@ -50,6 +50,7 @@ let gateSolved = false;
 let codeEntered = "";
 let functionalKeysRevealed = [];
 let foundKeysList = [];
+let codeClueNotes = []; // Clue objects in the maze
 
 // Audio variables for EMF & static
 let audioCtx = null;
@@ -78,6 +79,7 @@ export function initGame(socket, socketId, matchConfig) {
   codeEntered = "";
   functionalKeysRevealed = [];
   foundKeysList = [];
+  codeClueNotes = [];
   inventory = [];
   activeSlot = 0;
 
@@ -231,23 +233,28 @@ export function initGame(socket, socketId, matchConfig) {
   animate();
 }
 
+// 3 extra "empty" carry slots all human classes get by default
+const EXTRA_CARRY_SLOTS = ['', '', ''];
+
 function setupInventory() {
   const humanClasses = {
-    Locksmith: ["EMF Radar", "Thermal Camera", "Breaker Remote", "Battery Pack"],
-    Trapper: ["Salt Cannister", "Chalk / UV Spray", "Battery Pack", "Adrenaline Shot"],
-    Scout: ["EMF Radar", "Sanity Pills", "Battery Pack", "Adrenaline Shot"],
-    Medic: ["EMF Radar", "Sanity Pills", "Adrenaline Shot", "Battery Pack"],
-    "Flashlight Expert": ["EMF Radar", "Thermal Camera", "Battery Pack", "Battery Pack"],
-    Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Battery Pack", "Battery Pack", "Battery Pack"]
+    // Base 4 class items + 3 universal carry slots
+    Locksmith:          ["EMF Radar", "Thermal Camera", "Breaker Remote", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
+    Trapper:            ["Salt Cannister", "Chalk / UV Spray", "Battery Pack", "Adrenaline Shot", ...EXTRA_CARRY_SLOTS],
+    Scout:              ["EMF Radar", "Sanity Pills", "Battery Pack", "Adrenaline Shot",     ...EXTRA_CARRY_SLOTS],
+    Medic:              ["EMF Radar", "Sanity Pills", "Adrenaline Shot", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
+    "Flashlight Expert":["EMF Radar", "Thermal Camera", "Battery Pack", "Battery Pack",     ...EXTRA_CARRY_SLOTS],
+    // Quartermaster: 8 class items + 5 carry slots (biggest pack)
+    Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Battery Pack", "Battery Pack", "Battery Pack", '', '', '', '', '']
   };
 
   const ghostClasses = {
-    Stalker: ["Ghost Claws", "Scent Tracker"],
-    Mimic: ["Ghost Claws", "Infiltration Clone"],
-    Juggernaut: ["Ghost Claws", "Audio Amplifiers"],
-    Phantom: ["Ghost Claws", "Vapor Leap"],
+    Stalker:     ["Ghost Claws", "Scent Tracker"],
+    Mimic:       ["Ghost Claws", "Infiltration Clone"],
+    Juggernaut:  ["Ghost Claws", "Audio Amplifiers"],
+    Phantom:     ["Ghost Claws", "Vapor Leap"],
     Poltergeist: ["Ghost Claws", "Breaker Siphon"],
-    Banshee: ["Ghost Claws", "Sound Scrambler"]
+    Banshee:     ["Ghost Claws", "Sound Scrambler"]
   };
 
   inventory = myTeam === 'Human' ? (humanClasses[myClass] || []) : (ghostClasses[myClass] || []);
@@ -560,39 +567,73 @@ function generateMaze(keysCount = 8) {
   generateCircuitBreakers();
 }
 
+// 4 distinct key type definitions: shape + color + name
+const KEY_TYPES = [
+  { geo: () => new THREE.SphereGeometry(0.32, 10, 10),   color: 0xf59e0b, emissive: 0xf59e0b, label: 'Amber Orb'   },
+  { geo: () => new THREE.OctahedronGeometry(0.38),        color: 0x60a5fa, emissive: 0x3b82f6, label: 'Sapphire Shard' },
+  { geo: () => new THREE.TetrahedronGeometry(0.4),        color: 0xa78bfa, emissive: 0x7c3aed, label: 'Violet Prism' },
+  { geo: () => new THREE.DodecahedronGeometry(0.3),       color: 0x34d399, emissive: 0x10b981, label: 'Emerald Gem'  },
+];
+
 function generateCollectibles(keysCount) {
   // Clear any existing keys
-  keysInMaze.forEach(k => scene.remove(k));
+  keysInMaze.forEach(k => scene.remove(k.mesh));
   keysInMaze = [];
 
-  const keyGeo = new THREE.SphereGeometry(0.3, 8, 8);
-  const keyMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.5 });
+  // Also clear old code clue notes
+  codeClueNotes.forEach(n => scene.remove(n.mesh));
+  codeClueNotes = [];
+
+  const symbols = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa'];
 
   for (let i = 0; i < keysCount; i++) {
-    // Pick a random open corridor spot for the key
-    let x = 0;
-    let z = 0;
+    const typeIdx = i % KEY_TYPES.length;
+    const kt = KEY_TYPES[typeIdx];
+    const mat = new THREE.MeshStandardMaterial({ color: kt.color, emissive: kt.emissive, emissiveIntensity: 0.6, metalness: 0.4, roughness: 0.3 });
+    const mesh = new THREE.Mesh(kt.geo(), mat);
+
+    let x = 0, z = 0;
     if (openCorridors.length > 0) {
       const randIdx = Math.floor(Math.random() * openCorridors.length);
       x = openCorridors[randIdx].x;
       z = openCorridors[randIdx].z;
     } else {
-      // Fallback if openCorridors is empty for some reason
       const angle = (i / keysCount) * Math.PI * 2;
-      const radius = 15 + Math.random() * 20;
-      x = Math.cos(angle) * radius;
-      z = Math.sin(angle) * radius;
+      x = Math.cos(angle) * (15 + Math.random() * 20);
+      z = Math.sin(angle) * (15 + Math.random() * 20);
     }
+    mesh.position.set(x, 0.45, z);
+    // Store key type label in userData for HUD hints
+    mesh.userData.keyTypeLabel = kt.label;
+    scene.add(mesh);
 
-    const key = new THREE.Mesh(keyGeo, keyMat);
-    key.position.set(x, 0.4, z);
-    scene.add(key);
+    keysInMaze.push({ mesh, symbol: symbols[i % 10], index: i, typeName: kt.label });
+  }
 
-    keysInMaze.push({
-      mesh: key,
-      symbol: ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa'][i % 10],
-      index: i
-    });
+  // Spawn code clue notes — small glowing plates hinting at the cipher code digits
+  generateCodeClues();
+}
+
+function generateCodeClues() {
+  // Scatter 4 glowing clue slabs around the maze, each hinting at one digit of the code
+  const noteGeo = new THREE.BoxGeometry(0.6, 0.8, 0.08);
+  const noteMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xfde047, emissiveIntensity: 0.9, roughness: 0.5 });
+
+  for (let i = 0; i < 4; i++) {
+    const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
+    let x = 0, z = 0;
+    if (openCorridors.length > 4) {
+      const randIdx = Math.floor(Math.random() * openCorridors.length);
+      x = openCorridors[randIdx].x;
+      z = openCorridors[randIdx].z;
+    } else {
+      x = (Math.random() - 0.5) * 60;
+      z = (Math.random() - 0.5) * 60;
+    }
+    noteMesh.position.set(x, 1.0, z);
+    noteMesh.rotation.y = Math.random() * Math.PI;
+    scene.add(noteMesh);
+    codeClueNotes.push({ mesh: noteMesh, digitIndex: i, collected: false });
   }
 }
 
@@ -961,7 +1002,7 @@ function checkInteractions() {
       // Picked up!
       scene.remove(key.mesh);
       foundKeysList.push(key.symbol);
-      triggerNotification(`Retrieved key [${key.symbol}]`);
+      triggerNotification(`Retrieved [${key.typeName}] — symbol: ${key.symbol}`);
       
       const keyHud = document.getElementById('keys-hud-info');
       if (keyHud) {
@@ -991,6 +1032,20 @@ function checkInteractions() {
       triggerNotification(`circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
       
       checkWinCondition();
+      break;
+    }
+  }
+
+  // 4. Check proximity to Code Clue Notes (yellow glowing slabs)
+  for (let i = 0; i < codeClueNotes.length; i++) {
+    const note = codeClueNotes[i];
+    if (note.collected) continue;
+    const distToNote = camera.position.distanceTo(note.mesh.position);
+    if (distToNote < 4.5) {
+      note.collected = true;
+      note.mesh.material.emissiveIntensity = 0.1; // dim it so it looks consumed
+      const digitNames = ['FIRST', 'SECOND', 'THIRD', 'FOURTH'];
+      triggerNotification(`cipher clue found! this hints at the ${digitNames[note.digitIndex]} digit of the gate code.`);
       break;
     }
   }

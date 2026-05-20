@@ -85,7 +85,9 @@ function checkMatchEndCondition(roomId) {
   const playersList = Object.values(lobby.players);
   const humans = playersList.filter(p => p.team === 'Human');
   const humanCount = humans.length;
-  
+
+  // Only trigger ghost win if there were real humans AND all of them are captured.
+  // Prevents a false defeat when the lobby has 0 human players (e.g. solo ghost test).
   if (humanCount > 0) {
     const activeHumans = humans.filter(p => !p.isCaptured);
     if (activeHumans.length === 0) {
