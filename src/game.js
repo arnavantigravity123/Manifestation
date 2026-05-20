@@ -1386,20 +1386,16 @@ function checkInteractions() {
     }
   }
 
-  // 5. Check proximity to Pick-up Items
+  // 5. Check proximity to Pick-up Items (no hard cap — class loadout + floor finds can stack)
   for (let i = 0; i < itemsInMaze.length; i++) {
     const item = itemsInMaze[i];
     const dist = camera.position.distanceTo(item.mesh.position);
     if (dist < 4.5) {
-      if (inventory.length < 8) {
-        inventory.push(item.name);
-        scene.remove(item.mesh);
-        itemsInMaze.splice(i, 1);
-        triggerNotification(`Picked up ${item.name}`);
-        renderHUDInventory();
-      } else {
-        triggerNotification(`Inventory full! Cannot pick up ${item.name}.`);
-      }
+      inventory.push(item.name);
+      scene.remove(item.mesh);
+      itemsInMaze.splice(i, 1);
+      triggerNotification(`Picked up ${item.name}`);
+      renderHUDInventory();
       break;
     }
   }
@@ -1750,34 +1746,40 @@ function processFlashlightBattery(delta) {
   if (myTeam !== 'Human') return;
   if (!flashLight) return;
 
-  // Drains battery if flashlight has intensity > 0
-  if (flashLight.intensity > 0) {
-    // 1% per second = 80 seconds total battery life (drops to 20%)
+  const baseIntensity = inventory.includes('Battery Pack') ? 200 : 80;
+
+  // Always drain if the light is supposed to be on (tracked separately from intensity
+  // so that a flicker setting intensity=0 doesn't stop the drain loop permanently)
+  const lightShouldBeOn = flashlightBattery > 20;
+
+  if (lightShouldBeOn) {
+    // 1% per second = 80 seconds total battery life (drains from 100 to 20%)
     flashlightBattery = Math.max(20, flashlightBattery - delta * 1.0);
-    
+
     // Update battery bar UI
     const flBar = document.getElementById('flashlight-bar');
     const flVal = document.getElementById('flashlight-value');
     if (flBar) flBar.style.width = `${flashlightBattery}%`;
     if (flVal) flVal.textContent = `${Math.ceil(flashlightBattery)}%`;
 
-    const baseIntensity = inventory.includes('Battery Pack') ? 200 : 80;
-
-    // If battery is empty (hits 20% reserve limit), turn off the light
     if (flashlightBattery <= 20) {
+      // Just hit reserve limit this frame — turn off
       flashLight.intensity = 0;
-      if (Math.random() < 0.05) triggerNotification("Flashlight battery dead! (20% reserve limit)");
-    } else if (flashlightBattery < 35) {
-      // Flicker the flashlight when low battery (< 35%)
-      if (Math.random() < 0.15) {
-        flashLight.intensity = 0; // Temporary flicker off
-      } else {
-        flashLight.intensity = baseIntensity * 0.3; // Low light level
-      }
+      triggerNotification("Flashlight battery dead! Find a Battery Pack.");
+    } else if (flashlightBattery < 30) {
+      // Low battery: flicker between dim and off (30% to 20%)
+      flashLight.intensity = Math.random() < 0.12 ? 0 : baseIntensity * 0.25;
     } else {
-      // Normal intensity
+      // Full normal intensity
       flashLight.intensity = baseIntensity;
     }
+  } else {
+    // Battery at reserve — keep light off, update UI
+    flashLight.intensity = 0;
+    const flBar = document.getElementById('flashlight-bar');
+    const flVal = document.getElementById('flashlight-value');
+    if (flBar) flBar.style.width = `20%`;
+    if (flVal) flVal.textContent = `20%`;
   }
 }
 
