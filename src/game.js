@@ -508,6 +508,7 @@ function generateMaze(keysCount = 8) {
         walls.push(wallMesh);
 
         if (type === 2) {
+          wallMesh.userData = { isSliding: true, col: c, row: r };
           // Keep track of sliding corridors for realignments
           slidingWallSegments.push(wallMesh);
         }
@@ -570,6 +571,12 @@ function realignMazeCorridors(realignmentState) {
     // Odd/Even shift patterns
     const targetY = (solvedCount % 2 === 0) ? (idx % 2 === 0 ? 3.5 / 2 : -3) : (idx % 2 === 0 ? -3 : 3.5 / 2);
     
+    // Update mazeLayout immediately for pathfinding path recalculation
+    if (segment.userData && segment.userData.col !== undefined) {
+      const { col, row } = segment.userData;
+      mazeLayout[row][col] = (targetY < 0) ? 0 : 1;
+    }
+
     // Smooth sliding animation
     let currentY = segment.position.y;
     const anim = () => {
@@ -1225,6 +1232,30 @@ function setupSocketListeners() {
   
   socketClient.on('sound_beacon', ({ producerId, volume, position }) => {
     latestSoundBeacon = { position, volume, time: performance.now() };
+
+    // If current player is a Ghost, check if they hear this sound
+    if (myTeam === 'Ghost') {
+      const myPos = new THREE.Vector3(camera.position.x, 0, camera.position.z);
+      const soundPos = new THREE.Vector3(position.x, 0, position.z);
+      const dist = myPos.distanceTo(soundPos);
+
+      let hearingRadius = 0;
+      let soundType = "";
+      if (volume <= 1.0) {
+        hearingRadius = 10 * 4.5;
+        soundType = "Footsteps";
+      } else if (volume <= 35) {
+        hearingRadius = 20 * 4.5;
+        soundType = "Whisper";
+      } else {
+        hearingRadius = 50 * 4.5;
+        soundType = "Scream";
+      }
+
+      if (dist <= hearingRadius) {
+        triggerSoundPing(position, soundType);
+      }
+    }
   });
 
   socketClient.on('human_captured', ({ targetId }) => {
@@ -1276,6 +1307,45 @@ function setupSocketListeners() {
   socketClient.on('human_chalk_spray', ({ id, position }) => {
     deployChalkDecal(position);
   });
+}
+
+function triggerSoundPing(position, soundType) {
+  // Text notification for Ghost player
+  triggerNotification(`ALERT: ${soundType.toUpperCase()} DETECTED nearby!`);
+
+  // Create flat ring geometry on floor
+  const geom = new THREE.RingGeometry(0.1, 1.5, 32);
+  geom.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xff3333,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.8,
+    depthWrite: false
+  });
+  const pingMesh = new THREE.Mesh(geom, mat);
+  pingMesh.position.set(position.x, 0.1, position.z);
+  scene.add(pingMesh);
+
+  const startTime = performance.now();
+  const duration = 2000; // 2 seconds
+
+  function animatePing() {
+    const elapsed = performance.now() - startTime;
+    const progress = elapsed / duration;
+
+    if (progress >= 1.0) {
+      scene.remove(pingMesh);
+      geom.dispose();
+      mat.dispose();
+    } else {
+      const scale = 1.0 + progress * 8.0;
+      pingMesh.scale.set(scale, 1, scale);
+      pingMesh.material.opacity = 0.8 * (1.0 - progress);
+      requestAnimationFrame(animatePing);
+    }
+  }
+  animatePing();
 }
 
 function triggerAlarmFlashing() {
@@ -1382,6 +1452,20 @@ function animate() {
       speed *= 1.5;
     }
 
+    // Salt trap slow down for human Ghost players
+    if (myTeam === 'Ghost') {
+      let nearSalt = false;
+      saltTraps.forEach(trap => {
+        const dist = camera.position.distanceTo(trap.position);
+        if (dist < 2.5) {
+          nearSalt = true;
+        }
+      });
+      if (nearSalt) {
+        speed *= 0.2; // 80% slow down, matching AI slow down ratio
+      }
+    }
+
     if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
     if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
 
@@ -1391,6 +1475,7 @@ function animate() {
 
     // Simple wall collision checking (2D check)
     walls.forEach(wall => {
+      if (wall.position.y < 0) return; // Skip walls shifted below floor level (open sliding gates)
       const dx = camera.position.x - wall.position.x;
       const dz = camera.position.z - wall.position.z;
       const dist2D = Math.sqrt(dx*dx + dz*dz);
@@ -1596,6 +1681,7 @@ function animate() {
 
       // Wall collision — push ghost out if clipping
       walls.forEach(wall => {
+        if (wall.position.y < 0) return; // Skip walls shifted below floor level (open sliding gates)
         const dx = ghost.position.x - wall.position.x;
         const dz = ghost.position.z - wall.position.z;
         const dist2D = Math.sqrt(dx*dx + dz*dz);
