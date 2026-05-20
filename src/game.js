@@ -1764,13 +1764,11 @@ function processFlashlightBattery(delta) {
 
   const baseIntensity = inventory.includes('Battery Pack') ? 200 : 80;
 
-  // Always drain if the light is supposed to be on (tracked separately from intensity
-  // so that a flicker setting intensity=0 doesn't stop the drain loop permanently)
-  const lightShouldBeOn = flashlightBattery > 20;
-
-  if (lightShouldBeOn) {
-    // 1% per second = 80 seconds total battery life (drains from 100 to 20%)
-    flashlightBattery = Math.max(20, flashlightBattery - delta * 1.0);
+  // Drain if battery still has charge (tracked by battery level, not intensity,
+  // so a flicker can't permanently kill the light)
+  if (flashlightBattery > 0) {
+    // ~0.5% per second = 200 second total battery life from 100% to 0%
+    flashlightBattery = Math.max(0, flashlightBattery - delta * 0.5);
 
     // Update battery bar UI
     const flBar = document.getElementById('flashlight-bar');
@@ -1778,24 +1776,24 @@ function processFlashlightBattery(delta) {
     if (flBar) flBar.style.width = `${flashlightBattery}%`;
     if (flVal) flVal.textContent = `${Math.ceil(flashlightBattery)}%`;
 
-    if (flashlightBattery <= 20) {
-      // Just hit reserve limit this frame — turn off
+    if (flashlightBattery <= 0) {
+      // Fully dead
       flashLight.intensity = 0;
       triggerNotification("Flashlight battery dead! Find a Battery Pack.");
-    } else if (flashlightBattery < 30) {
-      // Low battery: flicker between dim and off (30% to 20%)
-      flashLight.intensity = Math.random() < 0.12 ? 0 : baseIntensity * 0.25;
+    } else if (flashlightBattery < 15) {
+      // Critical flicker warning (15% → 0%)
+      flashLight.intensity = Math.random() < 0.18 ? 0 : baseIntensity * 0.2;
     } else {
-      // Full normal intensity
+      // Normal full intensity
       flashLight.intensity = baseIntensity;
     }
   } else {
-    // Battery at reserve — keep light off, update UI
+    // Dead — keep off, UI stays at 0%
     flashLight.intensity = 0;
     const flBar = document.getElementById('flashlight-bar');
     const flVal = document.getElementById('flashlight-value');
-    if (flBar) flBar.style.width = `20%`;
-    if (flVal) flVal.textContent = `20%`;
+    if (flBar) flBar.style.width = `0%`;
+    if (flVal) flVal.textContent = `0%`;
   }
 }
 
