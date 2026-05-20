@@ -289,6 +289,8 @@ io.on('connection', (socket) => {
         keysCount: keys.length,
         cipherSolved: false,
         realKeySymbols: mode === 'hidden' ? [] : undefined,
+        // Each index is one digit of the 4-digit code, revealed by clue notes in the maze
+        codeDigits: code.split('').map(Number),
       }
     });
 

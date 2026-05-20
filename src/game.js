@@ -210,6 +210,9 @@ export function initGame(socket, socketId, matchConfig) {
     scene.add(camera);
   }
 
+  // Store the cipher code digits (revealed one at a time by clue notes in the maze)
+  window.cipherCodeDigits = matchConfig.puzzleState.codeDigits || [null, null, null, null];
+
   // Create Labyrinth
   generateMaze(matchConfig.puzzleState.keysCount);
 
@@ -1044,8 +1047,22 @@ function checkInteractions() {
     if (distToNote < 4.5) {
       note.collected = true;
       note.mesh.material.emissiveIntensity = 0.1; // dim it so it looks consumed
-      const digitNames = ['FIRST', 'SECOND', 'THIRD', 'FOURTH'];
-      triggerNotification(`cipher clue found! this hints at the ${digitNames[note.digitIndex]} digit of the gate code.`);
+
+      const digitNames = ['1ST', '2ND', '3RD', '4TH'];
+      const digits = window.cipherCodeDigits || [null, null, null, null];
+      const revealedDigit = digits[note.digitIndex];
+
+      triggerNotification(`cipher clue found! ${digitNames[note.digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
+
+      // Update the cipher HUD to show collected digits so far (unknown ones shown as _)
+      const cipherHUD = document.getElementById('hud-cipher-info');
+      if (cipherHUD) {
+        const display = digits.map((d, idx) => {
+          const collected = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
+          return collected ? d : '_';
+        }).join(' ');
+        cipherHUD.textContent = `CODE: ${display}`;
+      }
       break;
     }
   }
