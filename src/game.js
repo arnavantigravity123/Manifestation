@@ -24,6 +24,9 @@ let walls = [];
 let itemsInMaze = [];
 let keysInMaze = [];
 let saltTraps = [];
+let circuitBreakers = [];
+let fixedBreakersCount = 0;
+const totalBreakersRequired = 3;
 
 // Player Config
 let myTeam = 'Human';
@@ -410,7 +413,7 @@ function generateMaze(keysCount = 8) {
   slidingWallSegments = [];
 
   // Ground plane
-  const floorGeo = new THREE.PlaneGeometry(100, 100);
+  const floorGeo = new THREE.PlaneGeometry(300, 300);
   const floorMat = new THREE.MeshStandardMaterial({ 
     color: 0x111827, 
     roughness: 0.8,
@@ -422,7 +425,7 @@ function generateMaze(keysCount = 8) {
   scene.add(floor);
 
   // Ceiling
-  const ceilGeo = new THREE.PlaneGeometry(100, 100);
+  const ceilGeo = new THREE.PlaneGeometry(300, 300);
   const ceilMat = new THREE.MeshStandardMaterial({ color: 0x070b14, roughness: 0.9 });
   const ceiling = new THREE.Mesh(ceilGeo, ceilMat);
   ceiling.rotation.x = Math.PI / 2;
@@ -542,6 +545,7 @@ function generateMaze(keysCount = 8) {
 
   // Spawn key collectibles in chests/lockers represented by boxes
   generateCollectibles(keysCount);
+  generateCircuitBreakers();
 }
 
 function generateCollectibles(keysCount) {
@@ -553,11 +557,20 @@ function generateCollectibles(keysCount) {
   const keyMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.5 });
 
   for (let i = 0; i < keysCount; i++) {
-    // Generate key locations in empty paths
-    const angle = (i / keysCount) * Math.PI * 2;
-    const radius = 15 + Math.random() * 20;
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
+    // Pick a random open corridor spot for the key
+    let x = 0;
+    let z = 0;
+    if (openCorridors.length > 0) {
+      const randIdx = Math.floor(Math.random() * openCorridors.length);
+      x = openCorridors[randIdx].x;
+      z = openCorridors[randIdx].z;
+    } else {
+      // Fallback if openCorridors is empty for some reason
+      const angle = (i / keysCount) * Math.PI * 2;
+      const radius = 15 + Math.random() * 20;
+      x = Math.cos(angle) * radius;
+      z = Math.sin(angle) * radius;
+    }
 
     const key = new THREE.Mesh(keyGeo, keyMat);
     key.position.set(x, 0.4, z);
@@ -567,6 +580,37 @@ function generateCollectibles(keysCount) {
       mesh: key,
       symbol: ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa'][i % 10],
       index: i
+    });
+  }
+}
+
+function generateCircuitBreakers() {
+  circuitBreakers.forEach(b => scene.remove(b.mesh));
+  circuitBreakers = [];
+  fixedBreakersCount = 0;
+
+  const breakerGeo = new THREE.BoxGeometry(1.2, 2.0, 1.2);
+  
+  for (let i = 0; i < totalBreakersRequired; i++) {
+    const breakerMat = new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.8, roughness: 0.2 });
+    const mesh = new THREE.Mesh(breakerGeo, breakerMat);
+    
+    let x = 0; let z = 0;
+    if (openCorridors.length > 0) {
+      const randIdx = Math.floor(Math.random() * openCorridors.length);
+      x = openCorridors[randIdx].x;
+      z = openCorridors[randIdx].z;
+    } else {
+      x = (Math.random() - 0.5) * 40;
+      z = (Math.random() - 0.5) * 40;
+    }
+    
+    mesh.position.set(x, 1.0, z);
+    scene.add(mesh);
+    
+    circuitBreakers.push({
+      mesh: mesh,
+      isFixed: false
     });
   }
 }
@@ -870,9 +914,22 @@ function setupControls() {
 function checkInteractions() {
   // 1. Check proximity to Keypad Terminal (Master Gate)
   const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
-  if (distToGate < 4) {
-    // Open keypad overlay UI!
-    openKeypadModal();
+  if (distToGate < 6) {
+    if (!gateSolved) {
+      openKeypadModal();
+    } else {
+      const hasFirstKey = foundKeysList.includes(functionalKeysRevealed[0]);
+      const hasSecondKey = foundKeysList.includes(functionalKeysRevealed[1]);
+      const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+      
+      if (!hasFirstKey || !hasSecondKey) {
+        triggerNotification(`need twin keys to open gate! (${foundKeysList.length}/2 found)`);
+      } else if (!breakersFixed) {
+        triggerNotification(`master gate needs power! fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
+      } else {
+        triggerNotification("master gate breached! escape successful!");
+      }
+    }
     return;
   }
 
@@ -880,7 +937,7 @@ function checkInteractions() {
   for (let i = 0; i < keysInMaze.length; i++) {
     const key = keysInMaze[i];
     const distToKey = camera.position.distanceTo(key.mesh.position);
-    if (distToKey < 3.0) {
+    if (distToKey < 5.0) {
       // Picked up!
       scene.remove(key.mesh);
       foundKeysList.push(key.symbol);
@@ -897,6 +954,23 @@ function checkInteractions() {
       // Emit event
       socketClient.emit('solve_puzzle_room'); // Triggers alignment shift too
       keysInMaze.splice(i, 1);
+      break;
+    }
+  }
+
+  // 3. Check proximity to Circuit Breakers
+  for (let i = 0; i < circuitBreakers.length; i++) {
+    const breaker = circuitBreakers[i];
+    if (breaker.isFixed) continue;
+    
+    const distToBreaker = camera.position.distanceTo(breaker.mesh.position);
+    if (distToBreaker < 4.5) {
+      breaker.isFixed = true;
+      breaker.mesh.material.color.setHex(0x10b981); // Turn green
+      fixedBreakersCount++;
+      triggerNotification(`circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
+      
+      checkWinCondition();
       break;
     }
   }
@@ -1208,13 +1282,14 @@ function processFlashlightBattery(delta) {
 function checkWinCondition() {
   if (!gateSolved) return;
   
-  // Humans win if they retrieve the 2 functional keys and reach the Gate
+  // Humans win if they retrieve the 2 functional keys, fix circuit breakers, and reach the Gate
   const hasFirstKey = foundKeysList.includes(functionalKeysRevealed[0]);
   const hasSecondKey = foundKeysList.includes(functionalKeysRevealed[1]);
+  const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
-  if (hasFirstKey && hasSecondKey) {
+  if (hasFirstKey && hasSecondKey && breakersFixed) {
     const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
-    if (distToGate < 4) {
+    if (distToGate < 6) {
       triggerNotification("master gate breached! escape successful!");
       socketClient.emit('chat_message', { msg: "=== VICTORY: HUMANS HAVE ESCAPED THE LABYRINTH ===" });
       socketClient.emit('human_escaped');
