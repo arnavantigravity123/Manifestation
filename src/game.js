@@ -32,6 +32,7 @@ let isPanicked = false;
 let isCaptured = false;
 let panicTimer = 0;
 let flashLight = null;
+let flashlightBattery = 100;
 
 // Puzzle configuration
 let gateCoordinates = { x: 0, z: -35 };
@@ -71,14 +72,19 @@ export function initGame(socket, socketId, matchConfig) {
   activeSlot = 0;
 
   // Reset HUD visuals
+  flashlightBattery = 100;
   const hpVal = document.getElementById('hp-value');
   const hpBar = document.getElementById('hp-bar');
   const sanityVal = document.getElementById('sanity-value');
   const sanityBar = document.getElementById('sanity-bar');
+  const flBar = document.getElementById('flashlight-bar');
+  const flVal = document.getElementById('flashlight-value');
   if (hpVal) hpVal.textContent = "100 HP";
   if (hpBar) hpBar.style.width = "100%";
   if (sanityVal) sanityVal.textContent = "100%";
   if (sanityBar) sanityBar.style.width = "100%";
+  if (flBar) flBar.style.width = "100%";
+  if (flVal) flVal.textContent = "100%";
 
   const capturedOverlay = document.getElementById('captured-overlay');
   if (capturedOverlay) capturedOverlay.style.display = 'none';
@@ -89,6 +95,12 @@ export function initGame(socket, socketId, matchConfig) {
   const me = matchConfig.players[myId];
   myTeam = me.team;
   myClass = me.characterClass;
+
+  // Show/Hide flashlight gauge row based on team
+  const flRow = document.getElementById('flashlight-gauge-row');
+  if (flRow) {
+    flRow.style.display = myTeam === 'Ghost' ? 'none' : 'block';
+  }
 
   // Setup HUD inventory based on subclass data
   setupInventory();
@@ -913,6 +925,7 @@ function useActiveItem() {
   } else if (item === "EMF Radar") {
     triggerNotification("EMF radar is passively active when held.");
   } else if (item === "Battery Pack") {
+    flashlightBattery = 100;
     if (flashLight) flashLight.intensity = 200;
     triggerNotification("flashlight battery recharged.");
     removeItem(activeSlot);
@@ -1157,6 +1170,41 @@ function processSanity(delta) {
   }
 }
 
+function processFlashlightBattery(delta) {
+  if (myTeam !== 'Human') return;
+  if (!flashLight) return;
+
+  // Drains battery if flashlight has intensity > 0
+  if (flashLight.intensity > 0) {
+    // 1% per second = 100 seconds total battery life
+    flashlightBattery = Math.max(0, flashlightBattery - delta * 1.0);
+    
+    // Update battery bar UI
+    const flBar = document.getElementById('flashlight-bar');
+    const flVal = document.getElementById('flashlight-value');
+    if (flBar) flBar.style.width = `${flashlightBattery}%`;
+    if (flVal) flVal.textContent = `${Math.ceil(flashlightBattery)}%`;
+
+    const baseIntensity = inventory.includes('Battery Pack') ? 200 : 80;
+
+    // If battery is empty, turn off the light
+    if (flashlightBattery <= 0) {
+      flashLight.intensity = 0;
+      triggerNotification("Flashlight battery dead!");
+    } else if (flashlightBattery < 20) {
+      // Flicker the flashlight when low battery (< 20%)
+      if (Math.random() < 0.15) {
+        flashLight.intensity = 0; // Temporary flicker off
+      } else {
+        flashLight.intensity = baseIntensity * 0.3; // Low light level
+      }
+    } else {
+      // Normal intensity
+      flashLight.intensity = baseIntensity;
+    }
+  }
+}
+
 function checkWinCondition() {
   if (!gateSolved) return;
   
@@ -1283,8 +1331,10 @@ function setupSocketListeners() {
       if (flashLight) flashLight.intensity = 0;
       triggerNotification("Breaker Siphon! Flashlights disabled (15s)");
       setTimeout(() => {
-        if (flashLight && inventory.includes('Battery Pack')) flashLight.intensity = 200;
-        else if (flashLight) flashLight.intensity = 80;
+        if (flashlightBattery > 0 && flashLight) {
+          if (inventory.includes('Battery Pack')) flashLight.intensity = 200;
+          else flashLight.intensity = 80;
+        }
       }, 15000);
     }
   });
@@ -1547,6 +1597,7 @@ function animate() {
     // 2. Active sensors & sanity ticks
     processEMFSensors(delta);
     processSanity(delta);
+    processFlashlightBattery(delta);
 
     // 3. Process panic timer cooldown & Thermal Camera overrides
     if (isPanicked) {

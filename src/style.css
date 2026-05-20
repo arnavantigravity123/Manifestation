@@ -588,6 +588,11 @@ input[type="text"]:focus {
   box-shadow: 0 0 8px rgba(168, 85, 247, 0.5);
 }
 
+.gauge-bar-fill.battery {
+  background: linear-gradient(90deg, #eab308, #facc15);
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.5);
+}
+
 /* Master Gate Terminal Status */
 .terminal-status {
   text-align: right;
