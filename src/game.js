@@ -1846,8 +1846,8 @@ function animate() {
         characterClass: myClass
       });
 
-      // Emit walking sound frequency
-      if (Math.abs(velocity.x) > 1 || Math.abs(velocity.z) > 1) {
+      // Emit walking sound frequency (only for Humans)
+      if (myTeam === 'Human' && (Math.abs(velocity.x) > 1 || Math.abs(velocity.z) > 1)) {
         socketClient.emit('sound_produced', {
           volume: 0.5,
           position: { x: camera.position.x, z: camera.position.z }
@@ -1857,8 +1857,8 @@ function animate() {
       networkTimer = 0;
     }
 
-    // Process Microphone volume
-    if (audioAnalyser && !isCaptured) {
+    // Process Microphone volume (only for Humans)
+    if (myTeam === 'Human' && audioAnalyser && !isCaptured) {
       audioAnalyser.getByteFrequencyData(audioDataArray);
       let sum = 0;
       for(let i=0; i<audioDataArray.length; i++) sum += audioDataArray[i];
