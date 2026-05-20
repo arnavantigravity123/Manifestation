@@ -69,6 +69,8 @@ let myClass = 'Locksmith';
 let isPanicked = false;
 let isCaptured = false;
 let panicTimer = 0;
+let speedBoostTimer = 0;
+let latestSoundBeacon = null;
 let flashLight = null;
 let flashlightBattery = 100;
 
