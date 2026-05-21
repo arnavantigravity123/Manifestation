@@ -642,15 +642,15 @@ function generateMaze(keysCount = 8) {
   mazeLayout = layout.map(row => row.map(cell => cell === 0 ? 0 : 1)); // 0=open, 1=wall (treat sliding doors as walls for pathfinding)
 
   const generatedTex = textureLoader.load('/assets/wall_texture.png');
-  generatedTex.wrapS = THREE.RepeatWrapping;
-  generatedTex.wrapT = THREE.RepeatWrapping;
-  generatedTex.repeat.set(1, 1);
-  const wallBump = generatedTex;
+  const wallBumpTex = new THREE.TextureLoader().load('/assets/wall_bump_map.png');
+  wallBumpTex.wrapS = THREE.RepeatWrapping;
+  wallBumpTex.wrapT = THREE.RepeatWrapping;
+  wallBumpTex.repeat.set(1, 1);
 
   const wallMat = new THREE.MeshStandardMaterial({ 
     map: generatedTex,
-    bumpMap: wallBump,
-    bumpScale: 0.35,
+    bumpMap: wallBumpTex,
+    bumpScale: 0.8, // high bump scale for physical depth
     color: 0x475569,
     roughness: 0.92,
     metalness: 0.03
@@ -840,23 +840,47 @@ function generateCircuitBreakers() {
   circuitBreakers = [];
   fixedBreakersCount = 0;
 
-  const breakerGeo = new THREE.BoxGeometry(1.2, 2.0, 1.2);
+  // A flat 3D box that mounts flush against a wall
+  const breakerGeo = new THREE.BoxGeometry(0.8, 1.2, 0.15);
+  const breakerTex = new THREE.TextureLoader().load('/assets/breaker_texture.png');
+  // Initial color slightly red tinted to show it is broken/needs fixing
+  const breakerMat = new THREE.MeshStandardMaterial({ map: breakerTex, color: 0xffaaaa, roughness: 0.4, metalness: 0.8 });
   
   for (let i = 0; i < totalBreakersRequired; i++) {
-    const breakerMat = new THREE.MeshStandardMaterial({ color: 0xff0000, metalness: 0.8, roughness: 0.2 });
-    const mesh = new THREE.Mesh(breakerGeo, breakerMat);
+    const mesh = new THREE.Mesh(breakerGeo, breakerMat.clone());
     
-    let x = 0; let z = 0;
-    if (openCorridors.length > 0) {
-      const randIdx = Math.floor(seededRandom() * openCorridors.length);
-      x = openCorridors[randIdx].x;
-      z = openCorridors[randIdx].z;
-    } else {
-      x = (seededRandom() - 0.5) * 40;
-      z = (seededRandom() - 0.5) * 40;
+    let mounted = false;
+    const shuffledCorridors = [...openCorridors].sort(() => 0.5 - seededRandom());
+    
+    for (const corr of shuffledCorridors) {
+      const col = Math.floor(corr.x / blockSize + mazeSize / 2);
+      const row = Math.floor(corr.z / blockSize + mazeSize / 2);
+      
+      const dirs = [
+        { dc: 0, dr: -1, rx: 0, rz: -blockSize/2, rotY: 0 },         
+        { dc: 0, dr: 1, rx: 0, rz: blockSize/2, rotY: Math.PI },     
+        { dc: -1, dr: 0, rx: -blockSize/2, rz: 0, rotY: Math.PI/2 }, 
+        { dc: 1, dr: 0, rx: blockSize/2, rz: 0, rotY: -Math.PI/2 }   
+      ];
+      
+      for (const d of dirs) {
+        const nr = row + d.dr;
+        const nc = col + d.dc;
+        if (nr >= 0 && nr < mazeSize && nc >= 0 && nc < mazeSize && mazeLayout[nr][nc] === 1) {
+          // Mount the breaker slightly off the wall surface
+          mesh.position.set(corr.x + d.rx * 0.95, 1.5, corr.z + d.rz * 0.95);
+          mesh.rotation.y = d.rotY;
+          mounted = true;
+          break;
+        }
+      }
+      if (mounted) break;
     }
     
-    mesh.position.set(x, 1.0, z);
+    if (!mounted) {
+      mesh.position.set((seededRandom() - 0.5) * 40, 1.5, (seededRandom() - 0.5) * 40);
+    }
+    
     scene.add(mesh);
     
     circuitBreakers.push({
@@ -870,20 +894,27 @@ function generateConsumableItems() {
   itemsInMaze.forEach(item => scene.remove(item.mesh));
   itemsInMaze = [];
 
+  const textureLoader = new THREE.TextureLoader();
   const itemTypes = [
-    { name: 'Battery Pack', color: 0x22c55e },
-    { name: 'EMF Radar', color: 0x3b82f6 },
-    { name: 'Thermal Camera', color: 0xf97316 },
-    { name: 'Sanity Pills', color: 0xec4899 }
+    { name: 'Battery Pack', map: textureLoader.load('/assets/battery_sprite.png') },
+    { name: 'EMF Radar', map: textureLoader.load('/assets/emf_sprite.png') },
+    { name: 'Thermal Camera', map: textureLoader.load('/assets/thermal_sprite.png') },
+    { name: 'Sanity Pills', map: textureLoader.load('/assets/pills_sprite.png') }
   ];
 
-  const itemGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.6, 8);
-
-  // Spawn 10 random items
   for (let i = 0; i < 10; i++) {
     const type = itemTypes[Math.floor(seededRandom() * itemTypes.length)];
-    const itemMat = new THREE.MeshStandardMaterial({ color: type.color, emissive: type.color, emissiveIntensity: 0.2 });
-    const mesh = new THREE.Mesh(itemGeo, itemMat);
+    
+    const spriteMat = new THREE.SpriteMaterial({ 
+      map: type.map, 
+      color: 0xffffff,
+      fog: true,
+      transparent: true,
+      blending: THREE.AdditiveBlending, // Hides black background
+      depthWrite: false
+    });
+    const mesh = new THREE.Sprite(spriteMat);
+    mesh.scale.set(0.6, 0.6, 1);
 
     let x = 0, z = 0;
     if (openCorridors.length > 0) {
@@ -895,7 +926,7 @@ function generateConsumableItems() {
       z = (seededRandom() - 0.5) * 40;
     }
 
-    mesh.position.set(x, 0.3, z);
+    mesh.position.set(x, 0.35, z);
     scene.add(mesh);
 
     itemsInMaze.push({
