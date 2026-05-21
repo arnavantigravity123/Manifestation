@@ -227,6 +227,10 @@ export function initGame(socket, socketId, matchConfig) {
   scene.fog = new THREE.FogExp2(myTeam === 'Human' ? 0x030712 : 0x1e1b4b, 0.05);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  
+  // EXPOSE FOR DEBUGGING
+  window.scene = scene;
+  window.camera = camera;
   camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
   camera.position.set(0, 1.6, 0); // Eye-level
 
@@ -642,6 +646,10 @@ function generateMaze(keysCount = 8) {
   mazeLayout = layout.map(row => row.map(cell => cell === 0 ? 0 : 1)); // 0=open, 1=wall (treat sliding doors as walls for pathfinding)
 
   const generatedTex = textureLoader.load('/assets/wall_texture.png');
+  generatedTex.wrapS = THREE.RepeatWrapping;
+  generatedTex.wrapT = THREE.RepeatWrapping;
+  generatedTex.repeat.set(1, 1);
+
   const wallBumpTex = new THREE.TextureLoader().load('/assets/wall_bump_map.png');
   wallBumpTex.wrapS = THREE.RepeatWrapping;
   wallBumpTex.wrapT = THREE.RepeatWrapping;
@@ -650,7 +658,7 @@ function generateMaze(keysCount = 8) {
   const wallMat = new THREE.MeshStandardMaterial({ 
     map: generatedTex,
     bumpMap: wallBumpTex,
-    bumpScale: 0.8, // high bump scale for physical depth
+    bumpScale: 0.8, // restoring the high bump scale for physical depth since it wasn't the issue
     color: 0x475569,
     roughness: 0.92,
     metalness: 0.03
@@ -658,7 +666,7 @@ function generateMaze(keysCount = 8) {
   
   const slidingWallMat = new THREE.MeshStandardMaterial({
     map: generatedTex,
-    bumpMap: wallBump,
+    bumpMap: wallBumpTex,
     bumpScale: 0.25,
     color: 0x78350f,
     roughness: 0.6,
