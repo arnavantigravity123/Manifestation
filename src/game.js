@@ -1208,6 +1208,7 @@ function setupControls() {
       moveBackward = false;
       moveLeft = false;
       moveRight = false;
+      isSprinting = false;
     };
 
     window.addEventListener('touchend', (e) => {
@@ -1251,6 +1252,13 @@ function setupControls() {
       moveBackward = joyY > 0.2;
       moveLeft = joyX < -0.2;
       moveRight = joyX > 0.2;
+      
+      // Auto-sprint if joystick pushed far enough
+      if (dist > maxJoystickDistance * 0.85) {
+        isSprinting = true;
+      } else {
+        isSprinting = false;
+      }
     }
 
     // Action button bindings using touchstart & click for instant response
