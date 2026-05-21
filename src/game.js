@@ -571,45 +571,12 @@ function generateMaze(keysCount = 8) {
   walls = [];
   slidingWallSegments = [];
 
-  // Ground plane with procedural cracked stone floor texture
-  function createFloorTexture() {
-    const cv = document.createElement('canvas');
-    cv.width = 512; cv.height = 512;
-    const c = cv.getContext('2d');
-    c.fillStyle = '#0a0f1a';
-    c.fillRect(0, 0, 512, 512);
-    // Stone tiles
-    c.strokeStyle = '#050810';
-    c.lineWidth = 3;
-    for (let y = 0; y <= 512; y += 64) {
-      c.beginPath(); c.moveTo(0, y); c.lineTo(512, y); c.stroke();
-    }
-    for (let x = 0; x <= 512; x += 64) {
-      c.beginPath(); c.moveTo(x, 0); c.lineTo(x, 512); c.stroke();
-    }
-    // Grit and stains
-    for (let i = 0; i < 2000; i++) {
-      const gx = Math.random() * 512, gy = Math.random() * 512;
-      const gr = Math.floor(Math.random() * 20) + 8;
-      c.fillStyle = `rgb(${gr},${gr},${gr})`;
-      c.fillRect(gx, gy, Math.random() * 3 + 1, Math.random() * 3 + 1);
-    }
-    // Blood/rust stains
-    for (let i = 0; i < 30; i++) {
-      const sx = Math.random() * 512, sy = Math.random() * 512;
-      const sr = Math.random() * 12 + 4;
-      const sg = c.createRadialGradient(sx, sy, 0, sx, sy, sr);
-      sg.addColorStop(0, 'rgba(60, 10, 10, 0.4)');
-      sg.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      c.fillStyle = sg;
-      c.beginPath(); c.arc(sx, sy, sr, 0, Math.PI * 2); c.fill();
-    }
-    const t = new THREE.CanvasTexture(cv);
-    t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(8, 8);
-    return t;
-  }
-  const floorTex = createFloorTexture();
+  // Ground plane with photorealistic floor texture
+  const textureLoader = new THREE.TextureLoader();
+  const floorTex = textureLoader.load('/assets/floor_texture.png');
+  floorTex.wrapS = THREE.RepeatWrapping;
+  floorTex.wrapT = THREE.RepeatWrapping;
+  floorTex.repeat.set(8, 8);
   const floorGeo = new THREE.PlaneGeometry(300, 300);
   const floorMat = new THREE.MeshStandardMaterial({ 
     map: floorTex,
@@ -624,33 +591,11 @@ function generateMaze(keysCount = 8) {
   floor.receiveShadow = true;
   scene.add(floor);
 
-  // Ceiling with dark dripping texture
-  function createCeilingTexture() {
-    const cv = document.createElement('canvas');
-    cv.width = 512; cv.height = 512;
-    const c = cv.getContext('2d');
-    c.fillStyle = '#030508';
-    c.fillRect(0, 0, 512, 512);
-    // Water drip streaks
-    for (let i = 0; i < 60; i++) {
-      const dx = Math.random() * 512;
-      const dLen = Math.random() * 80 + 20;
-      c.strokeStyle = `rgba(10, 20, 30, ${Math.random() * 0.4 + 0.2})`;
-      c.lineWidth = Math.random() * 2 + 0.5;
-      c.beginPath(); c.moveTo(dx, 0); c.lineTo(dx + (Math.random() - 0.5) * 8, dLen); c.stroke();
-    }
-    // Dark spots
-    for (let i = 0; i < 500; i++) {
-      const gx = Math.random() * 512, gy = Math.random() * 512;
-      c.fillStyle = `rgba(${Math.floor(Math.random()*10)},${Math.floor(Math.random()*10)},${Math.floor(Math.random()*15)},0.5)`;
-      c.fillRect(gx, gy, Math.random() * 2 + 1, Math.random() * 2 + 1);
-    }
-    const t = new THREE.CanvasTexture(cv);
-    t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(6, 6);
-    return t;
-  }
-  const ceilTex = createCeilingTexture();
+  // Ceiling with photorealistic texture
+  const ceilTex = textureLoader.load('/assets/ceiling_texture.png');
+  ceilTex.wrapS = THREE.RepeatWrapping;
+  ceilTex.wrapT = THREE.RepeatWrapping;
+  ceilTex.repeat.set(6, 6);
   const ceilGeo = new THREE.PlaneGeometry(300, 300);
   const ceilMat = new THREE.MeshStandardMaterial({ 
     map: ceilTex,
@@ -696,276 +641,11 @@ function generateMaze(keysCount = 8) {
   // Store layout globally for ghost pathfinding
   mazeLayout = layout.map(row => row.map(cell => cell === 0 ? 0 : 1)); // 0=open, 1=wall (treat sliding doors as walls for pathfinding)
 
-  function createWallTexture() {
-    const W = 1024;
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = W;
-    const ctx = canvas.getContext('2d');
-    
-    // 1. Base very dark stone color
-    ctx.fillStyle = '#0a0e1a';
-    ctx.fillRect(0, 0, W, W);
-
-    // 2. Individual stone block fills with color variation
-    const rowH = 128;
-    const colW = 256;
-    for (let y = 0; y < W; y += rowH) {
-      const isOffset = (y / rowH) % 2 === 1;
-      const startX = isOffset ? colW / 2 : 0;
-      for (let x = startX - colW; x < W + colW; x += colW) {
-        // Each stone gets a slightly different shade
-        const base = 18 + Math.floor(seededRandom() * 22);
-        const tintR = base + Math.floor(seededRandom() * 8);
-        const tintG = base + Math.floor(seededRandom() * 5);
-        const tintB = base + Math.floor(seededRandom() * 12);
-        ctx.fillStyle = `rgb(${tintR},${tintG},${tintB})`;
-        ctx.fillRect(x + 4, y + 4, colW - 8, rowH - 8);
-      }
-    }
-
-    // 3. Heavy gritty noise on every stone surface
-    for (let i = 0; i < 8000; i++) {
-      const gx = seededRandom() * W;
-      const gy = seededRandom() * W;
-      const gr = seededRandom() * 2.5 + 0.5;
-      const gv = Math.floor(seededRandom() * 30) + 10;
-      ctx.fillStyle = `rgba(${gv},${gv},${gv},0.6)`;
-      ctx.beginPath();
-      ctx.arc(gx, gy, gr, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 4. Mortar / grout lines (running bond brick pattern)
-    ctx.strokeStyle = '#030509';
-    ctx.lineWidth = 6;
-    for (let y = 0; y <= W; y += rowH) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-      if (y < W) {
-        const isOffset = (y / rowH) % 2 === 1;
-        const startX = isOffset ? colW / 2 : 0;
-        for (let x = startX; x <= W; x += colW) {
-          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + rowH); ctx.stroke();
-        }
-      }
-    }
-
-    // 5. Deep jagged cracks
-    for (let c = 0; c < 40; c++) {
-      let cx = seededRandom() * W;
-      let cy = seededRandom() * W;
-      ctx.strokeStyle = `rgba(0,0,0,${0.5 + seededRandom() * 0.5})`;
-      ctx.lineWidth = seededRandom() * 2 + 0.5;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      const steps = Math.floor(seededRandom() * 8) + 4;
-      for (let s = 0; s < steps; s++) {
-        cx += (seededRandom() - 0.5) * 35;
-        cy += (seededRandom() - 0.5) * 35;
-        ctx.lineTo(cx, cy);
-      }
-      ctx.stroke();
-    }
-
-    // 6. Water drip streaks (vertical dark marks)
-    for (let d = 0; d < 30; d++) {
-      const dx = seededRandom() * W;
-      const dy = seededRandom() * W * 0.3;
-      const dLen = seededRandom() * 120 + 40;
-      ctx.strokeStyle = `rgba(5,8,15,${seededRandom() * 0.4 + 0.2})`;
-      ctx.lineWidth = seededRandom() * 3 + 1;
-      ctx.beginPath();
-      ctx.moveTo(dx, dy);
-      ctx.lineTo(dx + (seededRandom() - 0.5) * 6, dy + dLen);
-      ctx.stroke();
-    }
-
-    // 7. Blood/rust stains
-    for (let b = 0; b < 20; b++) {
-      const bx = seededRandom() * W;
-      const by = seededRandom() * W;
-      const bSize = seededRandom() * 25 + 8;
-      const bg = ctx.createRadialGradient(bx, by, 0, bx, by, bSize);
-      bg.addColorStop(0, `rgba(${50 + Math.floor(seededRandom() * 30)}, 5, 5, ${seededRandom() * 0.35 + 0.1})`);
-      bg.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = bg;
-      ctx.beginPath(); ctx.arc(bx, by, bSize, 0, Math.PI * 2); ctx.fill();
-    }
-
-    // 8. Creeping moss / slime (green & yellow organic growth near mortar lines)
-    for (let m = 0; m < 200; m++) {
-      const mx = seededRandom() * W;
-      const my = seededRandom() * W;
-      const mSize = seededRandom() * 22 + 5;
-      const isYellow = seededRandom() > 0.7;
-      const mg = ctx.createRadialGradient(mx, my, 0, mx, my, mSize);
-      if (isYellow) {
-        mg.addColorStop(0, 'rgba(101, 163, 13, 0.5)');
-        mg.addColorStop(0.6, 'rgba(63, 98, 18, 0.25)');
-      } else {
-        mg.addColorStop(0, 'rgba(22, 101, 52, 0.55)');
-        mg.addColorStop(0.6, 'rgba(20, 83, 45, 0.2)');
-      }
-      mg.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = mg;
-      ctx.beginPath(); ctx.arc(mx, my, mSize, 0, Math.PI * 2); ctx.fill();
-    }
-
-    // 9. Crawling vines — organic curved tendrils with small leaves
-    for (let v = 0; v < 12; v++) {
-      let vx = seededRandom() * W;
-      let vy = seededRandom() * W;
-      ctx.strokeStyle = `rgba(20, 80, 30, ${0.4 + seededRandom() * 0.3})`;
-      ctx.lineWidth = seededRandom() * 2.5 + 1;
-      ctx.beginPath();
-      ctx.moveTo(vx, vy);
-      const segments = Math.floor(seededRandom() * 12) + 6;
-      for (let s = 0; s < segments; s++) {
-        const cpx = vx + (seededRandom() - 0.5) * 60;
-        const cpy = vy + seededRandom() * 40 + 10;
-        vx += (seededRandom() - 0.5) * 40;
-        vy += seededRandom() * 30 + 5;
-        ctx.quadraticCurveTo(cpx, cpy, vx, vy);
-      }
-      ctx.stroke();
-      // Small leaves along the vine
-      for (let lf = 0; lf < Math.floor(seededRandom() * 5) + 2; lf++) {
-        const leafX = vx - seededRandom() * 80;
-        const leafY = vy - seededRandom() * 60;
-        ctx.fillStyle = `rgba(${15 + Math.floor(seededRandom() * 25)}, ${60 + Math.floor(seededRandom() * 40)}, ${10 + Math.floor(seededRandom() * 20)}, 0.5)`;
-        ctx.beginPath();
-        ctx.ellipse(leafX, leafY, seededRandom() * 6 + 3, seededRandom() * 3 + 1.5, seededRandom() * Math.PI, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    // 10. Skull symbols scratched into stone
-    for (let sk = 0; sk < 4; sk++) {
-      const sx = seededRandom() * (W - 60) + 30;
-      const sy = seededRandom() * (W - 60) + 30;
-      const skSize = seededRandom() * 15 + 12;
-      ctx.strokeStyle = `rgba(${40 + Math.floor(seededRandom() * 20)}, ${35 + Math.floor(seededRandom() * 15)}, ${30 + Math.floor(seededRandom() * 15)}, ${0.4 + seededRandom() * 0.3})`;
-      ctx.lineWidth = 1.5;
-      // Skull outline (circle for cranium)
-      ctx.beginPath();
-      ctx.arc(sx, sy, skSize, 0, Math.PI * 2);
-      ctx.stroke();
-      // Jaw (smaller arc below)
-      ctx.beginPath();
-      ctx.arc(sx, sy + skSize * 0.7, skSize * 0.6, 0, Math.PI);
-      ctx.stroke();
-      // Eye sockets
-      ctx.beginPath();
-      ctx.arc(sx - skSize * 0.3, sy - skSize * 0.1, skSize * 0.22, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(sx + skSize * 0.3, sy - skSize * 0.1, skSize * 0.22, 0, Math.PI * 2);
-      ctx.stroke();
-      // Nose hole (triangle)
-      ctx.beginPath();
-      ctx.moveTo(sx, sy + skSize * 0.15);
-      ctx.lineTo(sx - skSize * 0.1, sy + skSize * 0.35);
-      ctx.lineTo(sx + skSize * 0.1, sy + skSize * 0.35);
-      ctx.closePath();
-      ctx.stroke();
-    }
-
-    // 11. Diagonal claw marks / scratch marks
-    for (let cl = 0; cl < 8; cl++) {
-      const cx = seededRandom() * W;
-      const cy = seededRandom() * W;
-      const clLen = seededRandom() * 80 + 40;
-      const clAngle = seededRandom() * 0.6 + 0.5; // roughly diagonal
-      ctx.strokeStyle = `rgba(${20 + Math.floor(seededRandom() * 15)}, ${15 + Math.floor(seededRandom() * 10)}, ${10 + Math.floor(seededRandom() * 10)}, ${0.5 + seededRandom() * 0.3})`;
-      // Draw 3 parallel scratch lines
-      for (let sl = 0; sl < 3; sl++) {
-        const offset = (sl - 1) * (seededRandom() * 6 + 4);
-        ctx.lineWidth = seededRandom() * 1.5 + 0.5;
-        ctx.beginPath();
-        ctx.moveTo(cx + offset, cy);
-        ctx.lineTo(cx + offset + Math.cos(clAngle) * clLen, cy + Math.sin(clAngle) * clLen);
-        ctx.stroke();
-      }
-    }
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(1, 1);
-    return tex;
-  }
-
-  // Separate bump map with high contrast for actual 3D depth on walls
-  function createWallBumpMap() {
-    const W = 1024;
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = W;
-    const ctx = canvas.getContext('2d');
-
-    // White = raised, black = recessed
-    ctx.fillStyle = '#808080'; // neutral height
-    ctx.fillRect(0, 0, W, W);
-
-    // Each stone brick is slightly raised
-    const rowH = 128;
-    const colW = 256;
-    for (let y = 0; y < W; y += rowH) {
-      const isOffset = (y / rowH) % 2 === 1;
-      const startX = isOffset ? colW / 2 : 0;
-      for (let x = startX - colW; x < W + colW; x += colW) {
-        const brightness = 120 + Math.floor(seededRandom() * 30);
-        ctx.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
-        ctx.fillRect(x + 5, y + 5, colW - 10, rowH - 10);
-      }
-    }
-
-    // Mortar lines are recessed (dark)
-    ctx.strokeStyle = '#303030';
-    ctx.lineWidth = 8;
-    for (let y = 0; y <= W; y += rowH) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-      if (y < W) {
-        const isOffset = (y / rowH) % 2 === 1;
-        const startX = isOffset ? colW / 2 : 0;
-        for (let x = startX; x <= W; x += colW) {
-          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + rowH); ctx.stroke();
-        }
-      }
-    }
-
-    // Cracks are deeply recessed
-    for (let c = 0; c < 30; c++) {
-      let cx = seededRandom() * W;
-      let cy = seededRandom() * W;
-      ctx.strokeStyle = '#202020';
-      ctx.lineWidth = seededRandom() * 2 + 1;
-      ctx.beginPath(); ctx.moveTo(cx, cy);
-      const steps = Math.floor(seededRandom() * 6) + 3;
-      for (let s = 0; s < steps; s++) {
-        cx += (seededRandom() - 0.5) * 30;
-        cy += (seededRandom() - 0.5) * 30;
-        ctx.lineTo(cx, cy);
-      }
-      ctx.stroke();
-    }
-
-    // Random surface roughness
-    for (let i = 0; i < 4000; i++) {
-      const gx = seededRandom() * W;
-      const gy = seededRandom() * W;
-      const v = 100 + Math.floor(seededRandom() * 60);
-      ctx.fillStyle = `rgba(${v},${v},${v},0.3)`;
-      ctx.fillRect(gx, gy, seededRandom() * 4 + 1, seededRandom() * 4 + 1);
-    }
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = THREE.RepeatWrapping;
-    tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(1, 1);
-    return tex;
-  }
-  
-  const generatedTex = createWallTexture();
-  const wallBump = createWallBumpMap();
+  const generatedTex = textureLoader.load('/assets/wall_texture.png');
+  generatedTex.wrapS = THREE.RepeatWrapping;
+  generatedTex.wrapT = THREE.RepeatWrapping;
+  generatedTex.repeat.set(1, 1);
+  const wallBump = generatedTex;
 
   const wallMat = new THREE.MeshStandardMaterial({ 
     map: generatedTex,
@@ -2623,58 +2303,25 @@ function triggerNotification(text) {
 function createHumanMeshGroup() {
   const group = new THREE.Group();
   
-  // Torso (dark survival jacket)
-  const torsoGeo = new THREE.CylinderGeometry(0.24, 0.2, 0.7, 10);
-  const torsoMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.75, metalness: 0.1 });
-  const torso = new THREE.Mesh(torsoGeo, torsoMat);
-  torso.position.y = 0.8;
-  group.add(torso);
-  
-  // Head
-  const headGeo = new THREE.SphereGeometry(0.15, 12, 12);
-  const headMat = new THREE.MeshStandardMaterial({ color: 0xfbcfe8, roughness: 0.6 }); // skin tone
-  const head = new THREE.Mesh(headGeo, headMat);
-  head.position.y = 1.25;
-  group.add(head);
+  const spriteMat = new THREE.SpriteMaterial({ 
+    map: textureLoader.load('/assets/human_sprite.png'), 
+    color: 0xffffff,
+    fog: true,
+    transparent: true,
+    blending: THREE.AdditiveBlending, // Use additive to hide the black background
+    depthWrite: false
+  });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.scale.set(1.5, 2.8, 1);
+  sprite.position.y = 1.4;
+  group.add(sprite);
 
-  // Hair / Dark hood
-  const hoodGeo = new THREE.SphereGeometry(0.16, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-  const hoodMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.85 });
-  const hood = new THREE.Mesh(hoodGeo, hoodMat);
-  hood.position.copy(head.position);
-  hood.rotation.x = -Math.PI / 6;
-  group.add(hood);
-  
-  // Left Leg (blue jeans tint)
-  const legGeo = new THREE.CylinderGeometry(0.07, 0.06, 0.5, 8);
-  const legMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.8 });
-  const leftLeg = new THREE.Mesh(legGeo, legMat);
-  leftLeg.position.set(-0.11, 0.25, 0);
-  group.add(leftLeg);
-  
-  // Right Leg
-  const rightLeg = new THREE.Mesh(legGeo, legMat);
-  rightLeg.position.set(0.11, 0.25, 0);
-  group.add(rightLeg);
-  
-  // Left Arm (matching jacket)
-  const armGeo = new THREE.CylinderGeometry(0.05, 0.045, 0.5, 8);
-  const armMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.75 });
-  const leftArm = new THREE.Mesh(armGeo, armMat);
-  leftArm.position.set(-0.28, 0.8, 0);
-  leftArm.rotation.z = Math.PI / 16;
-  group.add(leftArm);
-  
-  // Right Arm
-  const rightArm = new THREE.Mesh(armGeo, armMat);
-  rightArm.position.set(0.28, 0.8, 0);
-  rightArm.rotation.z = -Math.PI / 16;
-  group.add(rightArm);
-
+  // Keep userData compatible with the animation loop
   group.userData = {
     type: 'Human',
     walkCycle: 0,
-    leftLeg, rightLeg, leftArm, rightArm,
+    leftLeg: { rotation: {x:0} }, rightLeg: { rotation: {x:0} }, 
+    leftArm: { rotation: {x:0} }, rightArm: { rotation: {x:0} },
     lastPosition: new THREE.Vector3()
   };
   
@@ -2684,142 +2331,26 @@ function createHumanMeshGroup() {
 function createGhostMeshGroup() {
   const group = new THREE.Group();
   
-  // Dark smoky material — visible but ghostly
-  const ghostMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1a2e,
-    emissive: 0x1a1040,
-    emissiveIntensity: 0.6,
+  const spriteMat = new THREE.SpriteMaterial({ 
+    map: textureLoader.load('/assets/ghost_sprite.png'), 
+    color: 0xffdddd, // slightly tint red
+    fog: true,
     transparent: true,
-    opacity: 0.55,
-    roughness: 0.8,
-    side: THREE.DoubleSide,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending, // Hides black background, makes ghost glow
     depthWrite: false
   });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.scale.set(3.0, 4.0, 1); // Massive imposing ghost
+  sprite.position.y = 2.0;
+  group.add(sprite);
 
-  // Slightly lighter face material
-  const faceMat = new THREE.MeshStandardMaterial({
-    color: 0x2a2a4a,
-    emissive: 0x1e1840,
-    emissiveIntensity: 0.5,
-    transparent: true,
-    opacity: 0.65,
-    roughness: 0.7,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-
-  // Even more transparent wispy material for trailing edges
-  const wispMat = new THREE.MeshStandardMaterial({
-    color: 0x12122a,
-    emissive: 0x0a0820,
-    emissiveIntensity: 0.3,
-    transparent: true,
-    opacity: 0.3,
-    roughness: 1.0,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-  
-  // 1. Head — properly sized, slightly gaunt
-  const headGeo = new THREE.SphereGeometry(0.22, 14, 14);
-  const head = new THREE.Mesh(headGeo, faceMat);
-  head.position.y = 2.55;
-  head.scale.set(1, 1.2, 0.9);
-  group.add(head);
-  
-  // 2. Neck
-  const neckGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.2, 8);
-  const neck = new THREE.Mesh(neckGeo, ghostMat);
-  neck.position.y = 2.3;
-  group.add(neck);
-
-  // 3. Upper torso — broad shoulders
-  const upperGeo = new THREE.CylinderGeometry(0.35, 0.28, 0.6, 10);
-  const upper = new THREE.Mesh(upperGeo, ghostMat);
-  upper.position.y = 1.9;
-  group.add(upper);
-
-  // 4. Lower torso
-  const lowerTorsoGeo = new THREE.CylinderGeometry(0.28, 0.22, 0.5, 10);
-  const lowerTorso = new THREE.Mesh(lowerTorsoGeo, ghostMat);
-  lowerTorso.position.y = 1.35;
-  group.add(lowerTorso);
-
-  // 5. Tattered robe / trailing wispy skirt
-  const robeGeo = new THREE.CylinderGeometry(0.22, 0.45, 1.2, 12, 1, true);
-  const robe = new THREE.Mesh(robeGeo, wispMat);
-  robe.position.y = 0.5;
-  group.add(robe);
-
-  // 6. Wispy tail that fades to nothing
-  const tailGeo = new THREE.ConeGeometry(0.4, 0.8, 10, 1, true);
-  const tailMat = new THREE.MeshStandardMaterial({
-    color: 0x0a0a1a,
-    emissive: 0x050510,
-    emissiveIntensity: 0.2,
-    transparent: true,
-    opacity: 0.15,
-    roughness: 1.0,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-  const tail = new THREE.Mesh(tailGeo, tailMat);
-  tail.position.y = -0.15;
-  tail.rotation.x = Math.PI; // flip cone to point down
-  group.add(tail);
-
-  // 7. Arms — long bony reaching limbs
-  const armGeo = new THREE.CylinderGeometry(0.04, 0.025, 0.9, 6);
-  const leftArm = new THREE.Mesh(armGeo, ghostMat);
-  leftArm.position.set(-0.4, 1.7, 0);
-  leftArm.rotation.z = 0.3;
-  leftArm.rotation.x = -0.2;
-  group.add(leftArm);
-  const rightArm = new THREE.Mesh(armGeo, ghostMat);
-  rightArm.position.set(0.4, 1.7, 0);
-  rightArm.rotation.z = -0.3;
-  rightArm.rotation.x = -0.2;
-  group.add(rightArm);
-
-  // 8. Claw-like hands (small spheres at arm tips)
-  const clawGeo = new THREE.SphereGeometry(0.05, 6, 6);
-  const clawL = new THREE.Mesh(clawGeo, ghostMat);
-  clawL.position.set(-0.6, 1.25, -0.15);
-  const clawR = new THREE.Mesh(clawGeo, ghostMat);
-  clawR.position.set(0.6, 1.25, -0.15);
-  group.add(clawL, clawR);
-
-  // 9. Eye sockets — dark hollows
-  const socketGeo = new THREE.SphereGeometry(0.055, 8, 8);
-  const socketMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-  const socketL = new THREE.Mesh(socketGeo, socketMat);
-  socketL.position.set(-0.09, 2.58, 0.18);
-  const socketR = new THREE.Mesh(socketGeo, socketMat);
-  socketR.position.set(0.09, 2.58, 0.18);
-  group.add(socketL, socketR);
-
-  // 10. Glowing ember eyes inside the sockets
-  const eyeGlowGeo = new THREE.SphereGeometry(0.03, 8, 8);
-  const eyeGlowMat = new THREE.MeshBasicMaterial({ color: 0xff4422 });
-  const eyeGlowL = new THREE.Mesh(eyeGlowGeo, eyeGlowMat);
-  eyeGlowL.position.set(-0.09, 2.58, 0.2);
-  const eyeGlowR = new THREE.Mesh(eyeGlowGeo, eyeGlowMat);
-  eyeGlowR.position.set(0.09, 2.58, 0.2);
-  group.add(eyeGlowL, eyeGlowR);
-
-  // 11. Mouth — dark gash
-  const mouthGeo = new THREE.BoxGeometry(0.08, 0.04, 0.02);
-  const mouthMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-  const mouth = new THREE.Mesh(mouthGeo, mouthMat);
-  mouth.position.set(0, 2.42, 0.2);
-  group.add(mouth);
-
-  // 12. Eerie purple aura light — bright enough to notice
+  // Eerie purple aura light — bright enough to notice
   const aura = new THREE.PointLight(0x6b21a8, 3.0, 12);
   aura.position.y = 2.0;
   group.add(aura);
 
-  // 13. Secondary dim red under-light
+  // Secondary dim red under-light
   const underLight = new THREE.PointLight(0x7f1d1d, 1.2, 6);
   underLight.position.y = 0.5;
   group.add(underLight);
