@@ -2607,62 +2607,92 @@ function createHumanMeshGroup() {
 function createGhostMeshGroup() {
   const group = new THREE.Group();
   
-  // Translucent glowing material for ghost robes
+  // Dark smoky translucent material — Phasmophobia style
   const ghostMat = new THREE.MeshStandardMaterial({
-    color: 0xdbeafe, // very pale ice blue
-    emissive: 0x4f46e5, // deep glowing indigo/purple
-    emissiveIntensity: 0.95,
+    color: 0x1a1a2e,        // very dark blue-grey
+    emissive: 0x0f0f23,     // extremely faint dark glow
+    emissiveIntensity: 0.4,
     transparent: true,
-    opacity: 0.75,
-    roughness: 0.15,
-    side: THREE.DoubleSide
+    opacity: 0.28,           // mostly invisible, like a shadow
+    roughness: 0.95,
+    side: THREE.DoubleSide,
+    depthWrite: false        // prevents z-fighting with walls
+  });
+
+  // Slightly brighter material for the face area
+  const faceMat = new THREE.MeshStandardMaterial({
+    color: 0x1e1e3a,
+    emissive: 0x111128,
+    emissiveIntensity: 0.3,
+    transparent: true,
+    opacity: 0.35,
+    roughness: 0.9,
+    side: THREE.DoubleSide,
+    depthWrite: false
   });
   
-  // 1. Head (glowing orb inside robe)
-  const headGeo = new THREE.SphereGeometry(0.28, 16, 16);
-  const head = new THREE.Mesh(headGeo, ghostMat);
-  head.position.y = 1.35;
+  // 1. Head — human proportioned, not oversized
+  const headGeo = new THREE.SphereGeometry(0.14, 12, 12);
+  const head = new THREE.Mesh(headGeo, faceMat);
+  head.position.y = 1.55;
+  head.scale.set(1, 1.15, 0.95); // slightly elongated
   group.add(head);
   
-  // 2. Gown/Robe (tapered cylinder/cone representing flowing sheets)
-  const robeGeo = new THREE.CylinderGeometry(0.08, 0.52, 1.1, 16, 4, true);
-  const robe = new THREE.Mesh(robeGeo, ghostMat);
-  robe.position.y = 0.65;
-  group.add(robe);
+  // 2. Torso — human shaped cylinder
+  const torsoGeo = new THREE.CylinderGeometry(0.18, 0.15, 0.65, 10);
+  const torso = new THREE.Mesh(torsoGeo, ghostMat);
+  torso.position.y = 1.1;
+  group.add(torso);
 
-  // 3. Hollow Screaming Mouth (dark gaping pit)
-  const mouthGeo = new THREE.BoxGeometry(0.1, 0.18, 0.05);
-  const mouthMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-  const mouth = new THREE.Mesh(mouthGeo, mouthMat);
-  mouth.position.set(0, 1.25, 0.25);
-  group.add(mouth);
+  // 3. Lower body — wispy trailing form (tapers to nothing)
+  const lowerGeo = new THREE.CylinderGeometry(0.15, 0.02, 0.8, 10, 1, true);
+  const lowerMat = new THREE.MeshStandardMaterial({
+    color: 0x0f0f1e,
+    emissive: 0x080818,
+    emissiveIntensity: 0.2,
+    transparent: true,
+    opacity: 0.18,
+    roughness: 1.0,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const lower = new THREE.Mesh(lowerGeo, lowerMat);
+  lower.position.y = 0.4;
+  group.add(lower);
 
-  // 4. Hollow Eye Sockets
-  const eyeHoleGeo = new THREE.SphereGeometry(0.06, 8, 8);
-  const eyeHoleMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-  const eyeL = new THREE.Mesh(eyeHoleGeo, eyeHoleMat);
-  eyeL.position.set(-0.1, 1.37, 0.24);
-  const eyeR = new THREE.Mesh(eyeHoleGeo, eyeHoleMat);
-  eyeR.position.set(0.1, 1.37, 0.24);
+  // 4. Arms — thin dark tendrils hanging down
+  const armGeo = new THREE.CylinderGeometry(0.03, 0.015, 0.55, 6);
+  const leftArm = new THREE.Mesh(armGeo, ghostMat);
+  leftArm.position.set(-0.22, 0.95, 0);
+  leftArm.rotation.z = 0.15;
+  group.add(leftArm);
+  const rightArm = new THREE.Mesh(armGeo, ghostMat);
+  rightArm.position.set(0.22, 0.95, 0);
+  rightArm.rotation.z = -0.15;
+  group.add(rightArm);
+
+  // 5. Eye sockets — very subtle dark hollows, not giant cartoon circles
+  const eyeGeo = new THREE.SphereGeometry(0.02, 6, 6);
+  const eyeMat = new THREE.MeshBasicMaterial({ 
+    color: 0x000000,
+    transparent: true,
+    opacity: 0.6
+  });
+  const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeL.position.set(-0.05, 1.57, 0.12);
+  const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+  eyeR.position.set(0.05, 1.57, 0.12);
   group.add(eyeL, eyeR);
 
-  // 5. Glowing Pupils
-  const glowEyeGeo = new THREE.SphereGeometry(0.025, 8, 8);
-  const glowEyeMat = new THREE.MeshBasicMaterial({ color: 0xef4444 }); // red glowing pupil
-  const pupilL = new THREE.Mesh(glowEyeGeo, glowEyeMat);
-  pupilL.position.set(-0.1, 1.37, 0.26);
-  const pupilR = new THREE.Mesh(glowEyeGeo, glowEyeMat);
-  pupilR.position.set(0.1, 1.37, 0.26);
-  group.add(pupilL, pupilR);
-  
-  // 6. Purple Point Light Aura
-  const aura = new THREE.PointLight(0x6366f1, 2.5, 8);
-  aura.position.y = 1.0;
+  // 6. Very dim eerie light — barely visible, cold color
+  const aura = new THREE.PointLight(0x2d2d5e, 0.8, 6);
+  aura.position.y = 1.2;
   group.add(aura);
 
   group.userData = {
     type: 'Ghost',
     bobAccumulator: Math.random() * 10,
+    flickerTimer: Math.random() * 100,
     lastPosition: new THREE.Vector3()
   };
   
@@ -3156,10 +3186,32 @@ function animate() {
   }
 
   // --- Active bobbing and walk cycle limb animations ---
-  // Bob AI ghosts
+  // Bob AI ghosts + Phasmophobia-style flickering
   ghosts3D.forEach(g => {
     const acc = g.userData.bobAccumulator || 0;
-    g.position.y = 0.25 + Math.sin(time * 0.003 + acc) * 0.12;
+    g.position.y = 0.15 + Math.sin(time * 0.002 + acc) * 0.08;
+
+    // Flickering visibility — ghost phases in and out
+    g.userData.flickerTimer = (g.userData.flickerTimer || 0) + delta;
+    const flickerPhase = Math.sin(time * 0.005 + acc) * 0.5 
+                       + Math.sin(time * 0.013 + acc * 2) * 0.3 
+                       + Math.sin(time * 0.031 + acc * 3) * 0.2;
+    // Random glitch bursts
+    const glitchBurst = Math.random() < 0.005 ? 0.6 : 0;
+    const targetOpacity = Math.max(0.08, Math.min(0.4, 0.22 + flickerPhase * 0.15 + glitchBurst));
+    
+    g.children.forEach(c => {
+      if (c.isMesh && c.material && c.material.transparent) {
+        c.material.opacity = targetOpacity;
+      }
+    });
+
+    // Subtle arm sway
+    g.children.forEach(c => {
+      if (c.geometry && c.geometry.type === 'CylinderGeometry' && c.position.x !== 0) {
+        c.rotation.x = Math.sin(time * 0.002 + acc) * 0.15;
+      }
+    });
   });
 
   // Bob / swing network players
@@ -3169,7 +3221,17 @@ function animate() {
     
     if (p.userData.type === 'Ghost') {
       const acc = p.userData.bobAccumulator || 0;
-      p.position.y = 0.25 + Math.sin(time * 0.003 + acc) * 0.12;
+      p.position.y = 0.15 + Math.sin(time * 0.002 + acc) * 0.08;
+      // Flickering for network ghosts too
+      const flickerPhase = Math.sin(time * 0.005 + acc) * 0.5 
+                         + Math.sin(time * 0.013 + acc * 2) * 0.3;
+      const glitchBurst = Math.random() < 0.005 ? 0.6 : 0;
+      const targetOpacity = Math.max(0.08, Math.min(0.4, 0.22 + flickerPhase * 0.12 + glitchBurst));
+      p.children.forEach(c => {
+        if (c.isMesh && c.material && c.material.transparent) {
+          c.material.opacity = targetOpacity;
+        }
+      });
     } else if (p.userData.type === 'Human') {
       // Calculate delta movement to drive the walk cycle
       const currentPos = p.position.clone();
