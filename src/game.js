@@ -853,20 +853,20 @@ function generateCircuitBreakers() {
     const shuffledCorridors = [...openCorridors].sort(() => 0.5 - seededRandom());
     
     for (const corr of shuffledCorridors) {
-      const col = Math.floor(corr.x / blockSize + mazeSize / 2);
-      const row = Math.floor(corr.z / blockSize + mazeSize / 2);
+      const col = Math.floor(corr.x / mazeBlockSize + mazeSizeGlobal / 2);
+      const row = Math.floor(corr.z / mazeBlockSize + mazeSizeGlobal / 2);
       
       const dirs = [
-        { dc: 0, dr: -1, rx: 0, rz: -blockSize/2, rotY: 0 },         
-        { dc: 0, dr: 1, rx: 0, rz: blockSize/2, rotY: Math.PI },     
-        { dc: -1, dr: 0, rx: -blockSize/2, rz: 0, rotY: Math.PI/2 }, 
-        { dc: 1, dr: 0, rx: blockSize/2, rz: 0, rotY: -Math.PI/2 }   
+        { dc: 0, dr: -1, rx: 0, rz: -mazeBlockSize/2, rotY: 0 },         
+        { dc: 0, dr: 1, rx: 0, rz: mazeBlockSize/2, rotY: Math.PI },     
+        { dc: -1, dr: 0, rx: -mazeBlockSize/2, rz: 0, rotY: Math.PI/2 }, 
+        { dc: 1, dr: 0, rx: mazeBlockSize/2, rz: 0, rotY: -Math.PI/2 }   
       ];
       
       for (const d of dirs) {
         const nr = row + d.dr;
         const nc = col + d.dc;
-        if (nr >= 0 && nr < mazeSize && nc >= 0 && nc < mazeSize && mazeLayout[nr][nc] === 1) {
+        if (nr >= 0 && nr < mazeSizeGlobal && nc >= 0 && nc < mazeSizeGlobal && mazeLayout[nr][nc] === 1) {
           // Mount the breaker slightly off the wall surface
           mesh.position.set(corr.x + d.rx * 0.95, 1.5, corr.z + d.rz * 0.95);
           mesh.rotation.y = d.rotY;
