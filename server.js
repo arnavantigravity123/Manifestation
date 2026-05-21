@@ -373,6 +373,10 @@ io.on('connection', (socket) => {
     checkMatchEndCondition(socket.roomId);
   });
 
+  socket.on('key_dropped', (data) => {
+    socket.to(socket.roomId).emit('key_dropped_sync', data);
+  });
+
   socket.on('human_escaped', () => {
     const { roomId } = socket;
     if (roomId && lobbies[roomId]) {

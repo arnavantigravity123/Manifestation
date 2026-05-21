@@ -1545,8 +1545,20 @@ function checkInteractions() {
       fixedBreakersCount++;
       
       // Increase global ambient light slightly with each fixed breaker
-      if (ambientLight) {
-        ambientLight.intensity = 1.5 + (fixedBreakersCount * 1.5);
+      if (myTeam === 'Ghost') {
+        ambientLight.intensity = 1.5 + (fixedBreakersCount * 2.0);
+      } else {
+        if (!isMobileDevice) {
+          ambientLight.intensity = 0.5 + (fixedBreakersCount * 0.7);
+        } else {
+          ambientLight.intensity = 1.0 + (fixedBreakersCount * 0.8);
+        }
+        
+        // Boost flashlight range and width slightly
+        if (flashLight) {
+          flashLight.distance = 45 + (fixedBreakersCount * 25);
+          flashLight.angle = (Math.PI / 3) + (fixedBreakersCount * 0.1);
+        }
       }
 
       triggerNotification(`circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
@@ -1973,6 +1985,14 @@ function dropKey() {
     typeName: poppedKey.typeName
   });
 
+  if (socketClient) {
+    socketClient.emit('key_dropped', {
+      symbol: poppedKey.symbol,
+      typeName: poppedKey.typeName,
+      position: { x: dropPos.x, y: 1.0, z: dropPos.z }
+    });
+  }
+
   renderCarriedKeysHUD();
   checkWinCondition();
   triggerNotification(`Dropped [${poppedKey.typeName}]`);
@@ -2383,6 +2403,26 @@ function setupSocketListeners() {
   socketClient.on('item_dropped_sync', ({ id, name, position }) => {
     // Teammate dropped an item, spawn it locally
     spawnDroppedItemLocal(id, name, new THREE.Vector3(position.x, position.y, position.z));
+  });
+
+  socketClient.on('key_dropped_sync', (data) => {
+    const kt = KEY_TYPES.find(k => k.label === data.typeName) || KEY_TYPES[0];
+    const mat = new THREE.MeshStandardMaterial({ 
+      color: kt.color, 
+      emissive: kt.emissive, 
+      emissiveIntensity: 0.8,
+      metalness: 0.8,
+      roughness: 0.2
+    });
+    const mesh = new THREE.Mesh(kt.geo(), mat);
+    mesh.position.set(data.position.x, data.position.y, data.position.z);
+    scene.add(mesh);
+
+    keysInMaze.push({
+      mesh: mesh,
+      symbol: data.symbol,
+      typeName: data.typeName
+    });
   });
 
   socketClient.on('item_picked_up_sync', ({ id }) => {
