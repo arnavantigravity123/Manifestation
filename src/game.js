@@ -308,8 +308,8 @@ function setupInventory() {
     Scout:              ["EMF Radar", "Sanity Pills", "Battery Pack", "Adrenaline Shot",     ...EXTRA_CARRY_SLOTS],
     Medic:              ["EMF Radar", "Sanity Pills", "Med Kit", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
     "Flashlight Expert":["EMF Radar", "Thermal Camera", "Battery Pack", "Battery Pack",     ...EXTRA_CARRY_SLOTS],
-    // Quartermaster: 8 class items + 0 carry slots (fully loaded pack)
-    Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Med Kit", "Battery Pack", "Battery Pack"]
+    // Quartermaster: 8 class items + 4 empty carry slots (12 total slots)
+    Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Med Kit", "Battery Pack", "Battery Pack", "", "", "", ""]
   };
 
   const ghostClasses = {
@@ -350,7 +350,10 @@ function renderHUDInventory() {
     
     const idxSpan = document.createElement('span');
     idxSpan.className = 'inventory-slot-index';
-    idxSpan.textContent = index + 1;
+    if (index === 9) idxSpan.textContent = '0';
+    else if (index === 10) idxSpan.textContent = '-';
+    else if (index === 11) idxSpan.textContent = '=';
+    else idxSpan.textContent = index + 1;
     slot.appendChild(idxSpan);
 
     const nameSpan = document.createElement('span');
@@ -1055,8 +1058,8 @@ function setupControls() {
       case 'Digit8': if (inventory.length > 7) { activeSlot = 7; renderHUDInventory(); } break;
       case 'Digit9': if (inventory.length > 8) { activeSlot = 8; renderHUDInventory(); } break;
       case 'Digit0': if (inventory.length > 9) { activeSlot = 9; renderHUDInventory(); } break;
-      case 'Minus':  if (inventory.length > 10) { activeSlot = 10; renderHUDInventory(); } break;
-      case 'Equal':  if (inventory.length > 11) { activeSlot = 11; renderHUDInventory(); } break;
+      case 'Minus': if (inventory.length > 10) { activeSlot = 10; renderHUDInventory(); } break;
+      case 'Equal': if (inventory.length > 11) { activeSlot = 11; renderHUDInventory(); } break;
     }
   };
 
