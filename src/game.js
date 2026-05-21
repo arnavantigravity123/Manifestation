@@ -2785,7 +2785,7 @@ function animate() {
           window.mobileGameActive = false;
           document.getElementById('captured-overlay').style.display = 'flex';
           
-          if (window.socketClient) {
+          if (socketClient) {
             socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) has been captured by the void.` });
             socketClient.emit('capture_human', { targetId: myId }); // Tell server we died!
           }
