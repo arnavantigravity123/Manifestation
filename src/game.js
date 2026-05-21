@@ -2304,7 +2304,7 @@ function createHumanMeshGroup() {
   const group = new THREE.Group();
   
   const spriteMat = new THREE.SpriteMaterial({ 
-    map: textureLoader.load('/assets/human_sprite.png'), 
+    map: new THREE.TextureLoader().load('/assets/human_sprite.png'), 
     color: 0xffffff,
     fog: true,
     transparent: true,
@@ -2332,7 +2332,7 @@ function createGhostMeshGroup() {
   const group = new THREE.Group();
   
   const spriteMat = new THREE.SpriteMaterial({ 
-    map: textureLoader.load('/assets/ghost_sprite.png'), 
+    map: new THREE.TextureLoader().load('/assets/ghost_sprite.png'), 
     color: 0xffdddd, // slightly tint red
     fog: true,
     transparent: true,
