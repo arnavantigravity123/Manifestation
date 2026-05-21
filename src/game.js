@@ -370,16 +370,16 @@ function renderCarriedKeysHUD() {
   keysPanel.innerHTML = '';
 
   const keyColors = {
-    'Amber Orb':     '#f59e0b',
-    'Sapphire Shard':'#60a5fa',
-    'Violet Prism':  '#a78bfa',
-    'Emerald Gem':   '#34d399',
+    'Amber Key':     '#f59e0b',
+    'Sapphire Key':  '#60a5fa',
+    'Violet Key':    '#c084fc',
+    'Emerald Key':   '#34d399',
   };
   const keyIcons = {
-    'Amber Orb':     '🔶',
-    'Sapphire Shard':'🔷',
-    'Violet Prism':  '💜',
-    'Emerald Gem':   '💚',
+    'Amber Key':     '🔑',
+    'Sapphire Key':  '🗝️',
+    'Violet Key':    '🗝️',
+    'Emerald Key':   '🔑',
   };
 
   // Show 3 slots always (empty ones greyed out)
@@ -627,24 +627,91 @@ function generateMaze(keysCount = 8) {
     const canvas = document.createElement('canvas');
     canvas.width = 512; canvas.height = 512;
     const ctx = canvas.getContext('2d');
+    
+    // 1. Base dark stone/slate color
     ctx.fillStyle = '#0f172a';
     ctx.fillRect(0, 0, 512, 512);
-    ctx.strokeStyle = '#1e293b';
-    ctx.lineWidth = 4;
-    for(let i=0; i<=512; i+=64) {
-      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
-    }
-    for(let i=0; i<150; i++) {
-      ctx.fillStyle = seededRandom() > 0.7 ? '#450a0a' : '#020617';
+
+    // 2. Gritty texture noise
+    for (let i = 0; i < 3000; i++) {
+      const x = seededRandom() * 512;
+      const y = seededRandom() * 512;
+      const r = seededRandom() * 1.5 + 0.8;
+      const gray = Math.floor(seededRandom() * 35) + 15;
+      ctx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
       ctx.beginPath();
-      ctx.arc(seededRandom()*512, seededRandom()*512, seededRandom()*15, 0, Math.PI*2);
+      ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // 3. Draw stone bricks (Running Bond Pattern)
+    ctx.strokeStyle = '#020617'; // very dark mortar lines
+    ctx.lineWidth = 5;
+    const rowHeight = 64;
+    for (let y = 0; y <= 512; y += rowHeight) {
+      // Horizontal grout line
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(512, y);
+      ctx.stroke();
+
+      if (y < 512) {
+        // Vertical grout lines (offset every other row)
+        const isOffsetRow = (y / rowHeight) % 2 === 0;
+        const colWidth = 128;
+        const offset = isOffsetRow ? 0 : 64;
+        for (let x = offset; x <= 512; x += colWidth) {
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, y + rowHeight);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // 4. Draw creepy jagged cracks in stone
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.2;
+    for (let c = 0; c < 25; c++) {
+      let curX = seededRandom() * 512;
+      let curY = seededRandom() * 512;
+      ctx.beginPath();
+      ctx.moveTo(curX, curY);
+      const steps = Math.floor(seededRandom() * 5) + 3;
+      for (let s = 0; s < steps; s++) {
+        curX += (seededRandom() - 0.5) * 20;
+        curY += (seededRandom() - 0.5) * 20;
+        ctx.lineTo(curX, curY);
+      }
+      ctx.stroke();
+    }
+
+    // 5. Creeping wet moss / toxic slime (green and yellow spores)
+    for (let m = 0; m < 150; m++) {
+      const x = seededRandom() * 512;
+      const y = seededRandom() * 512;
+      const size = seededRandom() * 18 + 6;
+      const isYellow = seededRandom() > 0.75;
+      
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, size);
+      if (isYellow) {
+        grad.addColorStop(0, 'rgba(132, 204, 22, 0.45)'); // lime/yellow green
+      } else {
+        grad.addColorStop(0, 'rgba(21, 128, 61, 0.55)'); // forest moss green
+      }
+      grad.addColorStop(0.5, 'rgba(20, 83, 45, 0.25)'); // dark green border
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(2, 2);
+    tex.repeat.set(1, 1);
     return tex;
   }
   
@@ -652,18 +719,24 @@ function generateMaze(keysCount = 8) {
 
   const wallMat = new THREE.MeshStandardMaterial({ 
     map: generatedTex,
-    color: 0x64748b, 
-    roughness: 0.8,
-    bumpScale: 0.2
+    bumpMap: generatedTex,
+    bumpScale: 0.15,
+    color: 0x475569, // slate stone tint
+    roughness: 0.9,
+    metalness: 0.05
   });
   
   const slidingWallMat = new THREE.MeshStandardMaterial({
     map: generatedTex,
-    color: 0xd97706, // Neon orange warning stripe pattern
-    roughness: 0.4,
+    bumpMap: generatedTex,
+    bumpScale: 0.1,
+    color: 0x92400e, // dark brown metal Warning state
+    roughness: 0.55,
+    metalness: 0.6
   });
 
-  const wallGeo = new THREE.BoxGeometry(blockSize, 4.5, blockSize);
+  // Overlap tiles slightly by adding 0.05 to width and depth to eliminate visible gaps/seams
+  const wallGeo = new THREE.BoxGeometry(blockSize + 0.05, 4.5, blockSize + 0.05);
 
   openCorridors = []; // Reset for new maze
   for (let r = 0; r < layout.length; r++) {
@@ -726,12 +799,49 @@ function generateMaze(keysCount = 8) {
   generateConsumableItems();
 }
 
+// Create a detailed 3D key using Torus, Cylinder, and Box components
+function createKeyMeshGroup(colorHex, emissiveHex) {
+  const group = new THREE.Group();
+  
+  const mat = new THREE.MeshStandardMaterial({
+    color: colorHex,
+    emissive: emissiveHex,
+    emissiveIntensity: 0.5,
+    metalness: 0.8,
+    roughness: 0.25
+  });
+
+  // 1. Ring/Handle (Torus)
+  const ringGeo = new THREE.TorusGeometry(0.18, 0.05, 8, 16);
+  const ring = new THREE.Mesh(ringGeo, mat);
+  ring.position.y = 0.25;
+  group.add(ring);
+
+  // 2. Stem/Shaft (Cylinder)
+  const shaftGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.45, 8);
+  const shaft = new THREE.Mesh(shaftGeo, mat);
+  shaft.position.y = -0.05;
+  group.add(shaft);
+
+  // 3. Tooth/Bit (Box)
+  const bitGeo = new THREE.BoxGeometry(0.12, 0.15, 0.04);
+  const bit = new THREE.Mesh(bitGeo, mat);
+  bit.position.set(0.08, -0.2, 0);
+  group.add(bit);
+
+  // Rotate group slightly to lie flatter/more interesting on the floor
+  group.rotation.x = Math.PI / 4;
+  group.rotation.y = Math.PI / 6;
+
+  return group;
+}
+
 // 4 distinct key type definitions: shape + color + name
 const KEY_TYPES = [
-  { geo: () => new THREE.SphereGeometry(0.32, 10, 10),   color: 0xf59e0b, emissive: 0xf59e0b, label: 'Amber Orb'   },
-  { geo: () => new THREE.OctahedronGeometry(0.38),        color: 0x60a5fa, emissive: 0x3b82f6, label: 'Sapphire Shard' },
-  { geo: () => new THREE.TetrahedronGeometry(0.4),        color: 0xa78bfa, emissive: 0x7c3aed, label: 'Violet Prism' },
-  { geo: () => new THREE.DodecahedronGeometry(0.3),       color: 0x34d399, emissive: 0x10b981, label: 'Emerald Gem'  },
+  { color: 0xf59e0b, emissive: 0xf59e0b, label: 'Amber Key'   },
+  { color: 0x60a5fa, emissive: 0x3b82f6, label: 'Sapphire Key' },
+  { color: 0xa78bfa, emissive: 0x7c3aed, label: 'Violet Key' },
+  { color: 0x34d399, emissive: 0x10b981, label: 'Emerald Key'  },
 ];
 
 function generateCollectibles(keysCount) {
@@ -748,8 +858,7 @@ function generateCollectibles(keysCount) {
   for (let i = 0; i < keysCount; i++) {
     const typeIdx = i % KEY_TYPES.length;
     const kt = KEY_TYPES[typeIdx];
-    const mat = new THREE.MeshStandardMaterial({ color: kt.color, emissive: kt.emissive, emissiveIntensity: 0.6, metalness: 0.4, roughness: 0.3 });
-    const mesh = new THREE.Mesh(kt.geo(), mat);
+    const mesh = createKeyMeshGroup(kt.color, kt.emissive);
 
     let x = 0, z = 0;
     if (openCorridors.length > 0) {
@@ -1947,22 +2056,34 @@ function checkWinCondition() {
 // Setup network synchronization
 function setupSocketListeners() {
   socketClient.on('player_moved', ({ id, position, rotation, team, characterClass }) => {
+    // If player mesh exists but team has changed, remove it to spawn the correct mesh type
+    if (players3D[id] && players3D[id].userData && players3D[id].userData.type !== team) {
+      scene.remove(players3D[id]);
+      delete players3D[id];
+    }
+
     if (!players3D[id]) {
-      // Spawn new network player representer (simple capsules)
       const isGhost = team === 'Ghost';
-      const capGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.8, 12);
-      const capMat = new THREE.MeshStandardMaterial({ 
-        color: isGhost ? 0xa855f7 : 0x3b82f6, 
-        roughness: 0.2,
-        metalness: 0.5
+      const capMesh = isGhost ? createGhostMeshGroup() : createHumanMeshGroup();
+      
+      // Setup thermal camera support
+      const thermalMat = new THREE.MeshBasicMaterial({ 
+        color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
       });
-      const capMesh = new THREE.Mesh(capGeo, capMat);
-      capMesh.position.set(position.x, 0.9, position.z);
+      capMesh.children.forEach(c => {
+        if (c.isMesh) {
+          c.userData.normalMat = c.material;
+          c.userData.thermalMat = thermalMat;
+        }
+      });
+
+      capMesh.position.set(position.x, isGhost ? 0.35 : 0, position.z);
       scene.add(capMesh);
       players3D[id] = capMesh;
     } else {
       // Update pos
-      players3D[id].position.set(position.x, 0.9, position.z);
+      const isGhost = team === 'Ghost';
+      players3D[id].position.set(position.x, isGhost ? 0.35 : 0, position.z);
       players3D[id].rotation.y = rotation.y;
     }
   });
@@ -2037,11 +2158,44 @@ function setupSocketListeners() {
 
   socketClient.on('ghost_mimic_clone', ({ id }) => {
     if (players3D[id]) {
-      // Disguise the ghost as a human for 15 seconds
-      const originalMat = players3D[id].material;
-      players3D[id].material = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.2, metalness: 0.5 });
+      const originalPosition = players3D[id].position.clone();
+      const originalRotation = players3D[id].rotation.clone();
+      
+      // Remove ghost mesh
+      scene.remove(players3D[id]);
+      
+      // Spawn human mesh in its place
+      const humanMesh = createHumanMeshGroup();
+      humanMesh.position.copy(originalPosition);
+      humanMesh.rotation.copy(originalRotation);
+      scene.add(humanMesh);
+      players3D[id] = humanMesh;
+      
       setTimeout(() => {
-        if (players3D[id]) players3D[id].material = originalMat;
+        if (players3D[id]) {
+          const currentPos = players3D[id].position.clone();
+          const currentRot = players3D[id].rotation.clone();
+          scene.remove(players3D[id]);
+          
+          // Swap back to ghost mesh
+          const ghostMesh = createGhostMeshGroup();
+          ghostMesh.position.copy(currentPos);
+          ghostMesh.rotation.copy(currentRot);
+          
+          // Setup thermal vision support for the recreated ghost mesh
+          const thermalMat = new THREE.MeshBasicMaterial({ 
+            color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
+          });
+          ghostMesh.children.forEach(c => {
+            if (c.isMesh) {
+              c.userData.normalMat = c.material;
+              c.userData.thermalMat = thermalMat;
+            }
+          });
+
+          scene.add(ghostMesh);
+          players3D[id] = ghostMesh;
+        }
       }, 15000);
     }
   });
@@ -2216,36 +2370,138 @@ function triggerNotification(text) {
   }, 4000);
 }
 
+function createHumanMeshGroup() {
+  const group = new THREE.Group();
+  
+  // Torso (dark survival jacket)
+  const torsoGeo = new THREE.CylinderGeometry(0.24, 0.2, 0.7, 10);
+  const torsoMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.75, metalness: 0.1 });
+  const torso = new THREE.Mesh(torsoGeo, torsoMat);
+  torso.position.y = 0.8;
+  group.add(torso);
+  
+  // Head
+  const headGeo = new THREE.SphereGeometry(0.15, 12, 12);
+  const headMat = new THREE.MeshStandardMaterial({ color: 0xfbcfe8, roughness: 0.6 }); // skin tone
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.position.y = 1.25;
+  group.add(head);
+
+  // Hair / Dark hood
+  const hoodGeo = new THREE.SphereGeometry(0.16, 12, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+  const hoodMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.85 });
+  const hood = new THREE.Mesh(hoodGeo, hoodMat);
+  hood.position.copy(head.position);
+  hood.rotation.x = -Math.PI / 6;
+  group.add(hood);
+  
+  // Left Leg (blue jeans tint)
+  const legGeo = new THREE.CylinderGeometry(0.07, 0.06, 0.5, 8);
+  const legMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.8 });
+  const leftLeg = new THREE.Mesh(legGeo, legMat);
+  leftLeg.position.set(-0.11, 0.25, 0);
+  group.add(leftLeg);
+  
+  // Right Leg
+  const rightLeg = new THREE.Mesh(legGeo, legMat);
+  rightLeg.position.set(0.11, 0.25, 0);
+  group.add(rightLeg);
+  
+  // Left Arm (matching jacket)
+  const armGeo = new THREE.CylinderGeometry(0.05, 0.045, 0.5, 8);
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.75 });
+  const leftArm = new THREE.Mesh(armGeo, armMat);
+  leftArm.position.set(-0.28, 0.8, 0);
+  leftArm.rotation.z = Math.PI / 16;
+  group.add(leftArm);
+  
+  // Right Arm
+  const rightArm = new THREE.Mesh(armGeo, armMat);
+  rightArm.position.set(0.28, 0.8, 0);
+  rightArm.rotation.z = -Math.PI / 16;
+  group.add(rightArm);
+
+  group.userData = {
+    type: 'Human',
+    walkCycle: 0,
+    leftLeg, rightLeg, leftArm, rightArm,
+    lastPosition: new THREE.Vector3()
+  };
+  
+  return group;
+}
+
+function createGhostMeshGroup() {
+  const group = new THREE.Group();
+  
+  // Translucent glowing material for ghost robes
+  const ghostMat = new THREE.MeshStandardMaterial({
+    color: 0xdbeafe, // very pale ice blue
+    emissive: 0x4f46e5, // deep glowing indigo/purple
+    emissiveIntensity: 0.95,
+    transparent: true,
+    opacity: 0.75,
+    roughness: 0.15,
+    side: THREE.DoubleSide
+  });
+  
+  // 1. Head (glowing orb inside robe)
+  const headGeo = new THREE.SphereGeometry(0.28, 16, 16);
+  const head = new THREE.Mesh(headGeo, ghostMat);
+  head.position.y = 1.35;
+  group.add(head);
+  
+  // 2. Gown/Robe (tapered cylinder/cone representing flowing sheets)
+  const robeGeo = new THREE.CylinderGeometry(0.08, 0.52, 1.1, 16, 4, true);
+  const robe = new THREE.Mesh(robeGeo, ghostMat);
+  robe.position.y = 0.65;
+  group.add(robe);
+
+  // 3. Hollow Screaming Mouth (dark gaping pit)
+  const mouthGeo = new THREE.BoxGeometry(0.1, 0.18, 0.05);
+  const mouthMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const mouth = new THREE.Mesh(mouthGeo, mouthMat);
+  mouth.position.set(0, 1.25, 0.25);
+  group.add(mouth);
+
+  // 4. Hollow Eye Sockets
+  const eyeHoleGeo = new THREE.SphereGeometry(0.06, 8, 8);
+  const eyeHoleMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const eyeL = new THREE.Mesh(eyeHoleGeo, eyeHoleMat);
+  eyeL.position.set(-0.1, 1.37, 0.24);
+  const eyeR = new THREE.Mesh(eyeHoleGeo, eyeHoleMat);
+  eyeR.position.set(0.1, 1.37, 0.24);
+  group.add(eyeL, eyeR);
+
+  // 5. Glowing Pupils
+  const glowEyeGeo = new THREE.SphereGeometry(0.025, 8, 8);
+  const glowEyeMat = new THREE.MeshBasicMaterial({ color: 0xef4444 }); // red glowing pupil
+  const pupilL = new THREE.Mesh(glowEyeGeo, glowEyeMat);
+  pupilL.position.set(-0.1, 1.37, 0.26);
+  const pupilR = new THREE.Mesh(glowEyeGeo, glowEyeMat);
+  pupilR.position.set(0.1, 1.37, 0.26);
+  group.add(pupilL, pupilR);
+  
+  // 6. Purple Point Light Aura
+  const aura = new THREE.PointLight(0x6366f1, 2.5, 8);
+  aura.position.y = 1.0;
+  group.add(aura);
+
+  group.userData = {
+    type: 'Ghost',
+    bobAccumulator: Math.random() * 10,
+    lastPosition: new THREE.Vector3()
+  };
+  
+  return group;
+}
+
 function spawnGhostAIs(count) {
   ghosts3D.forEach(g => scene.remove(g));
   ghosts3D = [];
 
-  const bodyGeo = new THREE.ConeGeometry(0.7, 2.5, 16);
-  const bodyMat = new THREE.MeshStandardMaterial({ 
-    color: 0xccccff, emissive: 0x7c3aed, emissiveIntensity: 0.8, 
-    roughness: 0.2, side: THREE.DoubleSide 
-  });
-  const headGeo = new THREE.SphereGeometry(0.5, 16, 16);
-  const eyeGeo = new THREE.SphereGeometry(0.12, 8, 8);
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide });
-
   for (let i = 0; i < count; i++) {
-    const ghostGroup = new THREE.Group();
-    
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 1.25;
-    const head = new THREE.Mesh(headGeo, bodyMat);
-    head.position.y = 2.5;
-    
-    const eye1 = new THREE.Mesh(eyeGeo, eyeMat);
-    eye1.position.set(-0.2, 2.6, 0.4);
-    const eye2 = new THREE.Mesh(eyeGeo, eyeMat);
-    eye2.position.set(0.2, 2.6, 0.4);
-    
-    const aura = new THREE.PointLight(0xa855f7, 80, 15);
-    aura.position.y = 1.5;
-
-    ghostGroup.add(body, head, eye1, eye2, aura);
+    const ghostGroup = createGhostMeshGroup();
     
     // Thermal materials for X-Ray
     const thermalMat = new THREE.MeshBasicMaterial({ 
@@ -2268,8 +2524,8 @@ function spawnGhostAIs(count) {
     });
     if (candidates.length > 0) spawnPos = candidates[Math.floor(seededRandom() * candidates.length)];
     ghostGroup.position.set(spawnPos.x, 0, spawnPos.z);
-
     scene.add(ghostGroup);
+
     // Assign a randomized ghost class to vary AI behavior
     const AI_GHOST_TYPES = ['Stalker', 'Mimic', 'Juggernaut', 'Phantom', 'Poltergeist', 'Banshee'];
     ghostGroup.userData.ghostClass = AI_GHOST_TYPES[Math.floor(seededRandom() * AI_GHOST_TYPES.length)];
@@ -2357,7 +2613,7 @@ function animate() {
       let blindedByHuman = false;
       Object.keys(players3D).forEach(id => {
         const pMesh = players3D[id];
-        const isHuman = pMesh.material.color.getHex() === 0x3b82f6;
+        const isHuman = pMesh.userData && pMesh.userData.type === 'Human';
         if (isHuman) {
           const dist = camera.position.distanceTo(pMesh.position);
           if (dist < 15) {
@@ -2431,7 +2687,7 @@ function animate() {
       if (inventory[activeSlot] === "Thermal Camera") {
         scene.fog = new THREE.FogExp2(0x330000, 0.02); // Red thermal vision
 
-        // Make ghosts bright and glowing
+        // Make AI ghosts bright and glowing
         ghosts3D.forEach(g => {
           g.children.forEach(c => {
             if (c.isMesh && c.material !== c.userData.thermalMat) {
@@ -2440,10 +2696,21 @@ function animate() {
             }
           });
         });
+        // Make network ghost players bright and glowing
+        Object.values(players3D).forEach(p => {
+          if (p.userData && p.userData.type === 'Ghost') {
+            p.children.forEach(c => {
+              if (c.isMesh && c.material !== c.userData.thermalMat) {
+                c.material = c.userData.thermalMat;
+                c.renderOrder = 999;
+              }
+            });
+          }
+        });
       } else {
         scene.fog = new THREE.FogExp2(0x030712, 0.05); // Normal dark
 
-        // Disable X-Ray vision
+        // Disable X-Ray vision for AI ghosts
         ghosts3D.forEach(g => {
           g.children.forEach(c => {
             if (c.isMesh && c.material !== c.userData.normalMat) {
@@ -2451,6 +2718,17 @@ function animate() {
               c.renderOrder = 0;
             }
           });
+        });
+        // Disable X-Ray vision for network ghost players
+        Object.values(players3D).forEach(p => {
+          if (p.userData && p.userData.type === 'Ghost') {
+            p.children.forEach(c => {
+              if (c.isMesh && c.material !== c.userData.normalMat) {
+                c.material = c.userData.normalMat;
+                c.renderOrder = 0;
+              }
+            });
+          }
         });
       }
     }
@@ -2704,6 +2982,44 @@ function animate() {
     if (promptEl) promptEl.style.display = 'none';
   }
 
+  // --- Active bobbing and walk cycle limb animations ---
+  // Bob AI ghosts
+  ghosts3D.forEach(g => {
+    const acc = g.userData.bobAccumulator || 0;
+    g.position.y = 0.25 + Math.sin(time * 0.003 + acc) * 0.12;
+  });
+
+  // Bob / swing network players
+  Object.keys(players3D).forEach(id => {
+    const p = players3D[id];
+    if (!p.userData) return;
+    
+    if (p.userData.type === 'Ghost') {
+      const acc = p.userData.bobAccumulator || 0;
+      p.position.y = 0.25 + Math.sin(time * 0.003 + acc) * 0.12;
+    } else if (p.userData.type === 'Human') {
+      // Calculate delta movement to drive the walk cycle
+      const currentPos = p.position.clone();
+      const lastPos = p.userData.lastPosition || p.position.clone();
+      const distMoved = currentPos.distanceTo(lastPos);
+      p.userData.lastPosition = currentPos;
+
+      if (distMoved > 0.01) {
+        // Human player is moving, advance walk cycle
+        p.userData.walkCycle += distMoved * 5.5;
+      } else {
+        // Human player is standing still, ease limbs back to center/rest position
+        p.userData.walkCycle *= 0.85;
+      }
+
+      // Swing legs and arms back and forth in opposition
+      const swing = Math.sin(p.userData.walkCycle) * 0.6;
+      if (p.userData.leftLeg) p.userData.leftLeg.rotation.x = swing;
+      if (p.userData.rightLeg) p.userData.rightLeg.rotation.x = -swing;
+      if (p.userData.leftArm) p.userData.leftArm.rotation.x = -swing;
+      if (p.userData.rightArm) p.userData.rightArm.rotation.x = swing;
+    }
+  });
   // Handle ghost initial spawning — only after splash screen and pointer lock / active game
   const readyToSpawn = isMobileDevice ? (window.gameReady && window.mobileGameActive) : (window.gameReady && document.pointerLockElement === document.getElementById('canvas-container'));
   if (ghosts3D.length === 0 && currentLobby && currentLobby.settings.ghostsCount > 0 && readyToSpawn) {
