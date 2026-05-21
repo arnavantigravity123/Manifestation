@@ -434,10 +434,23 @@ window.addEventListener('DOMContentLoaded', () => {
   // Settings UI Integration
   const settingsModal = document.getElementById('settings-modal');
   const controlSelect = document.getElementById('control-scheme-select');
+  const sensitivitySlider = document.getElementById('sensitivity-slider');
+  const sensitivityValue = document.getElementById('sensitivity-value');
   
   const savedControlMode = localStorage.getItem('control_mode') || 'auto';
   controlSelect.value = savedControlMode;
   setMobileMode(savedControlMode);
+  
+  const savedSensitivity = localStorage.getItem('look_sensitivity') || '1.0';
+  if (sensitivitySlider) sensitivitySlider.value = savedSensitivity;
+  if (sensitivityValue) sensitivityValue.textContent = savedSensitivity;
+  window.lookSensitivity = parseFloat(savedSensitivity);
+  
+  if (sensitivitySlider) {
+    sensitivitySlider.addEventListener('input', (e) => {
+      sensitivityValue.textContent = e.target.value;
+    });
+  }
 
   const showSettings = (e) => {
     if (e) {
@@ -452,6 +465,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const selectedMode = controlSelect.value;
     localStorage.setItem('control_mode', selectedMode);
     setMobileMode(selectedMode);
+    
+    if (sensitivitySlider) {
+      localStorage.setItem('look_sensitivity', sensitivitySlider.value);
+      window.lookSensitivity = parseFloat(sensitivitySlider.value);
+    }
   };
 
   document.getElementById('auth-settings-btn').addEventListener('click', showSettings);

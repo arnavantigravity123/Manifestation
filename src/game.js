@@ -1098,11 +1098,11 @@ function setupControls() {
   // Mouse camera rotation controller
   document.addEventListener('mousemove', (e) => {
     if (isMobileDevice) return;
-    if (document.pointerLockElement === document.getElementById('canvas-container')) {
-      camera.rotation.y -= e.movementX * 0.002;
-      camera.rotation.x -= e.movementY * 0.002;
-      camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
-    }
+    if (document.pointerLockElement !== document.getElementById('canvas-container') || isCaptured) return;
+    const sensitivity = window.lookSensitivity !== undefined ? window.lookSensitivity : 1.0;
+    camera.rotation.y -= e.movementX * 0.002 * sensitivity;
+    camera.rotation.x -= e.movementY * 0.002 * sensitivity;
+    camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
   });
 
   // Mobile Touch Controls
@@ -1144,8 +1144,9 @@ function setupControls() {
           const dx = t.clientX - lastLookX;
           const dy = t.clientY - lastLookY;
 
-          camera.rotation.y -= dx * 0.004;
-          camera.rotation.x -= dy * 0.004;
+          const sensitivity = window.lookSensitivity !== undefined ? window.lookSensitivity : 1.0;
+          camera.rotation.y -= dx * 0.004 * sensitivity;
+          camera.rotation.x -= dy * 0.004 * sensitivity;
           camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
 
           lastLookX = t.clientX;
