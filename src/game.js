@@ -2331,23 +2331,28 @@ function setupSocketListeners() {
       details.innerHTML += summaryHTML;
     }
 
-    const endLobbyBtn = document.getElementById('end-game-lobby-btn');
-    if (endLobbyBtn) {
-      endLobbyBtn.onclick = () => {
-        if (currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-')) {
-          sessionStorage.setItem('rejoinLobbyId', currentLobby.id);
-          sessionStorage.setItem('rejoinUsername', currentLobby.players[myId]?.username || `Operative_${Math.floor(100 + Math.random() * 900)}`);
-          sessionStorage.setItem('rejoinIsPublic', currentLobby.isPublic ? 'true' : 'false');
-          sessionStorage.setItem('rejoinIsSolo', 'false');
-        } else {
-          sessionStorage.removeItem('rejoinLobbyId');
-          sessionStorage.removeItem('rejoinUsername');
-          sessionStorage.removeItem('rejoinIsPublic');
-          sessionStorage.removeItem('rejoinIsSolo');
-        }
-        window.location.reload();
-      };
-    }
+    const bindRejoinBtn = (btnId) => {
+      const btn = document.getElementById(btnId);
+      if (btn) {
+        btn.onclick = () => {
+          if (currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-')) {
+            sessionStorage.setItem('rejoinLobbyId', currentLobby.id);
+            sessionStorage.setItem('rejoinUsername', currentLobby.players[myId]?.username || `Operative_${Math.floor(100 + Math.random() * 900)}`);
+            sessionStorage.setItem('rejoinIsPublic', currentLobby.isPublic ? 'true' : 'false');
+            sessionStorage.setItem('rejoinIsSolo', 'false');
+          } else {
+            sessionStorage.removeItem('rejoinLobbyId');
+            sessionStorage.removeItem('rejoinUsername');
+            sessionStorage.removeItem('rejoinIsPublic');
+            sessionStorage.removeItem('rejoinIsSolo');
+          }
+          window.location.reload();
+        };
+      }
+    };
+
+    bindRejoinBtn('end-game-lobby-btn');
+    bindRejoinBtn('captured-lobby-btn');
   });
 
   // Sync dropped items dynamically across all teammates in the lobby
@@ -2766,12 +2771,15 @@ function animate() {
         
         if (currentHP <= 0 && !isCaptured) {
           isCaptured = true;
+          // Trigger death logic
           document.exitPointerLock();
           window.mobileGameActive = false;
-          document.getElementById('hud-overlay').style.display = 'none';
           document.getElementById('captured-overlay').style.display = 'flex';
-          socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) has been captured by the void.` });
-          socketClient.emit('capture_human', { targetId: myId });
+          
+          if (window.socketClient) {
+            socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) has been captured by the void.` });
+            socketClient.emit('capture_human', { targetId: myId }); // Tell server we died!
+          }
         }
       }
 

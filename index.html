@@ -305,7 +305,11 @@
       <div id="captured-overlay" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(139,0,0,0.6); z-index: 9999; flex-direction: column; justify-content: center; align-items: center; color: white; backdrop-filter: blur(10px); pointer-events: auto;">
         <h1 style="font-family: 'Orbitron', sans-serif; font-size: 4rem; color: #ff4444; text-shadow: 0 0 20px red; letter-spacing: 5px;">CAPTURED</h1>
         <p style="font-size: 1.2rem; color: #ffcccc; max-width: 600px; text-align: center;">You have been dragged into the void...</p>
-        <button onclick="window.location.reload()" class="action-btn" style="margin-top: 2rem; background: rgba(0,0,0,0.8); padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto;">Return to Main Menu</button>
+        <p style="font-size: 1rem; color: var(--text-muted); margin-top: 1rem;">Waiting for match to end...</p>
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+          <button id="captured-lobby-btn" class="action-btn" style="background: rgba(0,0,0,0.8); padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto;">Return to Lobby / Play Again</button>
+          <button onclick="sessionStorage.clear(); window.location.reload()" class="action-btn" style="background: rgba(239, 68, 68, 0.2); border: 1px solid red; padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto;">Quit to Menu</button>
+        </div>
       </div>
 
       <!-- 6. End Game Screen Overlay -->
