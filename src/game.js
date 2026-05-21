@@ -297,19 +297,19 @@ export function initGame(socket, socketId, matchConfig) {
   animate();
 }
 
-// 3 extra "empty" carry slots all human classes get by default
-const EXTRA_CARRY_SLOTS = ['', '', ''];
+// 4 extra "empty" carry slots all human classes get by default to reach an 8-slot max
+const EXTRA_CARRY_SLOTS = ['', '', '', ''];
 
 function setupInventory() {
   const humanClasses = {
-    // Base 4 class items + 3 universal carry slots
+    // Base 4 class items + 4 universal carry slots = 8 slots total
     Locksmith:          ["EMF Radar", "Thermal Camera", "Breaker Remote", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
     Trapper:            ["Salt Cannister", "Chalk / UV Spray", "Battery Pack", "Adrenaline Shot", ...EXTRA_CARRY_SLOTS],
     Scout:              ["EMF Radar", "Sanity Pills", "Battery Pack", "Adrenaline Shot",     ...EXTRA_CARRY_SLOTS],
     Medic:              ["EMF Radar", "Sanity Pills", "Adrenaline Shot", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
     "Flashlight Expert":["EMF Radar", "Thermal Camera", "Battery Pack", "Battery Pack",     ...EXTRA_CARRY_SLOTS],
-    // Quartermaster: 8 class items + 5 carry slots (biggest pack)
-    Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Battery Pack", "Battery Pack", "Battery Pack", '', '', '', '', '']
+    // Quartermaster: 8 class items + 0 carry slots (fully loaded pack)
+    Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Battery Pack", "Battery Pack", "Battery Pack"]
   };
 
   const ghostClasses = {
@@ -703,33 +703,38 @@ function generateMaze(keysCount = 8) {
     }
   }
 
-  // Draw the Master Gate — visible from the start, but locked
-  gateCoordinates = { x: 0, z: - (mazeSize/2 * blockSize) + 4 };
-  const gateGeo = new THREE.BoxGeometry(10, 4, 1);
-  const gateMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.9, roughness: 0.1 }); // Dark metal locked state
+  // Draw the Master Gate — Photorealistic Vault Door
+  gateCoordinates = { x: 0, z: - (mazeSize/2 * blockSize) + blockSize + 0.26 }; // Flush against the north boundary wall (accounting for +0.5 wall overlap)
+  const gateGeo = new THREE.PlaneGeometry(4.5, 4); // Match corridor width
+  const vaultTex = textureLoader.load('/assets/vault_door.png');
+  vaultTex.wrapS = THREE.ClampToEdgeWrapping;
+  vaultTex.wrapT = THREE.ClampToEdgeWrapping;
+  const gateMat = new THREE.MeshStandardMaterial({ 
+    map: vaultTex,
+    color: 0x8899aa,
+    metalness: 0.8,
+    roughness: 0.3
+  });
   const gateMesh = new THREE.Mesh(gateGeo, gateMat);
   gateMesh.position.set(gateCoordinates.x, 2, gateCoordinates.z);
   gateMeshRef = gateMesh;
   scene.add(gateMesh);
-  walls.push(gateMesh);
+  
+  // Create an invisible blocking volume so player can't walk through the door
+  const gateBlockerGeo = new THREE.BoxGeometry(4.5, 4, 1);
+  const gateBlockerMat = new THREE.MeshBasicMaterial({ visible: false });
+  const gateBlocker = new THREE.Mesh(gateBlockerGeo, gateBlockerMat);
+  gateBlocker.position.set(gateCoordinates.x, 2, gateCoordinates.z - 0.5);
+  scene.add(gateBlocker);
+  walls.push(gateBlocker);
 
-  // Add a physical keypad to the door
-  const padGeo = new THREE.BoxGeometry(0.8, 1.2, 0.2);
-  const padMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
+  // Add a photorealistic keypad to the wall next to the door
+  const padGeo = new THREE.PlaneGeometry(0.6, 0.9);
+  const padTex = textureLoader.load('/assets/keypad.png');
+  const padMat = new THREE.MeshStandardMaterial({ map: padTex, metalness: 0.5, roughness: 0.5 });
   const padMesh = new THREE.Mesh(padGeo, padMat);
-  padMesh.position.set(2, 0, 0.6); // Offset relative to door
-  gateMesh.add(padMesh);
-
-  // Add 2 physical keyholes to the door
-  const holeGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.2, 16);
-  holeGeo.rotateX(Math.PI / 2);
-  const holeMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
-  const hole1 = new THREE.Mesh(holeGeo, holeMat);
-  hole1.position.set(-2, 0.5, 0.5);
-  gateMesh.add(hole1);
-  const hole2 = new THREE.Mesh(holeGeo, holeMat);
-  hole2.position.set(-2, -0.5, 0.5);
-  gateMesh.add(hole2);
+  padMesh.position.set(gateCoordinates.x + 1.2, 1.5, gateCoordinates.z + 0.05); 
+  scene.add(padMesh);
 
   // Spawn key collectibles in chests/lockers represented by boxes
   generateCollectibles(keysCount);
@@ -875,8 +880,17 @@ function generateCircuitBreakers() {
         const nr = row + d.dr;
         const nc = col + d.dc;
         if (nr >= 0 && nr < mazeSizeGlobal && nc >= 0 && nc < mazeSizeGlobal && mazeLayout[nr][nc] === 1) {
-          // Mount the breaker slightly off the wall surface
-          mesh.position.set(corr.x + d.rx * 0.95, 1.5, corr.z + d.rz * 0.95);
+          // Calculate exact placement on the expanded wall surface (+0.5 overlap)
+          const expandedWallWidth = mazeBlockSize + 0.5;
+          const distToWallFace = mazeBlockSize - (expandedWallWidth / 2); // e.g. 4.5 - 2.5 = 2.0
+          const breakerThickness = 0.15;
+          const offset = distToWallFace - (breakerThickness / 2) - 0.01; // Subtract half-thickness so it rests perfectly on wall
+
+          const dirX = Math.sign(d.rx); // 1, -1, or 0
+          const dirZ = Math.sign(d.rz);
+
+          // Mount the breaker perfectly flush against the wall surface
+          mesh.position.set(corr.x + dirX * offset, 1.5, corr.z + dirZ * offset);
           mesh.rotation.y = d.rotY;
           mounted = true;
           break;
@@ -910,9 +924,16 @@ function generateConsumableItems() {
     { name: 'Sanity Pills', map: textureLoader.load('/assets/pills_sprite.png') }
   ];
 
-  for (let i = 0; i < 10; i++) {
-    const type = itemTypes[Math.floor(seededRandom() * itemTypes.length)];
-    
+  // Generate exactly 1 EMF and 1 Thermal, then randomly pick Pills or Battery for the remaining 8 items
+  const itemsToSpawn = [
+    itemTypes[1], // EMF
+    itemTypes[2]  // Thermal
+  ];
+  for (let i = 0; i < 8; i++) {
+    itemsToSpawn.push(seededRandom() > 0.4 ? itemTypes[0] : itemTypes[3]); // 60% battery, 40% pills
+  }
+
+  itemsToSpawn.forEach(type => {
     const spriteMat = new THREE.SpriteMaterial({ 
       map: type.map, 
       color: 0xffffff,
@@ -938,10 +959,11 @@ function generateConsumableItems() {
     scene.add(mesh);
 
     itemsInMaze.push({
+      id: 'item_' + Math.random().toString(36).substr(2, 9),
       mesh: mesh,
       name: type.name
     });
-  }
+  });
 }
 
 // Corridor shifting alignment
@@ -1005,14 +1027,14 @@ function setupControls() {
         if (myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA) isSprinting = true;
         break;
       case 'KeyQ':
-        dropKey();
+        dropActiveItem();
         break;
       case 'Space':
         // Risk/Reward Ability: Panic Hide
         triggerPanicHide();
         break;
       case 'KeyG':
-        dropActiveItem();
+        dropKey();
         break;
       case 'BracketLeft':
         activeSlot = (activeSlot - 1 + inventory.length) % inventory.length;
@@ -1312,6 +1334,18 @@ function setupControls() {
   }
 }
 
+// Helper to check if player is looking roughly towards a target
+function isLookingAtTarget(targetPos, maxDist, maxAngle = 0.6) {
+  const dist = camera.position.distanceTo(targetPos);
+  if (dist > maxDist) return { looking: false, dist };
+  
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const toTarget = targetPos.clone().sub(camera.position).normalize();
+  const angle = dir.angleTo(toTarget);
+  return { looking: angle < maxAngle, dist };
+}
+
 // Dynamically render on-screen keys/breaker/item interaction prompts in HUD
 function updateInteractionPrompt() {
   const promptEl = document.getElementById('interaction-prompt');
@@ -1326,21 +1360,25 @@ function updateInteractionPrompt() {
   let promptText = "";
 
   // 1. Check Master Gate
-  const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
-  if (distToGate < 6.0) {
+  const gateVec = new THREE.Vector3(gateCoordinates.x, 2, gateCoordinates.z);
+  const { looking: lookingAtGate, dist: distToGate } = isLookingAtTarget(gateVec, 6.0);
+
+  if (lookingAtGate) { // Must be looking roughly at the door/keypad
     if (distToGate < minDistance) {
       minDistance = distToGate;
       if (!gateSolved) {
-        promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
-      } else {
+        const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
         const carriedSymbols = carriedKeys.map(k => k.symbol);
         const hasFirstKey = carriedSymbols.includes(functionalKeysRevealed[0]);
         const hasSecondKey = carriedSymbols.includes(functionalKeysRevealed[1]);
-        const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+        if (!hasFirstKey || !hasSecondKey || !breakersFixed) {
+          promptText = `ACCESS DENIED: Need 2 Keys & 3 Breakers (${fixedBreakersCount}/${totalBreakersRequired})`;
+        } else {
+          promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
+        }
+      } else {
         if (hasFirstKey && hasSecondKey && breakersFixed) {
           promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
-        } else {
-          promptText = `Master Gate: Need 2 Keys & 3 Breakers (${fixedBreakersCount}/${totalBreakersRequired})`;
         }
       }
     }
@@ -1349,14 +1387,14 @@ function updateInteractionPrompt() {
   // 2. Check Keys in Maze
   for (let i = 0; i < keysInMaze.length; i++) {
     const key = keysInMaze[i];
-    const distToKey = camera.position.distanceTo(key.mesh.position);
-    if (distToKey < 5.0) {
+    const { looking: lookingAtKey, dist: distToKey } = isLookingAtTarget(key.mesh.position, 5.0);
+    if (lookingAtKey) {
       if (distToKey < minDistance) {
         minDistance = distToKey;
         if (carriedKeys.length < MAX_CARRIED_KEYS) {
           promptText = isMobileDevice ? `Tap INTERACT to collect ${key.typeName}` : `Press <kbd>E</kbd> to collect ${key.typeName}`;
         } else {
-          promptText = isMobileDevice ? `Hands Full! Tap DROP KEY to replace` : `Hands Full! Press <kbd>Q</kbd> to drop a key first`;
+          promptText = isMobileDevice ? `Hands Full! Tap DROP KEY to replace` : `Hands Full! Press <kbd>G</kbd> to drop a key first`;
         }
       }
     }
@@ -1366,8 +1404,8 @@ function updateInteractionPrompt() {
   for (let i = 0; i < circuitBreakers.length; i++) {
     const breaker = circuitBreakers[i];
     if (breaker.isFixed) continue;
-    const distToBreaker = camera.position.distanceTo(breaker.mesh.position);
-    if (distToBreaker < 4.5) {
+    const { looking: lookingAtBreaker, dist: distToBreaker } = isLookingAtTarget(breaker.mesh.position, 4.5);
+    if (lookingAtBreaker) {
       if (distToBreaker < minDistance) {
         minDistance = distToBreaker;
         promptText = isMobileDevice ? "Tap INTERACT to repair breaker" : "Press <kbd>E</kbd> to repair breaker";
@@ -1379,8 +1417,8 @@ function updateInteractionPrompt() {
   for (let i = 0; i < codeClueNotes.length; i++) {
     const note = codeClueNotes[i];
     if (note.collected) continue;
-    const distToNote = camera.position.distanceTo(note.mesh.position);
-    if (distToNote < 4.5) {
+    const { looking: lookingAtNote, dist: distToNote } = isLookingAtTarget(note.mesh.position, 4.5);
+    if (lookingAtNote) {
       if (distToNote < minDistance) {
         minDistance = distToNote;
         promptText = isMobileDevice ? "Tap INTERACT to collect clue" : "Press <kbd>E</kbd> to collect clue";
@@ -1391,11 +1429,11 @@ function updateInteractionPrompt() {
   // 5. Check Pick-up Items
   for (let i = 0; i < itemsInMaze.length; i++) {
     const item = itemsInMaze[i];
-    const distToItem = camera.position.distanceTo(item.mesh.position);
-    if (distToItem < 4.5) {
+    const { looking: lookingAtItem, dist: distToItem } = isLookingAtTarget(item.mesh.position, 4.5);
+    if (lookingAtItem) {
       if (distToItem < minDistance) {
         minDistance = distToItem;
-        if (inventory.length < 8) {
+        if (inventory.includes('')) {
           promptText = isMobileDevice ? `Tap INTERACT to pick up ${item.name}` : `Press <kbd>E</kbd> to pick up ${item.name}`;
         } else {
           promptText = `Inventory Full! Cannot pick up ${item.name}`;
@@ -1414,21 +1452,32 @@ function updateInteractionPrompt() {
 
 function checkInteractions() {
   // 1. Check proximity to Keypad Terminal (Master Gate)
-  const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
-  if (distToGate < 6) {
+  const gateVec = new THREE.Vector3(gateCoordinates.x, 2, gateCoordinates.z);
+  const { looking: lookingAtGate, dist: distToGate } = isLookingAtTarget(gateVec, 6.0);
+
+  if (lookingAtGate) {
+    const carriedSymbols = carriedKeys.map(k => k.symbol);
+    const hasFirstKey = carriedSymbols.includes(functionalKeysRevealed[0]);
+    const hasSecondKey = carriedSymbols.includes(functionalKeysRevealed[1]);
+    const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+
     if (!gateSolved) {
-      openKeypadModal();
-    } else {
-      const carriedSymbols = carriedKeys.map(k => k.symbol);
-      const hasFirstKey = carriedSymbols.includes(functionalKeysRevealed[0]);
-      const hasSecondKey = carriedSymbols.includes(functionalKeysRevealed[1]);
-      const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
-      
       if (!hasFirstKey || !hasSecondKey) {
         const realCarried = carriedKeys.filter(k => functionalKeysRevealed.includes(k.symbol)).length;
         triggerNotification(`need both functional keys! (${realCarried}/2 in hand)`);
+        return; // Prevent opening keypad
       } else if (!breakersFixed) {
         triggerNotification(`master gate needs power! fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
+        return; // Prevent opening keypad
+      }
+      openKeypadModal();
+    } else {
+      if (hasFirstKey && hasSecondKey && breakersFixed) {
+        if (socketClient) {
+          socketClient.emit('human_escaped', { id: socketClient.id });
+        }
+        triggerNotification("YOU ESCAPED THE LABYRINTH!");
+        showEndScreen("HUMANS WIN!", "The surviving humans escaped the manifestation.");
       } else {
         triggerNotification("master gate breached! escape successful!");
       }
@@ -1436,14 +1485,14 @@ function checkInteractions() {
     return;
   }
 
-  // 2. Check proximity to Collectible Keys
+  // 2. Check Key Interactions
   for (let i = 0; i < keysInMaze.length; i++) {
     const key = keysInMaze[i];
-    const distToKey = camera.position.distanceTo(key.mesh.position);
-    if (distToKey < 5.0) {
+    const { looking: lookingAtKey } = isLookingAtTarget(key.mesh.position, 5.0);
+    if (lookingAtKey) {
       // Enforce carry limit
       if (carriedKeys.length >= MAX_CARRIED_KEYS) {
-        triggerNotification(`Hands full! Max ${MAX_CARRIED_KEYS} keys — drop one first.`);
+        triggerNotification(`Cannot carry more than ${MAX_CARRIED_KEYS} keys. Press G to drop one.`);
         break;
       }
       // Picked up!
@@ -1526,8 +1575,8 @@ function checkInteractions() {
   // 5. Check proximity to Pick-up Items (find empty slot & check unique items)
   for (let i = 0; i < itemsInMaze.length; i++) {
     const item = itemsInMaze[i];
-    const dist = camera.position.distanceTo(item.mesh.position);
-    if (dist < 4.5) {
+    const { looking: lookingAtItem } = isLookingAtTarget(item.mesh.position, 4.5);
+    if (lookingAtItem) {
       // UNIQUE EQUIPMENT CHECK: Prevent carrying duplicates of passive/reusable items
       const uniqueEquipment = ["EMF Radar", "Thermal Camera", "Breaker Remote"];
       if (uniqueEquipment.includes(item.name) && inventory.includes(item.name)) {
@@ -1541,6 +1590,7 @@ function checkInteractions() {
         inventory[emptyIndex] = item.name;
         scene.remove(item.mesh);
         itemsInMaze.splice(i, 1);
+        if (window.socket) window.socket.emit('item_picked_up', { id: item.id });
         triggerNotification(`Picked up ${item.name}`);
         renderHUDInventory();
       } else {
@@ -1797,48 +1847,80 @@ function dropActiveItem() {
     .addScaledVector(dir, 1.8);
   spawnPos.y = 0.3; // Floor height
 
+  const itemId = 'item_' + Math.random().toString(36).substr(2, 9);
+  
   // Emit event to network so teammates see it
   socketClient.emit('item_dropped', {
+    id: itemId,
     name: item,
     position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z }
   });
 
   // Spawn it locally
-  spawnDroppedItemLocal(item, spawnPos);
+  spawnDroppedItemLocal(itemId, item, spawnPos);
   triggerNotification(`Dropped ${item}`);
 }
 
-function spawnDroppedItemLocal(name, pos) {
-  let color = 0xffffff;
-  if (name === 'Battery Pack') color = 0x22c55e;
-  else if (name === 'EMF Radar') color = 0x3b82f6;
-  else if (name === 'Thermal Camera') color = 0xf97316;
-  else if (name === 'Sanity Pills') color = 0xec4899;
-  else if (name === 'Breaker Remote') color = 0xa855f7;
-  else if (name === 'Adrenaline Shot') color = 0xe11d48;
-  else if (name === 'Salt Cannister') color = 0xf8fafc;
-  else if (name === 'Chalk / UV Spray') color = 0xfef08a;
+function spawnDroppedItemLocal(id, name, pos) {
+  const textureLoader = new THREE.TextureLoader();
+  let texPath = '';
+  if (name === 'Battery Pack') texPath = '/assets/battery_sprite.png';
+  else if (name === 'EMF Radar') texPath = '/assets/emf_sprite.png';
+  else if (name === 'Thermal Camera') texPath = '/assets/thermal_sprite.png';
+  else if (name === 'Sanity Pills') texPath = '/assets/pills_sprite.png';
 
-  const itemGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.6, 8);
-  const itemMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.2 });
-  const mesh = new THREE.Mesh(itemGeo, itemMat);
+  let mesh;
+  if (texPath !== '') {
+    const spriteMat = new THREE.SpriteMaterial({ 
+      map: textureLoader.load(texPath), 
+      color: 0xffffff,
+      fog: true,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    mesh = new THREE.Sprite(spriteMat);
+    mesh.scale.set(0.6, 0.6, 1);
+  } else {
+    // Fallback for class-specific untextured items
+    const itemGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.6, 8);
+    const itemMat = new THREE.MeshStandardMaterial({ color: 0xa855f7, emissive: 0xa855f7, emissiveIntensity: 0.2 });
+    mesh = new THREE.Mesh(itemGeo, itemMat);
+  }
+  
   mesh.position.copy(pos);
+  mesh.position.y = 0.35; // ensure it is on floor
   scene.add(mesh);
 
   itemsInMaze.push({
+    id: id,
     mesh: mesh,
     name: name
   });
 }
 
-// Drop the most recently collected key
+// Drop the most recently collected key, prioritizing fake keys
 function dropKey() {
   if (carriedKeys.length === 0) {
     triggerNotification("No keys to drop.");
     return;
   }
 
-  const poppedKey = carriedKeys.pop();
+  // Try to find a fake key to drop first
+  let dropIndex = -1;
+  for (let i = carriedKeys.length - 1; i >= 0; i--) {
+    if (!functionalKeysRevealed.includes(carriedKeys[i].symbol)) {
+      dropIndex = i;
+      break;
+    }
+  }
+  
+  // If all carried keys are somehow functional, drop the last one
+  if (dropIndex === -1) {
+    dropIndex = carriedKeys.length - 1;
+  }
+
+  const poppedKey = carriedKeys.splice(dropIndex, 1)[0];
   
   // Remove from foundKeysList so it doesn't count towards the win condition anymore
   const symbolIndex = foundKeysList.indexOf(poppedKey.symbol);
@@ -2036,13 +2118,23 @@ function setupSocketListeners() {
       const capMesh = isGhost ? createGhostMeshGroup() : createHumanMeshGroup();
       
       // Setup thermal camera support
-      const thermalMat = new THREE.MeshBasicMaterial({ 
+      const meshThermalMat = new THREE.MeshBasicMaterial({ 
         color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
       });
       capMesh.children.forEach(c => {
         if (c.isMesh) {
           c.userData.normalMat = c.material;
-          c.userData.thermalMat = thermalMat;
+          c.userData.thermalMat = meshThermalMat;
+        } else if (c.isSprite) {
+          c.userData.normalMat = c.material;
+          c.userData.thermalMat = new THREE.SpriteMaterial({
+            map: c.material.map,
+            color: 0xffffff,
+            fog: false,
+            depthTest: false,
+            transparent: true,
+            blending: THREE.AdditiveBlending
+          });
         }
       });
 
@@ -2260,9 +2352,18 @@ function setupSocketListeners() {
   });
 
   // Sync dropped items dynamically across all teammates in the lobby
-  socketClient.on('item_dropped_sync', ({ name, position }) => {
-    const pos = new THREE.Vector3(position.x, position.y, position.z);
-    spawnDroppedItemLocal(name, pos);
+  socketClient.on('item_dropped_sync', ({ id, name, position }) => {
+    // Teammate dropped an item, spawn it locally
+    spawnDroppedItemLocal(id, name, new THREE.Vector3(position.x, position.y, position.z));
+  });
+
+  socketClient.on('item_picked_up_sync', ({ id }) => {
+    // Teammate picked up an item, remove it locally
+    const index = itemsInMaze.findIndex(item => item.id === id);
+    if (index !== -1) {
+      scene.remove(itemsInMaze[index].mesh);
+      itemsInMaze.splice(index, 1);
+    }
   });
 }
 
@@ -2412,13 +2513,23 @@ function spawnGhostAIs(count) {
     const ghostGroup = createGhostMeshGroup();
     
     // Thermal materials for X-Ray
-    const thermalMat = new THREE.MeshBasicMaterial({ 
+    const meshThermalMat = new THREE.MeshBasicMaterial({ 
       color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
     });
     ghostGroup.children.forEach(c => {
       if (c.isMesh) {
         c.userData.normalMat = c.material;
-        c.userData.thermalMat = thermalMat;
+        c.userData.thermalMat = meshThermalMat;
+      } else if (c.isSprite) {
+        c.userData.normalMat = c.material;
+        c.userData.thermalMat = new THREE.SpriteMaterial({
+          map: c.material.map,
+          color: 0xffffff,
+          fog: false,
+          depthTest: false,
+          transparent: true,
+          blending: THREE.AdditiveBlending
+        });
       }
     });
 
@@ -2598,7 +2709,7 @@ function animate() {
         // Make AI ghosts bright and glowing
         ghosts3D.forEach(g => {
           g.children.forEach(c => {
-            if (c.isMesh && c.material !== c.userData.thermalMat) {
+            if ((c.isMesh || c.isSprite) && c.material !== c.userData.thermalMat) {
               c.material = c.userData.thermalMat;
               c.renderOrder = 999;
             }
@@ -2608,7 +2719,7 @@ function animate() {
         Object.values(players3D).forEach(p => {
           if (p.userData && p.userData.type === 'Ghost') {
             p.children.forEach(c => {
-              if (c.isMesh && c.material !== c.userData.thermalMat) {
+              if ((c.isMesh || c.isSprite) && c.material !== c.userData.thermalMat) {
                 c.material = c.userData.thermalMat;
                 c.renderOrder = 999;
               }
@@ -2621,7 +2732,7 @@ function animate() {
         // Disable X-Ray vision for AI ghosts
         ghosts3D.forEach(g => {
           g.children.forEach(c => {
-            if (c.isMesh && c.material !== c.userData.normalMat) {
+            if ((c.isMesh || c.isSprite) && c.material !== c.userData.normalMat) {
               c.material = c.userData.normalMat;
               c.renderOrder = 0;
             }
@@ -2631,7 +2742,7 @@ function animate() {
         Object.values(players3D).forEach(p => {
           if (p.userData && p.userData.type === 'Ghost') {
             p.children.forEach(c => {
-              if (c.isMesh && c.material !== c.userData.normalMat) {
+              if ((c.isMesh || c.isSprite) && c.material !== c.userData.normalMat) {
                 c.material = c.userData.normalMat;
                 c.renderOrder = 0;
               }

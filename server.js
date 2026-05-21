@@ -405,6 +405,10 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('item_dropped_sync', data);
   });
 
+  socket.on('item_picked_up', (data) => {
+    socket.to(socket.roomId).emit('item_picked_up_sync', data);
+  });
+
   socket.on('chalk_spray', ({ position }) => {
     console.log(`[Lobby ${socket.roomId}] Player ${socket.id} used Chalk Spray at [${position.x.toFixed(1)}, ${position.z.toFixed(1)}].`);
     socket.to(socket.roomId).emit('human_chalk_spray', { id: socket.id, position });
