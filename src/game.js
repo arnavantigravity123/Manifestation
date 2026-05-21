@@ -306,10 +306,10 @@ function setupInventory() {
     Locksmith:          ["EMF Radar", "Thermal Camera", "Breaker Remote", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
     Trapper:            ["Salt Cannister", "Chalk / UV Spray", "Battery Pack", "Adrenaline Shot", ...EXTRA_CARRY_SLOTS],
     Scout:              ["EMF Radar", "Sanity Pills", "Battery Pack", "Adrenaline Shot",     ...EXTRA_CARRY_SLOTS],
-    Medic:              ["EMF Radar", "Sanity Pills", "Adrenaline Shot", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
+    Medic:              ["EMF Radar", "Sanity Pills", "Med Kit", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
     "Flashlight Expert":["EMF Radar", "Thermal Camera", "Battery Pack", "Battery Pack",     ...EXTRA_CARRY_SLOTS],
     // Quartermaster: 8 class items + 0 carry slots (fully loaded pack)
-    Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Battery Pack", "Battery Pack", "Battery Pack"]
+    Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Med Kit", "Battery Pack", "Battery Pack"]
   };
 
   const ghostClasses = {
@@ -453,6 +453,7 @@ function getIconOrShortName(itemName) {
     case "Chalk / UV Spray": return "SPRAY";
     case "Adrenaline Shot": return "ADRN";
     case "Sanity Pills": return "PILLS";
+    case "Med Kit": return "MED";
     case "Ghost Claws": return "CLAW";
     case "Scent Tracker": return "SCENT";
     case "Infiltration Clone": return "CLONE";
@@ -1627,6 +1628,12 @@ function useActiveItem() {
     currentSanity = 100;
     triggerNotification("sanity restored.");
     removeItem(activeSlot);
+  } else if (item === "Med Kit") {
+    currentHP = 100;
+    document.getElementById('hp-value').textContent = `${Math.ceil(currentHP)} HP`;
+    document.getElementById('hp-bar').style.width = `${currentHP}%`;
+    triggerNotification("health fully restored.");
+    removeItem(activeSlot);
   } else if (item === "Adrenaline Shot") {
     speedBoostTimer = 10;
     triggerNotification("adrenaline engaged! speed increased.");
@@ -1880,6 +1887,7 @@ function spawnDroppedItemLocal(id, name, pos) {
   else if (name === 'EMF Radar') texPath = '/assets/emf_sprite.png';
   else if (name === 'Thermal Camera') texPath = '/assets/thermal_sprite.png';
   else if (name === 'Sanity Pills') texPath = '/assets/pills_sprite.png';
+  else if (name === 'Med Kit') texPath = '/assets/medkit_sprite.png';
 
   let mesh;
   if (texPath !== '') {
