@@ -810,6 +810,83 @@ function generateMaze(keysCount = 8) {
       ctx.beginPath(); ctx.arc(mx, my, mSize, 0, Math.PI * 2); ctx.fill();
     }
 
+    // 9. Crawling vines — organic curved tendrils with small leaves
+    for (let v = 0; v < 12; v++) {
+      let vx = seededRandom() * W;
+      let vy = seededRandom() * W;
+      ctx.strokeStyle = `rgba(20, 80, 30, ${0.4 + seededRandom() * 0.3})`;
+      ctx.lineWidth = seededRandom() * 2.5 + 1;
+      ctx.beginPath();
+      ctx.moveTo(vx, vy);
+      const segments = Math.floor(seededRandom() * 12) + 6;
+      for (let s = 0; s < segments; s++) {
+        const cpx = vx + (seededRandom() - 0.5) * 60;
+        const cpy = vy + seededRandom() * 40 + 10;
+        vx += (seededRandom() - 0.5) * 40;
+        vy += seededRandom() * 30 + 5;
+        ctx.quadraticCurveTo(cpx, cpy, vx, vy);
+      }
+      ctx.stroke();
+      // Small leaves along the vine
+      for (let lf = 0; lf < Math.floor(seededRandom() * 5) + 2; lf++) {
+        const leafX = vx - seededRandom() * 80;
+        const leafY = vy - seededRandom() * 60;
+        ctx.fillStyle = `rgba(${15 + Math.floor(seededRandom() * 25)}, ${60 + Math.floor(seededRandom() * 40)}, ${10 + Math.floor(seededRandom() * 20)}, 0.5)`;
+        ctx.beginPath();
+        ctx.ellipse(leafX, leafY, seededRandom() * 6 + 3, seededRandom() * 3 + 1.5, seededRandom() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 10. Skull symbols scratched into stone
+    for (let sk = 0; sk < 4; sk++) {
+      const sx = seededRandom() * (W - 60) + 30;
+      const sy = seededRandom() * (W - 60) + 30;
+      const skSize = seededRandom() * 15 + 12;
+      ctx.strokeStyle = `rgba(${40 + Math.floor(seededRandom() * 20)}, ${35 + Math.floor(seededRandom() * 15)}, ${30 + Math.floor(seededRandom() * 15)}, ${0.4 + seededRandom() * 0.3})`;
+      ctx.lineWidth = 1.5;
+      // Skull outline (circle for cranium)
+      ctx.beginPath();
+      ctx.arc(sx, sy, skSize, 0, Math.PI * 2);
+      ctx.stroke();
+      // Jaw (smaller arc below)
+      ctx.beginPath();
+      ctx.arc(sx, sy + skSize * 0.7, skSize * 0.6, 0, Math.PI);
+      ctx.stroke();
+      // Eye sockets
+      ctx.beginPath();
+      ctx.arc(sx - skSize * 0.3, sy - skSize * 0.1, skSize * 0.22, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(sx + skSize * 0.3, sy - skSize * 0.1, skSize * 0.22, 0, Math.PI * 2);
+      ctx.stroke();
+      // Nose hole (triangle)
+      ctx.beginPath();
+      ctx.moveTo(sx, sy + skSize * 0.15);
+      ctx.lineTo(sx - skSize * 0.1, sy + skSize * 0.35);
+      ctx.lineTo(sx + skSize * 0.1, sy + skSize * 0.35);
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    // 11. Diagonal claw marks / scratch marks
+    for (let cl = 0; cl < 8; cl++) {
+      const cx = seededRandom() * W;
+      const cy = seededRandom() * W;
+      const clLen = seededRandom() * 80 + 40;
+      const clAngle = seededRandom() * 0.6 + 0.5; // roughly diagonal
+      ctx.strokeStyle = `rgba(${20 + Math.floor(seededRandom() * 15)}, ${15 + Math.floor(seededRandom() * 10)}, ${10 + Math.floor(seededRandom() * 10)}, ${0.5 + seededRandom() * 0.3})`;
+      // Draw 3 parallel scratch lines
+      for (let sl = 0; sl < 3; sl++) {
+        const offset = (sl - 1) * (seededRandom() * 6 + 4);
+        ctx.lineWidth = seededRandom() * 1.5 + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(cx + offset, cy);
+        ctx.lineTo(cx + offset + Math.cos(clAngle) * clLen, cy + Math.sin(clAngle) * clLen);
+        ctx.stroke();
+      }
+    }
+
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
@@ -2607,87 +2684,145 @@ function createHumanMeshGroup() {
 function createGhostMeshGroup() {
   const group = new THREE.Group();
   
-  // Dark smoky translucent material — Phasmophobia style
+  // Dark smoky material — visible but ghostly
   const ghostMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1a2e,        // very dark blue-grey
-    emissive: 0x0f0f23,     // extremely faint dark glow
-    emissiveIntensity: 0.4,
+    color: 0x1a1a2e,
+    emissive: 0x1a1040,
+    emissiveIntensity: 0.6,
     transparent: true,
-    opacity: 0.28,           // mostly invisible, like a shadow
-    roughness: 0.95,
-    side: THREE.DoubleSide,
-    depthWrite: false        // prevents z-fighting with walls
-  });
-
-  // Slightly brighter material for the face area
-  const faceMat = new THREE.MeshStandardMaterial({
-    color: 0x1e1e3a,
-    emissive: 0x111128,
-    emissiveIntensity: 0.3,
-    transparent: true,
-    opacity: 0.35,
-    roughness: 0.9,
+    opacity: 0.55,
+    roughness: 0.8,
     side: THREE.DoubleSide,
     depthWrite: false
   });
-  
-  // 1. Head — human proportioned, not oversized
-  const headGeo = new THREE.SphereGeometry(0.14, 12, 12);
-  const head = new THREE.Mesh(headGeo, faceMat);
-  head.position.y = 1.55;
-  head.scale.set(1, 1.15, 0.95); // slightly elongated
-  group.add(head);
-  
-  // 2. Torso — human shaped cylinder
-  const torsoGeo = new THREE.CylinderGeometry(0.18, 0.15, 0.65, 10);
-  const torso = new THREE.Mesh(torsoGeo, ghostMat);
-  torso.position.y = 1.1;
-  group.add(torso);
 
-  // 3. Lower body — wispy trailing form (tapers to nothing)
-  const lowerGeo = new THREE.CylinderGeometry(0.15, 0.02, 0.8, 10, 1, true);
-  const lowerMat = new THREE.MeshStandardMaterial({
-    color: 0x0f0f1e,
-    emissive: 0x080818,
-    emissiveIntensity: 0.2,
+  // Slightly lighter face material
+  const faceMat = new THREE.MeshStandardMaterial({
+    color: 0x2a2a4a,
+    emissive: 0x1e1840,
+    emissiveIntensity: 0.5,
     transparent: true,
-    opacity: 0.18,
+    opacity: 0.65,
+    roughness: 0.7,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+
+  // Even more transparent wispy material for trailing edges
+  const wispMat = new THREE.MeshStandardMaterial({
+    color: 0x12122a,
+    emissive: 0x0a0820,
+    emissiveIntensity: 0.3,
+    transparent: true,
+    opacity: 0.3,
     roughness: 1.0,
     side: THREE.DoubleSide,
     depthWrite: false
   });
-  const lower = new THREE.Mesh(lowerGeo, lowerMat);
-  lower.position.y = 0.4;
-  group.add(lower);
+  
+  // 1. Head — properly sized, slightly gaunt
+  const headGeo = new THREE.SphereGeometry(0.22, 14, 14);
+  const head = new THREE.Mesh(headGeo, faceMat);
+  head.position.y = 2.55;
+  head.scale.set(1, 1.2, 0.9);
+  group.add(head);
+  
+  // 2. Neck
+  const neckGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.2, 8);
+  const neck = new THREE.Mesh(neckGeo, ghostMat);
+  neck.position.y = 2.3;
+  group.add(neck);
 
-  // 4. Arms — thin dark tendrils hanging down
-  const armGeo = new THREE.CylinderGeometry(0.03, 0.015, 0.55, 6);
+  // 3. Upper torso — broad shoulders
+  const upperGeo = new THREE.CylinderGeometry(0.35, 0.28, 0.6, 10);
+  const upper = new THREE.Mesh(upperGeo, ghostMat);
+  upper.position.y = 1.9;
+  group.add(upper);
+
+  // 4. Lower torso
+  const lowerTorsoGeo = new THREE.CylinderGeometry(0.28, 0.22, 0.5, 10);
+  const lowerTorso = new THREE.Mesh(lowerTorsoGeo, ghostMat);
+  lowerTorso.position.y = 1.35;
+  group.add(lowerTorso);
+
+  // 5. Tattered robe / trailing wispy skirt
+  const robeGeo = new THREE.CylinderGeometry(0.22, 0.45, 1.2, 12, 1, true);
+  const robe = new THREE.Mesh(robeGeo, wispMat);
+  robe.position.y = 0.5;
+  group.add(robe);
+
+  // 6. Wispy tail that fades to nothing
+  const tailGeo = new THREE.ConeGeometry(0.4, 0.8, 10, 1, true);
+  const tailMat = new THREE.MeshStandardMaterial({
+    color: 0x0a0a1a,
+    emissive: 0x050510,
+    emissiveIntensity: 0.2,
+    transparent: true,
+    opacity: 0.15,
+    roughness: 1.0,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const tail = new THREE.Mesh(tailGeo, tailMat);
+  tail.position.y = -0.15;
+  tail.rotation.x = Math.PI; // flip cone to point down
+  group.add(tail);
+
+  // 7. Arms — long bony reaching limbs
+  const armGeo = new THREE.CylinderGeometry(0.04, 0.025, 0.9, 6);
   const leftArm = new THREE.Mesh(armGeo, ghostMat);
-  leftArm.position.set(-0.22, 0.95, 0);
-  leftArm.rotation.z = 0.15;
+  leftArm.position.set(-0.4, 1.7, 0);
+  leftArm.rotation.z = 0.3;
+  leftArm.rotation.x = -0.2;
   group.add(leftArm);
   const rightArm = new THREE.Mesh(armGeo, ghostMat);
-  rightArm.position.set(0.22, 0.95, 0);
-  rightArm.rotation.z = -0.15;
+  rightArm.position.set(0.4, 1.7, 0);
+  rightArm.rotation.z = -0.3;
+  rightArm.rotation.x = -0.2;
   group.add(rightArm);
 
-  // 5. Eye sockets — very subtle dark hollows, not giant cartoon circles
-  const eyeGeo = new THREE.SphereGeometry(0.02, 6, 6);
-  const eyeMat = new THREE.MeshBasicMaterial({ 
-    color: 0x000000,
-    transparent: true,
-    opacity: 0.6
-  });
-  const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
-  eyeL.position.set(-0.05, 1.57, 0.12);
-  const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
-  eyeR.position.set(0.05, 1.57, 0.12);
-  group.add(eyeL, eyeR);
+  // 8. Claw-like hands (small spheres at arm tips)
+  const clawGeo = new THREE.SphereGeometry(0.05, 6, 6);
+  const clawL = new THREE.Mesh(clawGeo, ghostMat);
+  clawL.position.set(-0.6, 1.25, -0.15);
+  const clawR = new THREE.Mesh(clawGeo, ghostMat);
+  clawR.position.set(0.6, 1.25, -0.15);
+  group.add(clawL, clawR);
 
-  // 6. Very dim eerie light — barely visible, cold color
-  const aura = new THREE.PointLight(0x2d2d5e, 0.8, 6);
-  aura.position.y = 1.2;
+  // 9. Eye sockets — dark hollows
+  const socketGeo = new THREE.SphereGeometry(0.055, 8, 8);
+  const socketMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const socketL = new THREE.Mesh(socketGeo, socketMat);
+  socketL.position.set(-0.09, 2.58, 0.18);
+  const socketR = new THREE.Mesh(socketGeo, socketMat);
+  socketR.position.set(0.09, 2.58, 0.18);
+  group.add(socketL, socketR);
+
+  // 10. Glowing ember eyes inside the sockets
+  const eyeGlowGeo = new THREE.SphereGeometry(0.03, 8, 8);
+  const eyeGlowMat = new THREE.MeshBasicMaterial({ color: 0xff4422 });
+  const eyeGlowL = new THREE.Mesh(eyeGlowGeo, eyeGlowMat);
+  eyeGlowL.position.set(-0.09, 2.58, 0.2);
+  const eyeGlowR = new THREE.Mesh(eyeGlowGeo, eyeGlowMat);
+  eyeGlowR.position.set(0.09, 2.58, 0.2);
+  group.add(eyeGlowL, eyeGlowR);
+
+  // 11. Mouth — dark gash
+  const mouthGeo = new THREE.BoxGeometry(0.08, 0.04, 0.02);
+  const mouthMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const mouth = new THREE.Mesh(mouthGeo, mouthMat);
+  mouth.position.set(0, 2.42, 0.2);
+  group.add(mouth);
+
+  // 12. Eerie purple aura light — bright enough to notice
+  const aura = new THREE.PointLight(0x6b21a8, 3.0, 12);
+  aura.position.y = 2.0;
   group.add(aura);
+
+  // 13. Secondary dim red under-light
+  const underLight = new THREE.PointLight(0x7f1d1d, 1.2, 6);
+  underLight.position.y = 0.5;
+  group.add(underLight);
 
   group.userData = {
     type: 'Ghost',
@@ -3186,30 +3321,28 @@ function animate() {
   }
 
   // --- Active bobbing and walk cycle limb animations ---
-  // Bob AI ghosts + Phasmophobia-style flickering
+  // Bob AI ghosts + flickering visibility
   ghosts3D.forEach(g => {
     const acc = g.userData.bobAccumulator || 0;
-    g.position.y = 0.15 + Math.sin(time * 0.002 + acc) * 0.08;
+    g.position.y = 0.1 + Math.sin(time * 0.0015 + acc) * 0.1;
 
-    // Flickering visibility — ghost phases in and out
-    g.userData.flickerTimer = (g.userData.flickerTimer || 0) + delta;
-    const flickerPhase = Math.sin(time * 0.005 + acc) * 0.5 
-                       + Math.sin(time * 0.013 + acc * 2) * 0.3 
-                       + Math.sin(time * 0.031 + acc * 3) * 0.2;
-    // Random glitch bursts
-    const glitchBurst = Math.random() < 0.005 ? 0.6 : 0;
-    const targetOpacity = Math.max(0.08, Math.min(0.4, 0.22 + flickerPhase * 0.15 + glitchBurst));
+    // Flickering visibility — ghost pulses in and out
+    const flickerPhase = Math.sin(time * 0.004 + acc) * 0.5 
+                       + Math.sin(time * 0.011 + acc * 2) * 0.3 
+                       + Math.sin(time * 0.027 + acc * 3) * 0.2;
+    const glitchBurst = Math.random() < 0.003 ? 0.25 : 0;
+    const targetOpacity = Math.max(0.35, Math.min(0.7, 0.5 + flickerPhase * 0.15 + glitchBurst));
     
     g.children.forEach(c => {
       if (c.isMesh && c.material && c.material.transparent) {
-        c.material.opacity = targetOpacity;
+        c.material.opacity = Math.min(targetOpacity, c.material.opacity + 0.4);
       }
     });
 
-    // Subtle arm sway
+    // Arm sway
     g.children.forEach(c => {
-      if (c.geometry && c.geometry.type === 'CylinderGeometry' && c.position.x !== 0) {
-        c.rotation.x = Math.sin(time * 0.002 + acc) * 0.15;
+      if (c.geometry && c.geometry.type === 'CylinderGeometry' && Math.abs(c.position.x) > 0.3) {
+        c.rotation.x = -0.2 + Math.sin(time * 0.002 + acc) * 0.25;
       }
     });
   });
@@ -3221,15 +3354,14 @@ function animate() {
     
     if (p.userData.type === 'Ghost') {
       const acc = p.userData.bobAccumulator || 0;
-      p.position.y = 0.15 + Math.sin(time * 0.002 + acc) * 0.08;
-      // Flickering for network ghosts too
-      const flickerPhase = Math.sin(time * 0.005 + acc) * 0.5 
-                         + Math.sin(time * 0.013 + acc * 2) * 0.3;
-      const glitchBurst = Math.random() < 0.005 ? 0.6 : 0;
-      const targetOpacity = Math.max(0.08, Math.min(0.4, 0.22 + flickerPhase * 0.12 + glitchBurst));
+      p.position.y = 0.1 + Math.sin(time * 0.0015 + acc) * 0.1;
+      const flickerPhase = Math.sin(time * 0.004 + acc) * 0.5 
+                         + Math.sin(time * 0.011 + acc * 2) * 0.3;
+      const glitchBurst = Math.random() < 0.003 ? 0.25 : 0;
+      const targetOpacity = Math.max(0.35, Math.min(0.7, 0.5 + flickerPhase * 0.12 + glitchBurst));
       p.children.forEach(c => {
         if (c.isMesh && c.material && c.material.transparent) {
-          c.material.opacity = targetOpacity;
+          c.material.opacity = Math.min(targetOpacity, c.material.opacity + 0.4);
         }
       });
     } else if (p.userData.type === 'Human') {
