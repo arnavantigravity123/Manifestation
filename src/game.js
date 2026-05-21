@@ -692,16 +692,33 @@ function generateMaze(keysCount = 8) {
     }
   }
 
-  // Draw the Master Gate — hidden until all escape conditions are met
+  // Draw the Master Gate — visible from the start, but locked
   gateCoordinates = { x: 0, z: - (mazeSize/2 * blockSize) + 4 };
   const gateGeo = new THREE.BoxGeometry(10, 4, 1);
-  const gateMat = new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.8, roughness: 0.2, transparent: true, opacity: 0.0 });
+  const gateMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.9, roughness: 0.1 }); // Dark metal locked state
   const gateMesh = new THREE.Mesh(gateGeo, gateMat);
   gateMesh.position.set(gateCoordinates.x, 2, gateCoordinates.z);
-  gateMesh.visible = false;
   gateMeshRef = gateMesh;
   scene.add(gateMesh);
   walls.push(gateMesh);
+
+  // Add a physical keypad to the door
+  const padGeo = new THREE.BoxGeometry(0.8, 1.2, 0.2);
+  const padMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
+  const padMesh = new THREE.Mesh(padGeo, padMat);
+  padMesh.position.set(2, 0, 0.6); // Offset relative to door
+  gateMesh.add(padMesh);
+
+  // Add 2 physical keyholes to the door
+  const holeGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.2, 16);
+  holeGeo.rotateX(Math.PI / 2);
+  const holeMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+  const hole1 = new THREE.Mesh(holeGeo, holeMat);
+  hole1.position.set(-2, 0.5, 0.5);
+  gateMesh.add(hole1);
+  const hole2 = new THREE.Mesh(holeGeo, holeMat);
+  hole2.position.set(-2, -0.5, 0.5);
+  gateMesh.add(hole2);
 
   // Spawn key collectibles in chests/lockers represented by boxes
   generateCollectibles(keysCount);
@@ -1589,18 +1606,16 @@ function deploySaltTrap() {
 // Keypad dialog helpers — queried lazily to avoid null refs at module load time
 let keypadUI, keypadScreen, keypadBtns, keypadClearBtn, keypadSubmitBtn, keypadCloseBtn;
 
-// Show the exit gate with an animation effect
+// Show the exit gate with an animation effect (now unlocks the already visible door)
 function showExitGate() {
   if (!gateMeshRef) return;
-  gateMeshRef.visible = true;
-  gateMeshRef.material.opacity = 1.0;
-  gateMeshRef.material.transparent = false;
-  // Flash the gate into existence with a growing emissive glow
-  gateMeshRef.material.emissive = new THREE.Color(0xef4444);
-  gateMeshRef.material.emissiveIntensity = 2.0;
+  // Flash the gate into unlocked state with a green emissive glow
+  gateMeshRef.material.color.setHex(0x10b981);
+  gateMeshRef.material.emissive = new THREE.Color(0x10b981);
+  gateMeshRef.material.emissiveIntensity = 1.0;
   setTimeout(() => {
     if (gateMeshRef) {
-      gateMeshRef.material.emissiveIntensity = 0.5;
+      gateMeshRef.material.emissiveIntensity = 0.3;
     }
   }, 1500);
   triggerNotification("⚠️ EXIT GATE UNLOCKED — Race to the Gate!");
@@ -1914,9 +1929,9 @@ function checkWinCondition() {
   const hasSecondKey = functionalKeysRevealed.length > 1 && carriedSymbols.includes(functionalKeysRevealed[1]);
   const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
-  // Reveal the exit gate when ALL conditions are satisfied for the first time
+  // Change gate material when ALL conditions are satisfied for the first time
   if (gateSolved && hasFirstKey && hasSecondKey && breakersFixed) {
-    if (gateMeshRef && !gateMeshRef.visible) {
+    if (gateMeshRef && gateMeshRef.material.emissiveIntensity === 0) {
       showExitGate();
     }
 
