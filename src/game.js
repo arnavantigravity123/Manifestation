@@ -1099,6 +1099,10 @@ function setupControls() {
   document.addEventListener('mousemove', (e) => {
     if (isMobileDevice) return;
     if (document.pointerLockElement !== document.getElementById('canvas-container') || isCaptured) return;
+    
+    // Ignore massive spikes caused by browser Pointer Lock bugs
+    if (Math.abs(e.movementX) > 200 || Math.abs(e.movementY) > 200) return;
+
     const sensitivity = window.lookSensitivity !== undefined ? window.lookSensitivity : 1.0;
     camera.rotation.y -= e.movementX * 0.002 * sensitivity;
     camera.rotation.x -= e.movementY * 0.002 * sensitivity;
