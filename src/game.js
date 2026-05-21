@@ -321,7 +321,7 @@ function setupInventory() {
     Banshee:     ["Ghost Claws", "Sound Scrambler"]
   };
 
-  inventory = myTeam === 'Human' ? (humanClasses[myClass] || []) : (ghostClasses[myClass] || []);
+  inventory = myTeam === 'Human' ? [...(humanClasses[myClass] || [])] : [...(ghostClasses[myClass] || [])];
   renderHUDInventory();
   
   // Set Class Display
@@ -1715,9 +1715,8 @@ function deployChalkDecal(pos) {
 }
 
 function removeItem(index) {
-  inventory.splice(index, 1);
+  inventory[index] = "";
   renderHUDInventory();
-  if (activeSlot >= inventory.length) activeSlot = Math.max(0, inventory.length - 1);
 }
 
 function deploySaltTrap() {
