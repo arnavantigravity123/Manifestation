@@ -79,6 +79,7 @@ let flashlightBattery = 100;
 let gateCoordinates = { x: 0, z: -35 };
 let gateMeshRef = null;  // Global ref so we can toggle visibility
 let gateSolved = false;
+let hasEscaped = false;
 let codeEntered = "";
 let functionalKeysRevealed = [];
 let foundKeysList = [];
@@ -124,6 +125,7 @@ export function initGame(socket, socketId, matchConfig) {
   currentSanity = 100;
   isPanicked = false;
   isCaptured = false;
+  hasEscaped = false;
   panicTimer = 0;
   speedBoostTimer = 0;
   latestSoundBeacon = null;
@@ -2230,7 +2232,8 @@ function checkWinCondition() {
     }
 
     const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
-    if (distToGate < 6) {
+    if (distToGate < 6 && !hasEscaped) {
+      hasEscaped = true;
       triggerNotification("master gate breached! escape successful!");
       socketClient.emit('chat_message', { msg: "=== VICTORY: HUMANS HAVE ESCAPED THE LABYRINTH ===" });
       socketClient.emit('human_escaped');
