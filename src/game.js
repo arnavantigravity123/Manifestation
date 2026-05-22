@@ -1005,6 +1005,35 @@ function realignMazeCorridors(realignmentState) {
 function setupControls() {
   const container = document.getElementById('canvas-container');
   const onKeyDown = (event) => {
+    // If keypad is open, intercept numeric keys and backspace
+    if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') {
+      if (event.code.startsWith('Digit') || event.code.startsWith('Numpad')) {
+        const num = event.code.replace('Digit', '').replace('Numpad', '');
+        if (num.length === 1 && num >= '0' && num <= '9') {
+          if (codeEntered.length < 4) {
+            codeEntered += num;
+            if (typeof keypadScreen !== 'undefined') {
+              keypadScreen.textContent = getKeypadDisplayString();
+            }
+          }
+          return; // Prevent other actions like changing inventory
+        }
+      } else if (event.code === 'Backspace') {
+        if (codeEntered.length > 0) {
+          codeEntered = codeEntered.slice(0, -1);
+          if (typeof keypadScreen !== 'undefined') {
+            keypadScreen.textContent = getKeypadDisplayString();
+          }
+        }
+        return;
+      } else if (event.code === 'Enter' || event.code === 'NumpadEnter') {
+        if (typeof keypadSubmitBtn !== 'undefined') {
+          keypadSubmitBtn.click();
+        }
+        return;
+      }
+    }
+
     switch (event.code) {
       case 'ArrowUp':
       case 'KeyW':
