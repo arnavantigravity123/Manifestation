@@ -2315,6 +2315,8 @@ function setupSocketListeners() {
         document.exitPointerLock();
         window.mobileGameActive = false;
         document.getElementById('hud-overlay').style.display = 'none';
+        const mobileCtrl = document.getElementById('mobile-controls-container');
+        if (mobileCtrl) mobileCtrl.style.display = 'none';
         document.getElementById('captured-overlay').style.display = 'flex';
       });
     } else if (players3D[targetId]) {
@@ -3158,6 +3160,8 @@ function animate() {
             document.exitPointerLock();
             window.mobileGameActive = false;
             document.getElementById('hud-overlay').style.display = 'none';
+            const mobileCtrl = document.getElementById('mobile-controls-container');
+            if (mobileCtrl) mobileCtrl.style.display = 'none';
             document.getElementById('captured-overlay').style.display = 'flex';
           });
         }
