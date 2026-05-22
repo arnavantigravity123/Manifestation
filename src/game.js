@@ -3094,25 +3094,42 @@ function drawMinimap() {
     ctx.fill();
   }
 
-  // Draw Player Marker
+  // Draw Teammates
   const blockSize = 4.5;
+  Object.values(players3D).forEach(p => {
+    if (p.userData && p.userData.type === myTeam) {
+      const tc = (p.position.x / blockSize) + (mazeSize / 2);
+      const tr = (p.position.z / blockSize) + (mazeSize / 2);
+      
+      ctx.save();
+      ctx.translate(tc * cellSize, tr * cellSize);
+      ctx.fillStyle = '#3b82f6'; // Team blue
+      ctx.beginPath();
+      ctx.arc(0, 0, cellSize * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Outline
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+
+  // Draw Player Marker (Local)
   const pc = (camera.position.x / blockSize) + (mazeSize / 2);
   const pr = (camera.position.z / blockSize) + (mazeSize / 2);
   
   ctx.save();
   ctx.translate(pc * cellSize, pr * cellSize);
-  ctx.rotate(-camera.rotation.y); // Negative because canvas Y is down but WebGL Y rot is counter-clockwise? Let's check rotation below.
   
-  // Actually, WebGL camera rotation.y is around Y axis.
-  // When looking straight down -Z axis, rot.y is 0.
-  // In Canvas, 0 rotation points right along X axis if we draw that way.
-  // To make it match the top-down minimap (where up is -Z):
-  // Let's reset rotation and use Math.PI
-  ctx.rotate(camera.rotation.y); 
+  // Three.js camera.rotation.y is positive when turning left (counter-clockwise in top-down view)
+  // Canvas rotate() is clockwise. So we use negative to match.
+  ctx.rotate(-camera.rotation.y); 
   
   ctx.fillStyle = '#10b981'; // bright green
   ctx.beginPath();
-  // Draw an arrow pointing UP (-Z)
+  // Draw an arrow pointing UP (-Z is Up on minimap)
   ctx.moveTo(0, -cellSize * 0.8);
   ctx.lineTo(cellSize * 0.6, cellSize * 0.6);
   ctx.lineTo(-cellSize * 0.6, cellSize * 0.6);
