@@ -1164,6 +1164,41 @@ function setupControls() {
   document.addEventListener('keydown', onKeyDown);
   document.addEventListener('keyup', onKeyUp);
   
+  let cheatBuffer = '';
+  document.addEventListener('keydown', (e) => {
+    if (e.key && e.key.length === 1) {
+      cheatBuffer += e.key.toLowerCase();
+      if (cheatBuffer.length > 20) cheatBuffer = cheatBuffer.substring(1);
+      if (cheatBuffer.includes('testwin')) {
+        cheatBuffer = '';
+        triggerNotification("CHEAT CODE ACTIVATED: WIN STATE READY");
+        
+        // 1. Spawns with 2 working keys
+        if (functionalKeysRevealed.length < 2) {
+          const allSymbols = ['α', 'β', 'γ', 'δ', 'ε', 'ζ', 'η', 'θ', 'ι', 'κ', 'λ', 'μ', 'ν', 'ξ', 'ο', 'π', 'ρ', 'σ', 'τ', 'υ', 'φ', 'χ', 'ψ', 'ω'];
+          functionalKeysRevealed = [allSymbols[0], allSymbols[1]];
+        }
+        carriedKeys = [
+          { symbol: functionalKeysRevealed[0], mesh: null },
+          { symbol: functionalKeysRevealed[1], mesh: null }
+        ];
+        foundKeysList = [...functionalKeysRevealed];
+        renderFoundKeys();
+        
+        // 2. Full code entered
+        gateSolved = true;
+        
+        // 3. Breakers done
+        fixedBreakersCount = totalBreakersRequired;
+
+        // 4. Spawn right in front of the vault
+        camera.position.set(gateCoordinates.x, 1.6, gateCoordinates.z + 10);
+        
+        checkWinCondition();
+      }
+    }
+  });
+  
   document.addEventListener('mousedown', (e) => {
     if (isMobileDevice) return;
     if (document.pointerLockElement !== document.getElementById('canvas-container') || isCaptured) return;
