@@ -1360,29 +1360,23 @@ function setupControls() {
       dropItemBtn.addEventListener('click', handleDropItem);
     }
 
-    // Sprint button — hold to sprint
+    // Sprint button — toggle: tap to start, tap again to stop
     const sprintBtn = document.getElementById('btn-mobile-sprint');
     if (sprintBtn) {
-      sprintBtn.addEventListener('touchstart', (e) => {
+      const handleSprintToggle = (e) => {
         if (!isMobileDevice) return;
         e.preventDefault();
         e.stopPropagation();
-        if (myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA && !isCaptured && window.gameReady) {
+        if (isSprinting) {
+          isSprinting = false;
+          sprintBtn.classList.remove('sprinting');
+        } else if (myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA && !isCaptured && window.gameReady) {
           isSprinting = true;
           sprintBtn.classList.add('sprinting');
         }
-      }, { passive: false });
-
-      sprintBtn.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        isSprinting = false;
-        sprintBtn.classList.remove('sprinting');
-      }, { passive: false });
-
-      sprintBtn.addEventListener('touchcancel', (e) => {
-        isSprinting = false;
-        sprintBtn.classList.remove('sprinting');
-      });
+      };
+      sprintBtn.addEventListener('touchstart', handleSprintToggle, { passive: false });
+      sprintBtn.addEventListener('click', handleSprintToggle);
     }
 
     const handlePause = (e) => {
@@ -2965,11 +2959,18 @@ function animate() {
       if (isSprinting && moving && stamina > 0) {
         speed *= 1.55; // sprint multiplier
         stamina = Math.max(0, stamina - STAMINA_DRAIN_RATE * delta);
-        if (stamina <= 0) isSprinting = false;
+        if (stamina <= 0) {
+          isSprinting = false;
+          const sb = document.getElementById('btn-mobile-sprint');
+          if (sb) sb.classList.remove('sprinting');
+        }
       } else {
-        isSprinting = false;
+        if (isSprinting) {
+          isSprinting = false;
+          const sb = document.getElementById('btn-mobile-sprint');
+          if (sb) sb.classList.remove('sprinting');
+        }
         stamina = Math.min(100, stamina + STAMINA_REGEN_RATE * delta);
-        // Prevent starting sprint if stamina too low
         if (stamina <= SPRINT_MIN_STAMINA) isSprinting = false;
       }
       // Update stamina bar
