@@ -1024,7 +1024,7 @@ function setupControls() {
           }
           return; // Prevent other actions like changing inventory
         }
-      } else if (event.code === 'Backspace') {
+      } else if (event.key === 'Backspace') {
         if (codeEntered.length > 0) {
           codeEntered = codeEntered.slice(0, -1);
           if (typeof keypadScreen !== 'undefined') {
@@ -1032,9 +1032,13 @@ function setupControls() {
           }
         }
         return;
-      } else if (event.code === 'Enter' || event.code === 'NumpadEnter') {
-        if (typeof keypadSubmitBtn !== 'undefined') {
-          keypadSubmitBtn.click();
+      } else if (event.key === 'Enter') {
+        if (codeEntered.length < 4) {
+          if (typeof triggerNotification === 'function') triggerNotification("Enter all 4 digits first.");
+        } else {
+          if (typeof socketClient !== 'undefined') socketClient.emit('try_cipher', codeEntered);
+          keypadUI.style.display = 'none';
+          codeEntered = '';
         }
         return;
       }
