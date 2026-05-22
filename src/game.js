@@ -183,6 +183,7 @@ export function initGame(socket, socketId, matchConfig) {
   }
 
   container.addEventListener('click', () => {
+    if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
     if (isMobileDevice) {
       window.mobileGameActive = true;
       ptrOverlay.style.display = 'none';
@@ -206,7 +207,12 @@ export function initGame(socket, socketId, matchConfig) {
     if (document.pointerLockElement === container) {
       ptrOverlay.style.display = 'none';
     } else {
-      ptrOverlay.style.display = 'flex';
+      // Don't show pause overlay if the keypad modal is open
+      if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') {
+        ptrOverlay.style.display = 'none';
+      } else {
+        ptrOverlay.style.display = 'flex';
+      }
     }
   });
 
