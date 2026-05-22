@@ -737,6 +737,7 @@ function generateMaze(keysCount = 8) {
   gateBlocker.position.set(gateCoordinates.x, 2, gateCoordinates.z - 0.5);
   scene.add(gateBlocker);
   walls.push(gateBlocker);
+  gateBlockerRef = gateBlocker;
 
   // Add a photorealistic keypad to the wall next to the door
   const padGeo = new THREE.PlaneGeometry(0.6, 0.9);
@@ -1532,8 +1533,23 @@ function checkInteractions() {
         if (socketClient) {
           socketClient.emit('human_escaped', { id: socketClient.id });
         }
-        triggerNotification("YOU ESCAPED THE LABYRINTH!");
-        showEndScreen("HUMANS WIN!", "The surviving humans escaped the manifestation.");
+        isCaptured = true; // Lock controls during cinematic
+        playEscapeCinematic(() => {
+          document.getElementById('hud-overlay').style.display = 'none';
+          document.exitPointerLock();
+          window.mobileGameActive = false;
+          // Show the end game overlay
+          const endOverlay = document.getElementById('end-game-overlay');
+          const endTitle = document.getElementById('end-game-title');
+          const endDetails = document.getElementById('end-game-details');
+          if (endOverlay && endTitle) {
+            endTitle.textContent = 'HUMANS WIN!';
+            endTitle.style.color = '#10b981';
+            endTitle.style.textShadow = '0 0 40px rgba(16,185,129,0.8)';
+            endDetails.innerHTML = '<p style="color:#ccc;font-size:1.3rem;">The surviving humans escaped the manifestation.</p>';
+            endOverlay.style.display = 'flex';
+          }
+        });
       } else {
         triggerNotification("master gate breached! escape successful!");
       }
@@ -2243,6 +2259,7 @@ function setupSocketListeners() {
   // Keypad failure penalty trigger
   socketClient.on('cipher_failed_penalty', ({ cooldownSeconds, revealSeconds }) => {
     triggerAlarmFlashing();
+    playWrongCodeAnimation();
     triggerNotification(`terminal lockout active (${cooldownSeconds}s) | outlines exposed (${revealSeconds}s)`);
   });
 
@@ -2281,11 +2298,13 @@ function setupSocketListeners() {
   socketClient.on('human_captured', ({ targetId }) => {
     if (targetId === myId) {
       isCaptured = true;
-      document.exitPointerLock();
-      window.mobileGameActive = false;
-      document.getElementById('hud-overlay').style.display = 'none';
-      document.getElementById('captured-overlay').style.display = 'flex';
       socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) was captured by a Ghost.` });
+      playGhostCaptureAnimation(() => {
+        document.exitPointerLock();
+        window.mobileGameActive = false;
+        document.getElementById('hud-overlay').style.display = 'none';
+        document.getElementById('captured-overlay').style.display = 'flex';
+      });
     } else if (players3D[targetId]) {
       scene.remove(players3D[targetId]);
       delete players3D[targetId];
@@ -2531,6 +2550,256 @@ function triggerNotification(text) {
   setTimeout(() => {
     box.style.display = 'none';
   }, 4000);
+}
+
+// ==========================================
+// CINEMATIC ANIMATION: WRONG CODE
+// ==========================================
+function playWrongCodeAnimation() {
+  const overlay = document.getElementById('wrong-code-overlay');
+  const text = document.getElementById('wrong-code-text');
+  const canvas = document.getElementById('canvas-container');
+  if (!overlay || !text) return;
+
+  overlay.style.display = 'block';
+  overlay.style.background = 'transparent';
+  
+  // Screen shake
+  let shakeCount = 0;
+  const shakeInterval = setInterval(() => {
+    const offX = (Math.random() - 0.5) * 18;
+    const offY = (Math.random() - 0.5) * 12;
+    canvas.style.transform = `translate(${offX}px, ${offY}px)`;
+    shakeCount++;
+    if (shakeCount > 20) {
+      clearInterval(shakeInterval);
+      canvas.style.transform = '';
+    }
+  }, 40);
+
+  // Red flash pulse
+  overlay.style.background = 'rgba(255, 0, 0, 0.25)';
+  setTimeout(() => { overlay.style.background = 'rgba(255, 0, 0, 0.15)'; }, 150);
+  setTimeout(() => { overlay.style.background = 'rgba(255, 0, 0, 0.25)'; }, 300);
+  setTimeout(() => { overlay.style.background = 'rgba(255, 0, 0, 0.1)'; }, 500);
+
+  // ACCESS DENIED text slam in
+  text.style.transition = 'none';
+  text.style.opacity = '0';
+  text.style.transform = 'translate(-50%, -50%) scale(2.5)';
+  
+  requestAnimationFrame(() => {
+    text.style.transition = 'opacity 0.2s ease, transform 0.3s cubic-bezier(0.17, 0.67, 0.21, 1.2)';
+    text.style.opacity = '1';
+    text.style.transform = 'translate(-50%, -50%) scale(1)';
+  });
+
+  // Fade out after 1.5s
+  setTimeout(() => {
+    text.style.transition = 'opacity 0.8s ease';
+    text.style.opacity = '0';
+  }, 1500);
+
+  setTimeout(() => {
+    overlay.style.display = 'none';
+    overlay.style.background = 'transparent';
+    text.style.opacity = '0';
+  }, 2500);
+}
+
+// ==========================================
+// CINEMATIC ANIMATION: ESCAPE / VICTORY
+// ==========================================
+let gateBlockerRef = null; // Will be set during maze building
+
+function playEscapeCinematic(callback) {
+  const overlay = document.getElementById('escape-cinematic-overlay');
+  const lbTop = document.getElementById('escape-letterbox-top');
+  const lbBottom = document.getElementById('escape-letterbox-bottom');
+  const flash = document.getElementById('escape-flash');
+  const escText = document.getElementById('escape-text');
+  if (!overlay) { if (callback) callback(); return; }
+
+  overlay.style.display = 'block';
+
+  // Phase 1: Letterbox bars slide in (cinematic framing)
+  setTimeout(() => {
+    lbTop.style.top = '0';
+    lbBottom.style.bottom = '0';
+  }, 100);
+
+  // Phase 2: Gate opens — slide the door mesh up over 2 seconds
+  if (gateMeshRef) {
+    const startY = gateMeshRef.position.y;
+    const targetY = startY + 5;
+    const startTime = performance.now();
+    const duration = 2000;
+    
+    const animateGate = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      gateMeshRef.position.y = startY + (targetY - startY) * eased;
+      
+      // Rumble effect during opening
+      if (progress < 1) {
+        const rumble = (1 - progress) * 3;
+        const rX = (Math.random() - 0.5) * rumble;
+        const rY = (Math.random() - 0.5) * rumble;
+        document.getElementById('canvas-container').style.transform = `translate(${rX}px, ${rY}px)`;
+        requestAnimationFrame(animateGate);
+      } else {
+        document.getElementById('canvas-container').style.transform = '';
+      }
+    };
+    requestAnimationFrame(animateGate);
+
+    // Remove the blocker so the player can conceptually walk through
+    if (gateBlockerRef) {
+      setTimeout(() => {
+        const idx = walls.indexOf(gateBlockerRef);
+        if (idx !== -1) walls.splice(idx, 1);
+        scene.remove(gateBlockerRef);
+      }, 1500);
+    }
+  }
+
+  // Phase 3: Camera auto-walk forward through the gate (after 2.5s)
+  setTimeout(() => {
+    const walkDuration = 1500;
+    const walkStart = performance.now();
+    const startZ = camera.position.z;
+    const walkTarget = startZ - 8; // Walk 8 units forward through the gate
+    
+    const walkAnim = (now) => {
+      const elapsed = now - walkStart;
+      const progress = Math.min(elapsed / walkDuration, 1);
+      const eased = progress * progress; // Ease in
+      camera.position.z = startZ + (walkTarget - startZ) * eased;
+      if (progress < 1) requestAnimationFrame(walkAnim);
+    };
+    requestAnimationFrame(walkAnim);
+  }, 2500);
+
+  // Phase 4: Bright white flash at 3.5s
+  setTimeout(() => {
+    flash.style.opacity = '1';
+  }, 3500);
+
+  // Phase 5: "ESCAPED" text appears at 4s
+  setTimeout(() => {
+    escText.style.transition = 'opacity 0.8s ease, transform 0.8s ease';
+    escText.style.opacity = '1';
+    escText.style.transform = 'translate(-50%, -50%) scale(1)';
+    flash.style.transition = 'opacity 1.5s ease';
+    flash.style.opacity = '0.3';
+  }, 4000);
+
+  // Phase 6: Clean up and show end screen at 6s
+  setTimeout(() => {
+    overlay.style.display = 'none';
+    lbTop.style.top = '-15%';
+    lbBottom.style.bottom = '-15%';
+    flash.style.opacity = '0';
+    escText.style.opacity = '0';
+    if (callback) callback();
+  }, 6000);
+}
+
+// ==========================================
+// CINEMATIC ANIMATION: GHOST CAPTURE
+// ==========================================
+function playGhostCaptureAnimation(callback) {
+  const overlay = document.getElementById('ghost-capture-overlay');
+  const vignette = document.getElementById('ghost-capture-vignette');
+  const captureText = document.getElementById('ghost-capture-text');
+  const staticEl = document.getElementById('ghost-capture-static');
+  const canvas = document.getElementById('canvas-container');
+  if (!overlay) { if (callback) callback(); return; }
+
+  overlay.style.display = 'block';
+
+  // Find closest ghost to create pull effect
+  let closestGhost = null;
+  let closestDist = Infinity;
+  ghosts3D.forEach(g => {
+    const d = camera.position.distanceTo(g.position);
+    if (d < closestDist) { closestDist = d; closestGhost = g; }
+  });
+
+  // Phase 1: Purple vignette closes in (0 - 1.5s)
+  vignette.style.background = 'radial-gradient(ellipse at center, transparent 30%, rgba(80,0,120,0.7) 100%)';
+  
+  // TV static flickers in
+  staticEl.style.transition = 'opacity 1s ease';
+  staticEl.style.opacity = '0.6';
+
+  // Camera shake + slight pull toward ghost
+  const shakeStart = performance.now();
+  const shakeDur = 2000;
+  const origPos = camera.position.clone();
+  
+  const shakeAnim = (now) => {
+    const elapsed = now - shakeStart;
+    const progress = Math.min(elapsed / shakeDur, 1);
+    
+    // Increasing shake intensity
+    const intensity = progress * 8;
+    const sX = (Math.random() - 0.5) * intensity;
+    const sY = (Math.random() - 0.5) * intensity;
+    canvas.style.transform = `translate(${sX}px, ${sY}px)`;
+    
+    // Slight camera pull toward ghost
+    if (closestGhost && progress < 0.8) {
+      const pullStrength = progress * 0.02;
+      const dir = new THREE.Vector3().subVectors(closestGhost.position, camera.position).normalize();
+      camera.position.x += dir.x * pullStrength;
+      camera.position.z += dir.z * pullStrength;
+      // Slowly rotate camera to face ghost
+      const targetAngle = Math.atan2(
+        closestGhost.position.x - camera.position.x,
+        closestGhost.position.z - camera.position.z
+      );
+      camera.rotation.y += (targetAngle - camera.rotation.y) * 0.02;
+    }
+    
+    if (progress < 1) requestAnimationFrame(shakeAnim);
+    else canvas.style.transform = '';
+  };
+  requestAnimationFrame(shakeAnim);
+
+  // Phase 2: Text appears at 1.2s
+  const captureMessages = [
+    "THE VOID CLAIMS YOU",
+    "YOU CANNOT ESCAPE",
+    "DRAGGED INTO DARKNESS",
+    "CONSUMED BY SHADOW"
+  ];
+  const msg = captureMessages[Math.floor(Math.random() * captureMessages.length)];
+  
+  setTimeout(() => {
+    captureText.textContent = msg;
+    captureText.style.transition = 'opacity 0.5s ease';
+    captureText.style.opacity = '1';
+  }, 1200);
+
+  // Phase 3: Full vignette closes in + screen goes dark
+  setTimeout(() => {
+    vignette.style.background = 'radial-gradient(ellipse at center, rgba(40,0,60,0.5) 0%, rgba(0,0,0,0.95) 70%)';
+    captureText.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+    captureText.style.transform = 'translate(-50%, -50%) scale(1.3)';
+  }, 2000);
+
+  // Phase 4: Full blackout and cleanup
+  setTimeout(() => {
+    overlay.style.display = 'none';
+    vignette.style.background = 'radial-gradient(ellipse at center, transparent 30%, rgba(80,0,120,0.0) 100%)';
+    captureText.style.opacity = '0';
+    captureText.style.transform = 'translate(-50%, -50%) scale(1)';
+    staticEl.style.opacity = '0';
+    if (callback) callback();
+  }, 3000);
 }
 
 function createHumanMeshGroup() {
@@ -2860,15 +3129,18 @@ function animate() {
         
         if (currentHP <= 0 && !isCaptured) {
           isCaptured = true;
-          // Trigger death logic
-          document.exitPointerLock();
-          window.mobileGameActive = false;
-          document.getElementById('captured-overlay').style.display = 'flex';
           
           if (socketClient) {
             socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) has been captured by the void.` });
             socketClient.emit('capture_human', { targetId: myId }); // Tell server we died!
           }
+
+          playGhostCaptureAnimation(() => {
+            document.exitPointerLock();
+            window.mobileGameActive = false;
+            document.getElementById('hud-overlay').style.display = 'none';
+            document.getElementById('captured-overlay').style.display = 'flex';
+          });
         }
       }
 

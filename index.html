@@ -327,6 +327,26 @@
     <div id="alarm-flash" class="fullscreen-alarm-overlay"></div>
     <div id="game-notification" class="notification-box">WARNING: INCORRECT CIPHER CODE! OUTLINES REVEALED!</div>
 
+    <!-- Wrong Code Animation Overlay -->
+    <div id="wrong-code-overlay" style="display: none; position: fixed; top:0; left:0; width:100%; height:100%; z-index: 9998; pointer-events: none;">
+      <div id="wrong-code-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Orbitron', sans-serif; font-size: 3.5rem; color: #ff2222; text-shadow: 0 0 30px rgba(255,0,0,0.8), 0 0 60px rgba(255,0,0,0.4); opacity: 0; letter-spacing: 8px; white-space: nowrap;">ACCESS DENIED</div>
+    </div>
+
+    <!-- Escape Cinematic Overlay -->
+    <div id="escape-cinematic-overlay" style="display: none; position: fixed; top:0; left:0; width:100%; height:100%; z-index: 9997; pointer-events: none; background: transparent;">
+      <div id="escape-letterbox-top" style="position: absolute; top: -15%; left: 0; width: 100%; height: 15%; background: black; transition: top 1s ease;"></div>
+      <div id="escape-letterbox-bottom" style="position: absolute; bottom: -15%; left: 0; width: 100%; height: 15%; background: black; transition: bottom 1s ease;"></div>
+      <div id="escape-flash" style="position: absolute; top:0; left:0; width:100%; height:100%; background: white; opacity: 0; transition: opacity 0.3s ease;"></div>
+      <div id="escape-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Orbitron', sans-serif; font-size: 4rem; color: #10b981; text-shadow: 0 0 40px rgba(16,185,129,0.9), 0 0 80px rgba(16,185,129,0.5); opacity: 0; letter-spacing: 6px; text-align: center; white-space: nowrap;">ESCAPED</div>
+    </div>
+
+    <!-- Ghost Capture Cinematic Overlay -->
+    <div id="ghost-capture-overlay" style="display: none; position: fixed; top:0; left:0; width:100%; height:100%; z-index: 9998; pointer-events: none;">
+      <div id="ghost-capture-vignette" style="position: absolute; top:0; left:0; width:100%; height:100%; background: radial-gradient(ellipse at center, transparent 30%, rgba(80,0,120,0.0) 100%); transition: background 1.5s ease;"></div>
+      <div id="ghost-capture-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Orbitron', sans-serif; font-size: 2.5rem; color: #a855f7; text-shadow: 0 0 30px rgba(168,85,247,0.8), 0 0 60px rgba(100,0,180,0.4); opacity: 0; letter-spacing: 5px; text-align: center;"></div>
+      <div id="ghost-capture-static" style="position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; mix-blend-mode: overlay; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px);"></div>
+    </div>
+
     <!-- 7. Settings Modal Overlay -->
     <div id="settings-modal" class="settings-modal" style="display: none;">
       <div class="settings-panel">
