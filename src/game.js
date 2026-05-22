@@ -1965,14 +1965,7 @@ function dropKey() {
 
   // Re-instantiate the 3D mesh
   const kt = KEY_TYPES.find(k => k.label === poppedKey.typeName) || KEY_TYPES[0];
-  const mat = new THREE.MeshStandardMaterial({ 
-    color: kt.color, 
-    emissive: kt.emissive, 
-    emissiveIntensity: 0.8,
-    metalness: 0.8,
-    roughness: 0.2
-  });
-  const mesh = new THREE.Mesh(kt.geo(), mat);
+  const mesh = createKeyMeshGroup(kt.color, kt.emissive);
   
   // Drop it slightly in front of the player
   const dropPos = new THREE.Vector3(0, 0, -2).applyQuaternion(camera.quaternion).add(camera.position);
@@ -2407,14 +2400,7 @@ function setupSocketListeners() {
 
   socketClient.on('key_dropped_sync', (data) => {
     const kt = KEY_TYPES.find(k => k.label === data.typeName) || KEY_TYPES[0];
-    const mat = new THREE.MeshStandardMaterial({ 
-      color: kt.color, 
-      emissive: kt.emissive, 
-      emissiveIntensity: 0.8,
-      metalness: 0.8,
-      roughness: 0.2
-    });
-    const mesh = new THREE.Mesh(kt.geo(), mat);
+    const mesh = createKeyMeshGroup(kt.color, kt.emissive);
     mesh.position.set(data.position.x, data.position.y, data.position.z);
     scene.add(mesh);
 
