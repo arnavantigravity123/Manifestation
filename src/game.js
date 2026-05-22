@@ -1810,7 +1810,7 @@ function useActiveItem() {
     let closestDist = 4.0;
     Object.keys(players3D).forEach(id => {
       const dist = camera.position.distanceTo(players3D[id].position);
-      const isHuman = players3D[id].material.color.getHex() === 0x3b82f6;
+      const isHuman = players3D[id].userData && players3D[id].userData.type === 'Human';
       if (isHuman && dist < closestDist) {
         closestDist = dist;
         closestId = id;
@@ -1828,7 +1828,7 @@ function useActiveItem() {
     let closestPos = null;
     Object.keys(players3D).forEach(id => {
       const dist = camera.position.distanceTo(players3D[id].position);
-      const isHuman = players3D[id].material.color.getHex() === 0x3b82f6;
+      const isHuman = players3D[id].userData && players3D[id].userData.type === 'Human';
       if (isHuman && dist < closestDist) {
         closestDist = dist;
         closestPos = players3D[id].position;
