@@ -1099,6 +1099,26 @@ function setupControls() {
         activeSlot = (activeSlot + 1) % inventory.length;
         renderHUDInventory();
         break;
+      case 'KeyM':
+        const wrapper = document.getElementById('minimap-wrapper');
+        const controls = document.getElementById('minimap-expanded-controls');
+        if (wrapper && controls && window.gameReady && myTeam === 'Human') {
+          if (!isMinimapExpanded) {
+            isMinimapExpanded = true;
+            wrapper.classList.add('expanded');
+            controls.style.display = 'block';
+            if (document.pointerLockElement) document.exitPointerLock();
+            drawMinimap();
+          } else {
+            isMinimapExpanded = false;
+            wrapper.classList.remove('expanded');
+            controls.style.display = 'none';
+            if (!isMobileDevice) {
+              document.getElementById('canvas-container').requestPointerLock();
+            }
+          }
+        }
+        break;
       case 'Digit1': if (inventory.length > 0) { activeSlot = 0; renderHUDInventory(); } break;
       case 'Digit2': if (inventory.length > 1) { activeSlot = 1; renderHUDInventory(); } break;
       case 'Digit3': if (inventory.length > 2) { activeSlot = 2; renderHUDInventory(); } break;
