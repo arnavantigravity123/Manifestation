@@ -132,7 +132,7 @@ io.on('connection', (socket) => {
     
     // If none found, create a new one
     if (!targetRoomId) {
-      targetRoomId = `public-${Math.floor(10000 + Math.random() * 90000)}`;
+      targetRoomId = Math.floor(100000 + Math.random() * 900000).toString();
       socket.emit('matchmaking_status', { msg: 'Created new public lobby.' });
     } else {
       socket.emit('matchmaking_status', { msg: 'Found public lobby. Joining...' });

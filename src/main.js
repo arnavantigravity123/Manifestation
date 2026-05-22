@@ -204,13 +204,13 @@ soloBtn.addEventListener('click', () => {
   soloLoadingOverlay.style.display = 'block';
   const s = initializeSocketConnection();
   
-  const roomId = `solo-${Math.floor(1000 + Math.random() * 9000)}`;
+  const roomId = Math.floor(100000 + Math.random() * 900000).toString();
   s.emit('join_room', { roomId, username: getUsername(), isPublic: false });
 });
 
 createPublicBtn.addEventListener('click', () => {
   const s = initializeSocketConnection();
-  const roomId = `pub-${Math.floor(10000 + Math.random() * 90000)}`;
+  const roomId = Math.floor(100000 + Math.random() * 900000).toString();
   s.emit('join_room', { roomId, username: getUsername(), isPublic: true });
 });
 
@@ -221,7 +221,7 @@ joinPublicBtn.addEventListener('click', () => {
 
 createPrivateBtn.addEventListener('click', () => {
   const s = initializeSocketConnection();
-  const roomId = `prv-${Math.floor(10000 + Math.random() * 90000)}`;
+  const roomId = Math.floor(100000 + Math.random() * 900000).toString();
   s.emit('join_room', { roomId, username: getUsername(), isPublic: false });
 });
 
