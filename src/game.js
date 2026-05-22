@@ -23,7 +23,7 @@ export function setMobileMode(mode) {
   if (isMobileDevice) {
     document.body.classList.add('is-mobile');
     if (document.pointerLockElement) {
-      document.exitPointerLock();
+      if (document.pointerLockElement) document.exitPointerLock();
     }
     const resumeTarget = document.getElementById('resume-click-target');
     if (resumeTarget) resumeTarget.textContent = 'TAP TO ENTER LABYRINTH';
@@ -1581,7 +1581,7 @@ function checkInteractions() {
         isCaptured = true; // Lock controls during cinematic
         playEscapeCinematic(() => {
           document.getElementById('hud-overlay').style.display = 'none';
-          document.exitPointerLock();
+          if (document.pointerLockElement) document.exitPointerLock();
           window.mobileGameActive = false;
           // Show the end game overlay
           const endOverlay = document.getElementById('end-game-overlay');
@@ -2346,7 +2346,7 @@ function setupSocketListeners() {
       isCaptured = true;
       socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) was captured by a Ghost.` });
       playGhostCaptureAnimation(() => {
-        document.exitPointerLock();
+        if (document.pointerLockElement) document.exitPointerLock();
         window.mobileGameActive = false;
         document.getElementById('hud-overlay').style.display = 'none';
         const mobileCtrl = document.getElementById('mobile-controls-container');
@@ -2436,7 +2436,7 @@ function setupSocketListeners() {
 
   socketClient.on('match_ended', ({ winner, summary }) => {
     // Exit pointer lock
-    document.exitPointerLock();
+    if (document.pointerLockElement) document.exitPointerLock();
     window.mobileGameActive = false;
 
     // Show the End Game Overlay
@@ -3371,7 +3371,7 @@ function animate() {
           }
 
           playGhostCaptureAnimation(() => {
-            document.exitPointerLock();
+            if (document.pointerLockElement) document.exitPointerLock();
             window.mobileGameActive = false;
             document.getElementById('hud-overlay').style.display = 'none';
             const mobileCtrl = document.getElementById('mobile-controls-container');
