@@ -1486,6 +1486,10 @@ function isLookingAtTarget(targetPos, maxDist, maxAngle = 0.6) {
 // Dynamically render on-screen keys/breaker/item interaction prompts in HUD
 function updateInteractionPrompt() {
   const promptEl = document.getElementById('interaction-prompt');
+  if (myTeam === 'Ghost') {
+    if (promptEl) promptEl.style.display = 'none';
+    return;
+  }
   if (!promptEl) return;
 
   if (myTeam !== 'Human' || isCaptured || !window.gameReady) {
@@ -1588,6 +1592,8 @@ function updateInteractionPrompt() {
 }
 
 function checkInteractions() {
+  if (myTeam === 'Ghost') return;
+
   // 1. Check proximity to Keypad Terminal (Master Gate)
   const gateVec = new THREE.Vector3(gateCoordinates.x, 2, gateCoordinates.z);
   const { looking: lookingAtGate, dist: distToGate } = isLookingAtTarget(gateVec, 6.0);
@@ -3109,7 +3115,7 @@ function drawMinimap() {
   // Draw discovered cells
   for (let r = 0; r < mazeSize; r++) {
     for (let c = 0; c < mazeSize; c++) {
-      if (visitedCells.has(`${r},${c}`)) {
+      if (myTeam === 'Ghost' || visitedCells.has(`${r},${c}`)) {
         const type = mazeLayout[r][c];
         if (type === 1) {
           // Wall
