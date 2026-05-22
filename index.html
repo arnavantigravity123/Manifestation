@@ -217,6 +217,21 @@
           </div>
         </div>
 
+        <!-- Minimap UI (Top Right) -->
+        <div id="minimap-wrapper" class="interactive-hud">
+          <div id="minimap-header">MINIMAP <span>(Click to Expand)</span></div>
+          <div id="minimap-container">
+            <canvas id="minimap-canvas" width="200" height="200"></canvas>
+          </div>
+          <!-- Expanded UI buttons -->
+          <div id="minimap-expanded-controls" style="display: none;">
+            <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">Click map to place a mark</div>
+            <button id="minimap-btn-clear" class="minimap-btn">Clear Marks</button>
+            <button id="minimap-btn-close" class="minimap-btn" style="background: rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.8);">Close [X]</button>
+          </div>
+        </div>
+
+
         <!-- Center: Interactive Crosshair -->
         <div class="crosshair"></div>
         <div id="interaction-prompt"></div>

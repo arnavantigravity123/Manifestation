@@ -614,6 +614,92 @@ input[type="text"]:focus {
   text-transform: uppercase;
 }
 
+/* Minimap UI */
+#minimap-wrapper {
+  position: absolute;
+  top: 130px; /* Below the terminal status */
+  right: 20px;
+  background: rgba(10, 15, 30, 0.85);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+  padding: 0.5rem;
+  border-radius: 8px;
+  pointer-events: auto;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  z-index: 50;
+  cursor: pointer;
+}
+
+#minimap-wrapper:hover {
+  border-color: rgba(16, 185, 129, 0.6);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+}
+
+#minimap-header {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+#minimap-header span {
+  font-size: 0.6rem;
+  opacity: 0.7;
+}
+
+#minimap-container {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #000;
+  border-radius: 4px;
+}
+
+#minimap-canvas {
+  display: block;
+}
+
+/* Expanded Minimap State */
+#minimap-wrapper.expanded {
+  top: 50%;
+  right: 50%;
+  transform: translate(50%, -50%);
+  padding: 1.5rem;
+  border-color: rgba(16, 185, 129, 0.8);
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.5);
+  z-index: 9999;
+  cursor: crosshair;
+}
+
+#minimap-wrapper.expanded #minimap-container {
+  /* Scale the canvas visually using CSS without changing its resolution, or we redraw it at higher res */
+  width: 400px;
+  height: 400px;
+}
+
+#minimap-wrapper.expanded #minimap-canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.minimap-btn {
+  margin-top: 10px;
+  padding: 0.5rem 1rem;
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  color: white;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.minimap-btn:hover {
+  background: rgba(16, 185, 129, 0.4);
+}
+
 /* Bottom HUD (Inventory & Sensors) */
 .hud-bottom {
   display: flex;

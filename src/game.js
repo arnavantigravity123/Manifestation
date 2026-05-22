@@ -93,6 +93,11 @@ let micStream = null;
 let audioAnalyser = null;
 let audioDataArray = null;
 
+// Minimap variables
+let visitedCells = new Set();
+let mapMarks = [];
+let isMinimapExpanded = false;
+
 let seededRandom = Math.random;
 
 function mulberry32(a) {
@@ -130,6 +135,11 @@ export function initGame(socket, socketId, matchConfig) {
   codeClueNotes = [];
   inventory = [];
   activeSlot = 0;
+  visitedCells.clear();
+  mapMarks = [];
+  isMinimapExpanded = false;
+
+  setupMinimap();
 
   // Reset HUD visuals
   flashlightBattery = 100;
@@ -184,6 +194,7 @@ export function initGame(socket, socketId, matchConfig) {
 
   container.addEventListener('click', () => {
     if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
+    if (isMinimapExpanded) return;
     if (isMobileDevice) {
       window.mobileGameActive = true;
       ptrOverlay.style.display = 'none';
@@ -207,8 +218,8 @@ export function initGame(socket, socketId, matchConfig) {
     if (document.pointerLockElement === container) {
       ptrOverlay.style.display = 'none';
     } else {
-      // Don't show pause overlay if the keypad modal is open
-      if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') {
+      // Don't show pause overlay if the keypad modal or minimap is open
+      if ((typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') || isMinimapExpanded) {
         ptrOverlay.style.display = 'none';
       } else {
         ptrOverlay.style.display = 'flex';
@@ -2928,6 +2939,169 @@ function spawnGhostAIs(count) {
   }
 }
 
+// ==========================================
+// MINIMAP LOGIC
+// ==========================================
+let minimapSetupDone = false;
+function setupMinimap() {
+  if (minimapSetupDone) return;
+  const wrapper = document.getElementById('minimap-wrapper');
+  const canvas = document.getElementById('minimap-canvas');
+  const controls = document.getElementById('minimap-expanded-controls');
+  const btnClose = document.getElementById('minimap-btn-close');
+  const btnClear = document.getElementById('minimap-btn-clear');
+
+  if (!wrapper || !canvas) return;
+  minimapSetupDone = true;
+
+  // Toggle map expansion
+  wrapper.addEventListener('click', (e) => {
+    // Ignore clicks on buttons inside the wrapper
+    if (e.target.tagName === 'BUTTON') return;
+    
+    if (!isMinimapExpanded) {
+      isMinimapExpanded = true;
+      wrapper.classList.add('expanded');
+      controls.style.display = 'block';
+      if (document.pointerLockElement) document.exitPointerLock();
+      drawMinimap(); // Redraw immediately
+    } else {
+      // If clicking directly on the canvas while expanded, drop a mark
+      if (e.target.id === 'minimap-canvas') {
+        const rect = canvas.getBoundingClientRect();
+        // Since canvas CSS width is 400px but internal is 200px
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        const px = (e.clientX - rect.left) * scaleX;
+        const py = (e.clientY - rect.top) * scaleY;
+        
+        // Map canvas coordinates to grid
+        const mazeSize = 35;
+        const cellSize = canvas.width / mazeSize;
+        const c = Math.floor(px / cellSize);
+        const r = Math.floor(py / cellSize);
+        
+        if (c >= 0 && c < mazeSize && r >= 0 && r < mazeSize) {
+          mapMarks.push({r, c});
+          drawMinimap();
+        }
+      }
+    }
+  });
+
+  btnClose.addEventListener('click', (e) => {
+    e.stopPropagation(); // prevent wrapper click
+    isMinimapExpanded = false;
+    wrapper.classList.remove('expanded');
+    controls.style.display = 'none';
+    if (!isMobileDevice) {
+      document.getElementById('canvas-container').requestPointerLock();
+    }
+  });
+
+  btnClear.addEventListener('click', (e) => {
+    e.stopPropagation();
+    mapMarks = [];
+    drawMinimap();
+  });
+}
+
+function updateMinimapVisibility() {
+  if (!window.mazeLayout) return;
+  const mazeSize = 35;
+  const blockSize = 4.5;
+  
+  // Calculate current grid cell
+  const px = camera.position.x;
+  const pz = camera.position.z;
+  const c = Math.floor((px / blockSize) + (mazeSize / 2));
+  const r = Math.floor((pz / blockSize) + (mazeSize / 2));
+  
+  // Mark current and adjacent cells as visited
+  for (let dr = -2; dr <= 2; dr++) {
+    for (let dc = -2; dc <= 2; dc++) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr >= 0 && nr < mazeSize && nc >= 0 && nc < mazeSize) {
+        // Simple distance check for circular vision
+        if (dr*dr + dc*dc <= 5) {
+          const key = `${nr},${nc}`;
+          if (!visitedCells.has(key)) {
+            visitedCells.add(key);
+          }
+        }
+      }
+    }
+  }
+}
+
+function drawMinimap() {
+  const canvas = document.getElementById('minimap-canvas');
+  if (!canvas || !window.mazeLayout) return;
+  const ctx = canvas.getContext('2d');
+  
+  const mazeSize = 35;
+  const cellSize = canvas.width / mazeSize;
+  
+  // Clear canvas
+  ctx.fillStyle = '#050a10';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw discovered cells
+  for (let r = 0; r < mazeSize; r++) {
+    for (let c = 0; c < mazeSize; c++) {
+      if (visitedCells.has(`${r},${c}`)) {
+        const type = window.mazeLayout[r][c];
+        if (type === 1) {
+          // Wall
+          ctx.fillStyle = '#1e293b'; 
+          ctx.fillRect(c * cellSize, r * cellSize, cellSize + 0.5, cellSize + 0.5);
+        } else {
+          // Floor
+          ctx.fillStyle = '#64748b';
+          ctx.fillRect(c * cellSize, r * cellSize, cellSize + 0.5, cellSize + 0.5);
+        }
+      }
+    }
+  }
+
+  // Draw Marks
+  ctx.fillStyle = '#0ea5e9'; // bright blue
+  for (const mark of mapMarks) {
+    ctx.beginPath();
+    ctx.arc((mark.c + 0.5) * cellSize, (mark.r + 0.5) * cellSize, cellSize * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Draw Player Marker
+  const blockSize = 4.5;
+  const pc = (camera.position.x / blockSize) + (mazeSize / 2);
+  const pr = (camera.position.z / blockSize) + (mazeSize / 2);
+  
+  ctx.save();
+  ctx.translate(pc * cellSize, pr * cellSize);
+  ctx.rotate(-camera.rotation.y); // Negative because canvas Y is down but WebGL Y rot is counter-clockwise? Let's check rotation below.
+  
+  // Actually, WebGL camera rotation.y is around Y axis.
+  // When looking straight down -Z axis, rot.y is 0.
+  // In Canvas, 0 rotation points right along X axis if we draw that way.
+  // To make it match the top-down minimap (where up is -Z):
+  // Let's reset rotation and use Math.PI
+  ctx.rotate(camera.rotation.y); 
+  
+  ctx.fillStyle = '#10b981'; // bright green
+  ctx.beginPath();
+  // Draw an arrow pointing UP (-Z)
+  ctx.moveTo(0, -cellSize * 0.8);
+  ctx.lineTo(cellSize * 0.6, cellSize * 0.6);
+  ctx.lineTo(-cellSize * 0.6, cellSize * 0.6);
+  ctx.closePath();
+  ctx.fill();
+  
+  ctx.restore();
+}
+
 // 3D Game Loop rendering
 let networkTimer = 0;
 function animate() {
@@ -3463,6 +3637,12 @@ function animate() {
   const readyToSpawn = isMobileDevice ? (window.gameReady && window.mobileGameActive) : (window.gameReady && document.pointerLockElement === document.getElementById('canvas-container'));
   if (ghosts3D.length === 0 && currentLobby && currentLobby.settings.ghostsCount > 0 && readyToSpawn) {
     spawnGhostAIs(currentLobby.settings.ghostsCount);
+  }
+
+  // Update and draw Minimap
+  if (window.gameReady && myTeam === 'Human') {
+    updateMinimapVisibility();
+    drawMinimap();
   }
 
   renderer.render(scene, camera);
