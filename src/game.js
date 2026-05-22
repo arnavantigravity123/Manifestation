@@ -1300,13 +1300,6 @@ function setupControls() {
       moveBackward = joyY > 0.2;
       moveLeft = joyX < -0.2;
       moveRight = joyX > 0.2;
-      
-      // Auto-sprint if joystick pushed far enough
-      if (dist > maxJoystickDistance * 0.85) {
-        isSprinting = true;
-      } else {
-        isSprinting = false;
-      }
     }
 
     // Action button bindings using touchstart & click for instant response
@@ -1365,6 +1358,31 @@ function setupControls() {
       };
       dropItemBtn.addEventListener('touchstart', handleDropItem, { passive: false });
       dropItemBtn.addEventListener('click', handleDropItem);
+    }
+
+    // Sprint button — hold to sprint
+    const sprintBtn = document.getElementById('btn-mobile-sprint');
+    if (sprintBtn) {
+      sprintBtn.addEventListener('touchstart', (e) => {
+        if (!isMobileDevice) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA && !isCaptured && window.gameReady) {
+          isSprinting = true;
+          sprintBtn.classList.add('sprinting');
+        }
+      }, { passive: false });
+
+      sprintBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        isSprinting = false;
+        sprintBtn.classList.remove('sprinting');
+      }, { passive: false });
+
+      sprintBtn.addEventListener('touchcancel', (e) => {
+        isSprinting = false;
+        sprintBtn.classList.remove('sprinting');
+      });
     }
 
     const handlePause = (e) => {

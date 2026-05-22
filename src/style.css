@@ -907,6 +907,37 @@ body.is-mobile #joystick-knob {
   box-shadow: 0 0 10px var(--primary-accent);
 }
 
+body.is-mobile .mobile-sprint-btn {
+  position: absolute;
+  bottom: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 110px;
+  padding: 0.65rem 0;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: white;
+  background: linear-gradient(135deg, #0ea5e9, #0369a1);
+  border: 1px solid rgba(14, 165, 233, 0.5);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+  text-align: center;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body.is-mobile .mobile-sprint-btn:active,
+body.is-mobile .mobile-sprint-btn.sprinting {
+  transform: translateX(-50%) scale(0.93);
+  background: linear-gradient(135deg, #38bdf8, #0284c7);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.6), 0 4px 12px rgba(14, 165, 233, 0.4);
+  border-color: rgba(56, 189, 248, 0.8);
+}
+
 body.is-mobile #mobile-actions {
   position: absolute;
   bottom: 22%;
