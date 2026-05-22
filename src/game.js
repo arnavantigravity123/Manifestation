@@ -3008,7 +3008,7 @@ function setupMinimap() {
 }
 
 function updateMinimapVisibility() {
-  if (!window.mazeLayout) return;
+  if (!mazeLayout || mazeLayout.length === 0) return;
   const mazeSize = 35;
   const blockSize = 4.5;
   
@@ -3038,7 +3038,7 @@ function updateMinimapVisibility() {
 
 function drawMinimap() {
   const canvas = document.getElementById('minimap-canvas');
-  if (!canvas || !window.mazeLayout) return;
+  if (!canvas || !mazeLayout || mazeLayout.length === 0) return;
   const ctx = canvas.getContext('2d');
   
   const mazeSize = 35;
@@ -3052,7 +3052,7 @@ function drawMinimap() {
   for (let r = 0; r < mazeSize; r++) {
     for (let c = 0; c < mazeSize; c++) {
       if (visitedCells.has(`${r},${c}`)) {
-        const type = window.mazeLayout[r][c];
+        const type = mazeLayout[r][c];
         if (type === 1) {
           // Wall
           ctx.fillStyle = '#1e293b'; 
