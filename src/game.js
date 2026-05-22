@@ -1842,10 +1842,10 @@ function useActiveItem() {
 
 function deployChalkDecal(pos) {
   const geo = new THREE.PlaneGeometry(1.5, 1.5);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.8 });
+  const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(pos.x, 0.02, pos.z);
+  mesh.position.set(pos.x, 0.05, pos.z);
   scene.add(mesh);
 }
 
