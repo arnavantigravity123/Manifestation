@@ -417,18 +417,19 @@ function renderCarriedKeysHUD() {
     if (i < carriedKeys.length) {
       const k = carriedKeys[i];
       const isReal = functionalKeysRevealed.includes(k.symbol);
-      const color = keyColors[k.typeName] || '#ffffff';
+      const typeName = k.typeName || 'Unknown Key';
+      const color = keyColors[typeName] || '#ffffff';
       slot.style.borderColor = color;
       slot.style.background = `${color}18`;
       slot.style.boxShadow = isReal ? `0 0 8px ${color}` : 'none';
 
       const icon = document.createElement('div');
-      icon.textContent = keyIcons[k.typeName] || '🗝️';
+      icon.textContent = keyIcons[typeName] || '🗝️';
       icon.style.fontSize = '1rem';
       slot.appendChild(icon);
 
       const label = document.createElement('div');
-      label.textContent = k.typeName.split(' ')[0]; // "Amber", "Sapphire", etc.
+      label.textContent = typeName.split(' ')[0]; // "Amber", "Sapphire", etc.
       label.style.fontSize = '0.55rem';
       label.style.color = color;
       label.style.textAlign = 'center';
@@ -1179,8 +1180,8 @@ function setupControls() {
           functionalKeysRevealed = [allSymbols[0], allSymbols[1]];
         }
         carriedKeys = [
-          { symbol: functionalKeysRevealed[0], mesh: null },
-          { symbol: functionalKeysRevealed[1], mesh: null }
+          { symbol: functionalKeysRevealed[0], typeName: 'Amber Key', mesh: null },
+          { symbol: functionalKeysRevealed[1], typeName: 'Sapphire Key', mesh: null }
         ];
         foundKeysList = [...functionalKeysRevealed];
         renderFoundKeys();
