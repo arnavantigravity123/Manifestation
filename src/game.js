@@ -1156,6 +1156,9 @@ function setupControls() {
           if (typeof socketClient !== 'undefined') socketClient.emit('try_cipher', codeEntered);
           keypadUI.style.display = 'none';
           codeEntered = '';
+          if (!window.isMobileDevice) {
+            document.getElementById('canvas-container').requestPointerLock();
+          }
         }
         return;
       }
@@ -2104,6 +2107,9 @@ function setupKeypadListeners() {
   const closeKeypad = () => {
     keypadUI.style.display = 'none';
     codeEntered = '';
+    if (!window.isMobileDevice) {
+      document.getElementById('canvas-container').requestPointerLock();
+    }
   };
 
   keypadCloseBtn.addEventListener('click', closeKeypad);
