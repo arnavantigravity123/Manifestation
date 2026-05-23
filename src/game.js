@@ -2418,14 +2418,6 @@ function checkWinCondition() {
     if (gateMeshRef && gateMeshRef.material.emissiveIntensity === 0) {
       showExitGate();
     }
-
-    const distToGate = camera.position.distanceTo(new THREE.Vector3(gateCoordinates.x, camera.position.y, gateCoordinates.z));
-    if (distToGate < 6 && !hasEscaped) {
-      hasEscaped = true;
-      triggerNotification("master gate breached! escape successful!");
-      socketClient.emit('chat_message', { msg: "=== VICTORY: HUMANS HAVE ESCAPED THE LABYRINTH ===" });
-      socketClient.emit('human_escaped');
-    }
   }
 }
 
