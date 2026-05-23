@@ -2468,7 +2468,15 @@ function setupSocketListeners() {
     gateSolved = true;
     functionalKeysRevealed = realKeySymbols;
 
-    triggerNotification(`cipher solved! twin keys revealed: [${realKeySymbols.join(', ')}]`);
+    const carriedSymbols = carriedKeys.map(k => k.symbol);
+    const hasFirstKey = carriedSymbols.includes(realKeySymbols[0]);
+    const hasSecondKey = carriedSymbols.includes(realKeySymbols[1]);
+
+    if (hasFirstKey && hasSecondKey) {
+      triggerNotification(`cipher solved! twin keys revealed: [${realKeySymbols.join(', ')}]. PRESS E ON GATE TO ESCAPE!`);
+    } else {
+      triggerNotification(`cipher solved! twin keys revealed: [${realKeySymbols.join(', ')}]`);
+    }
     
     const lockLabel = document.getElementById('terminal-lock-label');
     lockLabel.textContent = "Twin Keys Required";
