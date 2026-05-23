@@ -281,7 +281,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    const keySymbols = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa'];
+    const keySymbols = ['Amber Key', 'Sapphire Key', 'Violet Key', 'Emerald Key', 'Ruby Key', 'Topaz Key', 'Opal Key', 'Quartz Key', 'Onyx Key', 'Pearl Key'];
     const keys = [];
     for (let i = 0; i < keysCount; i++) {
       keys.push({
