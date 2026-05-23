@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+0: import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
@@ -3647,8 +3647,6 @@ function animate() {
       // Breaker Remote freezes all ghost movement
       if (window.ghostsFrozen) return;
 
-      const distToPlayer = ghost.position.distanceTo(new THREE.Vector3(camera.position.x, ghost.position.y, camera.position.z));
-
       // Damage check uses actual distance to PLAYER
       applyGhostDamageToHuman(ghost.position);
       checkChalkDecals(ghost.position);
@@ -3959,3 +3957,4 @@ function animate() {
 
   renderer.render(scene, camera);
 }
+\n
