@@ -6,9 +6,18 @@ let preloadedGhostModel = null;
 const gltfLoader = new GLTFLoader();
 gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
   preloadedGhostModel = gltf.scene;
-  // Meshy AI scale adjustments - make it massive and terrifying
-  preloadedGhostModel.scale.set(4.5, 4.5, 4.5);
-  preloadedGhostModel.position.y = 1.0; // Hover slightly above ground
+  // Meshy AI scale adjustments - reduced scale based on feedback
+  preloadedGhostModel.scale.set(2.5, 2.5, 2.5);
+  
+  // Center the model's pivot point so it rotates in place instead of sweeping
+  const box = new THREE.Box3().setFromObject(preloadedGhostModel);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  
+  // Offset the children so the pivot is at the exact center bottom
+  preloadedGhostModel.position.x = -center.x;
+  preloadedGhostModel.position.z = -center.z;
+  preloadedGhostModel.position.y = -box.min.y + 0.2; // Hover slightly above ground
   
   preloadedGhostModel.traverse((child) => {
     if (child.isMesh) {
@@ -25,8 +34,13 @@ gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
     const spriteChild = group.children.find(c => c.isSprite);
     if (spriteChild) {
       group.remove(spriteChild);
+      
+      // Wrap the centered model in an anchor group so the centering isn't lost during rotation
       const clone = SkeletonUtils.clone(preloadedGhostModel);
-      group.add(clone);
+      const anchorGroup = new THREE.Group();
+      anchorGroup.add(clone);
+      
+      group.add(anchorGroup);
       
       // Re-apply thermal materials
       const thermalMat = new THREE.MeshBasicMaterial({ 
@@ -2988,7 +3002,9 @@ function createGhostMeshGroup() {
   
   if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
-    group.add(clone);
+    const anchorGroup = new THREE.Group();
+    anchorGroup.add(clone);
+    group.add(anchorGroup);
   } else {
     // Fallback to sprite
     const spriteMat = new THREE.SpriteMaterial({ 
