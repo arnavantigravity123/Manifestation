@@ -3,7 +3,31 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 let preloadedGhostModel = null;
+let preloadedHumanModel = null;
 const gltfLoader = new GLTFLoader();
+
+gltfLoader.load('/assets/human_model.glb', (gltf) => {
+  preloadedHumanModel = gltf.scene;
+  preloadedHumanModel.scale.set(1.5, 1.5, 1.5);
+  
+  const box = new THREE.Box3().setFromObject(preloadedHumanModel);
+  const center = box.getCenter(new THREE.Vector3());
+  
+  preloadedHumanModel.position.x = -center.x;
+  preloadedHumanModel.position.z = -center.z;
+  preloadedHumanModel.position.y = -box.min.y; 
+  
+  preloadedHumanModel.traverse((child) => {
+    if (child.isMesh) {
+      if (child.material) {
+        child.material.transparent = true;
+        child.material.opacity = 1.0;
+        child.material.depthWrite = true;
+      }
+      child.castShadow = true;
+    }
+  });
+});
 gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
   preloadedGhostModel = gltf.scene;
   // Meshy AI scale adjustments - reduced scale based on feedback
@@ -3031,18 +3055,23 @@ function playGhostCaptureAnimation(callback) {
 function createHumanMeshGroup() {
   const group = new THREE.Group();
   
-  const spriteMat = new THREE.SpriteMaterial({ 
-    map: new THREE.TextureLoader().load('/assets/human_sprite.png'), 
-    color: 0xffffff,
-    fog: true,
-    transparent: true,
-    blending: THREE.AdditiveBlending, // Use additive to hide the black background
-    depthWrite: false
-  });
-  const sprite = new THREE.Sprite(spriteMat);
-  sprite.scale.set(1.5, 2.8, 1);
-  sprite.position.y = 1.4;
-  group.add(sprite);
+  if (preloadedHumanModel) {
+    const clone = SkeletonUtils.clone(preloadedHumanModel);
+    group.add(clone);
+  } else {
+    const spriteMat = new THREE.SpriteMaterial({ 
+      map: new THREE.TextureLoader().load('/assets/human_sprite.png'), 
+      color: 0xffffff,
+      fog: true,
+      transparent: true,
+      blending: THREE.AdditiveBlending, // Use additive to hide the black background
+      depthWrite: false
+    });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.scale.set(1.5, 2.8, 1);
+    sprite.position.y = 1.4;
+    group.add(sprite);
+  }
 
   // Keep userData compatible with the animation loop
   group.userData = {
