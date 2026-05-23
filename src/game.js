@@ -841,6 +841,7 @@ function generateMaze(keysCount = 8) {
   const gateBlockerMat = new THREE.MeshBasicMaterial({ visible: false });
   const gateBlocker = new THREE.Mesh(gateBlockerGeo, gateBlockerMat);
   gateBlocker.position.set(gateCoordinates.x, 2, gateCoordinates.z - 0.5);
+  gateBlocker.userData = { halfSizeX: 4.5 / 2, halfSizeZ: 1 / 2 };
   scene.add(gateBlocker);
   walls.push(gateBlocker);
   gateBlockerRef = gateBlocker;
@@ -3494,8 +3495,11 @@ function animate() {
         const wx = wall.position.x;
         const wz = wall.position.z;
         
-        const overlapX = (wallHalfSize + playerRadius) - Math.abs(px - wx);
-        const overlapZ = (wallHalfSize + playerRadius) - Math.abs(pz - wz);
+        const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : wallHalfSize;
+        const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : wallHalfSize;
+        
+        const overlapX = (hx + playerRadius) - Math.abs(px - wx);
+        const overlapZ = (hz + playerRadius) - Math.abs(pz - wz);
         
         if (overlapX > 0 && overlapZ > 0) {
           if (overlapX < overlapZ) {
