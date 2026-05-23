@@ -19,6 +19,35 @@ gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
       }
     }
   });
+
+  // Retroactively replace any fallback sprites that spawned while we were loading
+  const replaceSpriteWithModel = (group) => {
+    const spriteChild = group.children.find(c => c.isSprite);
+    if (spriteChild) {
+      group.remove(spriteChild);
+      const clone = SkeletonUtils.clone(preloadedGhostModel);
+      group.add(clone);
+      
+      // Re-apply thermal materials
+      const thermalMat = new THREE.MeshBasicMaterial({ 
+        color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
+      });
+      group.traverse(c => {
+        if (c.isMesh) {
+          c.userData.normalMat = c.material;
+          c.userData.thermalMat = thermalMat;
+        }
+      });
+    }
+  };
+
+  if (typeof ghosts3D !== 'undefined') ghosts3D.forEach(replaceSpriteWithModel);
+  if (typeof players3D !== 'undefined') {
+    Object.values(players3D).forEach(p => {
+      if (p.userData && p.userData.type === 'Ghost') replaceSpriteWithModel(p);
+    });
+  }
+
   console.log("Ghost 3D model loaded successfully!");
 }, undefined, (error) => {
   console.error("Failed to load ghost model:", error);
