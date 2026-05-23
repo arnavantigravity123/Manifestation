@@ -166,8 +166,22 @@ io.on('connection', (socket) => {
         puzzleState: null,
       };
     } else if (lobbies[roomId].gameStarted) {
-      socket.emit('error_message', { msg: "Cannot join, game has already started." });
-      socket.leave(roomId);
+      // Allow rejoining players to wait in the lobby while the game is still active
+      const lobby = lobbies[roomId];
+      const isHost = Object.keys(lobby.players).length === 0;
+
+      lobby.players[socket.id] = {
+        id: socket.id,
+        username: username || `Survivor #${Math.floor(1000 + Math.random() * 9000)}`,
+        team: 'Human',
+        characterClass: 'Locksmith',
+        isHost: isHost,
+        isReady: false,
+        isCaptured: true // Start captured so they don't prevent the match from ending
+      };
+
+      socket.emit('joined_room_success', { roomId, isPublic: lobby.isPublic });
+      io.to(roomId).emit('lobby_update', lobby);
       return;
     }
 

@@ -410,6 +410,9 @@ window.addEventListener('DOMContentLoaded', () => {
   const rejoinSoloStr = sessionStorage.getItem('rejoinIsSolo');
 
   if (rejoinId && rejoinUser) {
+    const startScreen = document.getElementById('start-screen');
+    if (startScreen) startScreen.style.display = 'none';
+
     sessionStorage.removeItem('rejoinLobbyId');
     sessionStorage.removeItem('rejoinUsername');
     sessionStorage.removeItem('rejoinIsPublic');
