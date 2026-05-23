@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
-import { spawnTestWinItems } from './test_win.js';
 
 let preloadedGhostModel = null;
 let preloadedHumanModel = null;
@@ -1275,46 +1274,72 @@ function setupControls() {
       if (cheatBuffer.length > 20) cheatBuffer = cheatBuffer.substring(1);
       if (cheatBuffer.includes('spawnwin')) {
         cheatBuffer = '';
-        triggerNotification("CHEAT: SPAWNING WIN ITEMS IN FRONT OF YOU");
-        
-        spawnTestWinItems({
-          camera, 
-          keysInMaze, 
-          circuitBreakers, 
-          codeClueNotes, 
-          functionalKeysRevealed,
-          gateCoordinates,
-          cipherCodeDigits: window.cipherCodeDigits,
-          triggerNotification
-        });
+        try {
+          // Teleport player to the gate
+          camera.position.set(gateCoordinates.x, 1.6, gateCoordinates.z + 4);
+          
+          // Move ALL keys in maze right in front of the player
+          keysInMaze.forEach((k, index) => {
+            const xOff = -2 + (index * 1.5);
+            k.mesh.position.set(camera.position.x + xOff, 0.5, camera.position.z - 2);
+          });
+          
+          // Move ALL circuit breakers right in front of the player
+          circuitBreakers.forEach((b, index) => {
+            const xOff = -2 + (index * 1.5);
+            b.mesh.position.set(camera.position.x + xOff, 1.2, camera.position.z - 3);
+          });
+          
+          // Move code clue notes right in front of the player
+          codeClueNotes.forEach((note, index) => {
+            const xOff = -2.5 + (index * 1.5);
+            note.mesh.position.set(camera.position.x + xOff, 0.8, camera.position.z - 4);
+          });
+          
+          const codeStr = (window.cipherCodeDigits || []).join('');
+          triggerNotification(`CHEAT: Items spawned! Vault code: ${codeStr}`);
+          console.log('spawnwin cheat executed. Code:', codeStr, 'Real keys:', functionalKeysRevealed);
+        } catch(err) {
+          console.error('spawnwin cheat error:', err);
+          triggerNotification('CHEAT ERROR: ' + err.message);
+        }
       }
       
       if (cheatBuffer.includes('testwin')) {
         cheatBuffer = '';
-        triggerNotification("CHEAT CODE ACTIVATED: WIN STATE READY");
-        
-        // 1. Spawns with 2 working keys
-        if (functionalKeysRevealed.length < 2) {
-          const allSymbols = ['α', 'β', 'γ', 'δ', 'ε', 'ζ', 'η', 'θ', 'ι', 'κ', 'λ', 'μ', 'ν', 'ξ', 'ο', 'π', 'ρ', 'σ', 'τ', 'υ', 'φ', 'χ', 'ψ', 'ω'];
-          functionalKeysRevealed = [allSymbols[0], allSymbols[1]];
-        }
-        carriedKeys = [
-          { symbol: functionalKeysRevealed[0], typeName: 'Amber Key', mesh: null },
-          { symbol: functionalKeysRevealed[1], typeName: 'Sapphire Key', mesh: null }
-        ];
-        foundKeysList = [...functionalKeysRevealed];
-        renderFoundKeys();
-        
-        // 2. Full code entered
-        gateSolved = true;
-        
-        // 3. Breakers done
-        fixedBreakersCount = totalBreakersRequired;
+        try {
+          // 1. Give the player the 2 REAL functional keys using the CORRECT symbols from the server
+          carriedKeys = [
+            { symbol: functionalKeysRevealed[0], typeName: 'Amber Key', mesh: null },
+            { symbol: functionalKeysRevealed[1], typeName: 'Sapphire Key', mesh: null }
+          ];
+          foundKeysList = [...functionalKeysRevealed];
+          renderFoundKeys();
+          renderCarriedKeysHUD();
+          
+          // 2. Mark the cipher code as solved
+          gateSolved = true;
+          
+          // 3. Fix all breakers
+          fixedBreakersCount = totalBreakersRequired;
+          // Also visually mark all breakers as fixed
+          circuitBreakers.forEach(b => {
+            b.isFixed = true;
+            b.mesh.material.color.setHex(0x10b981);
+          });
 
-        // 4. Spawn right in front of the vault
-        camera.position.set(gateCoordinates.x, 1.6, gateCoordinates.z + 10);
-        
-        checkWinCondition();
+          // 4. Teleport right in front of the vault (close enough to trigger win on interaction)
+          camera.position.set(gateCoordinates.x, 1.6, gateCoordinates.z + 4);
+          
+          const codeStr = (window.cipherCodeDigits || []).join('');
+          triggerNotification(`WIN STATE READY! Walk to gate & press E. Code: ${codeStr}`);
+          console.log('testwin cheat executed. Keys:', functionalKeysRevealed, 'Code:', codeStr);
+          
+          checkWinCondition();
+        } catch(err) {
+          console.error('testwin cheat error:', err);
+          triggerNotification('CHEAT ERROR: ' + err.message);
+        }
       }
     }
   });
