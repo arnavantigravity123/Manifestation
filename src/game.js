@@ -3381,10 +3381,10 @@ function animate() {
 
     // Speed details
     // Human WALK: 90  (~9 u/s after friction)
-    // Juggernaut ghost player: 85 (~8.5 u/s) — faster than normal ghosts, but slightly slower than human walk
+    // Juggernaut ghost player: 75 (~7.5 u/s) — faster than normal ghosts, but noticeably slower than human walk
     // All other ghost players: 55 (~5.5 u/s) — clearly slower than a walking human
     let baseGhostSpeed = 55.0;
-    if (myTeam === 'Ghost' && myClass === 'Juggernaut') baseGhostSpeed = 85.0;
+    if (myTeam === 'Ghost' && myClass === 'Juggernaut') baseGhostSpeed = 75.0;
     let speed = myTeam === 'Ghost' ? baseGhostSpeed : 90.0;
 
     // --- Sprint logic (humans only) ---
@@ -3654,9 +3654,9 @@ function animate() {
       checkChalkDecals(ghost.position);
 
       // Check salt traps (triggering & consumption)
-      // Juggernaut (8 u/s) is faster than normal ghosts but slower than human walk (~9 u/s).
+      // Juggernaut (6.5 u/s) is faster than normal ghosts but noticeably slower than human walk (~9 u/s).
       // Humans must still manage stamina, but won't be instantly run down by walking.
-      let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? 8.0 : 4.0;
+      let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? 6.5 : 4.0;
       for (let i = saltTraps.length - 1; i >= 0; i--) {
         const trap = saltTraps[i];
         if (ghost.position.distanceTo(trap.position) < 2.5) {
