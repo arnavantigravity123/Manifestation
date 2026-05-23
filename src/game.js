@@ -1756,11 +1756,7 @@ function checkInteractions() {
     const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
     if (!gateSolved) {
-      if (!hasFirstKey || !hasSecondKey) {
-        const realCarried = carriedKeys.filter(k => functionalKeysRevealed.includes(k.symbol)).length;
-        triggerNotification(`need both functional keys! (${realCarried}/2 in hand)`);
-        return; // Prevent opening keypad
-      } else if (!breakersFixed) {
+      if (!breakersFixed) {
         triggerNotification(`master gate needs power! fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
         return; // Prevent opening keypad
       }
@@ -1778,7 +1774,8 @@ function checkInteractions() {
           window.mobileGameActive = false;
         });
       } else {
-        triggerNotification("master gate breached! escape successful!");
+        const realCarried = carriedKeys.filter(k => functionalKeysRevealed.includes(k.symbol)).length;
+        triggerNotification(`cipher cracked, but master gate needs both twin keys to open! (${realCarried}/2 in hand)`);
       }
     }
     return;
