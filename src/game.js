@@ -7,7 +7,7 @@ const gltfLoader = new GLTFLoader();
 gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
   preloadedGhostModel = gltf.scene;
   // Meshy AI scale adjustments - reduced scale based on feedback
-  preloadedGhostModel.scale.set(2.5, 2.5, 2.5);
+  preloadedGhostModel.scale.set(2.2, 2.2, 2.2);
   
   // Center the model's pivot point so it rotates in place instead of sweeping
   const box = new THREE.Box3().setFromObject(preloadedGhostModel);
@@ -1013,16 +1013,24 @@ function generateConsumableItems() {
     { name: 'Battery Pack', map: textureLoader.load('/assets/battery_sprite.png') },
     { name: 'EMF Radar', map: textureLoader.load('/assets/emf_sprite.png') },
     { name: 'Thermal Camera', map: textureLoader.load('/assets/thermal_sprite.png') },
-    { name: 'Sanity Pills', map: textureLoader.load('/assets/pills_sprite.png') }
+    { name: 'Sanity Pills', map: textureLoader.load('/assets/pills_sprite.png') },
+    { name: 'Med Kit', map: textureLoader.load('/assets/medkit_sprite.png') }
   ];
 
-  // Generate exactly 1 EMF and 1 Thermal, then randomly pick Pills or Battery for the remaining 8 items
+  // Generate exactly 1 EMF and 1 Thermal, then randomly pick Battery/Pills/MedKit for the remaining 8 items
   const itemsToSpawn = [
     itemTypes[1], // EMF
     itemTypes[2]  // Thermal
   ];
   for (let i = 0; i < 8; i++) {
-    itemsToSpawn.push(seededRandom() > 0.4 ? itemTypes[0] : itemTypes[3]); // 60% battery, 40% pills
+    const rand = seededRandom();
+    if (rand > 0.6) {
+      itemsToSpawn.push(itemTypes[0]); // 40% Battery
+    } else if (rand > 0.3) {
+      itemsToSpawn.push(itemTypes[3]); // 30% Sanity Pills
+    } else {
+      itemsToSpawn.push(itemTypes[4]); // 30% Med Kit
+    }
   }
 
   itemsToSpawn.forEach(type => {
