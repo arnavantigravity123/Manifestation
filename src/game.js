@@ -1284,7 +1284,7 @@ function setupControls() {
           codeClueNotes, 
           functionalKeysRevealed,
           gateCoordinates,
-          cipherCodeDigits,
+          cipherCodeDigits: window.cipherCodeDigits,
           triggerNotification
         });
       }
