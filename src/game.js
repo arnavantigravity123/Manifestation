@@ -1314,7 +1314,6 @@ function setupControls() {
             { symbol: functionalKeysRevealed[1], typeName: 'Sapphire Key', mesh: null }
           ];
           foundKeysList = [...functionalKeysRevealed];
-          renderFoundKeys();
           renderCarriedKeysHUD();
           
           // 2. Mark the cipher code as solved
