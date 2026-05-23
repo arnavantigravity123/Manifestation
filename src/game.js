@@ -1156,7 +1156,9 @@ function setupControls() {
           if (typeof socketClient !== 'undefined') socketClient.emit('try_cipher', codeEntered);
           keypadUI.style.display = 'none';
           codeEntered = '';
-          if (!window.isMobileDevice) {
+          const ptrOverlay = document.getElementById('pointer-lock-overlay');
+          if (ptrOverlay && !window.isMobileDevice) {
+            ptrOverlay.style.display = 'flex';
             document.getElementById('canvas-container').requestPointerLock();
           }
         }
@@ -1221,7 +1223,9 @@ function setupControls() {
             isMinimapExpanded = false;
             wrapper.classList.remove('expanded');
             controls.style.display = 'none';
-            if (!isMobileDevice) {
+            const ptrOverlay = document.getElementById('pointer-lock-overlay');
+            if (ptrOverlay && !window.isMobileDevice) {
+              ptrOverlay.style.display = 'flex';
               document.getElementById('canvas-container').requestPointerLock();
             }
           }
@@ -1767,21 +1771,11 @@ function checkInteractions() {
           socketClient.emit('human_escaped', { id: socketClient.id });
         }
         isCaptured = true; // Lock controls during cinematic
+        window.isEscaping = true;
         playEscapeCinematic(() => {
           document.getElementById('hud-overlay').style.display = 'none';
           if (document.pointerLockElement) document.exitPointerLock();
           window.mobileGameActive = false;
-          // Show the end game overlay
-          const endOverlay = document.getElementById('end-game-overlay');
-          const endTitle = document.getElementById('end-game-title');
-          const endDetails = document.getElementById('end-game-details');
-          if (endOverlay && endTitle) {
-            endTitle.textContent = 'HUMANS WIN!';
-            endTitle.style.color = '#10b981';
-            endTitle.style.textShadow = '0 0 40px rgba(16,185,129,0.8)';
-            endDetails.innerHTML = '<p style="color:#ccc;font-size:1.3rem;">The surviving humans escaped the manifestation.</p>';
-            endOverlay.style.display = 'flex';
-          }
         });
       } else {
         triggerNotification("master gate breached! escape successful!");
@@ -2107,7 +2101,9 @@ function setupKeypadListeners() {
   const closeKeypad = () => {
     keypadUI.style.display = 'none';
     codeEntered = '';
-    if (!window.isMobileDevice) {
+    const ptrOverlay = document.getElementById('pointer-lock-overlay');
+    if (ptrOverlay && !window.isMobileDevice) {
+      ptrOverlay.style.display = 'flex';
       document.getElementById('canvas-container').requestPointerLock();
     }
   };
@@ -2641,13 +2637,14 @@ function setupSocketListeners() {
     if (document.pointerLockElement) document.exitPointerLock();
     window.mobileGameActive = false;
 
-    // Show the End Game Overlay
-    const overlay = document.getElementById('end-game-overlay');
-    const title = document.getElementById('end-game-title');
-    const details = document.getElementById('end-game-details');
+    const renderOverlay = () => {
+      // Show the End Game Overlay
+      const overlay = document.getElementById('end-game-overlay');
+      const title = document.getElementById('end-game-title');
+      const details = document.getElementById('end-game-details');
 
-    if (overlay && title && details) {
-      overlay.style.display = 'flex';
+      if (overlay && title && details) {
+        overlay.style.display = 'flex';
       
       if (winner === 'Human') {
         title.textContent = "VICTORY";
@@ -2698,6 +2695,12 @@ function setupSocketListeners() {
 
     bindRejoinBtn('end-game-lobby-btn');
     bindRejoinBtn('captured-lobby-btn');
+
+    if (window.isEscaping) {
+      setTimeout(renderOverlay, 2500);
+    } else {
+      renderOverlay();
+    }
   });
 
   // Sync dropped items dynamically across all teammates in the lobby
