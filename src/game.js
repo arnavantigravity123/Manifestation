@@ -6,9 +6,9 @@ let preloadedGhostModel = null;
 const gltfLoader = new GLTFLoader();
 gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
   preloadedGhostModel = gltf.scene;
-  // Meshy AI scale adjustments
-  preloadedGhostModel.scale.set(1.5, 1.5, 1.5);
-  preloadedGhostModel.position.y = 0; // Ground level
+  // Meshy AI scale adjustments - make it massive and terrifying
+  preloadedGhostModel.scale.set(4.5, 4.5, 4.5);
+  preloadedGhostModel.position.y = 1.0; // Hover slightly above ground
   
   preloadedGhostModel.traverse((child) => {
     if (child.isMesh) {
