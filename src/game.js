@@ -1277,7 +1277,16 @@ function setupControls() {
         cheatBuffer = '';
         triggerNotification("CHEAT: SPAWNING WIN ITEMS IN FRONT OF YOU");
         
-        spawnTestWinItems(camera, keysInMaze, circuitBreakers, codeClueNotes, functionalKeysRevealed);
+        spawnTestWinItems({
+          camera, 
+          keysInMaze, 
+          circuitBreakers, 
+          codeClueNotes, 
+          functionalKeysRevealed,
+          gateCoordinates,
+          cipherCodeDigits,
+          triggerNotification
+        });
       }
       
       if (cheatBuffer.includes('testwin')) {
