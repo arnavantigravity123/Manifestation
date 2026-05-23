@@ -7,7 +7,7 @@ const gltfLoader = new GLTFLoader();
 gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
   preloadedGhostModel = gltf.scene;
   // Meshy AI scale adjustments - reduced scale based on feedback
-  preloadedGhostModel.scale.set(2.2, 2.2, 2.2);
+  preloadedGhostModel.scale.set(2.0, 2.0, 2.0);
   
   // Center the model's pivot point so it rotates in place instead of sweeping
   const box = new THREE.Box3().setFromObject(preloadedGhostModel);
