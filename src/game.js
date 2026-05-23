@@ -3060,6 +3060,7 @@ function createHumanMeshGroup() {
   
   if (preloadedHumanModel) {
     const clone = SkeletonUtils.clone(preloadedHumanModel);
+    clone.rotation.y = Math.PI; // Fix reversed facing
     group.add(clone);
   } else {
     const spriteMat = new THREE.SpriteMaterial({ 
