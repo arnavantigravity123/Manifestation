@@ -122,6 +122,7 @@ let saltTraps = [];
 let circuitBreakers = [];
 let fixedBreakersCount = 0;
 const totalBreakersRequired = 3;
+let ghostPathMeshes = [];
 
 // Sprint / Stamina
 let isSprinting = false;
@@ -2672,6 +2673,36 @@ function triggerSoundPing(position, soundType) {
   pingMesh.position.set(position.x, 0.1, position.z);
   scene.add(pingMesh);
 
+  // Calculate and draw glowing path to the source
+  const startGrid = worldToGrid(camera.position.x, camera.position.z);
+  const endGrid = worldToGrid(position.x, position.z);
+  const path = bfsPath(startGrid.col, startGrid.row, endGrid.col, endGrid.row);
+  
+  // Clean up any old path
+  ghostPathMeshes.forEach(m => {
+    scene.remove(m);
+    if (m.geometry) m.geometry.dispose();
+    if (m.material) m.material.dispose();
+  });
+  ghostPathMeshes = [];
+
+  // Create new path orbs
+  path.forEach((pt, index) => {
+    if (index === 0) return; // skip exact current block
+    const sphereGeom = new THREE.SphereGeometry(0.3, 8, 8);
+    const sphereMat = new THREE.MeshBasicMaterial({ 
+      color: 0xff3333, // Glowing red
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const orb = new THREE.Mesh(sphereGeom, sphereMat);
+    orb.position.set(pt.x, 0.5, pt.z); // Hovering at knee height
+    scene.add(orb);
+    ghostPathMeshes.push(orb);
+  });
+
   const startTime = performance.now();
   const duration = 2000; // 2 seconds
 
@@ -2683,10 +2714,30 @@ function triggerSoundPing(position, soundType) {
       scene.remove(pingMesh);
       geom.dispose();
       mat.dispose();
+      
+      // Clean up path
+      ghostPathMeshes.forEach(orb => {
+        scene.remove(orb);
+        orb.geometry.dispose();
+        orb.material.dispose();
+      });
+      ghostPathMeshes = [];
     } else {
       const scale = 1.0 + progress * 8.0;
       pingMesh.scale.set(scale, 1, scale);
       pingMesh.material.opacity = 0.8 * (1.0 - progress);
+      
+      // Animate path orbs
+      ghostPathMeshes.forEach((orb, i) => {
+        const waveOffset = i * 60; // 60ms delay per orb for sweeping effect
+        if (elapsed > waveOffset) {
+           orb.material.opacity = 0.8 * (1.0 - progress);
+           orb.position.y = 0.5 + Math.sin((elapsed - waveOffset) * 0.01) * 0.2; // slight bob
+        } else {
+           orb.material.opacity = 0; // invisible until wave reaches
+        }
+      });
+      
       requestAnimationFrame(animatePing);
     }
   }
@@ -3497,14 +3548,9 @@ function animate() {
       }
     }
 
-    // 4. Update AI Bots pathing behaviors toward nearest human
-    ghosts3D.forEach((ghost, idx) => {
-      // Breaker Remote freezes all ghost movement
-      if (window.ghostsFrozen) return;
-
-      // Damage check uses actual distance to PLAYER
-      const distToPlayer = ghost.position.distanceTo(new THREE.Vector3(camera.position.x, ghost.position.y, camera.position.z));
-
+    // Helper function to apply damage if human is near a ghost
+    const applyGhostDamageToHuman = (ghostPos) => {
+      const distToPlayer = ghostPos.distanceTo(new THREE.Vector3(camera.position.x, ghostPos.y, camera.position.z));
       if (distToPlayer < 1.5 && myTeam === 'Human' && !isPanicked) {
         currentHP = Math.max(0, currentHP - delta * 45);
         document.getElementById('hp-value').textContent = `${Math.ceil(currentHP)} HP`;
@@ -3528,6 +3574,22 @@ function animate() {
           });
         }
       }
+    };
+
+    // Damage check against network Ghost players
+    Object.values(players3D).forEach(p => {
+      if (p.userData && p.userData.type === 'Ghost') {
+        applyGhostDamageToHuman(p.position);
+      }
+    });
+
+    // 4. Update AI Bots pathing behaviors toward nearest human
+    ghosts3D.forEach((ghost, idx) => {
+      // Breaker Remote freezes all ghost movement
+      if (window.ghostsFrozen) return;
+
+      // Damage check uses actual distance to PLAYER
+      applyGhostDamageToHuman(ghost.position);
 
       // Check salt traps (triggering & consumption)
       // Juggernaut (8 u/s) is faster than normal ghosts but slower than human walk (~9 u/s).
