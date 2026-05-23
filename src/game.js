@@ -1,4 +1,28 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+
+let preloadedGhostModel = null;
+const gltfLoader = new GLTFLoader();
+gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
+  preloadedGhostModel = gltf.scene;
+  // Meshy AI scale adjustments
+  preloadedGhostModel.scale.set(1.5, 1.5, 1.5);
+  preloadedGhostModel.position.y = 0; // Ground level
+  
+  preloadedGhostModel.traverse((child) => {
+    if (child.isMesh) {
+      // Ensure the AI textures render brightly and correctly
+      if (child.material) {
+        child.material.transparent = true;
+        child.material.opacity = 0.95;
+      }
+    }
+  });
+  console.log("Ghost 3D model loaded successfully!");
+}, undefined, (error) => {
+  console.error("Failed to load ghost model:", error);
+});
 
 let scene, camera, renderer;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -2923,19 +2947,25 @@ function createHumanMeshGroup() {
 function createGhostMeshGroup() {
   const group = new THREE.Group();
   
-  const spriteMat = new THREE.SpriteMaterial({ 
-    map: new THREE.TextureLoader().load('/assets/ghost_sprite.png'), 
-    color: 0xffdddd, // slightly tint red
-    fog: true,
-    transparent: true,
-    opacity: 0.85,
-    blending: THREE.AdditiveBlending, // Hides black background, makes ghost glow
-    depthWrite: false
-  });
-  const sprite = new THREE.Sprite(spriteMat);
-  sprite.scale.set(3.0, 4.0, 1); // Massive imposing ghost
-  sprite.position.y = 2.0;
-  group.add(sprite);
+  if (preloadedGhostModel) {
+    const clone = SkeletonUtils.clone(preloadedGhostModel);
+    group.add(clone);
+  } else {
+    // Fallback to sprite
+    const spriteMat = new THREE.SpriteMaterial({ 
+      map: new THREE.TextureLoader().load('/assets/ghost_sprite.png'), 
+      color: 0xffdddd, // slightly tint red
+      fog: true,
+      transparent: true,
+      opacity: 0.85,
+      blending: THREE.AdditiveBlending, // Hides black background, makes ghost glow
+      depthWrite: false
+    });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.scale.set(3.0, 4.0, 1); // Massive imposing ghost
+    sprite.position.y = 2.0;
+    group.add(sprite);
+  }
 
   // Eerie purple aura light — bright enough to notice
   const aura = new THREE.PointLight(0x6b21a8, 3.0, 12);
