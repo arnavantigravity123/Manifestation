@@ -147,6 +147,7 @@ let circuitBreakers = [];
 let fixedBreakersCount = 0;
 const totalBreakersRequired = 3;
 let ghostPathMeshes = [];
+let chalkDecals = [];
 
 // Sprint / Stamina
 let isSprinting = false;
@@ -1990,6 +1991,7 @@ function deployChalkDecal(pos) {
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(pos.x, 0.05, pos.z);
   scene.add(mesh);
+  chalkDecals.push(mesh);
 }
 
 function removeItem(index) {
@@ -3609,10 +3611,34 @@ function animate() {
       }
     };
 
+    // Helper function to check chalk decals for a given ghost position
+    const checkChalkDecals = (ghostPos) => {
+      for (let i = chalkDecals.length - 1; i >= 0; i--) {
+        const decal = chalkDecals[i];
+        if (ghostPos.distanceTo(decal.position) < 2.5) {
+          if (!decal.userData || !decal.userData.triggered) {
+            decal.userData = decal.userData || {};
+            decal.userData.triggered = true;
+            if (myTeam === 'Human') {
+              triggerNotification("Ghost detected stepping on UV Chalk!");
+            }
+            // Flash red to indicate detection, then fade away
+            decal.material.color.setHex(0xff3333);
+            setTimeout(() => {
+              scene.remove(decal);
+              const idx = chalkDecals.indexOf(decal);
+              if (idx > -1) chalkDecals.splice(idx, 1);
+            }, 3000);
+          }
+        }
+      }
+    };
+
     // Damage check against network Ghost players
     Object.values(players3D).forEach(p => {
       if (p.userData && p.userData.type === 'Ghost') {
         applyGhostDamageToHuman(p.position);
+        checkChalkDecals(p.position);
       }
     });
 
@@ -3623,6 +3649,7 @@ function animate() {
 
       // Damage check uses actual distance to PLAYER
       applyGhostDamageToHuman(ghost.position);
+      checkChalkDecals(ghost.position);
 
       // Check salt traps (triggering & consumption)
       // Juggernaut (8 u/s) is faster than normal ghosts but slower than human walk (~9 u/s).
