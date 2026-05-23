@@ -3307,19 +3307,32 @@ function animate() {
     camera.translateZ(velocity.z * delta);
     camera.position.y = 1.6; // Lock height
 
-    // Simple wall collision checking (2D check)
-    walls.forEach(wall => {
-      if (wall.position.y < 0) return; // Skip walls shifted below floor level (open sliding gates)
-      const dx = camera.position.x - wall.position.x;
-      const dz = camera.position.z - wall.position.z;
-      const dist2D = Math.sqrt(dx*dx + dz*dz);
-      if (dist2D < 2.8) { // Increased to 2.8 to prevent near-clipping the camera through walls
-        const pushForce = (2.8 - dist2D) * 1.0; 
-        const pushDir = new THREE.Vector2(dx, dz).normalize();
-        camera.position.x += pushDir.x * pushForce;
-        camera.position.z += pushDir.y * pushForce;
-      }
-    });
+    // Robust AABB Wall collision checking
+    const playerRadius = 0.8; // Radius to prevent near-clipping
+    const wallHalfSize = 4.5 / 2;
+    
+    // Run two iterations to smoothly resolve corner pinches
+    for (let iter = 0; iter < 2; iter++) {
+      walls.forEach(wall => {
+        if (wall.position.y < 0) return; // Skip walls shifted below floor level (open sliding gates)
+        
+        const px = camera.position.x;
+        const pz = camera.position.z;
+        const wx = wall.position.x;
+        const wz = wall.position.z;
+        
+        const overlapX = (wallHalfSize + playerRadius) - Math.abs(px - wx);
+        const overlapZ = (wallHalfSize + playerRadius) - Math.abs(pz - wz);
+        
+        if (overlapX > 0 && overlapZ > 0) {
+          if (overlapX < overlapZ) {
+            camera.position.x += (px > wx ? overlapX : -overlapX);
+          } else {
+            camera.position.z += (pz > wz ? overlapZ : -overlapZ);
+          }
+        }
+      });
+    }
 
     // 2. Active sensors & sanity ticks
     processEMFSensors(delta);
