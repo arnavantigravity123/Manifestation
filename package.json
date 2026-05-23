@@ -12,6 +12,7 @@
   "dependencies": {
     "concurrently": "^9.2.1",
     "express": "^5.2.1",
+    "jimp": "^1.6.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "three": "^0.184.0",
