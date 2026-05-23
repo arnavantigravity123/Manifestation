@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { spawnTestWinItems } from './test_win.js';
 
 let preloadedGhostModel = null;
 let preloadedHumanModel = null;
@@ -1272,6 +1273,13 @@ function setupControls() {
     if (e.key && e.key.length === 1) {
       cheatBuffer += e.key.toLowerCase();
       if (cheatBuffer.length > 20) cheatBuffer = cheatBuffer.substring(1);
+      if (cheatBuffer.includes('spawnwin')) {
+        cheatBuffer = '';
+        triggerNotification("CHEAT: SPAWNING WIN ITEMS IN FRONT OF YOU");
+        
+        spawnTestWinItems(camera, keysInMaze, circuitBreakers, codeClueNotes, functionalKeysRevealed);
+      }
+      
       if (cheatBuffer.includes('testwin')) {
         cheatBuffer = '';
         triggerNotification("CHEAT CODE ACTIVATED: WIN STATE READY");
