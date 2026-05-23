@@ -1316,8 +1316,8 @@ function setupControls() {
           foundKeysList = [...functionalKeysRevealed];
           renderCarriedKeysHUD();
           
-          // 2. Mark the cipher code as solved
-          gateSolved = true;
+          // 2. Do not mark cipher as solved, so player still has to type it
+          // gateSolved = true;
           
           // 3. Fix all breakers
           fixedBreakersCount = totalBreakersRequired;
