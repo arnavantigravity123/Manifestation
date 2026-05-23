@@ -2324,7 +2324,7 @@ function setupSocketListeners() {
       const meshThermalMat = new THREE.MeshBasicMaterial({ 
         color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
       });
-      capMesh.children.forEach(c => {
+      capMesh.traverse(c => {
         if (c.isMesh) {
           c.userData.normalMat = c.material;
           c.userData.thermalMat = meshThermalMat;
@@ -2455,10 +2455,20 @@ function setupSocketListeners() {
           const thermalMat = new THREE.MeshBasicMaterial({ 
             color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
           });
-          ghostMesh.children.forEach(c => {
+          ghostMesh.traverse(c => {
             if (c.isMesh) {
               c.userData.normalMat = c.material;
               c.userData.thermalMat = thermalMat;
+            } else if (c.isSprite) {
+              c.userData.normalMat = c.material;
+              c.userData.thermalMat = new THREE.SpriteMaterial({
+                map: c.material.map,
+                color: 0xffffff,
+                fog: false,
+                depthTest: false,
+                transparent: true,
+                blending: THREE.AdditiveBlending
+              });
             }
           });
 
@@ -2998,7 +3008,7 @@ function spawnGhostAIs(count) {
     const meshThermalMat = new THREE.MeshBasicMaterial({ 
       color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
     });
-    ghostGroup.children.forEach(c => {
+    ghostGroup.traverse(c => {
       if (c.isMesh) {
         c.userData.normalMat = c.material;
         c.userData.thermalMat = meshThermalMat;
@@ -3390,8 +3400,8 @@ function animate() {
 
         // Make AI ghosts bright and glowing
         ghosts3D.forEach(g => {
-          g.children.forEach(c => {
-            if ((c.isMesh || c.isSprite) && c.material !== c.userData.thermalMat) {
+          g.traverse(c => {
+            if ((c.isMesh || c.isSprite) && c.userData.thermalMat && c.material !== c.userData.thermalMat) {
               c.material = c.userData.thermalMat;
               c.renderOrder = 999;
             }
@@ -3400,8 +3410,8 @@ function animate() {
         // Make network ghost players bright and glowing
         Object.values(players3D).forEach(p => {
           if (p.userData && p.userData.type === 'Ghost') {
-            p.children.forEach(c => {
-              if ((c.isMesh || c.isSprite) && c.material !== c.userData.thermalMat) {
+            p.traverse(c => {
+              if ((c.isMesh || c.isSprite) && c.userData.thermalMat && c.material !== c.userData.thermalMat) {
                 c.material = c.userData.thermalMat;
                 c.renderOrder = 999;
               }
@@ -3413,8 +3423,8 @@ function animate() {
 
         // Disable X-Ray vision for AI ghosts
         ghosts3D.forEach(g => {
-          g.children.forEach(c => {
-            if ((c.isMesh || c.isSprite) && c.material !== c.userData.normalMat) {
+          g.traverse(c => {
+            if ((c.isMesh || c.isSprite) && c.userData.normalMat && c.material !== c.userData.normalMat) {
               c.material = c.userData.normalMat;
               c.renderOrder = 0;
             }
@@ -3423,8 +3433,8 @@ function animate() {
         // Disable X-Ray vision for network ghost players
         Object.values(players3D).forEach(p => {
           if (p.userData && p.userData.type === 'Ghost') {
-            p.children.forEach(c => {
-              if ((c.isMesh || c.isSprite) && c.material !== c.userData.normalMat) {
+            p.traverse(c => {
+              if ((c.isMesh || c.isSprite) && c.userData.normalMat && c.material !== c.userData.normalMat) {
                 c.material = c.userData.normalMat;
                 c.renderOrder = 0;
               }
