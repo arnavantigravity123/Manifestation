@@ -2664,6 +2664,7 @@ function setupSocketListeners() {
       summaryHTML += `</div>`;
       details.innerHTML += summaryHTML;
     }
+  };
 
     const bindRejoinBtn = (btnId) => {
       const btn = document.getElementById(btnId);
