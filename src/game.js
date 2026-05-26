@@ -203,6 +203,14 @@ function mulberry32(a) {
   };
 }
 
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(seededRandom() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
 export function initGame(socket, socketId, matchConfig) {
   socketClient = socket;
   myId = socketId;
@@ -737,7 +745,7 @@ function generateMaze(keysCount = 8) {
   function carve(x, z) {
     layout[z][x] = 0;
     const dirs = [[0,-2], [0,2], [-2,0], [2,0]];
-    dirs.sort(() => seededRandom() - 0.5);
+    shuffleArray(dirs);
     for (let [dx, dz] of dirs) {
       const nx = x + dx, nz = z + dz;
       if (nx > 0 && nx < mazeSize-1 && nz > 0 && nz < mazeSize-1 && layout[nz][nx] === 1) {
@@ -982,7 +990,7 @@ function generateCircuitBreakers() {
     const mesh = new THREE.Mesh(breakerGeo, breakerMat.clone());
     
     let mounted = false;
-    const shuffledCorridors = [...openCorridors].sort(() => 0.5 - seededRandom());
+    const shuffledCorridors = shuffleArray([...openCorridors]);
     
     for (const corr of shuffledCorridors) {
       const col = Math.floor(corr.x / mazeBlockSize + mazeSizeGlobal / 2);
@@ -2369,7 +2377,8 @@ function processFlashlightBattery(delta) {
   if (myTeam !== 'Human') return;
   if (!flashLight) return;
 
-  const baseIntensity = inventory.includes('Battery Pack') ? 200 : 80;
+  const intensityBonus = typeof fixedBreakersCount !== 'undefined' ? fixedBreakersCount * 40 : 0;
+  const baseIntensity = (inventory.includes('Battery Pack') ? 200 : 80) + intensityBonus;
 
   // Drain if battery still has charge (tracked by battery level, not intensity,
   // so a flicker can't permanently kill the light)
@@ -3573,7 +3582,10 @@ function animate() {
       if (panicTimer <= 0) {
         isPanicked = false;
         if (inventory[activeSlot] !== "Thermal Camera") {
-          camera.fog = new THREE.FogExp2(myTeam === 'Human' ? 0x030712 : 0x1e1b4b, 0.05);
+          const fogDensity = myTeam === 'Human' ? Math.max(0.01, 0.05 - (fixedBreakersCount * 0.015)) : 0.05;
+          if (!scene.fog) scene.fog = new THREE.FogExp2(myTeam === 'Human' ? 0x030712 : 0x1e1b4b, fogDensity);
+          scene.fog.color.setHex(myTeam === 'Human' ? 0x030712 : 0x1e1b4b);
+          scene.fog.density = fogDensity;
         }
         if (flashLight) flashLight.intensity = 200;
         triggerNotification("invisibility ended. sensors active.");
@@ -3584,7 +3596,9 @@ function animate() {
     if (myTeam === 'Human') {
       // Thermal Camera passive effect
       if (inventory[activeSlot] === "Thermal Camera") {
-        scene.fog = new THREE.FogExp2(0x330000, 0.02); // Red thermal vision
+        if (!scene.fog) scene.fog = new THREE.FogExp2(0x330000, 0.02);
+        scene.fog.color.setHex(0x330000);
+        scene.fog.density = 0.02; // Red thermal vision
 
         // Make AI ghosts bright and glowing
         ghosts3D.forEach(g => {
@@ -3607,7 +3621,10 @@ function animate() {
           }
         });
       } else {
-        scene.fog = new THREE.FogExp2(0x030712, 0.05); // Normal dark
+        const fogDensity = Math.max(0.01, 0.05 - (fixedBreakersCount * 0.015));
+        if (!scene.fog) scene.fog = new THREE.FogExp2(0x030712, fogDensity);
+        scene.fog.color.setHex(0x030712);
+        scene.fog.density = fogDensity;
 
         // Disable X-Ray vision for AI ghosts
         ghosts3D.forEach(g => {
@@ -3706,6 +3723,10 @@ function animate() {
       // Juggernaut (6.5 u/s) is faster than normal ghosts but noticeably slower than human walk (~9 u/s).
       // Humans must still manage stamina, but won't be instantly run down by walking.
       let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? 6.5 : 4.0;
+      if (ghost.userData.speedBoostTimer && ghost.userData.speedBoostTimer > 0) {
+        ghost.userData.speedBoostTimer -= delta;
+        moveSpeed = 8.5;
+      }
       for (let i = saltTraps.length - 1; i >= 0; i--) {
         const trap = saltTraps[i];
         if (ghost.position.distanceTo(trap.position) < 2.5) {
@@ -3750,6 +3771,7 @@ function animate() {
         ghost.userData.targetGrid = null;
         ghost.userData.loseSightTimer = 0;
         ghost.userData.lastSoundTime = 0;
+        ghost.userData.abilityCooldown = 15.0 + Math.random() * 10.0;
       }
 
       // Check Line of Sight (LOS)
@@ -3772,6 +3794,52 @@ function animate() {
         if (ghost.userData.loseSightTimer > 3.0) {
           ghost.userData.aiState = 'WANDER'; // Lost player
           ghost.userData.targetGrid = null;
+        }
+      }
+
+      // Execute Bot Abilities
+      if (myTeam === 'Human') {
+        if (ghost.userData.abilityCooldown > 0) {
+          ghost.userData.abilityCooldown -= delta;
+        } else if (distToPlayer < 25) {
+          ghost.userData.abilityCooldown = 20.0 + Math.random() * 10.0;
+          const gClass = ghost.userData.ghostClass;
+          
+          if (gClass === 'Stalker') {
+            triggerNotification("A Stalker bot caught your scent!");
+            ghost.userData.aiState = 'CHASE';
+            ghost.userData.targetGrid = worldToGrid(camera.position.x, camera.position.z);
+            ghost.userData.pathTime = 0;
+          } else if (gClass === 'Mimic') {
+            triggerNotification("A Mimic bot is disguising itself!");
+            if (typeof preloadedHumanModel !== 'undefined' && preloadedHumanModel) {
+              const mimicModel = SkeletonUtils.clone(preloadedHumanModel);
+              ghost.add(mimicModel);
+              ghost.children.forEach(c => { if(c !== mimicModel) c.visible = false; });
+              setTimeout(() => {
+                ghost.remove(mimicModel);
+                ghost.children.forEach(c => { c.visible = true; });
+              }, 10000);
+            }
+          } else if (gClass === 'Juggernaut') {
+            triggerNotification("A Juggernaut bot is enraged!");
+            ghost.userData.speedBoostTimer = 5.0;
+          } else if (gClass === 'Phantom') {
+            triggerNotification("A Phantom bot used Vapor Leap!");
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(ghost.quaternion);
+            ghost.position.addScaledVector(forward, 8);
+          } else if (gClass === 'Poltergeist') {
+            triggerNotification("Poltergeist bot deployed Breaker Siphon!");
+            if (flashLight) {
+               const oldInt = flashLight.intensity;
+               flashLight.intensity = 0;
+               setTimeout(() => { if (flashlightBattery > 0) flashLight.intensity = oldInt; }, 10000);
+            }
+          } else if (gClass === 'Banshee') {
+            triggerNotification("Banshee bot scrambled your sensors!");
+            document.body.style.filter = "invert(1) hue-rotate(180deg)";
+            setTimeout(() => { document.body.style.filter = "none"; }, 5000);
+          }
         }
       }
 
