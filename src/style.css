@@ -112,9 +112,9 @@ body, html {
 
 .logo-container h1 {
   font-family: 'Orbitron', sans-serif;
-  font-size: 2.7rem;
+  font-size: clamp(1.8rem, 8vw, 2.7rem);
   font-weight: 900;
-  letter-spacing: 4px;
+  letter-spacing: clamp(1px, 2vw, 4px);
   color: var(--primary-accent);
   text-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
   margin-bottom: 0.25rem;
