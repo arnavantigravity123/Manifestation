@@ -1029,18 +1029,18 @@ body.is-mobile .mobile-sprint-btn.sprinting {
 
 body.is-mobile #mobile-actions {
   position: absolute;
-  bottom: 22%;
-  right: 5%;
+  bottom: 2%;
+  right: 1%;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.6rem;
-  width: 160px;
+  gap: 0.4rem;
+  width: 130px;
 }
 
 body.is-mobile .mobile-action-btn {
-  padding: 0.8rem 0;
+  padding: 0.5rem 0;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: 800;
   color: white;
   border-radius: 8px;
@@ -1181,9 +1181,20 @@ body.is-mobile .inventory-slot-index {
   left: 3px;
 }
 
+body.is-mobile .inventory-slot span:not(.inventory-slot-index) {
+  font-size: 0.4rem !important;
+}
+
 body.is-mobile .logo-container h1 {
   font-size: 1.8rem;
   letter-spacing: 2px;
+}
+
+body.is-mobile .notification-box {
+  top: 5%;
+  padding: 0.5rem 1rem;
+  font-size: 0.6rem;
+  width: 80%;
 }
 
 body.is-mobile #hud-subclass-badge {
