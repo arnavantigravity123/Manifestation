@@ -86,6 +86,8 @@ body, html {
   padding: 2rem;
   color: var(--text-main);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 95vh;
+  overflow-y: auto;
 }
 
 .glass-panel:hover {
