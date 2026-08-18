@@ -1181,6 +1181,11 @@ body.is-mobile .inventory-slot-index {
   left: 3px;
 }
 
+body.is-mobile .logo-container h1 {
+  font-size: 1.8rem;
+  letter-spacing: 2px;
+}
+
 body.is-mobile #hud-subclass-badge {
   font-size: 0.45rem;
   margin-top: 0.2rem;
