@@ -7,9 +7,15 @@
     "dev": "concurrently \"node server.js\" \"vite\"",
     "build": "vite build",
     "start": "node server.js",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:sync": "vite build && cap sync"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
+    "@revenuecat/purchases-capacitor": "^13.4.0",
     "concurrently": "^9.2.1",
     "express": "^5.2.1",
     "jimp": "^1.6.1",

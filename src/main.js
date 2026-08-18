@@ -1,6 +1,9 @@
 import { io } from 'socket.io-client';
 import { initGame, setMobileMode } from './game.js';
+import { Purchases } from '@revenuecat/purchases-capacitor';
 
+// Initialize RevenueCat
+Purchases.configure({ apiKey: "test_cMsleegvwoeSHogVfNJSxcSJCqj" });
 let socket = null;
 let currentLobby = null;
 let myId = null;
@@ -21,7 +24,10 @@ const createPrivateBtn = document.getElementById('create-private-btn');
 const joinPrivateBtn = document.getElementById('join-private-btn');
 const privateRoomInput = document.getElementById('private-room-input');
 const soloLoadingOverlay = document.getElementById('solo-loading-overlay');
-
+const vipStoreBtn = document.getElementById('vip-store-btn');
+const vipPaywallModal = document.getElementById('vip-paywall-modal');
+const buyVipBtn = document.getElementById('buy-vip-btn');
+const closeVipBtn = document.getElementById('close-vip-btn');
 const roomDisplay = document.getElementById('lobby-room-display');
 const lobbyTypeLabel = document.getElementById('lobby-type-label');
 const playersList = document.getElementById('players-list');
@@ -117,10 +123,49 @@ chooseGhostBtn.addEventListener('click', () => {
   updatePlayerSettings();
 });
 
+// VIP Paywall Logic
+vipStoreBtn.addEventListener('click', () => {
+  vipPaywallModal.style.display = 'block';
+});
+
+closeVipBtn.addEventListener('click', () => {
+  vipPaywallModal.style.display = 'none';
+});
+
+buyVipBtn.addEventListener('click', async () => {
+  buyVipBtn.textContent = 'Processing...';
+  buyVipBtn.disabled = true;
+  
+  try {
+    const offerings = await Purchases.getOfferings();
+    if (offerings.current && offerings.current.availablePackages.length !== 0) {
+      const { customerInfo } = await Purchases.purchasePackage({ aPackage: offerings.current.availablePackages[0] });
+      
+      if (customerInfo.entitlements.active['vip_access']) {
+        alert("VIP Access Granted! Ads removed and credits added.");
+        vipPaywallModal.style.display = 'none';
+        vipStoreBtn.style.display = 'none'; // Hide the store button since they are VIP
+      }
+    } else {
+      // Fallback for hackathon testing if products aren't set up yet in Google Play Console
+      alert("Test Mode: Google Play products not configured yet. (Hackathon Demo)");
+      vipPaywallModal.style.display = 'none';
+    }
+  } catch (error) {
+    if (!error.userCancelled) {
+      alert("Error purchasing: " + error.message);
+    }
+  } finally {
+    buyVipBtn.textContent = 'Unlock VIP - $4.99';
+    buyVipBtn.disabled = false;
+  }
+});
+
 // Socket Initialization Wrapper
 function initializeSocketConnection() {
   if (socket) return socket;
-  const socketUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : window.location.origin;
+  // Use production Render URL for socket connections from mobile
+  const socketUrl = 'https://manifestation-e53w.onrender.com/';
   socket = io(socketUrl);
 
   socket.on('connect', () => {

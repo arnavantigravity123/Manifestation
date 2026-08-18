@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Manifestation</string>
+    <string name="title_activity_main">Manifestation</string>
+    <string name="package_name">com.manifestation.game</string>
+    <string name="custom_url_scheme">com.manifestation.game</string>
+</resources>
