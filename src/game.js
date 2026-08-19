@@ -3781,8 +3781,9 @@ function animate() {
       // Check Line of Sight (LOS)
       let canSeePlayer = false;
       if (distToPlayer < 13.5 && myTeam === 'Human' && !isPanicked) { // 3 blocks max sight range
-        const directionToPlayer = new THREE.Vector3().subVectors(camera.position, ghost.position).normalize();
-        const raycaster = new THREE.Raycaster(ghost.position, directionToPlayer, 0, 15);
+        const rayOrigin = new THREE.Vector3(ghost.position.x, 2.0, ghost.position.z);
+        const directionToPlayer = new THREE.Vector3().subVectors(camera.position, rayOrigin).normalize();
+        const raycaster = new THREE.Raycaster(rayOrigin, directionToPlayer, 0, 15);
         const intersects = raycaster.intersectObjects(walls);
         if (intersects.length === 0 || intersects[0].distance > distToPlayer) {
           canSeePlayer = true;
@@ -3851,9 +3852,9 @@ function animate() {
       if (latestSoundBeacon && latestSoundBeacon.time > ghost.userData.lastSoundTime && ghost.userData.aiState !== 'CHASE') {
         const distToSound = ghost.position.distanceTo(new THREE.Vector3(latestSoundBeacon.position.x, ghost.position.y, latestSoundBeacon.position.z));
         let hearingRadius = 0;
-        if (latestSoundBeacon.volume <= 1.0) hearingRadius = 10 * mazeBlockSize; // Footsteps
-        else if (latestSoundBeacon.volume <= 35) hearingRadius = 20 * mazeBlockSize; // Whisper
-        else hearingRadius = 50 * mazeBlockSize; // Scream
+        if (latestSoundBeacon.volume <= 1.0) hearingRadius = 3 * mazeBlockSize; // Footsteps (reduced from 10)
+        else if (latestSoundBeacon.volume <= 35) hearingRadius = 10 * mazeBlockSize; // Whisper (reduced from 20)
+        else hearingRadius = 30 * mazeBlockSize; // Scream (reduced from 50)
 
         if (distToSound <= hearingRadius) {
           ghost.userData.aiState = 'INVESTIGATE';
