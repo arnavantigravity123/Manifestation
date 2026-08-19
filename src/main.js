@@ -150,17 +150,19 @@ buyVipBtn.addEventListener('click', async () => {
         playerCreditsDisplay.textContent = playerCredits;
       }
     } else {
-      // Fallback for hackathon testing if products aren't set up yet in Google Play Console
-      alert("Test Mode: Google Play products not configured yet. Granting VIP for Hackathon Demo!");
+      throw new Error("No offerings configured");
+    }
+  } catch (error) {
+    if (error && error.userCancelled) {
+      // User manually cancelled the native payment sheet, do nothing
+    } else {
+      // Fallback for hackathon testing (Web / No Google Play products configured)
+      alert("Test Mode: RevenueCat not fully configured yet. Granting VIP for Hackathon Demo!");
       vipPaywallModal.style.display = 'none';
       vipStoreBtn.style.display = 'none';
       playerCredits += 500;
       localStorage.setItem('manifestation_credits', playerCredits);
       playerCreditsDisplay.textContent = playerCredits;
-    }
-  } catch (error) {
-    if (!error.userCancelled) {
-      alert("Error purchasing: " + error.message);
     }
   } finally {
     buyVipBtn.textContent = 'Unlock VIP - $4.99';
