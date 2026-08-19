@@ -3852,9 +3852,10 @@ function animate() {
       if (latestSoundBeacon && latestSoundBeacon.time > ghost.userData.lastSoundTime && ghost.userData.aiState !== 'CHASE') {
         const distToSound = ghost.position.distanceTo(new THREE.Vector3(latestSoundBeacon.position.x, ghost.position.y, latestSoundBeacon.position.z));
         let hearingRadius = 0;
-        if (latestSoundBeacon.volume <= 1.0) hearingRadius = 3 * mazeBlockSize; // Footsteps (reduced from 10)
-        else if (latestSoundBeacon.volume <= 35) hearingRadius = 10 * mazeBlockSize; // Whisper (reduced from 20)
-        else hearingRadius = 30 * mazeBlockSize; // Scream (reduced from 50)
+        if (latestSoundBeacon.volume <= 1.0) hearingRadius = 5 * mazeBlockSize; // Walking
+        else if (latestSoundBeacon.volume <= 2.0) hearingRadius = 9 * mazeBlockSize; // Sprinting
+        else if (latestSoundBeacon.volume <= 35) hearingRadius = 14 * mazeBlockSize; // Whisper
+        else hearingRadius = 35 * mazeBlockSize; // Scream
 
         if (distToSound <= hearingRadius) {
           ghost.userData.aiState = 'INVESTIGATE';
@@ -3964,11 +3965,12 @@ function animate() {
 
       // Emit walking sound frequency (only for Humans)
       if (myTeam === 'Human' && (Math.abs(velocity.x) > 1 || Math.abs(velocity.z) > 1)) {
+        const footstepVolume = isSprinting ? 1.5 : 0.5;
         socketClient.emit('sound_produced', {
-          volume: 0.5,
+          volume: footstepVolume,
           position: { x: camera.position.x, z: camera.position.z }
         });
-        latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, volume: 0.5, time: performance.now() };
+        latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, volume: footstepVolume, time: performance.now() };
       }
       networkTimer = 0;
     }
