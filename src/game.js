@@ -764,6 +764,12 @@ function generateMaze(keysCount = 8) {
   carve(centerCoord, centerCoord);
   layout[Math.floor(mazeSize/2)][Math.floor(mazeSize/2)] = 0; // Ensure true center spawn is safe
 
+  // Force an ALWAYS OPEN grand hallway straight to the Master Gate (Vault) at the North
+  // This guarantees the vault is never blocked and is easily findable from the center
+  for (let i = 1; i <= centerCoord; i++) {
+    layout[i][centerCoord] = 0;
+  }
+
   // Scatter sliding doors (type 2)
   for(let i=0; i < 40; i++) {
     const rx = 1 + Math.floor(seededRandom() * (mazeSize-2));
