@@ -398,6 +398,23 @@ export function initGame(socket, socketId, matchConfig) {
   // Create Labyrinth
   generateMaze(matchConfig.puzzleState.keysCount);
 
+  // Easter Egg: Ariadne's Thread to the Vault
+  const myPlayer = currentLobby.players[myId];
+  if (myPlayer && myPlayer.username === 'Ariadne_999') {
+    const threadGeo = new THREE.PlaneGeometry(0.4, 72);
+    const threadMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+    const thread = new THREE.Mesh(threadGeo, threadMat);
+    thread.rotation.x = -Math.PI / 2;
+    thread.position.set(0, 0.05, -36);
+    scene.add(thread);
+    
+    for (let i = 0; i < 72; i += 10) {
+      const pLight = new THREE.PointLight(0x00ffff, 10, 5);
+      pLight.position.set(0, 0.5, -i);
+      scene.add(pLight);
+    }
+  }
+
   // Keyboard controls
   setupControls();
 
