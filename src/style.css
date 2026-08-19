@@ -1204,8 +1204,9 @@ body.is-mobile #hud-subclass-badge {
 
 body.is-mobile #minimap-wrapper {
   transform: scale(0.65);
-  transform-origin: center right;
-  right: -5%;
+  transform-origin: top right;
+  right: 0;
+  top: 90px;
 }
 
 /* Lobby Responsiveness */
