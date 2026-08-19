@@ -145,11 +145,18 @@ buyVipBtn.addEventListener('click', async () => {
         alert("VIP Access Granted! Ads removed and credits added.");
         vipPaywallModal.style.display = 'none';
         vipStoreBtn.style.display = 'none'; // Hide the store button since they are VIP
+        playerCredits += 500;
+        localStorage.setItem('manifestation_credits', playerCredits);
+        playerCreditsDisplay.textContent = playerCredits;
       }
     } else {
       // Fallback for hackathon testing if products aren't set up yet in Google Play Console
-      alert("Test Mode: Google Play products not configured yet. (Hackathon Demo)");
+      alert("Test Mode: Google Play products not configured yet. Granting VIP for Hackathon Demo!");
       vipPaywallModal.style.display = 'none';
+      vipStoreBtn.style.display = 'none';
+      playerCredits += 500;
+      localStorage.setItem('manifestation_credits', playerCredits);
+      playerCreditsDisplay.textContent = playerCredits;
     }
   } catch (error) {
     if (!error.userCancelled) {
@@ -159,6 +166,64 @@ buyVipBtn.addEventListener('click', async () => {
     buyVipBtn.textContent = 'Unlock VIP - $4.99';
     buyVipBtn.disabled = false;
   }
+});
+
+// Skins Store and Ads Logic
+const openSkinsBtn = document.getElementById('open-skins-btn');
+const skinsStoreModal = document.getElementById('skins-store-modal');
+const closeSkinsBtn = document.getElementById('close-skins-btn');
+const watchAdBtn = document.getElementById('watch-ad-btn');
+const playerCreditsDisplay = document.getElementById('player-credits-display');
+const buySkinBtns = document.querySelectorAll('.buy-skin-btn');
+
+let playerCredits = parseInt(localStorage.getItem('manifestation_credits') || '0');
+playerCreditsDisplay.textContent = playerCredits;
+
+openSkinsBtn.addEventListener('click', () => {
+  skinsStoreModal.style.display = 'block';
+});
+
+closeSkinsBtn.addEventListener('click', () => {
+  skinsStoreModal.style.display = 'none';
+});
+
+watchAdBtn.addEventListener('click', () => {
+  watchAdBtn.textContent = 'Loading Ad...';
+  watchAdBtn.disabled = true;
+  
+  // Mock Ad Network delay
+  setTimeout(() => {
+    alert("Watching Ad... (This is a mock rewarded video ad)");
+    playerCredits += 50;
+    localStorage.setItem('manifestation_credits', playerCredits);
+    playerCreditsDisplay.textContent = playerCredits;
+    watchAdBtn.textContent = '📺 Watch Ad (+50 💰)';
+    watchAdBtn.disabled = false;
+  }, 1500);
+});
+
+buySkinBtns.forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    const price = parseInt(e.target.getAttribute('data-price'));
+    const skinId = e.target.getAttribute('data-skin-id');
+    
+    if (localStorage.getItem(`unlocked_${skinId}`)) {
+      alert("You already own this skin!");
+      return;
+    }
+    
+    if (playerCredits >= price) {
+      playerCredits -= price;
+      localStorage.setItem('manifestation_credits', playerCredits);
+      localStorage.setItem(`unlocked_${skinId}`, 'true');
+      playerCreditsDisplay.textContent = playerCredits;
+      e.target.textContent = 'Equipped';
+      e.target.style.background = '#059669';
+      alert("Skin successfully purchased and equipped!");
+    } else {
+      alert(`Not enough credits! You need ${price} 💰. Watch ads or buy VIP.`);
+    }
+  });
 });
 
 // Socket Initialization Wrapper
