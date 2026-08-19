@@ -2465,7 +2465,8 @@ function setupSocketListeners() {
 
     if (!players3D[id]) {
       const isGhost = team === 'Ghost';
-      const capMesh = isGhost ? createGhostMeshGroup() : createHumanMeshGroup();
+      const pSkinId = currentLobby && currentLobby.players[id] ? currentLobby.players[id].skinId : null;
+      const capMesh = isGhost ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId);
       
       // Setup thermal camera support
       const meshThermalMat = new THREE.MeshBasicMaterial({ 
@@ -2589,7 +2590,8 @@ function setupSocketListeners() {
       scene.remove(players3D[id]);
       
       // Spawn human mesh in its place
-      const humanMesh = createHumanMeshGroup();
+      const pSkinId = currentLobby && currentLobby.players[id] ? currentLobby.players[id].skinId : null;
+      const humanMesh = createHumanMeshGroup(pSkinId);
       humanMesh.position.copy(originalPosition);
       humanMesh.rotation.copy(originalRotation);
       scene.add(humanMesh);
@@ -2602,7 +2604,7 @@ function setupSocketListeners() {
           scene.remove(players3D[id]);
           
           // Swap back to ghost mesh
-          const ghostMesh = createGhostMeshGroup();
+          const ghostMesh = createGhostMeshGroup(pSkinId);
           ghostMesh.position.copy(currentPos);
           ghostMesh.rotation.copy(currentRot);
           
@@ -3139,10 +3141,21 @@ function playGhostCaptureAnimation(callback) {
   }, 3000);
 }
 
-function createHumanMeshGroup() {
+function createHumanMeshGroup(skinId) {
   const group = new THREE.Group();
   
-  if (preloadedHumanModel) {
+  if (skinId) {
+    const texPath = skinId === 'skin_cyborg' ? '/assets/skin_neon_cyborg.jpg' : '/assets/skin_shadow_ghost.jpg';
+    const spriteMat = new THREE.SpriteMaterial({ 
+      map: new THREE.TextureLoader().load(texPath), 
+      color: 0xffffff,
+      fog: true
+    });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.scale.set(1.5, 1.5, 1);
+    sprite.position.y = 1.0;
+    group.add(sprite);
+  } else if (preloadedHumanModel) {
     const clone = SkeletonUtils.clone(preloadedHumanModel);
     clone.rotation.y = Math.PI; // Fix reversed facing
     group.add(clone);
@@ -3173,10 +3186,21 @@ function createHumanMeshGroup() {
   return group;
 }
 
-function createGhostMeshGroup() {
+function createGhostMeshGroup(skinId) {
   const group = new THREE.Group();
   
-  if (preloadedGhostModel) {
+  if (skinId) {
+    const texPath = skinId === 'skin_cyborg' ? '/assets/skin_neon_cyborg.jpg' : '/assets/skin_shadow_ghost.jpg';
+    const spriteMat = new THREE.SpriteMaterial({ 
+      map: new THREE.TextureLoader().load(texPath), 
+      color: 0xffffff,
+      fog: true
+    });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.scale.set(1.5, 1.5, 1);
+    sprite.position.y = 1.0;
+    group.add(sprite);
+  } else if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
     anchorGroup.add(clone);

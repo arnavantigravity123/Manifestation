@@ -204,13 +204,37 @@ watchAdBtn.addEventListener('click', () => {
   }, 1500);
 });
 
+function updateSkinButtons() {
+  const equipped = localStorage.getItem('manifestation_equipped_skin');
+  buySkinBtns.forEach(btn => {
+    const skinId = btn.getAttribute('data-skin-id');
+    const price = btn.getAttribute('data-price');
+    
+    if (skinId === equipped) {
+      btn.textContent = 'EQUIPPED';
+      btn.style.background = '#059669';
+    } else if (localStorage.getItem(`unlocked_${skinId}`)) {
+      btn.textContent = 'EQUIP';
+      btn.style.background = '#3b82f6';
+    } else {
+      btn.textContent = `BUY - ${price} 💰`;
+      btn.style.background = '';
+    }
+  });
+}
+
+// Call on startup
+updateSkinButtons();
+
 buySkinBtns.forEach(btn => {
   btn.addEventListener('click', (e) => {
     const price = parseInt(e.target.getAttribute('data-price'));
     const skinId = e.target.getAttribute('data-skin-id');
     
     if (localStorage.getItem(`unlocked_${skinId}`)) {
-      alert("You already own this skin!");
+      // Already owned, just equip
+      localStorage.setItem('manifestation_equipped_skin', skinId);
+      updateSkinButtons();
       return;
     }
     
@@ -218,9 +242,9 @@ buySkinBtns.forEach(btn => {
       playerCredits -= price;
       localStorage.setItem('manifestation_credits', playerCredits);
       localStorage.setItem(`unlocked_${skinId}`, 'true');
+      localStorage.setItem('manifestation_equipped_skin', skinId);
       playerCreditsDisplay.textContent = playerCredits;
-      e.target.textContent = 'Equipped';
-      e.target.style.background = '#059669';
+      updateSkinButtons();
       alert("Skin successfully purchased and equipped!");
     } else {
       alert(`Not enough credits! You need ${price} 💰. Watch ads or buy VIP.`);
@@ -311,30 +335,34 @@ function getUsername() {
   return usernameInput.value.trim() || `Operative_${Math.floor(100 + Math.random() * 900)}`;
 }
 
+function getSkinId() {
+  return localStorage.getItem('manifestation_equipped_skin') || null;
+}
+
 soloBtn.addEventListener('click', () => {
   isSoloMode = true;
   soloLoadingOverlay.style.display = 'block';
   const s = initializeSocketConnection();
   
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  s.emit('join_room', { roomId, username: getUsername(), isPublic: false });
+  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false });
 });
 
 createPublicBtn.addEventListener('click', () => {
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  s.emit('join_room', { roomId, username: getUsername(), isPublic: true });
+  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: true });
 });
 
 joinPublicBtn.addEventListener('click', () => {
   const s = initializeSocketConnection();
-  s.emit('join_public_matchmaking', { username: getUsername() });
+  s.emit('join_public_matchmaking', { username: getUsername(), skinId: getSkinId() });
 });
 
 createPrivateBtn.addEventListener('click', () => {
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  s.emit('join_room', { roomId, username: getUsername(), isPublic: false });
+  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false });
 });
 
 joinPrivateBtn.addEventListener('click', () => {
@@ -344,7 +372,7 @@ joinPrivateBtn.addEventListener('click', () => {
     return;
   }
   const s = initializeSocketConnection();
-  s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), isPublic: false });
+  s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), skinId: getSkinId(), isPublic: false });
 });
 
 // ====== Quit Handlers ======
@@ -542,6 +570,7 @@ window.addEventListener('DOMContentLoaded', () => {
     s.emit('join_room', {
       roomId: rejoinId,
       username: rejoinUser,
+      skinId: getSkinId(),
       isPublic: rejoinPublicStr === 'true'
     });
   }

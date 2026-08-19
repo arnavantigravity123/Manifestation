@@ -120,7 +120,7 @@ function endMatch(roomId, winner) {
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`);
 
-  socket.on('join_public_matchmaking', ({ username }) => {
+  socket.on('join_public_matchmaking', ({ username, skinId }) => {
     // Find an open public lobby
     let targetRoomId = null;
     for (const [id, lobby] of Object.entries(lobbies)) {
@@ -139,14 +139,14 @@ io.on('connection', (socket) => {
     }
 
     // Call join room with public flag
-    joinRoomHandler(socket, { roomId: targetRoomId, username, isPublic: true });
+    joinRoomHandler(socket, { roomId: targetRoomId, username, skinId, isPublic: true });
   });
 
   socket.on('join_room', (data) => {
     joinRoomHandler(socket, data);
   });
 
-  function joinRoomHandler(socket, { roomId, username, isPublic = false }) {
+  function joinRoomHandler(socket, { roomId, username, skinId = null, isPublic = false }) {
     socket.join(roomId);
     
     if (!lobbies[roomId]) {
@@ -173,6 +173,7 @@ io.on('connection', (socket) => {
       lobby.players[socket.id] = {
         id: socket.id,
         username: username || `Survivor #${Math.floor(1000 + Math.random() * 9000)}`,
+        skinId: skinId,
         team: 'Human',
         characterClass: 'Locksmith',
         isHost: isHost,
@@ -191,6 +192,7 @@ io.on('connection', (socket) => {
     lobby.players[socket.id] = {
       id: socket.id,
       username: username || `Survivor #${Math.floor(1000 + Math.random() * 9000)}`,
+      skinId: skinId,
       team: 'Human', // Default team
       characterClass: 'Locksmith', // Default subclass
       isHost,
