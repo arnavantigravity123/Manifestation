@@ -360,19 +360,16 @@ export function initGame(socket, socketId, matchConfig) {
   scene.background = new THREE.Color(0x000000); // Pure black to eliminate any gap visibility
   scene.fog = new THREE.FogExp2(myTeam === 'Human' ? 0x030712 : 0x1e1b4b, 0.05);
 
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  // EXPOSE FOR DEBUGGING
-  window.scene = scene;
-  window.camera = camera;
-  camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
-  // 2. Renderer container
-  const container = document.getElementById('canvas-container');
   const w = container.clientWidth || window.innerWidth;
   const h = container.clientHeight || window.innerHeight;
   
-  // 1. Camera
   camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
+  camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
   camera.position.set(0, 1.6, 0); // Eye level
+
+  // EXPOSE FOR DEBUGGING
+  window.scene = scene;
+  window.camera = camera;
 
   // 3. Renderer setup
   renderer = new THREE.WebGLRenderer({ antialias: true });
