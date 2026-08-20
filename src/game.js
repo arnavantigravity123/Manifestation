@@ -140,6 +140,7 @@ let currentLobby = null;
 let currentHP = 100;
 let currentSanity = 100;
 let inventory = [];
+const abilityCooldowns = {};
 let activeSlot = 0;
 let players3D = {}; // id -> mesh
 let ghosts3D = [];  // bot meshes
@@ -1097,22 +1098,27 @@ function generateConsumableItems() {
     { name: 'EMF Radar', map: textureLoader.load('/assets/emf_sprite.png') },
     { name: 'Thermal Camera', map: textureLoader.load('/assets/thermal_sprite.png') },
     { name: 'Sanity Pills', map: textureLoader.load('/assets/pills_sprite.png') },
-    { name: 'Med Kit', map: textureLoader.load('/assets/medkit_sprite.png') }
+    { name: 'Med Kit', map: textureLoader.load('/assets/medkit_sprite.png') },
+    { name: 'Salt Cannister', map: textureLoader.load('/assets/salt_sprite.png') },
+    { name: 'Breaker Remote', map: textureLoader.load('/assets/remote_sprite.png') }
   ];
 
-  // Generate exactly 1 EMF and 1 Thermal, then randomly pick Battery/Pills/MedKit for the remaining 8 items
+  // Generate 1 EMF, 1 Thermal, 1 Breaker Remote, then randomly pick Battery/Pills/MedKit/Salt
   const itemsToSpawn = [
     itemTypes[1], // EMF
-    itemTypes[2]  // Thermal
+    itemTypes[2], // Thermal
+    itemTypes[6]  // Breaker Remote
   ];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 9; i++) {
     const rand = seededRandom();
-    if (rand > 0.6) {
-      itemsToSpawn.push(itemTypes[0]); // 40% Battery
-    } else if (rand > 0.3) {
+    if (rand > 0.7) {
+      itemsToSpawn.push(itemTypes[0]); // 30% Battery
+    } else if (rand > 0.4) {
       itemsToSpawn.push(itemTypes[3]); // 30% Sanity Pills
+    } else if (rand > 0.2) {
+      itemsToSpawn.push(itemTypes[4]); // 20% Med Kit
     } else {
-      itemsToSpawn.push(itemTypes[4]); // 30% Med Kit
+      itemsToSpawn.push(itemTypes[5]); // 20% Salt Cannister
     }
   }
 
@@ -2039,6 +2045,14 @@ function useActiveItem() {
     triggerNotification("thermal camera is passively active when held.");
   } else if (item === "Ghost Claws") {
     if (myTeam !== 'Ghost') return;
+    
+    // 5-second cooldown on Ghost Claws attacks
+    const now = Date.now();
+    if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
+      triggerNotification(`Ghost Claws recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
+      return;
+    }
+
     let closestId = null;
     let closestDist = 4.0;
     Object.keys(players3D).forEach(id => {
@@ -2052,10 +2066,16 @@ function useActiveItem() {
     if (closestId) {
       socketClient.emit('capture_human', { targetId: closestId });
       triggerNotification("Captured a survivor!");
+      abilityCooldowns[item] = now + 5000;
     } else {
       triggerNotification("No survivor in range.");
     }
   } else if (item === "Scent Tracker") {
+    const now = Date.now();
+    if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
+      triggerNotification(`Scent Tracker recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
+      return;
+    }
     triggerNotification("Scent tracking active.");
     let closestDist = 9999;
     let closestPos = null;
@@ -2074,31 +2094,56 @@ function useActiveItem() {
       scene.add(line);
       setTimeout(() => scene.remove(line), 5000);
     }
-    removeItem(activeSlot);
+    abilityCooldowns[item] = now + 20000; // 20s cooldown
   } else if (item === "Infiltration Clone") {
+    const now = Date.now();
+    if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
+      triggerNotification(`Clone recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
+      return;
+    }
     triggerNotification("Mimic clone active! You appear human.");
     socketClient.emit('mimic_clone');
-    removeItem(activeSlot);
+    abilityCooldowns[item] = now + 30000; // 30s cooldown
   } else if (item === "Audio Amplifiers") {
+    const now = Date.now();
+    if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
+      triggerNotification(`Amplifiers recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
+      return;
+    }
     triggerNotification("Audio Amplifiers engaged! Extreme speed.");
     speedBoostTimer = 10;
-    removeItem(activeSlot);
+    abilityCooldowns[item] = now + 45000; // 45s cooldown
   } else if (item === "Vapor Leap") {
+    const now = Date.now();
+    if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
+      triggerNotification(`Vapor Leap recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
+      return;
+    }
     triggerNotification("Vapor Leap!");
     const forward = new THREE.Vector3();
     camera.getWorldDirection(forward);
     forward.y = 0;
     forward.normalize();
     camera.position.addScaledVector(forward, 12);
-    removeItem(activeSlot);
+    abilityCooldowns[item] = now + 15000; // 15s cooldown
   } else if (item === "Breaker Siphon") {
+    const now = Date.now();
+    if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
+      triggerNotification(`Siphon recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
+      return;
+    }
     triggerNotification("Breaker Siphon deployed!");
     socketClient.emit('breaker_siphon');
-    removeItem(activeSlot);
+    abilityCooldowns[item] = now + 30000; // 30s cooldown
   } else if (item === "Sound Scrambler") {
+    const now = Date.now();
+    if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
+      triggerNotification(`Scrambler recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
+      return;
+    }
     triggerNotification("Scrambler unleashed!");
     socketClient.emit('sound_scramble');
-    removeItem(activeSlot);
+    abilityCooldowns[item] = now + 40000; // 40s cooldown
   } else if (item === "Chalk / UV Spray") {
     deployChalkDecal(camera.position);
     socketClient.emit('chalk_spray', { position: { x: camera.position.x, z: camera.position.z } });
