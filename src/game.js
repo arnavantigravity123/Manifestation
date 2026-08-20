@@ -365,14 +365,16 @@ export function initGame(socket, socketId, matchConfig) {
   window.scene = scene;
   window.camera = camera;
   camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
-  const w = document.documentElement.clientWidth;
-  const h = document.documentElement.clientHeight;
+  // 2. Renderer container
+  const container = document.getElementById('canvas-container');
+  const w = container.clientWidth || window.innerWidth;
+  const h = container.clientHeight || window.innerHeight;
   
   // 1. Camera
   camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
   camera.position.set(0, 1.6, 0); // Eye level
 
-  // 2. Renderer
+  // 3. Renderer setup
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(w, h);
   renderer.shadowMap.enabled = true;
@@ -444,8 +446,9 @@ export function initGame(socket, socketId, matchConfig) {
 
   // Window Resize
   window.addEventListener('resize', () => {
-    const w = document.documentElement.clientWidth;
-    const h = document.documentElement.clientHeight;
+    const container = document.getElementById('canvas-container');
+    const w = container.clientWidth || window.innerWidth;
+    const h = container.clientHeight || window.innerHeight;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     if (activeViewCamera) {
