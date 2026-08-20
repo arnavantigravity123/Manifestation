@@ -361,15 +361,20 @@ export function initGame(socket, socketId, matchConfig) {
   scene.fog = new THREE.FogExp2(myTeam === 'Human' ? 0x030712 : 0x1e1b4b, 0.05);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  
   // EXPOSE FOR DEBUGGING
   window.scene = scene;
   window.camera = camera;
   camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
-  camera.position.set(0, 1.6, 0); // Eye-level
+  const w = document.documentElement.clientWidth;
+  const h = document.documentElement.clientHeight;
+  
+  // 1. Camera
+  camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
+  camera.position.set(0, 1.6, 0); // Eye level
 
+  // 2. Renderer
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(w, h);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
@@ -439,13 +444,15 @@ export function initGame(socket, socketId, matchConfig) {
 
   // Window Resize
   window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    const w = document.documentElement.clientWidth;
+    const h = document.documentElement.clientHeight;
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
     if (activeViewCamera) {
-      activeViewCamera.aspect = window.innerWidth / window.innerHeight;
+      activeViewCamera.aspect = w / h;
       activeViewCamera.updateProjectionMatrix();
     }
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(w, h);
   });
 
   // Start loop
