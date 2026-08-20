@@ -197,15 +197,21 @@ let mapMarks = [];
 let isMinimapExpanded = false;
 
 let seededRandom = Math.random;
-
+// --- Map Generator ---
 function mulberry32(a) {
   return function() {
-    let t = a += 0x6D2B79F5;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+    var t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
 }
+
+// --- Player Camera Views ---
+let viewModes = ['fps', 'tps_shoulder', 'tps_far', 'top_down'];
+let currentViewIndex = 0;
+let activeViewCamera = null;
+let localPlayerVisual = null;
 
 function shuffleArray(array) {
   for (let i = array.length - 1; i > 0; i--) {
@@ -226,6 +232,10 @@ export function initGame(socket, socketId, matchConfig) {
   seededRandom = mulberry32(seedInt);
 
   // Reset core game state variables for clean start/re-entry
+  currentViewIndex = 0;
+  activeViewCamera = null;
+  localPlayerVisual = null;
+  
   currentHP = 100;
   currentSanity = 100;
   isPanicked = false;
@@ -431,6 +441,10 @@ export function initGame(socket, socketId, matchConfig) {
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
+    if (activeViewCamera) {
+      activeViewCamera.aspect = window.innerWidth / window.innerHeight;
+      activeViewCamera.updateProjectionMatrix();
+    }
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
@@ -1160,7 +1174,37 @@ function realignMazeCorridors(realignmentState) {
   });
 }
 
+function toggleCameraView() {
+  currentViewIndex = (currentViewIndex + 1) % viewModes.length;
+  const mode = viewModes[currentViewIndex];
+  
+  if (!activeViewCamera) {
+    activeViewCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    scene.add(activeViewCamera);
+  }
+  
+  // Make sure we have a local player visual if we enter TPS
+  if (mode !== 'fps' && !localPlayerVisual) {
+    const pSkinId = localStorage.getItem('manifestation_equipped_skin') || null;
+    localPlayerVisual = myTeam === 'Ghost' ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId);
+    // Align visual downwards slightly since camera is at eye level (1.6)
+    localPlayerVisual.position.set(0, myTeam === 'Ghost' ? -1.25 : -1.6, 0);
+    camera.add(localPlayerVisual);
+  }
+
+  if (mode === 'fps') {
+    if (localPlayerVisual) localPlayerVisual.visible = false;
+  } else {
+    if (localPlayerVisual) localPlayerVisual.visible = true;
+  }
+  triggerNotification("Camera View: " + mode.toUpperCase());
+}
+
+let controlsSetup = false;
 function setupControls() {
+  if (controlsSetup) return;
+  controlsSetup = true;
+
   const container = document.getElementById('canvas-container');
   const onKeyDown = (event) => {
     // If keypad is open, intercept numeric keys and backspace
@@ -1235,6 +1279,9 @@ function setupControls() {
         break;
       case 'KeyG':
         dropKey();
+        break;
+      case 'KeyV':
+        toggleCameraView();
         break;
       case 'BracketLeft':
         activeSlot = (activeSlot - 1 + inventory.length) % inventory.length;
@@ -3470,9 +3517,40 @@ function drawMinimap() {
 }
 
 // 3D Game Loop rendering
+let animationFrameId = null;
 let networkTimer = 0;
 function animate() {
-  requestAnimationFrame(animate);
+  if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
+  animationFrameId = requestAnimationFrame(animate);
+
+  if (localPlayerVisual) {
+    localPlayerVisual.rotation.x = -camera.rotation.x;
+  }
+  
+  if (activeViewCamera) {
+    const mode = viewModes[currentViewIndex];
+    if (mode === 'fps') {
+      activeViewCamera.position.copy(camera.position);
+      activeViewCamera.quaternion.copy(camera.quaternion);
+    } else {
+      const offset = new THREE.Vector3();
+      const euler = new THREE.Euler(0, camera.rotation.y, 0, 'YXZ');
+      
+      if (mode === 'tps_shoulder') {
+        offset.set(0.8, 0.5, 3);
+        activeViewCamera.rotation.set(camera.rotation.x, camera.rotation.y, 0, 'YXZ');
+      } else if (mode === 'tps_far') {
+        offset.set(0, 1.5, 6);
+        activeViewCamera.rotation.set(camera.rotation.x - 0.1, camera.rotation.y, 0, 'YXZ');
+      } else if (mode === 'top_down') {
+        offset.set(0, 15, 0);
+        activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
+      }
+      
+      offset.applyEuler(euler);
+      activeViewCamera.position.copy(camera.position).add(offset);
+    }
+  }
 
   const time = performance.now();
   const delta = (time - prevTime) / 1000;
@@ -4128,5 +4206,5 @@ function animate() {
     drawMinimap();
   }
 
-  renderer.render(scene, camera);
+  renderer.render(scene, activeViewCamera || camera);
 }
