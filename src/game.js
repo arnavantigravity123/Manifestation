@@ -3196,11 +3196,14 @@ function createHumanMeshGroup(skinId) {
     const spriteMat = new THREE.SpriteMaterial({ 
       map: new THREE.TextureLoader().load(texPath), 
       color: 0xffffff,
-      fog: true
+      fog: true,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
     });
     const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(1.5, 1.5, 1);
-    sprite.position.y = 1.0;
+    sprite.scale.set(1.2, 1.2, 1);
+    sprite.position.y = 0.8;
     group.add(sprite);
   } else if (preloadedHumanModel) {
     const clone = SkeletonUtils.clone(preloadedHumanModel);
@@ -3241,11 +3244,14 @@ function createGhostMeshGroup(skinId) {
     const spriteMat = new THREE.SpriteMaterial({ 
       map: new THREE.TextureLoader().load(texPath), 
       color: 0xffffff,
-      fog: true
+      fog: true,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
     });
     const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(1.5, 1.5, 1);
-    sprite.position.y = 1.0;
+    sprite.scale.set(1.2, 1.2, 1);
+    sprite.position.y = 0.8;
     group.add(sprite);
   } else if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
