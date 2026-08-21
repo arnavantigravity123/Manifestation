@@ -2806,8 +2806,9 @@ function setupSocketListeners() {
       triggerNotification("Breaker Siphon! Flashlights disabled (15s)");
       setTimeout(() => {
         if (flashlightBattery > 0 && flashLight) {
-          if (inventory.includes('Battery Pack')) flashLight.intensity = 200;
-          else flashLight.intensity = 80;
+          const mult = getVisionMultiplier();
+          if (inventory.includes('Battery Pack')) flashLight.intensity = 200 * mult;
+          else flashLight.intensity = 80 * mult;
         }
       }, 15000);
     }
