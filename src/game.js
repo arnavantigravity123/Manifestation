@@ -459,6 +459,7 @@ export function initGame(socket, socketId, matchConfig) {
       b.mesh.material.color.setHex(0x10b981);
       b.mesh.material.emissive = new THREE.Color(0x10b981);
     });
+    updateEnvironmentLighting();
 
     const codeStr = (window.cipherCodeDigits || []).join('');
     setTimeout(() => {
@@ -1475,6 +1476,7 @@ function setupControls() {
             b.isFixed = true;
             b.mesh.material.color.setHex(0x10b981);
           });
+          updateEnvironmentLighting();
 
           // 4. Teleport right in front of the vault (close enough to trigger win on interaction)
           camera.position.set(gateCoordinates.x, 1.6, gateCoordinates.z + 4);
@@ -2534,12 +2536,20 @@ function processSanity(delta) {
   }
 }
 
+function getVisionMultiplier() {
+  if (typeof fixedBreakersCount === 'undefined') return 1.0;
+  if (fixedBreakersCount >= 3) return 1.50;
+  if (fixedBreakersCount === 2) return 1.25;
+  if (fixedBreakersCount === 1) return 1.10;
+  return 1.0;
+}
+
 function processFlashlightBattery(delta) {
   if (myTeam !== 'Human') return;
   if (!flashLight) return;
 
-  const intensityBonus = typeof fixedBreakersCount !== 'undefined' ? fixedBreakersCount * 40 : 0;
-  const baseIntensity = (inventory.includes('Battery Pack') ? 200 : 80) + intensityBonus;
+  const mult = getVisionMultiplier();
+  const baseIntensity = (inventory.includes('Battery Pack') ? 200 : 80) * mult;
 
   // Drain if battery still has charge (tracked by battery level, not intensity,
   // so a flicker can't permanently kill the light)
@@ -3526,6 +3536,25 @@ function setupMinimap() {
   });
 }
 
+function updateEnvironmentLighting() {
+  const mult = getVisionMultiplier();
+  if (myTeam === 'Ghost') {
+    ambientLight.intensity = 2.0 * mult;
+  } else {
+    if (!isMobileDevice) {
+      ambientLight.intensity = 1.5 * mult;
+    } else {
+      ambientLight.intensity = 2.0 * mult;
+    }
+    
+    // Boost flashlight range and width slightly
+    if (flashLight) {
+      flashLight.distance = 45 * mult;
+      flashLight.angle = (Math.PI / 3) * mult;
+    }
+  }
+}
+
 function fixBreakerLocal(breakerId) {
   const breaker = circuitBreakers.find(b => b.id === breakerId);
   if (!breaker || breaker.isFixed) return;
@@ -3534,22 +3563,7 @@ function fixBreakerLocal(breakerId) {
   breaker.mesh.material.color.setHex(0x10b981); // Turn green
   fixedBreakersCount++;
   
-  // Increase global ambient light slightly with each fixed breaker
-  if (myTeam === 'Ghost') {
-    ambientLight.intensity = 1.5 + (fixedBreakersCount * 2.0);
-  } else {
-    if (!isMobileDevice) {
-      ambientLight.intensity = 0.5 + (fixedBreakersCount * 0.7);
-    } else {
-      ambientLight.intensity = 1.0 + (fixedBreakersCount * 0.8);
-    }
-    
-    // Boost flashlight range and width slightly
-    if (flashLight) {
-      flashLight.distance = 45 + (fixedBreakersCount * 25);
-      flashLight.angle = (Math.PI / 3) + (fixedBreakersCount * 0.1);
-    }
-  }
+  updateEnvironmentLighting();
 
   triggerNotification(`circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
   checkWinCondition();
