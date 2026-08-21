@@ -849,10 +849,23 @@ function generateMaze(keysCount = 8) {
   carve(centerCoord, centerCoord);
   layout[Math.floor(mazeSize/2)][Math.floor(mazeSize/2)] = 0; // Ensure true center spawn is safe
 
-  // Force an ALWAYS OPEN grand hallway straight to the Master Gate (Vault) at the North
-  // This guarantees the vault is never blocked and is easily findable from the center
-  for (let i = 1; i <= centerCoord; i++) {
-    layout[i][centerCoord] = 0;
+  // Randomly select one of the 4 cardinal boundaries for the Master Gate (Vault)
+  // This guarantees the vault is always accessible from the center but its location is randomized each match
+  window.vaultEdge = ['N', 'S', 'E', 'W'][Math.floor(Math.random() * 4)];
+  window.vaultR = 0; window.vaultC = centerCoord; // Defaults
+
+  if (window.vaultEdge === 'N') {
+    for (let i = 1; i <= centerCoord; i++) layout[i][centerCoord] = 0;
+    window.vaultR = 0; window.vaultC = centerCoord;
+  } else if (window.vaultEdge === 'S') {
+    for (let i = centerCoord; i < mazeSize - 1; i++) layout[i][centerCoord] = 0;
+    window.vaultR = mazeSize - 1; window.vaultC = centerCoord;
+  } else if (window.vaultEdge === 'E') {
+    for (let i = centerCoord; i < mazeSize - 1; i++) layout[centerCoord][i] = 0;
+    window.vaultR = centerCoord; window.vaultC = mazeSize - 1;
+  } else if (window.vaultEdge === 'W') {
+    for (let i = 1; i <= centerCoord; i++) layout[centerCoord][i] = 0;
+    window.vaultR = centerCoord; window.vaultC = 0;
   }
 
   // Scatter sliding doors (type 2)
@@ -924,7 +937,29 @@ function generateMaze(keysCount = 8) {
   }
 
   // Draw the Master Gate — Photorealistic Vault Door
-  gateCoordinates = { x: 0, z: - (mazeSize/2 * blockSize) + blockSize + 0.26 }; // Flush against the north boundary wall (accounting for +0.5 wall overlap)
+  const vaultXPos = (window.vaultC - layout[0].length / 2) * blockSize + blockSize/2;
+  const vaultZPos = (window.vaultR - layout.length / 2) * blockSize + blockSize/2;
+
+  // Offset slightly from the boundary wall so it's visible and doesn't z-fight
+  let offsetZ = 0, offsetX = 0, padOffsetZ = 0, padOffsetX = 0, blockOffsetZ = 0, blockOffsetX = 0;
+  let gateRotY = 0;
+  
+  if (window.vaultEdge === 'N') {
+    // North wall: faces South (+Z). Left is +X.
+    offsetZ = +0.26; padOffsetX = 1.2; padOffsetZ = 0.05; blockOffsetZ = -0.5; gateRotY = 0;
+  } else if (window.vaultEdge === 'S') {
+    // South wall: faces North (-Z). Left is -X.
+    offsetZ = -0.26; padOffsetX = -1.2; padOffsetZ = -0.05; blockOffsetZ = 0.5; gateRotY = Math.PI;
+  } else if (window.vaultEdge === 'E') {
+    // East wall: faces West (-X). Left is -Z.
+    offsetX = -0.26; padOffsetZ = -1.2; padOffsetX = -0.05; blockOffsetX = 0.5; gateRotY = -Math.PI / 2;
+  } else if (window.vaultEdge === 'W') {
+    // West wall: faces East (+X). Left is +Z.
+    offsetX = +0.26; padOffsetZ = 1.2; padOffsetX = 0.05; blockOffsetX = -0.5; gateRotY = Math.PI / 2;
+  }
+
+  gateCoordinates = { x: vaultXPos + offsetX, z: vaultZPos + offsetZ };
+  
   const gateGeo = new THREE.PlaneGeometry(4.5, 4); // Match corridor width
   const vaultTex = textureLoader.load('/assets/vault_door.png');
   vaultTex.wrapS = THREE.ClampToEdgeWrapping;
@@ -937,15 +972,20 @@ function generateMaze(keysCount = 8) {
   });
   const gateMesh = new THREE.Mesh(gateGeo, gateMat);
   gateMesh.position.set(gateCoordinates.x, 2, gateCoordinates.z);
+  gateMesh.rotation.y = gateRotY;
   gateMeshRef = gateMesh;
   scene.add(gateMesh);
   
   // Create an invisible blocking volume so player can't walk through the door
-  const gateBlockerGeo = new THREE.BoxGeometry(4.5, 4, 1);
+  let blockerSizeX = 4.5, blockerSizeZ = 1;
+  if (window.vaultEdge === 'E' || window.vaultEdge === 'W') {
+    blockerSizeX = 1; blockerSizeZ = 4.5;
+  }
+  const gateBlockerGeo = new THREE.BoxGeometry(blockerSizeX, 4, blockerSizeZ);
   const gateBlockerMat = new THREE.MeshBasicMaterial({ visible: false });
   const gateBlocker = new THREE.Mesh(gateBlockerGeo, gateBlockerMat);
-  gateBlocker.position.set(gateCoordinates.x, 2, gateCoordinates.z - 0.5);
-  gateBlocker.userData = { halfSizeX: 4.5 / 2, halfSizeZ: 1 / 2 };
+  gateBlocker.position.set(vaultXPos + blockOffsetX, 2, vaultZPos + blockOffsetZ);
+  gateBlocker.userData = { halfSizeX: blockerSizeX / 2, halfSizeZ: blockerSizeZ / 2 };
   scene.add(gateBlocker);
   walls.push(gateBlocker);
   gateBlockerRef = gateBlocker;
@@ -955,7 +995,8 @@ function generateMaze(keysCount = 8) {
   const padTex = textureLoader.load('/assets/keypad.png');
   const padMat = new THREE.MeshStandardMaterial({ map: padTex, metalness: 0.5, roughness: 0.5 });
   const padMesh = new THREE.Mesh(padGeo, padMat);
-  padMesh.position.set(gateCoordinates.x + 1.2, 1.5, gateCoordinates.z + 0.05); 
+  padMesh.position.set(gateCoordinates.x + padOffsetX, 1.5, gateCoordinates.z + padOffsetZ);
+  padMesh.rotation.y = gateRotY;
   scene.add(padMesh);
 
   // Spawn key collectibles in chests/lockers represented by boxes
@@ -1426,7 +1467,13 @@ function setupControls() {
         cheatBuffer = '';
         try {
           // Teleport player to the gate
-          camera.position.set(gateCoordinates.x, 1.6, gateCoordinates.z + 4);
+          let telX = gateCoordinates.x;
+          let telZ = gateCoordinates.z;
+          if (window.vaultEdge === 'N') telZ += 4;
+          if (window.vaultEdge === 'S') telZ -= 4;
+          if (window.vaultEdge === 'E') telX -= 4;
+          if (window.vaultEdge === 'W') telX += 4;
+          camera.position.set(telX, 1.6, telZ);
           
           // Move ALL keys in maze right in front of the player
           keysInMaze.forEach((k, index) => {
@@ -1479,7 +1526,13 @@ function setupControls() {
           updateEnvironmentLighting();
 
           // 4. Teleport right in front of the vault (close enough to trigger win on interaction)
-          camera.position.set(gateCoordinates.x, 1.6, gateCoordinates.z + 4);
+          let telX = gateCoordinates.x;
+          let telZ = gateCoordinates.z;
+          if (window.vaultEdge === 'N') telZ += 4;
+          if (window.vaultEdge === 'S') telZ -= 4;
+          if (window.vaultEdge === 'E') telX -= 4;
+          if (window.vaultEdge === 'W') telX += 4;
+          camera.position.set(telX, 1.6, telZ);
           
           const codeStr = (window.cipherCodeDigits || []).join('');
           triggerNotification(`WIN STATE READY! Walk to gate & press E. Code: ${codeStr}`);
@@ -2528,7 +2581,9 @@ function processSanity(delta) {
   document.getElementById('sanity-value').textContent = `${Math.floor(currentSanity)}%`;
   document.getElementById('sanity-bar').style.width = `${currentSanity}%`;
 
-  if (currentSanity < 30) {
+  if (window.sensorsScrambled) {
+    document.body.style.filter = "invert(1) hue-rotate(180deg)";
+  } else if (currentSanity < 30) {
     // Hallucinations overlay
     document.body.style.filter = `hue-rotate(${Math.sin(performance.now() * 0.01) * 30}deg) contrast(1.2)`;
   } else {
@@ -2567,6 +2622,8 @@ function processFlashlightBattery(delta) {
       // Fully dead
       flashLight.intensity = 0;
       triggerNotification("Flashlight battery dead! Find a Battery Pack.");
+    } else if (window.flashlightDisabledBySiphon) {
+      flashLight.intensity = 0;
     } else if (flashlightBattery < 15) {
       // Critical flicker warning (15% → 0%)
       flashLight.intensity = Math.random() < 0.18 ? 0 : baseIntensity * 0.2;
@@ -2802,24 +2859,20 @@ function setupSocketListeners() {
 
   socketClient.on('ghost_breaker_siphon', () => {
     if (myTeam === 'Human') {
-      if (flashLight) flashLight.intensity = 0;
+      window.flashlightDisabledBySiphon = true;
       triggerNotification("Breaker Siphon! Flashlights disabled (15s)");
       setTimeout(() => {
-        if (flashlightBattery > 0 && flashLight) {
-          const mult = getVisionMultiplier();
-          if (inventory.includes('Battery Pack')) flashLight.intensity = 200 * mult;
-          else flashLight.intensity = 80 * mult;
-        }
+        window.flashlightDisabledBySiphon = false;
       }, 15000);
     }
   });
 
   socketClient.on('ghost_sound_scramble', () => {
     if (myTeam === 'Human') {
+      window.sensorsScrambled = true;
       triggerNotification("Signal scrambled! Sensors offline (10s)");
-      document.body.style.filter = "invert(1) hue-rotate(180deg)";
       setTimeout(() => {
-        document.body.style.filter = "none";
+        window.sensorsScrambled = false;
       }, 10000);
     }
   });
@@ -4147,15 +4200,12 @@ function animate() {
             ghost.position.addScaledVector(forward, 8);
           } else if (gClass === 'Poltergeist') {
             triggerNotification("Poltergeist bot deployed Breaker Siphon!");
-            if (flashLight) {
-               const oldInt = flashLight.intensity;
-               flashLight.intensity = 0;
-               setTimeout(() => { if (flashlightBattery > 0) flashLight.intensity = oldInt; }, 10000);
-            }
+            window.flashlightDisabledBySiphon = true;
+            setTimeout(() => { window.flashlightDisabledBySiphon = false; }, 10000);
           } else if (gClass === 'Banshee') {
             triggerNotification("Banshee bot scrambled your sensors!");
-            document.body.style.filter = "invert(1) hue-rotate(180deg)";
-            setTimeout(() => { document.body.style.filter = "none"; }, 5000);
+            window.sensorsScrambled = true;
+            setTimeout(() => { window.sensorsScrambled = false; }, 5000);
           }
         }
       }
