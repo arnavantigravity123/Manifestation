@@ -1771,19 +1771,22 @@ function updateInteractionPrompt() {
   if (lookingAtGate) { // Must be looking roughly at the door/keypad
     if (distToGate < minDistance) {
       minDistance = distToGate;
+      const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+      const carriedSymbols = carriedKeys.map(k => k.symbol);
+      const hasFirstKey = functionalKeysRevealed.length > 0 && carriedSymbols.includes(functionalKeysRevealed[0]);
+      const hasSecondKey = functionalKeysRevealed.length > 1 && carriedSymbols.includes(functionalKeysRevealed[1]);
+
       if (!gateSolved) {
-        const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
-        const carriedSymbols = carriedKeys.map(k => k.symbol);
-        const hasFirstKey = carriedSymbols.includes(functionalKeysRevealed[0]);
-        const hasSecondKey = carriedSymbols.includes(functionalKeysRevealed[1]);
-        if (!hasFirstKey || !hasSecondKey || !breakersFixed) {
-          promptText = `ACCESS DENIED: Need 2 Keys & 3 Breakers (${fixedBreakersCount}/${totalBreakersRequired})`;
+        if (!breakersFixed) {
+          promptText = `ACCESS DENIED: Need 3 Breakers to power terminal (${fixedBreakersCount}/${totalBreakersRequired})`;
         } else {
           promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
         }
       } else {
         if (hasFirstKey && hasSecondKey && breakersFixed) {
           promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
+        } else {
+          promptText = `ACCESS DENIED: Need Twin Keys to Escape`;
         }
       }
     }
