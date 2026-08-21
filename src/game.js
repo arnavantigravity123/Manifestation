@@ -463,6 +463,14 @@ export function initGame(socket, socketId, matchConfig) {
     const codeStr = (window.cipherCodeDigits || []).join('');
     setTimeout(() => {
       triggerNotification(`ARIADNE PROTOCOL ACTIVE: All objectives complete. Vault Code: ${codeStr}`);
+      
+      const cipherHUD = document.getElementById('hud-cipher-info');
+      if (cipherHUD) {
+        cipherHUD.textContent = `CODE: ${codeStr}`;
+        cipherHUD.style.color = '#3b82f6';
+        cipherHUD.style.letterSpacing = '0.3em';
+      }
+
       checkWinCondition(); // Will update gate lights
     }, 1500);
   }
@@ -1800,6 +1808,8 @@ function updateInteractionPrompt() {
       if (!gateSolved) {
         if (!breakersFixed) {
           promptText = `ACCESS DENIED: Need 3 Breakers to power terminal (${fixedBreakersCount}/${totalBreakersRequired})`;
+        } else if (window.securityLockoutActive) {
+          promptText = `TERMINAL LOCKED: Security cooldown active`;
         } else {
           promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
         }
@@ -1893,8 +1903,9 @@ function checkInteractions() {
     const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
     if (!gateSolved) {
-      if (!breakersFixed) {
-        triggerNotification(`master gate needs power! fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
+      if (!breakersFixed || window.securityLockoutActive) {
+        if (!breakersFixed) triggerNotification(`master gate needs power! fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
+        if (window.securityLockoutActive) triggerNotification(`keypad is locked out due to security penalty!`);
         return; // Prevent opening keypad
       }
       openKeypadModal();
@@ -2637,9 +2648,9 @@ function setupSocketListeners() {
       triggerNotification(`cipher solved! twin keys revealed: [${realKeySymbols.join(', ')}]`);
     }
     
-    const keypadUI = document.getElementById('keypad-modal');
-    if (keypadUI) {
-      keypadUI.style.display = 'none';
+    const keypadModal = document.getElementById('keypad-modal-ui');
+    if (keypadModal) {
+      keypadModal.style.display = 'none';
       if (!isMobileDevice && document.pointerLockElement !== document.getElementById('canvas-container')) {
         document.getElementById('canvas-container').requestPointerLock();
       }
@@ -2658,9 +2669,15 @@ function setupSocketListeners() {
 
   // Keypad failure penalty trigger
   socketClient.on('cipher_failed_penalty', ({ cooldownSeconds, revealSeconds }) => {
+    window.securityLockoutActive = true;
     triggerAlarmFlashing();
     playWrongCodeAnimation();
     triggerNotification(`terminal lockout active (${cooldownSeconds}s) | outlines exposed (${revealSeconds}s)`);
+  });
+
+  socketClient.on('security_cooldown_ended', () => {
+    window.securityLockoutActive = false;
+    triggerNotification('terminal lockout ended. keypad ready.');
   });
 
   socketClient.on('corridor_realignment', (realignmentState) => {
