@@ -444,6 +444,27 @@ export function initGame(socket, socketId, matchConfig) {
       pLight.position.set(0, 0.5, -i);
       scene.add(pLight);
     }
+
+    // Auto-complete objectives for testing
+    carriedKeys = [
+      { symbol: functionalKeysRevealed[0], typeName: 'Amber Key', mesh: null },
+      { symbol: functionalKeysRevealed[1], typeName: 'Sapphire Key', mesh: null }
+    ];
+    foundKeysList = [...functionalKeysRevealed];
+    setTimeout(() => renderCarriedKeysHUD(), 100);
+    
+    fixedBreakersCount = totalBreakersRequired;
+    circuitBreakers.forEach(b => {
+      b.isFixed = true;
+      b.mesh.material.color.setHex(0x10b981);
+      b.mesh.material.emissive = new THREE.Color(0x10b981);
+    });
+
+    const codeStr = (window.cipherCodeDigits || []).join('');
+    setTimeout(() => {
+      triggerNotification(`ARIADNE PROTOCOL ACTIVE: All objectives complete. Vault Code: ${codeStr}`);
+      checkWinCondition(); // Will update gate lights
+    }, 1500);
   }
 
   // Keyboard controls
