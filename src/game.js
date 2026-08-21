@@ -413,6 +413,22 @@ export function initGame(socket, socketId, matchConfig) {
   // Create Labyrinth
   generateMaze(matchConfig.puzzleState.keysCount);
 
+  // Set spawn positions
+  if (myTeam === 'Ghost') {
+    // Pick a random open corridor far from the center (where humans spawn)
+    const farCorridors = openCorridors.filter(c => Math.abs(c.x) > 20 || Math.abs(c.z) > 20);
+    if (farCorridors.length > 0) {
+      const spawnIdx = Math.floor(Math.random() * farCorridors.length);
+      const spawnNode = farCorridors[spawnIdx];
+      camera.position.set(spawnNode.x, 1.6, spawnNode.z);
+    } else {
+      camera.position.set(20, 1.6, 20);
+    }
+  } else {
+    // Humans spawn grouped together at the center
+    camera.position.set(0, 1.6, 0);
+  }
+
   // Easter Egg: Ariadne's Thread to the Vault
   const myPlayer = currentLobby.players[myId];
   if (myPlayer && myPlayer.username === 'Ariadne_999') {
@@ -1080,8 +1096,10 @@ function generateCircuitBreakers() {
     }
     
     scene.add(mesh);
+    mesh.userData.id = `breaker_${i}`;
     
     circuitBreakers.push({
+      id: `breaker_${i}`,
       mesh: mesh,
       isFixed: false
     });
@@ -1914,30 +1932,8 @@ function checkInteractions() {
     
     const distToBreaker = camera.position.distanceTo(breaker.mesh.position);
     if (distToBreaker < 4.5) {
-      breaker.isFixed = true;
-      breaker.mesh.material.color.setHex(0x10b981); // Turn green
-      fixedBreakersCount++;
-      
-      // Increase global ambient light slightly with each fixed breaker
-      if (myTeam === 'Ghost') {
-        ambientLight.intensity = 1.5 + (fixedBreakersCount * 2.0);
-      } else {
-        if (!isMobileDevice) {
-          ambientLight.intensity = 0.5 + (fixedBreakersCount * 0.7);
-        } else {
-          ambientLight.intensity = 1.0 + (fixedBreakersCount * 0.8);
-        }
-        
-        // Boost flashlight range and width slightly
-        if (flashLight) {
-          flashLight.distance = 45 + (fixedBreakersCount * 25);
-          flashLight.angle = (Math.PI / 3) + (fixedBreakersCount * 0.1);
-        }
-      }
-
-      triggerNotification(`circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
-      
-      checkWinCondition();
+      if (typeof socketClient !== 'undefined') socketClient.emit('breaker_fixed', { breakerId: breaker.id });
+      fixBreakerLocal(breaker.id);
       break;
     }
   }
@@ -2539,6 +2535,8 @@ function processFlashlightBattery(delta) {
   }
 }
 
+let exitGateShown = false;
+
 function checkWinCondition() {
   const carriedSymbols = carriedKeys.map(k => k.symbol);
   const hasFirstKey = functionalKeysRevealed.length > 0 && carriedSymbols.includes(functionalKeysRevealed[0]);
@@ -2547,8 +2545,9 @@ function checkWinCondition() {
 
   // Change gate material when ALL conditions are satisfied for the first time
   if (gateSolved && hasFirstKey && hasSecondKey && breakersFixed) {
-    if (gateMeshRef && gateMeshRef.material.emissiveIntensity === 0) {
+    if (gateMeshRef && !exitGateShown) {
       showExitGate();
+      exitGateShown = true;
     }
   }
 }
@@ -2614,6 +2613,14 @@ function setupSocketListeners() {
       triggerNotification(`cipher solved! twin keys revealed: [${realKeySymbols.join(', ')}]`);
     }
     
+    const keypadUI = document.getElementById('keypad-modal');
+    if (keypadUI) {
+      keypadUI.style.display = 'none';
+      if (!isMobileDevice && document.pointerLockElement !== document.getElementById('canvas-container')) {
+        document.getElementById('canvas-container').requestPointerLock();
+      }
+    }
+
     const lockLabel = document.getElementById('terminal-lock-label');
     lockLabel.textContent = "Twin Keys Required";
     lockLabel.style.color = "var(--secondary-accent)";
@@ -2621,6 +2628,8 @@ function setupSocketListeners() {
 
     const cipherHUD = document.getElementById('hud-cipher-info');
     cipherHUD.textContent = `Keys: ${realKeySymbols.join(' & ')}`;
+    
+    showExitGate();
   });
 
   // Keypad failure penalty trigger
@@ -2770,6 +2779,8 @@ function setupSocketListeners() {
     // Exit pointer lock
     if (document.pointerLockElement) document.exitPointerLock();
     window.mobileGameActive = false;
+    window.gameReady = false;
+    isCaptured = true;
 
     const renderOverlay = () => {
       // Show the End Game Overlay
@@ -2832,7 +2843,9 @@ function setupSocketListeners() {
     bindRejoinBtn('captured-lobby-btn');
 
     if (window.isEscaping) {
-      setTimeout(renderOverlay, 2500);
+      setTimeout(renderOverlay, 6500);
+    } else if (window.isCapturedAnimation) {
+      setTimeout(renderOverlay, 3500);
     } else {
       renderOverlay();
     }
@@ -2864,6 +2877,10 @@ function setupSocketListeners() {
       scene.remove(itemsInMaze[index].mesh);
       itemsInMaze.splice(index, 1);
     }
+  });
+
+  socketClient.on('breaker_fixed_sync', ({ breakerId }) => {
+    fixBreakerLocal(breakerId);
   });
 }
 
@@ -3149,6 +3166,7 @@ function playEscapeCinematic(callback) {
 // CINEMATIC ANIMATION: GHOST CAPTURE
 // ==========================================
 function playGhostCaptureAnimation(callback) {
+  window.isCapturedAnimation = true;
   const overlay = document.getElementById('ghost-capture-overlay');
   const vignette = document.getElementById('ghost-capture-vignette');
   const captureText = document.getElementById('ghost-capture-text');
@@ -3460,6 +3478,35 @@ function setupMinimap() {
     mapMarks = [];
     drawMinimap();
   });
+}
+
+function fixBreakerLocal(breakerId) {
+  const breaker = circuitBreakers.find(b => b.id === breakerId);
+  if (!breaker || breaker.isFixed) return;
+
+  breaker.isFixed = true;
+  breaker.mesh.material.color.setHex(0x10b981); // Turn green
+  fixedBreakersCount++;
+  
+  // Increase global ambient light slightly with each fixed breaker
+  if (myTeam === 'Ghost') {
+    ambientLight.intensity = 1.5 + (fixedBreakersCount * 2.0);
+  } else {
+    if (!isMobileDevice) {
+      ambientLight.intensity = 0.5 + (fixedBreakersCount * 0.7);
+    } else {
+      ambientLight.intensity = 1.0 + (fixedBreakersCount * 0.8);
+    }
+    
+    // Boost flashlight range and width slightly
+    if (flashLight) {
+      flashLight.distance = 45 + (fixedBreakersCount * 25);
+      flashLight.angle = (Math.PI / 3) + (fixedBreakersCount * 0.1);
+    }
+  }
+
+  triggerNotification(`circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
+  checkWinCondition();
 }
 
 function updateMinimapVisibility() {

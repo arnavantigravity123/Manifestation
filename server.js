@@ -415,6 +415,10 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('breaker_remote_triggered');
   });
 
+  socket.on('breaker_fixed', ({ breakerId }) => {
+    socket.to(socket.roomId).emit('breaker_fixed_sync', { breakerId });
+  });
+
   socket.on('sound_scramble', () => {
     console.log(`[Lobby ${socket.roomId}] Player ${socket.id} (Banshee) used Sound Scramble.`);
     socket.to(socket.roomId).emit('ghost_sound_scramble', { id: socket.id });
