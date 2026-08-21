@@ -3520,22 +3520,43 @@ function updateMinimapVisibility() {
   const c = Math.floor((px / blockSize) + (mazeSize / 2));
   const r = Math.floor((pz / blockSize) + (mazeSize / 2));
   
-  // Mark current and adjacent cells as visited
-  for (let dr = -2; dr <= 2; dr++) {
-    for (let dc = -2; dc <= 2; dc++) {
-      const nr = r + dr;
-      const nc = c + dc;
-      if (nr >= 0 && nr < mazeSize && nc >= 0 && nc < mazeSize) {
-        // Simple distance check for circular vision
-        if (dr*dr + dc*dc <= 5) {
-          const key = `${nr},${nc}`;
-          if (!visitedCells.has(key)) {
-            visitedCells.add(key);
-          }
-        }
+  // Mark cells using a 2-step flood fill to prevent revealing through walls
+  const queue = [{c, r, dist: 0}];
+  const currentVisible = new Set();
+  currentVisible.add(`${r},${c}`);
+  
+  while (queue.length > 0) {
+    const curr = queue.shift();
+    if (curr.dist >= 2) continue; // max 2 steps for radius ~5x5
+    
+    const neighbors = [
+      {dc: 0, dr: -1}, {dc: 0, dr: 1}, {dc: -1, dr: 0}, {dc: 1, dr: 0},
+      {dc: -1, dr: -1}, {dc: 1, dr: -1}, {dc: -1, dr: 1}, {dc: 1, dr: 1} // Diagonals
+    ];
+    
+    for (const n of neighbors) {
+      const nc = curr.c + n.dc;
+      const nr = curr.r + n.dr;
+      
+      if (nr < 0 || nr >= mazeSize || nc < 0 || nc >= mazeSize) continue;
+      
+      const key = `${nr},${nc}`;
+      if (currentVisible.has(key)) continue;
+      
+      // If current cell is a wall, we cannot see PAST it
+      if (curr.dist > 0 && mazeLayout[curr.r][curr.c] !== 0) continue;
+      
+      // Prevent diagonal sight through two adjacent corner walls
+      if (Math.abs(n.dc) === 1 && Math.abs(n.dr) === 1) {
+        if (mazeLayout[curr.r][nc] === 1 && mazeLayout[nr][curr.c] === 1) continue; 
       }
+      
+      currentVisible.add(key);
+      queue.push({c: nc, r: nr, dist: curr.dist + 1});
     }
   }
+
+  currentVisible.forEach(key => visitedCells.add(key));
 }
 
 function drawMinimap() {
