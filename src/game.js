@@ -1809,7 +1809,8 @@ function updateInteractionPrompt() {
         if (!breakersFixed) {
           promptText = `ACCESS DENIED: Need 3 Breakers to power terminal (${fixedBreakersCount}/${totalBreakersRequired})`;
         } else if (window.securityLockoutActive) {
-          promptText = `TERMINAL LOCKED: Security cooldown active`;
+          const remaining = Math.max(1, Math.ceil((window.securityLockoutEndTime - performance.now()) / 1000));
+          promptText = `ACCESS DENIED: Security Lockout (${remaining}s remaining)`;
         } else {
           promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
         }
@@ -1905,7 +1906,10 @@ function checkInteractions() {
     if (!gateSolved) {
       if (!breakersFixed || window.securityLockoutActive) {
         if (!breakersFixed) triggerNotification(`master gate needs power! fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
-        if (window.securityLockoutActive) triggerNotification(`keypad is locked out due to security penalty!`);
+        if (window.securityLockoutActive) {
+          const remaining = Math.max(1, Math.ceil((window.securityLockoutEndTime - performance.now()) / 1000));
+          triggerNotification(`ACCESS DENIED: Keypad locked out for ${remaining} more seconds!`);
+        }
         return; // Prevent opening keypad
       }
       openKeypadModal();
@@ -2670,6 +2674,7 @@ function setupSocketListeners() {
   // Keypad failure penalty trigger
   socketClient.on('cipher_failed_penalty', ({ cooldownSeconds, revealSeconds }) => {
     window.securityLockoutActive = true;
+    window.securityLockoutEndTime = performance.now() + (cooldownSeconds * 1000);
     triggerAlarmFlashing();
     playWrongCodeAnimation();
     triggerNotification(`terminal lockout active (${cooldownSeconds}s) | outlines exposed (${revealSeconds}s)`);
