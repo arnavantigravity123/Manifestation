@@ -1485,6 +1485,7 @@ function setupControls() {
         if (myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA) isSprinting = true;
         break;
       case 'KeyQ':
+      case 'KeyF':
         dropActiveItem();
         break;
       case 'Space':
