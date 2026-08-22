@@ -2156,13 +2156,14 @@ function updateInteractionPrompt() {
   }
 
   // 5. Check Ground Dropped Items
-  for (let i = 0; i < droppedWorldItems.length; i++) {
-    const dItem = droppedWorldItems[i];
+  for (let i = 0; i < itemsInMaze.length; i++) {
+    const dItem = itemsInMaze[i];
+    if (!dItem || !dItem.mesh) continue;
     const { looking: lookingAtItem, dist: distToItem } = isLookingAtTarget(dItem.mesh.position, 4.0);
     if (lookingAtItem) {
       if (distToItem < minDistance) {
         minDistance = distToItem;
-        promptText = isMobileDevice ? `Tap INTERACT to pick up ${dItem.name}` : `Press <kbd>E</kbd> to pick up ${dItem.name}`;
+        promptText = isMobileDevice ? `Tap INTERACT to pick up ${dItem.name || 'Item'}` : `Press <kbd>E</kbd> to pick up ${dItem.name || 'Item'}`;
       }
     }
   }
