@@ -75,12 +75,26 @@ const classesData = {
   }
 };
 
-let currentSelectedTeam = 'Human';
+let currentSelectedTeam = localStorage.getItem('manifestation_team') || 'Human';
 
-// Pre-fill username with random name
-usernameInput.value = `Operative_${Math.floor(100 + Math.random() * 900)}`;
+// Pre-fill username from localStorage or random fallback
+const savedUsername = localStorage.getItem('manifestation_username');
+if (savedUsername && savedUsername.trim() !== '') {
+  usernameInput.value = savedUsername.trim();
+} else {
+  const defaultName = `Operative_${Math.floor(100 + Math.random() * 900)}`;
+  usernameInput.value = defaultName;
+  localStorage.setItem('manifestation_username', defaultName);
+}
 
-function populateSubclasses(team) {
+usernameInput.addEventListener('input', () => {
+  const val = usernameInput.value.trim();
+  if (val) {
+    localStorage.setItem('manifestation_username', val);
+  }
+});
+
+function populateSubclasses(team, savedClass = null) {
   subclassSelect.innerHTML = '';
   const subclasses = Object.keys(classesData[team]);
   subclasses.forEach(cls => {
@@ -89,37 +103,56 @@ function populateSubclasses(team) {
     opt.textContent = cls;
     subclassSelect.appendChild(opt);
   });
+  
+  const targetClass = savedClass || localStorage.getItem('manifestation_class');
+  if (targetClass && subclasses.includes(targetClass)) {
+    subclassSelect.value = targetClass;
+  }
   updateSubclassDesc();
 }
 
 function updateSubclassDesc() {
   const clsName = subclassSelect.value;
-  if (classesData[currentSelectedTeam][clsName]) {
+  if (classesData[currentSelectedTeam] && classesData[currentSelectedTeam][clsName]) {
     classDesc.textContent = classesData[currentSelectedTeam][clsName].desc;
   }
 }
 
-// Initial Fill
-populateSubclasses('Human');
+// Initial Fill with restored team & class
+if (currentSelectedTeam === 'Ghost') {
+  chooseGhostBtn.classList.add('active');
+  chooseHumanBtn.classList.remove('active');
+  populateSubclasses('Ghost');
+} else {
+  currentSelectedTeam = 'Human';
+  chooseHumanBtn.classList.add('active');
+  chooseGhostBtn.classList.remove('active');
+  populateSubclasses('Human');
+}
 
 subclassSelect.addEventListener('change', () => {
+  localStorage.setItem('manifestation_class', subclassSelect.value);
   updateSubclassDesc();
   updatePlayerSettings();
 });
 
 chooseHumanBtn.addEventListener('click', () => {
   currentSelectedTeam = 'Human';
+  localStorage.setItem('manifestation_team', 'Human');
   chooseHumanBtn.classList.add('active');
   chooseGhostBtn.classList.remove('active');
   populateSubclasses('Human');
+  localStorage.setItem('manifestation_class', subclassSelect.value);
   updatePlayerSettings();
 });
 
 chooseGhostBtn.addEventListener('click', () => {
   currentSelectedTeam = 'Ghost';
+  localStorage.setItem('manifestation_team', 'Ghost');
   chooseGhostBtn.classList.add('active');
   chooseHumanBtn.classList.remove('active');
   populateSubclasses('Ghost');
+  localStorage.setItem('manifestation_class', subclassSelect.value);
   updatePlayerSettings();
 });
 
@@ -494,14 +527,25 @@ function renderLobby() {
   });
 }
 
-// Host configs
+// Host configs & persistence
+const savedBotsEnabled = localStorage.getItem('manifestation_bots_enabled');
+if (savedBotsEnabled !== null) {
+  botToggle.checked = savedBotsEnabled === 'true';
+}
+const savedRoleMode = localStorage.getItem('manifestation_role_mode');
+if (savedRoleMode) {
+  roleModeSelect.value = savedRoleMode;
+}
+
 botToggle.addEventListener('change', () => {
+  localStorage.setItem('manifestation_bots_enabled', botToggle.checked ? 'true' : 'false');
   if (currentLobby && currentLobby.players[myId]?.isHost) {
     socket.emit('update_settings', { botsEnabled: botToggle.checked });
   }
 });
 
 roleModeSelect.addEventListener('change', () => {
+  localStorage.setItem('manifestation_role_mode', roleModeSelect.value);
   if (currentLobby && currentLobby.players[myId]?.isHost) {
     socket.emit('update_settings', { roleSelectionMode: roleModeSelect.value });
   }
