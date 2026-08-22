@@ -176,6 +176,7 @@ let flashlightBattery = 100;
 // Puzzle configuration
 let gateCoordinates = { x: 0, z: -35 };
 let gateMeshRef = null;  // Global ref so we can toggle visibility
+let padMeshRef = null;   // Global ref for the keypad
 let gateSolved = false;
 let hasEscaped = false;
 let codeEntered = "";
@@ -944,21 +945,25 @@ function generateMaze(keysCount = 8) {
   let offsetZ = 0, offsetX = 0, padOffsetZ = 0, padOffsetX = 0, blockOffsetZ = 0, blockOffsetX = 0;
   let gateRotY = 0;
   
+  // Use 2.6 to firmly place it 0.1 units outside the 2.5 radius wall
   if (window.vaultEdge === 'N') {
-    // North wall: faces South (+Z). Left is +X.
-    offsetZ = 2.51; padOffsetX = 1.2; padOffsetZ = 0.05; blockOffsetZ = 1.75; gateRotY = 0;
+    // North wall: faces South (+Z).
+    offsetZ = 2.6; padOffsetX = 1.2; padOffsetZ = 0.05; blockOffsetZ = 1.75; gateRotY = 0;
   } else if (window.vaultEdge === 'S') {
-    // South wall: faces North (-Z). Left is -X.
-    offsetZ = -2.51; padOffsetX = -1.2; padOffsetZ = -0.05; blockOffsetZ = -1.75; gateRotY = Math.PI;
+    // South wall: faces North (-Z).
+    offsetZ = -2.6; padOffsetX = -1.2; padOffsetZ = -0.05; blockOffsetZ = -1.75; gateRotY = Math.PI;
   } else if (window.vaultEdge === 'E') {
-    // East wall: faces West (-X). Left is -Z.
-    offsetX = -2.51; padOffsetZ = -1.2; padOffsetX = -0.05; blockOffsetX = -1.75; gateRotY = -Math.PI / 2;
+    // East wall: faces West (-X).
+    offsetX = -2.6; padOffsetZ = -1.2; padOffsetX = -0.05; blockOffsetX = -1.75; gateRotY = -Math.PI / 2;
   } else if (window.vaultEdge === 'W') {
-    // West wall: faces East (+X). Left is +Z.
-    offsetX = 2.51; padOffsetZ = 1.2; padOffsetX = 0.05; blockOffsetX = 1.75; gateRotY = Math.PI / 2;
+    // West wall: faces East (+X).
+    offsetX = 2.6; padOffsetZ = 1.2; padOffsetX = 0.05; blockOffsetX = 1.75; gateRotY = Math.PI / 2;
   }
 
   gateCoordinates = { x: vaultXPos + offsetX, z: vaultZPos + offsetZ };
+  
+  if (gateMeshRef) { scene.remove(gateMeshRef); gateMeshRef = null; }
+  if (padMeshRef) { scene.remove(padMeshRef); padMeshRef = null; }
   
   const gateGeo = new THREE.PlaneGeometry(4.5, 4); // Match corridor width
   const vaultTex = textureLoader.load('/assets/vault_door.png');
@@ -997,6 +1002,7 @@ function generateMaze(keysCount = 8) {
   const padMesh = new THREE.Mesh(padGeo, padMat);
   padMesh.position.set(gateCoordinates.x + padOffsetX, 1.5, gateCoordinates.z + padOffsetZ);
   padMesh.rotation.y = gateRotY;
+  padMeshRef = padMesh;
   scene.add(padMesh);
 
   // Spawn key collectibles in chests/lockers represented by boxes
