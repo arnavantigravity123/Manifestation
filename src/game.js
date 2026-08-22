@@ -2167,10 +2167,6 @@ function collectClueLocal(digitIndex) {
     keypadScreen.textContent = getKeypadDisplayString();
   }
 }
-      }
-      break;
-    }
-  }
 
   // 5. Check proximity to Pick-up Items (find empty slot & check unique items)
   for (let i = 0; i < itemsInMaze.length; i++) {
