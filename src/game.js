@@ -563,11 +563,14 @@ function renderHUDInventory() {
   const invGrid = document.getElementById('hud-inventory');
   if (!invGrid) return;
   invGrid.innerHTML = '';
+  const now = Date.now();
 
   // --- Class ability items ---
   inventory.forEach((item, index) => {
     const slot = document.createElement('div');
+    const isCd = item && abilityCooldowns[item] && abilityCooldowns[item] > now;
     slot.className = index === activeSlot ? 'inventory-slot active' : 'inventory-slot';
+    if (isCd) slot.classList.add('on-cooldown');
     slot.style.pointerEvents = 'auto';
     slot.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -590,6 +593,17 @@ function renderHUDInventory() {
     nameSpan.style.color = index === activeSlot ? 'white' : 'var(--text-muted)';
     slot.appendChild(nameSpan);
 
+    // Cooldown timer overlay
+    const cdOverlay = document.createElement('div');
+    cdOverlay.className = 'slot-cooldown-overlay';
+    cdOverlay.style.display = isCd ? 'flex' : 'none';
+
+    const cdText = document.createElement('span');
+    cdText.className = 'slot-cooldown-text';
+    cdText.textContent = isCd ? `${Math.ceil((abilityCooldowns[item] - now) / 1000)}s` : '';
+    cdOverlay.appendChild(cdText);
+    slot.appendChild(cdOverlay);
+
     invGrid.appendChild(slot);
   });
 
@@ -600,6 +614,47 @@ function renderHUDInventory() {
 
   if (typeof socketClient !== 'undefined' && socketClient.emit) {
     socketClient.emit('inventory_update', { inventory, carriedKeys });
+  }
+}
+
+function updateCooldownHUD() {
+  const invGrid = document.getElementById('hud-inventory');
+  if (!invGrid) return;
+  const now = Date.now();
+  const slots = invGrid.querySelectorAll('.inventory-slot');
+  
+  slots.forEach((slot, index) => {
+    const item = inventory[index];
+    const overlay = slot.querySelector('.slot-cooldown-overlay');
+    const text = slot.querySelector('.slot-cooldown-text');
+    if (!overlay || !text) return;
+
+    if (item && abilityCooldowns[item] && abilityCooldowns[item] > now) {
+      const remainingMs = abilityCooldowns[item] - now;
+      const seconds = Math.ceil(remainingMs / 1000);
+      overlay.style.display = 'flex';
+      text.textContent = `${seconds}s`;
+      slot.classList.add('on-cooldown');
+    } else {
+      if (overlay.style.display !== 'none') {
+        overlay.style.display = 'none';
+        slot.classList.remove('on-cooldown');
+      }
+    }
+  });
+
+  // Update mobile action button timer if applicable
+  const useBtn = document.getElementById('btn-mobile-use');
+  if (useBtn) {
+    const activeItem = inventory[activeSlot];
+    if (activeItem && abilityCooldowns[activeItem] && abilityCooldowns[activeItem] > now) {
+      const remaining = Math.ceil((abilityCooldowns[activeItem] - now) / 1000);
+      useBtn.textContent = `USE (${remaining}s)`;
+      useBtn.style.opacity = '0.6';
+    } else {
+      useBtn.textContent = 'USE';
+      useBtn.style.opacity = '1';
+    }
   }
 }
 
@@ -4777,12 +4832,13 @@ function animate() {
     spawnGhostAIs(currentLobby.settings.ghostsCount);
   }
 
-  // Update and draw Minimap
+  // Update and draw Minimap & Cooldown Timers
   if (window.gameReady) {
     if (myTeam === 'Human') {
       updateMinimapVisibility();
     }
     drawMinimap();
+    updateCooldownHUD();
   }
 
   renderer.render(scene, activeViewCamera || camera);
