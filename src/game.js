@@ -2050,6 +2050,20 @@ function isLookingAtTarget(targetPos, maxDist, maxAngle = 0.6) {
   return { looking: angle < maxAngle, dist };
 }
 
+function isKeyFunctional(k) {
+  if (!k) return false;
+  return functionalKeysRevealed.some(f => 
+    f === k.symbol || 
+    f === k.typeName || 
+    (k.typeName && f.toLowerCase().includes(k.typeName.toLowerCase())) ||
+    (k.symbol && f.toLowerCase().includes(k.symbol.toLowerCase()))
+  );
+}
+
+function getKeyIdentifier(k) {
+  return k.typeName || k.symbol;
+}
+
 // Dynamically render on-screen keys/breaker/item interaction prompts in HUD
 function updateInteractionPrompt() {
   const promptEl = document.getElementById('interaction-prompt');
@@ -2075,8 +2089,15 @@ function updateInteractionPrompt() {
     if (distToGate < minDistance) {
       minDistance = distToGate;
       const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+      const uninsertedKeyIndex = carriedKeys.findIndex(k => 
+        isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
+      );
 
-      if (!gateSolved) {
+      if (uninsertedKeyIndex !== -1) {
+        const keyToInsert = carriedKeys[uninsertedKeyIndex];
+        const keyId = getKeyIdentifier(keyToInsert);
+        promptText = isMobileDevice ? `Tap INTERACT to Insert [${keyId}]` : `Press <kbd>E</kbd> to Insert [${keyId}]`;
+      } else if (!gateSolved) {
         if (!breakersFixed) {
           promptText = `ACCESS DENIED: Need 3 Breakers to power terminal (${fixedBreakersCount}/${totalBreakersRequired})`;
         } else if (window.securityLockoutActive) {
@@ -2085,17 +2106,10 @@ function updateInteractionPrompt() {
         } else {
           promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
         }
+      } else if (insertedGateKeys.length >= 2 && breakersFixed) {
+        promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
       } else {
-        const uninsertedKeyIndex = carriedKeys.findIndex(k => functionalKeysRevealed.includes(k.symbol) && !insertedGateKeys.includes(k.symbol));
-
-        if (insertedGateKeys.length >= 2 && breakersFixed) {
-          promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
-        } else if (uninsertedKeyIndex !== -1) {
-          const keyToInsert = carriedKeys[uninsertedKeyIndex];
-          promptText = isMobileDevice ? `Tap INTERACT to Insert [${keyToInsert.symbol}]` : `Press <kbd>E</kbd> to Insert [${keyToInsert.symbol}]`;
-        } else {
-          promptText = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
-        }
+        promptText = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
       }
     }
   }
@@ -2129,31 +2143,27 @@ function updateInteractionPrompt() {
     }
   }
 
-  // 4. Check Code Clue Notes
+  // 4. Check Code Clue Notes (Glowing Cipher Pages)
   for (let i = 0; i < codeClueNotes.length; i++) {
-    const note = codeClueNotes[i];
-    if (note.collected) continue;
-    const { looking: lookingAtNote, dist: distToNote } = isLookingAtTarget(note.mesh.position, 4.5);
-    if (lookingAtNote) {
-      if (distToNote < minDistance) {
-        minDistance = distToNote;
-        promptText = isMobileDevice ? "Tap INTERACT to collect clue" : "Press <kbd>E</kbd> to collect clue";
+    const clue = codeClueNotes[i];
+    if (clue.isCollected) continue;
+    const { looking: lookingAtClue, dist: distToClue } = isLookingAtTarget(clue.mesh.position, 4.0);
+    if (lookingAtClue) {
+      if (distToClue < minDistance) {
+        minDistance = distToClue;
+        promptText = isMobileDevice ? `Tap INTERACT to inspect Cipher Clue #${clue.digitIndex + 1}` : `Press <kbd>E</kbd> to inspect Cipher Clue #${clue.digitIndex + 1}`;
       }
     }
   }
 
-  // 5. Check Pick-up Items
-  for (let i = 0; i < itemsInMaze.length; i++) {
-    const item = itemsInMaze[i];
-    const { looking: lookingAtItem, dist: distToItem } = isLookingAtTarget(item.mesh.position, 4.5);
+  // 5. Check Ground Dropped Items
+  for (let i = 0; i < droppedWorldItems.length; i++) {
+    const dItem = droppedWorldItems[i];
+    const { looking: lookingAtItem, dist: distToItem } = isLookingAtTarget(dItem.mesh.position, 4.0);
     if (lookingAtItem) {
       if (distToItem < minDistance) {
         minDistance = distToItem;
-        if (inventory.includes('')) {
-          promptText = isMobileDevice ? `Tap INTERACT to pick up ${item.name}` : `Press <kbd>E</kbd> to pick up ${item.name}`;
-        } else {
-          promptText = `Inventory Full! Cannot pick up ${item.name}`;
-        }
+        promptText = isMobileDevice ? `Tap INTERACT to pick up ${dItem.name}` : `Press <kbd>E</kbd> to pick up ${dItem.name}`;
       }
     }
   }
@@ -2176,9 +2186,30 @@ function checkInteractions() {
   if (lookingAtGate) {
     const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
+    // Check if player has any matching functional key to insert into gate
+    const uninsertedKeyIndex = carriedKeys.findIndex(k => 
+      isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
+    );
+
+    if (uninsertedKeyIndex !== -1) {
+      const poppedKey = carriedKeys.splice(uninsertedKeyIndex, 1)[0];
+      const keyId = getKeyIdentifier(poppedKey);
+      if (!insertedGateKeys.includes(keyId)) {
+        insertedGateKeys.push(keyId);
+      }
+      renderCarriedKeysHUD();
+      updateGateHUD();
+      if (typeof socketClient !== 'undefined') {
+        socketClient.emit('insert_gate_key', { symbol: keyId });
+      }
+      triggerNotification(`🔑 Inserted [${keyId}] into Master Gate! (${insertedGateKeys.length}/2 installed)`);
+      checkWinCondition();
+      return;
+    }
+
     if (!gateSolved) {
       if (!breakersFixed || window.securityLockoutActive) {
-        if (!breakersFixed) triggerNotification(`master gate needs power! fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
+        if (!breakersFixed) triggerNotification(`Master Gate needs power! Fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
         if (window.securityLockoutActive) {
           const remaining = Math.max(1, Math.ceil((window.securityLockoutEndTime - performance.now()) / 1000));
           triggerNotification(`ACCESS DENIED: Keypad locked out for ${remaining} more seconds!`);
@@ -2187,22 +2218,7 @@ function checkInteractions() {
       }
       openKeypadModal();
     } else {
-      // Keypad is solved. Check if player has any matching functional key to insert!
-      const uninsertedKeyIndex = carriedKeys.findIndex(k => functionalKeysRevealed.includes(k.symbol) && !insertedGateKeys.includes(k.symbol));
-
-      if (uninsertedKeyIndex !== -1) {
-        const poppedKey = carriedKeys.splice(uninsertedKeyIndex, 1)[0];
-        if (!insertedGateKeys.includes(poppedKey.symbol)) {
-          insertedGateKeys.push(poppedKey.symbol);
-        }
-        renderCarriedKeysHUD();
-        updateGateHUD();
-        if (typeof socketClient !== 'undefined') {
-          socketClient.emit('insert_gate_key', { symbol: poppedKey.symbol });
-        }
-        triggerNotification(`🔑 Inserted [${poppedKey.symbol}] into Master Gate! (${insertedGateKeys.length}/2 installed)`);
-        checkWinCondition();
-      } else if (insertedGateKeys.length >= 2 && breakersFixed) {
+      if (insertedGateKeys.length >= 2 && breakersFixed) {
         // All conditions satisfied -> Escape victory!
         if (socketClient) {
           socketClient.emit('human_escaped', { id: socketClient.id });
@@ -2215,7 +2231,6 @@ function checkInteractions() {
           window.mobileGameActive = false;
         });
       } else {
-        const realCarried = carriedKeys.filter(k => functionalKeysRevealed.includes(k.symbol)).length;
         triggerNotification(`Master Gate requires remaining twin key! (${insertedGateKeys.length}/2 installed: [${insertedGateKeys.join(', ') || 'None'}])`);
       }
     }
