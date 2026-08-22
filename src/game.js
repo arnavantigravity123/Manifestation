@@ -2623,7 +2623,8 @@ function processFlashlightBattery(delta) {
       flashLight.intensity = 0;
       triggerNotification("Flashlight battery dead! Find a Battery Pack.");
     } else if (window.flashlightDisabledBySiphon) {
-      flashLight.intensity = 0;
+      // Siphon penalty flicker (same as critical battery)
+      flashLight.intensity = Math.random() < 0.18 ? 0 : baseIntensity * 0.2;
     } else if (flashlightBattery < 15) {
       // Critical flicker warning (15% → 0%)
       flashLight.intensity = Math.random() < 0.18 ? 0 : baseIntensity * 0.2;
@@ -2860,7 +2861,7 @@ function setupSocketListeners() {
   socketClient.on('ghost_breaker_siphon', () => {
     if (myTeam === 'Human') {
       window.flashlightDisabledBySiphon = true;
-      triggerNotification("Breaker Siphon! Flashlights disabled (15s)");
+      triggerNotification("Breaker Siphon! Flashlights disrupted (15s)");
       setTimeout(() => {
         window.flashlightDisabledBySiphon = false;
       }, 15000);
