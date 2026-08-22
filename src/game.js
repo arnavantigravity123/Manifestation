@@ -291,7 +291,7 @@ export function initGame(socket, socketId, matchConfig) {
         const mobileCtrl = document.getElementById('mobile-controls-container');
         if (mobileCtrl) mobileCtrl.style.display = 'flex';
       } else {
-        document.getElementById('canvas-container').requestPointerLock();
+        (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
       }
       triggerNotification("SPECTATOR MODE ENGAGED. Move freely.");
     };
@@ -355,8 +355,12 @@ export function initGame(socket, socketId, matchConfig) {
     if (isMinimapExpanded) return;
     window.mobileGameActive = true;
     ptrOverlay.style.display = 'none';
-    if (!isMobileDevice && container && container.requestPointerLock) {
-      container.requestPointerLock();
+    if (!isMobileDevice) {
+      // Lock on the canvas element (renderer.domElement) — browsers require pointer lock on canvas, not a div
+      const lockTarget = (renderer && renderer.domElement) || container;
+      if (lockTarget && lockTarget.requestPointerLock) {
+        lockTarget.requestPointerLock();
+      }
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   };
@@ -370,7 +374,7 @@ export function initGame(socket, socketId, matchConfig) {
 
   document.addEventListener('pointerlockchange', () => {
     if (isMobileDevice) return;
-    if (document.pointerLockElement === container) {
+    if (document.pointerLockElement) {
       ptrOverlay.style.display = 'none';
     } else {
       // Don't show pause overlay if the keypad modal or minimap is open
@@ -1545,7 +1549,7 @@ function setupControls() {
           const ptrOverlay = document.getElementById('pointer-lock-overlay');
           if (ptrOverlay && !window.isMobileDevice) {
             ptrOverlay.style.display = 'flex';
-            document.getElementById('canvas-container').requestPointerLock();
+            (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
           }
         }
         return;
@@ -1616,7 +1620,7 @@ function setupControls() {
             const ptrOverlay = document.getElementById('pointer-lock-overlay');
             if (ptrOverlay && !window.isMobileDevice) {
               ptrOverlay.style.display = 'flex';
-              document.getElementById('canvas-container').requestPointerLock();
+              (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
             }
           }
         }
@@ -2617,7 +2621,7 @@ function setupKeypadListeners() {
     const ptrOverlay = document.getElementById('pointer-lock-overlay');
     if (ptrOverlay && !window.isMobileDevice) {
       ptrOverlay.style.display = 'flex';
-      document.getElementById('canvas-container').requestPointerLock();
+      (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
     }
   };
 
@@ -3047,7 +3051,7 @@ function setupSocketListeners() {
     if (keypadModal) {
       keypadModal.style.display = 'none';
       if (!isMobileDevice && !document.pointerLockElement) {
-        document.getElementById('canvas-container').requestPointerLock();
+        (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
       }
     }
 
@@ -3169,7 +3173,7 @@ function setupSocketListeners() {
       if (hudOverlay) hudOverlay.style.display = 'flex';
 
       if (!isMobileDevice) {
-        document.getElementById('canvas-container').requestPointerLock();
+        (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
       } else {
         window.mobileGameActive = true;
         const mobileCtrl = document.getElementById('mobile-controls-container');
@@ -4054,7 +4058,7 @@ function setupMinimap() {
     wrapper.classList.remove('expanded');
     controls.style.display = 'none';
     if (!isMobileDevice) {
-      document.getElementById('canvas-container').requestPointerLock();
+      (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
     }
   });
 
@@ -4425,7 +4429,7 @@ function animate() {
     camera.translateX(-velocity.x * delta);
     camera.translateZ(velocity.z * delta);
     if (window.isSpectating) {
-      if (document.getElementById('canvas-container').requestPointerLock) {
+      if (!isMobileDevice) {
         // Simple vertical controls for PC: E to go up, Q to go down
         // (Since jump isn't naturally mapped, we'll map vertical flight to moveForward pitch)
         const forward = new THREE.Vector3();
