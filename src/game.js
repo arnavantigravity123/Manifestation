@@ -946,16 +946,16 @@ function generateMaze(keysCount = 8) {
   
   if (window.vaultEdge === 'N') {
     // North wall: faces South (+Z). Left is +X.
-    offsetZ = +0.26; padOffsetX = 1.2; padOffsetZ = 0.05; blockOffsetZ = -0.5; gateRotY = 0;
+    offsetZ = 2.51; padOffsetX = 1.2; padOffsetZ = 0.05; blockOffsetZ = 1.75; gateRotY = 0;
   } else if (window.vaultEdge === 'S') {
     // South wall: faces North (-Z). Left is -X.
-    offsetZ = -0.26; padOffsetX = -1.2; padOffsetZ = -0.05; blockOffsetZ = 0.5; gateRotY = Math.PI;
+    offsetZ = -2.51; padOffsetX = -1.2; padOffsetZ = -0.05; blockOffsetZ = -1.75; gateRotY = Math.PI;
   } else if (window.vaultEdge === 'E') {
     // East wall: faces West (-X). Left is -Z.
-    offsetX = -0.26; padOffsetZ = -1.2; padOffsetX = -0.05; blockOffsetX = 0.5; gateRotY = -Math.PI / 2;
+    offsetX = -2.51; padOffsetZ = -1.2; padOffsetX = -0.05; blockOffsetX = -1.75; gateRotY = -Math.PI / 2;
   } else if (window.vaultEdge === 'W') {
     // West wall: faces East (+X). Left is +Z.
-    offsetX = +0.26; padOffsetZ = 1.2; padOffsetX = 0.05; blockOffsetX = -0.5; gateRotY = Math.PI / 2;
+    offsetX = 2.51; padOffsetZ = 1.2; padOffsetX = 0.05; blockOffsetX = 1.75; gateRotY = Math.PI / 2;
   }
 
   gateCoordinates = { x: vaultXPos + offsetX, z: vaultZPos + offsetZ };
