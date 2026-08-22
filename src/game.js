@@ -184,6 +184,7 @@ let functionalKeysRevealed = [];
 let foundKeysList = [];
 let carriedKeys = [];      // Keys currently carried (max 3)
 const MAX_CARRIED_KEYS = 3;
+let insertedGateKeys = []; // Keys installed into the Master Gate
 let codeClueNotes = []; // Clue objects in the maze
 
 // Audio variables for EMF & static
@@ -272,6 +273,7 @@ export function initGame(socket, socketId, matchConfig) {
   functionalKeysRevealed = [];
   foundKeysList = [];
   carriedKeys = [];
+  insertedGateKeys = (matchConfig.puzzleState && matchConfig.puzzleState.insertedKeys) ? [...matchConfig.puzzleState.insertedKeys] : [];
   codeClueNotes = [];
   inventory = [];
   activeSlot = 0;
@@ -553,7 +555,7 @@ function setupInventory() {
     Locksmith:          ["EMF Radar", "Thermal Camera", "Breaker Remote", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
     Trapper:            ["Salt Cannister", "Chalk / UV Spray", "Battery Pack", "Adrenaline Shot", ...EXTRA_CARRY_SLOTS],
     Scout:              ["EMF Radar", "Sanity Pills", "Battery Pack", "Adrenaline Shot",     ...EXTRA_CARRY_SLOTS],
-    Medic:              ["EMF Radar", "Sanity Pills", "Med Kit", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
+    Medic:              ["Defibrillator", "EMF Radar", "Med Kit", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
     "Flashlight Expert":["EMF Radar", "Thermal Camera", "Battery Pack", "Battery Pack",     ...EXTRA_CARRY_SLOTS],
     // Quartermaster: 8 class items + 4 empty carry slots (12 total slots)
     Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Med Kit", "Battery Pack", "Battery Pack", "", "", "", ""]
@@ -768,6 +770,7 @@ function getIconOrShortName(itemName) {
     case "Adrenaline Shot": return "ADRN";
     case "Sanity Pills": return "PILLS";
     case "Med Kit": return "MED";
+    case "Defibrillator": return "DEFIB";
     case "Ghost Claws": return "CLAW";
     case "Scent Tracker": return "SCENT";
     case "Infiltration Clone": return "CLONE";
@@ -1745,8 +1748,8 @@ function setupControls() {
   
   document.addEventListener('mousedown', (e) => {
     if (isMobileDevice) return;
-    if (document.pointerLockElement !== document.getElementById('canvas-container') || isCaptured) return;
-    if (e.button === 0) { // Left click
+    if (document.pointerLockElement !== document.getElementById('canvas-container') || (isCaptured && !window.isSpectating)) return;
+    if (e.button === 0 && !window.isSpectating) { // Left click
       useActiveItem();
     }
   });
@@ -1754,7 +1757,7 @@ function setupControls() {
   // Mouse camera rotation controller
   document.addEventListener('mousemove', (e) => {
     if (isMobileDevice) return;
-    if (document.pointerLockElement !== document.getElementById('canvas-container') || isCaptured) return;
+    if (document.pointerLockElement !== document.getElementById('canvas-container') || (isCaptured && !window.isSpectating)) return;
     
     // Ignore massive spikes caused by browser Pointer Lock bugs
     if (Math.abs(e.movementX) > 200 || Math.abs(e.movementY) > 200) return;
@@ -1774,7 +1777,7 @@ function setupControls() {
     // Listen on document to bypass pointer-events touch bugs in mobile viewports
     document.addEventListener('touchstart', (e) => {
       if (!isMobileDevice) return;
-      if (isCaptured || !window.gameReady) return;
+      if ((isCaptured && !window.isSpectating) || !window.gameReady) return;
       
       // Ignore touch starts on joystick or action buttons
       if (e.target.closest('#mobile-joystick') || e.target.closest('#mobile-actions') || e.target.closest('#btn-mobile-pause')) {
@@ -2159,9 +2162,6 @@ function checkInteractions() {
   const { looking: lookingAtGate, dist: distToGate } = isLookingAtTarget(gateVec, 6.0);
 
   if (lookingAtGate) {
-    const carriedSymbols = carriedKeys.map(k => k.symbol);
-    const hasFirstKey = carriedSymbols.includes(functionalKeysRevealed[0]);
-    const hasSecondKey = carriedSymbols.includes(functionalKeysRevealed[1]);
     const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
     if (!gateSolved) {
@@ -2175,7 +2175,23 @@ function checkInteractions() {
       }
       openKeypadModal();
     } else {
-      if (hasFirstKey && hasSecondKey && breakersFixed) {
+      // Keypad is solved. Check if player has any matching functional key to insert!
+      const uninsertedKeyIndex = carriedKeys.findIndex(k => functionalKeysRevealed.includes(k.symbol) && !insertedGateKeys.includes(k.symbol));
+
+      if (uninsertedKeyIndex !== -1) {
+        const poppedKey = carriedKeys.splice(uninsertedKeyIndex, 1)[0];
+        if (!insertedGateKeys.includes(poppedKey.symbol)) {
+          insertedGateKeys.push(poppedKey.symbol);
+        }
+        renderCarriedKeysHUD();
+        updateGateHUD();
+        if (typeof socketClient !== 'undefined') {
+          socketClient.emit('insert_gate_key', { symbol: poppedKey.symbol });
+        }
+        triggerNotification(`🔑 Inserted [${poppedKey.symbol}] into Master Gate! (${insertedGateKeys.length}/2 installed)`);
+        checkWinCondition();
+      } else if (insertedGateKeys.length >= 2 && breakersFixed) {
+        // All conditions satisfied -> Escape victory!
         if (socketClient) {
           socketClient.emit('human_escaped', { id: socketClient.id });
         }
@@ -2188,7 +2204,7 @@ function checkInteractions() {
         });
       } else {
         const realCarried = carriedKeys.filter(k => functionalKeysRevealed.includes(k.symbol)).length;
-        triggerNotification(`cipher cracked, but master gate needs both twin keys to open! (${realCarried}/2 in hand)`);
+        triggerNotification(`Master Gate requires remaining twin key! (${insertedGateKeys.length}/2 installed: [${insertedGateKeys.join(', ') || 'None'}])`);
       }
     }
     return;
@@ -2337,6 +2353,32 @@ function useActiveItem() {
     document.getElementById('hp-bar').style.width = `${currentHP}%`;
     triggerNotification("health fully restored.");
     removeItem(activeSlot);
+  } else if (item === "Defibrillator") {
+    // Medic Revive Ability: revive 1 dead/captured teammate
+    if (myTeam !== 'Human') return;
+    
+    let targetPlayerId = null;
+    let targetPlayerName = 'Survivor';
+
+    if (currentLobby && currentLobby.players) {
+      for (const [id, p] of Object.entries(currentLobby.players)) {
+        if (id !== myId && p.team === 'Human' && p.isCaptured) {
+          targetPlayerId = id;
+          targetPlayerName = p.username || 'Survivor';
+          break;
+        }
+      }
+    }
+
+    if (targetPlayerId) {
+      if (typeof socketClient !== 'undefined') {
+        socketClient.emit('revive_player', { targetId: targetPlayerId });
+      }
+      removeItem(activeSlot);
+      triggerNotification(`⚡ Defibrillator discharged! Reviving Operative ${targetPlayerName}!`);
+    } else {
+      triggerNotification("Defibrillator ready: No fallen teammates currently require revival.");
+    }
   } else if (item === "Adrenaline Shot") {
     speedBoostTimer = 10;
     triggerNotification("adrenaline engaged! speed increased.");
@@ -2873,19 +2915,41 @@ function processFlashlightBattery(delta) {
 
 let exitGateShown = false;
 
+function updateGateHUD() {
+  const keysHud = document.getElementById('keys-hud-info');
+  if (keysHud) {
+    const realCarried = carriedKeys.filter(k => functionalKeysRevealed.includes(k.symbol)).length;
+    if (insertedGateKeys.length >= 2) {
+      keysHud.style.color = "#10b981";
+      keysHud.textContent = `GATE KEYS: 2 / 2 INSTALLED (GATE READY!)`;
+    } else {
+      keysHud.style.color = "var(--secondary-accent)";
+      keysHud.textContent = `GATE KEYS: ${insertedGateKeys.length} / 2 INSTALLED (${realCarried}/2 in hand)`;
+    }
+  }
+  const lockLabel = document.getElementById('terminal-lock-label');
+  if (lockLabel) {
+    if (gateSolved && insertedGateKeys.length >= 2 && fixedBreakersCount >= totalBreakersRequired) {
+      lockLabel.textContent = "GATE UNLOCKED — PRESS E TO ESCAPE";
+      lockLabel.style.color = "#10b981";
+    } else if (gateSolved) {
+      lockLabel.textContent = `Keys: ${insertedGateKeys.length}/2 Installed`;
+      lockLabel.style.color = "var(--secondary-accent)";
+    }
+  }
+}
+
 function checkWinCondition() {
-  const carriedSymbols = carriedKeys.map(k => k.symbol);
-  const hasFirstKey = functionalKeysRevealed.length > 0 && carriedSymbols.includes(functionalKeysRevealed[0]);
-  const hasSecondKey = functionalKeysRevealed.length > 1 && carriedSymbols.includes(functionalKeysRevealed[1]);
   const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
   // Change gate material when ALL conditions are satisfied for the first time
-  if (gateSolved && hasFirstKey && hasSecondKey && breakersFixed) {
+  if (gateSolved && insertedGateKeys.length >= 2 && breakersFixed) {
     if (gateMeshRef && !exitGateShown) {
       showExitGate();
       exitGateShown = true;
     }
   }
+  updateGateHUD();
 }
 
 // Setup network synchronization
@@ -3049,7 +3113,56 @@ function setupSocketListeners() {
     }
   });
 
+  socketClient.on('gate_key_inserted_sync', ({ symbol, insertedKeys, installerName }) => {
+    insertedGateKeys = insertedKeys;
+    triggerNotification(`🔑 [${installerName}] installed [${symbol}] into Master Gate! (${insertedGateKeys.length}/2 installed)`);
+    updateGateHUD();
+    if (insertedGateKeys.length >= 2) {
+      showExitGate();
+    }
+  });
+
+  socketClient.on('player_revived_sync', ({ targetId, medicName, revivedName }) => {
+    if (currentLobby && currentLobby.players && currentLobby.players[targetId]) {
+      currentLobby.players[targetId].isCaptured = false;
+    }
+    triggerNotification(`⚡ [${medicName}] revived Operative ${revivedName}!`);
+
+    if (targetId === myId) {
+      isCaptured = false;
+      window.isSpectating = false;
+      currentHP = 75;
+      currentSanity = 75;
+      
+      const hpVal = document.getElementById('hp-value');
+      const hpBar = document.getElementById('hp-bar');
+      const sanityVal = document.getElementById('sanity-value');
+      const sanityBar = document.getElementById('sanity-bar');
+      if (hpVal) hpVal.textContent = "75 HP";
+      if (hpBar) hpBar.style.width = "75%";
+      if (sanityVal) sanityVal.textContent = "75%";
+      if (sanityBar) sanityBar.style.width = "75%";
+
+      const capOverlay = document.getElementById('captured-overlay');
+      if (capOverlay) capOverlay.style.display = 'none';
+      const hudOverlay = document.getElementById('hud-overlay');
+      if (hudOverlay) hudOverlay.style.display = 'flex';
+
+      if (!isMobileDevice) {
+        document.getElementById('canvas-container').requestPointerLock();
+      } else {
+        window.mobileGameActive = true;
+        const mobileCtrl = document.getElementById('mobile-controls-container');
+        if (mobileCtrl) mobileCtrl.style.display = 'flex';
+      }
+      triggerNotification("⚡ REVIVED BY MEDIC! BACK IN THE ACTION!");
+    }
+  });
+
   socketClient.on('human_captured', ({ targetId }) => {
+    if (currentLobby && currentLobby.players && currentLobby.players[targetId]) {
+      currentLobby.players[targetId].isCaptured = true;
+    }
     if (targetId === myId) {
       isCaptured = true;
       socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) was captured by a Ghost.` });

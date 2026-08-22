@@ -421,6 +421,41 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('key_dropped_sync', data);
   });
 
+  socket.on('insert_gate_key', ({ symbol }) => {
+    const { roomId } = socket;
+    const lobby = lobbies[roomId];
+    if (!lobby || !lobby.puzzleState) return;
+    if (!lobby.puzzleState.insertedKeys) lobby.puzzleState.insertedKeys = [];
+    if (!lobby.puzzleState.insertedKeys.includes(symbol)) {
+      lobby.puzzleState.insertedKeys.push(symbol);
+    }
+    const installerName = (lobby.players[socket.id] && lobby.players[socket.id].username) || 'Operative';
+    console.log(`[Lobby ${roomId}] Key [${symbol}] inserted into Master Gate by ${installerName}. Total: ${lobby.puzzleState.insertedKeys.length}/2`);
+    io.to(roomId).emit('gate_key_inserted_sync', {
+      symbol,
+      insertedKeys: lobby.puzzleState.insertedKeys,
+      installerName
+    });
+  });
+
+  socket.on('revive_player', ({ targetId }) => {
+    const { roomId } = socket;
+    const lobby = lobbies[roomId];
+    if (!lobby) return;
+    if (lobby.players[targetId]) {
+      lobby.players[targetId].isCaptured = false;
+    }
+    const medicName = (lobby.players[socket.id] && lobby.players[socket.id].username) || 'Medic';
+    const revivedName = (lobby.players[targetId] && lobby.players[targetId].username) || 'Survivor';
+    console.log(`[Lobby ${roomId}] Medic ${medicName} revived fallen player ${revivedName}.`);
+    io.to(roomId).emit('player_revived_sync', {
+      targetId,
+      medicName,
+      revivedName
+    });
+    io.to(roomId).emit('chat_message', { msg: `[SYSTEM]: Medic ${medicName} revived Operative ${revivedName}!` });
+  });
+
   socket.on('human_escaped', () => {
     const { roomId } = socket;
     if (roomId && lobbies[roomId]) {
