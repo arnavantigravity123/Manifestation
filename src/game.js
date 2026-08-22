@@ -4351,15 +4351,29 @@ function animate() {
       // Breaker Remote freezes all ghost movement
       if (window.ghostsFrozen) return;
 
-      const distToPlayer = ghost.position.distanceTo(new THREE.Vector3(camera.position.x, ghost.position.y, camera.position.z));
+      // Find nearest human
+      let nearestHumanPos = null;
+      let minDist = Infinity;
+      
+      if (myTeam === 'Human' && !isPanicked && !isCaptured) {
+         const d = ghost.position.distanceTo(camera.position);
+         if (d < minDist) { minDist = d; nearestHumanPos = new THREE.Vector3(camera.position.x, ghost.position.y, camera.position.z); }
+      }
+      Object.values(players3D).forEach(p => {
+         if (p.userData && p.userData.type === 'Human' && !p.userData.isCaptured && !p.userData.isPanicked) {
+            const d = ghost.position.distanceTo(p.position);
+            if (d < minDist) { minDist = d; nearestHumanPos = new THREE.Vector3(p.position.x, ghost.position.y, p.position.z); }
+         }
+      });
+
+      const distToPlayer = minDist !== Infinity ? minDist : 9999;
+      const targetPos = nearestHumanPos || camera.position;
 
       // Damage check uses actual distance to PLAYER
       applyGhostDamageToHuman(ghost.position);
       checkChalkDecals(ghost.position);
 
       // Check salt traps (triggering & consumption)
-      // Juggernaut (6.5 u/s) is faster than normal ghosts but noticeably slower than human walk (~9 u/s).
-      // Humans must still manage stamina, but won't be instantly run down by walking.
       let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? 6.5 : 4.0;
       if (ghost.userData.speedBoostTimer && ghost.userData.speedBoostTimer > 0) {
         ghost.userData.speedBoostTimer -= delta;
@@ -4416,9 +4430,9 @@ function animate() {
 
       // Check Line of Sight (LOS)
       let canSeePlayer = false;
-      if (distToPlayer < 13.5 && myTeam === 'Human' && !isPanicked) { // 3 blocks max sight range
+      if (distToPlayer < 13.5 && nearestHumanPos) { // 3 blocks max sight range
         const rayOrigin = new THREE.Vector3(ghost.position.x, 2.0, ghost.position.z);
-        const directionToPlayer = new THREE.Vector3().subVectors(camera.position, rayOrigin).normalize();
+        const directionToPlayer = new THREE.Vector3().subVectors(targetPos, rayOrigin).normalize();
         const raycaster = new THREE.Raycaster(rayOrigin, directionToPlayer, 0, 15);
         const intersects = raycaster.intersectObjects(walls);
         if (intersects.length === 0 || intersects[0].distance > distToPlayer) {
@@ -4439,7 +4453,7 @@ function animate() {
       }
 
       // Execute Bot Abilities
-      if (myTeam === 'Human') {
+      if (nearestHumanPos) {
         if (ghost.userData.abilityCooldown > 0) {
           ghost.userData.abilityCooldown -= delta;
         } else if (distToPlayer < 25) {
@@ -4447,12 +4461,12 @@ function animate() {
           const gClass = ghost.userData.ghostClass;
           
           if (gClass === 'Stalker') {
-            triggerNotification("A Stalker bot caught your scent!");
+            if (myTeam === 'Human') triggerNotification("A Stalker bot caught your scent!");
             ghost.userData.aiState = 'CHASE';
-            ghost.userData.targetGrid = worldToGrid(camera.position.x, camera.position.z);
+            ghost.userData.targetGrid = worldToGrid(targetPos.x, targetPos.z);
             ghost.userData.pathTime = 0;
           } else if (gClass === 'Mimic') {
-            triggerNotification("A Mimic bot is disguising itself!");
+            if (myTeam === 'Human') triggerNotification("A Mimic bot is disguising itself!");
             if (typeof preloadedHumanModel !== 'undefined' && preloadedHumanModel) {
               const mimicModel = SkeletonUtils.clone(preloadedHumanModel);
               ghost.add(mimicModel);
@@ -4463,22 +4477,22 @@ function animate() {
               }, 10000);
             }
           } else if (gClass === 'Juggernaut') {
-            triggerNotification("A Juggernaut bot is enraged!");
+            if (myTeam === 'Human') triggerNotification("A Juggernaut bot is enraged!");
             ghost.userData.speedBoostTimer = 5.0;
           } else if (gClass === 'Phantom') {
-            triggerNotification("A Phantom bot used Vapor Leap!");
+            if (myTeam === 'Human') triggerNotification("A Phantom bot used Vapor Leap!");
             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(ghost.quaternion);
             ghost.position.addScaledVector(forward, 8);
           } else if (gClass === 'Poltergeist') {
-            const dist = camera.position.distanceTo(ghost.position);
-            if (dist <= 6 * 4.5) {
+            const dist = targetPos.distanceTo(ghost.position);
+            if (dist <= 6 * 4.5 && myTeam === 'Human') {
               triggerNotification("Poltergeist bot deployed Breaker Siphon!");
               window.flashlightDisabledBySiphon = true;
               setTimeout(() => { window.flashlightDisabledBySiphon = false; }, 10000);
             }
           } else if (gClass === 'Banshee') {
-            const dist = camera.position.distanceTo(ghost.position);
-            if (dist <= 6 * 4.5) {
+            const dist = targetPos.distanceTo(ghost.position);
+            if (dist <= 6 * 4.5 && myTeam === 'Human') {
               triggerNotification("Banshee bot scrambled your sensors!");
               window.sensorsScrambled = true;
               setTimeout(() => { window.sensorsScrambled = false; }, 5000);
@@ -4511,7 +4525,7 @@ function animate() {
         
         let destGrid;
         if (ghost.userData.aiState === 'CHASE') {
-          destGrid = worldToGrid(camera.position.x, camera.position.z);
+          destGrid = worldToGrid(targetPos.x, targetPos.z);
           ghost.userData.targetGrid = destGrid;
         } else if (ghost.userData.aiState === 'INVESTIGATE') {
           destGrid = ghost.userData.targetGrid;
