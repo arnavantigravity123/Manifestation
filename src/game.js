@@ -4495,9 +4495,9 @@ function animate() {
       });
 
       const distToPlayer = minDist !== Infinity ? minDist : 9999;
-      const targetPos = nearestHumanPos || camera.position;
+      const targetPos = nearestHumanPos;
 
-      // Damage check uses actual distance to PLAYER
+      // Damage check uses actual distance to PLAYER (only damages humans)
       applyGhostDamageToHuman(ghost.position);
       checkChalkDecals(ghost.position);
 
@@ -4556,9 +4556,9 @@ function animate() {
         ghost.userData.abilityCooldown = 15.0 + Math.random() * 10.0;
       }
 
-      // Check Line of Sight (LOS)
+      // Check Line of Sight (LOS) ONLY if there is an active Human
       let canSeePlayer = false;
-      if (distToPlayer < 13.5 && nearestHumanPos) { // 3 blocks max sight range
+      if (targetPos && distToPlayer < 13.5) { // 3 blocks max sight range
         const rayOrigin = new THREE.Vector3(ghost.position.x, 2.0, ghost.position.z);
         const directionToPlayer = new THREE.Vector3().subVectors(targetPos, rayOrigin).normalize();
         const raycaster = new THREE.Raycaster(rayOrigin, directionToPlayer, 0, 15);
@@ -4569,19 +4569,24 @@ function animate() {
       }
 
       // State Transitions
-      if (canSeePlayer) {
+      if (canSeePlayer && targetPos) {
         ghost.userData.aiState = 'CHASE';
         ghost.userData.loseSightTimer = 0;
       } else if (ghost.userData.aiState === 'CHASE') {
-        ghost.userData.loseSightTimer += delta;
-        if (ghost.userData.loseSightTimer > 3.0) {
-          ghost.userData.aiState = 'WANDER'; // Lost player
+        if (!targetPos) {
+          ghost.userData.aiState = 'WANDER';
           ghost.userData.targetGrid = null;
+        } else {
+          ghost.userData.loseSightTimer += delta;
+          if (ghost.userData.loseSightTimer > 3.0) {
+            ghost.userData.aiState = 'WANDER'; // Lost player
+            ghost.userData.targetGrid = null;
+          }
         }
       }
 
-      // Execute Bot Abilities
-      if (nearestHumanPos) {
+      // Execute Bot Abilities on human targets
+      if (targetPos) {
         if (ghost.userData.abilityCooldown > 0) {
           ghost.userData.abilityCooldown -= delta;
         } else if (distToPlayer < 25) {
@@ -4629,7 +4634,7 @@ function animate() {
         }
       }
 
-      // Check Sound Beacons
+      // Check Sound Beacons (human noise)
       if (latestSoundBeacon && latestSoundBeacon.time > ghost.userData.lastSoundTime && ghost.userData.aiState !== 'CHASE') {
         const distToSound = ghost.position.distanceTo(new THREE.Vector3(latestSoundBeacon.position.x, ghost.position.y, latestSoundBeacon.position.z));
         let hearingRadius = 0;
@@ -4652,7 +4657,7 @@ function animate() {
         const ghostGrid = worldToGrid(ghost.position.x, ghost.position.z);
         
         let destGrid;
-        if (ghost.userData.aiState === 'CHASE') {
+        if (ghost.userData.aiState === 'CHASE' && targetPos) {
           destGrid = worldToGrid(targetPos.x, targetPos.z);
           ghost.userData.targetGrid = destGrid;
         } else if (ghost.userData.aiState === 'INVESTIGATE') {
@@ -4664,7 +4669,7 @@ function animate() {
           }
         } 
 
-        if (ghost.userData.aiState === 'WANDER') {
+        if (ghost.userData.aiState === 'WANDER' || !destGrid) {
           if (!ghost.userData.targetGrid || (ghostGrid.col === ghost.userData.targetGrid.col && ghostGrid.row === ghost.userData.targetGrid.row)) {
             let rx, rz, attempts = 0;
             ghost.userData.wanderCount = (ghost.userData.wanderCount || 0) + 1;
@@ -4704,15 +4709,15 @@ function animate() {
           const dir = new THREE.Vector3(dx, 0, dz).normalize();
           ghost.position.addScaledVector(dir, delta * moveSpeed);
         }
-      } else if (ghost.userData.aiState === 'CHASE' && distToPlayer > 0.5) {
-        // Fallback: Chase direct line of sight
-        const dir = new THREE.Vector3(camera.position.x - ghost.position.x, 0, camera.position.z - ghost.position.z).normalize();
+      } else if (ghost.userData.aiState === 'CHASE' && distToPlayer > 0.5 && targetPos) {
+        // Fallback: Chase direct line of sight to human target
+        const dir = new THREE.Vector3(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
         ghost.position.addScaledVector(dir, delta * moveSpeed);
       }
       
-      // Face the player if chasing, otherwise face movement direction
-      if (ghost.userData.aiState === 'CHASE') {
-        ghost.lookAt(camera.position.x, ghost.position.y, camera.position.z);
+      // Face the human player if chasing, otherwise face movement direction
+      if (ghost.userData.aiState === 'CHASE' && targetPos) {
+        ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
       } else if (path && path.length > 0 && pathIdx < path.length) {
         ghost.lookAt(path[pathIdx].x, ghost.position.y, path[pathIdx].z);
       }
