@@ -597,6 +597,10 @@ function renderHUDInventory() {
   if (myTeam === 'Human') {
     renderCarriedKeysHUD();
   }
+
+  if (typeof socketClient !== 'undefined' && socketClient.emit) {
+    socketClient.emit('inventory_update', { inventory, carriedKeys });
+  }
 }
 
 function renderCarriedKeysHUD() {
@@ -664,6 +668,10 @@ function renderCarriedKeysHUD() {
     }
 
     keysPanel.appendChild(slot);
+  }
+
+  if (typeof socketClient !== 'undefined' && socketClient.emit) {
+    socketClient.emit('inventory_update', { inventory, carriedKeys });
   }
 
   // Update keys-hud-info count
@@ -4260,6 +4268,27 @@ function animate() {
           if (socketClient) {
             socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) has been captured by the void.` });
             socketClient.emit('capture_human', { targetId: myId }); // Tell server we died!
+
+            // Drop all items and keys
+            inventory.forEach(itemName => {
+              if (itemName && itemName !== '') {
+                socketClient.emit('item_dropped', {
+                  id: 'item_' + seededRandom().toString(36).substr(2, 9),
+                  name: itemName,
+                  position: { x: camera.position.x, y: 1.6, z: camera.position.z }
+                });
+              }
+            });
+            carriedKeys.forEach(key => {
+              socketClient.emit('key_dropped', {
+                typeName: key.typeName,
+                symbol: key.symbol,
+                position: { x: camera.position.x, y: 1.6, z: camera.position.z }
+              });
+            });
+            inventory = [];
+            carriedKeys = [];
+            renderHUDInventory();
           }
 
           playGhostCaptureAnimation(() => {

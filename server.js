@@ -381,7 +381,19 @@ io.on('connection', (socket) => {
   });
 
   socket.on('player_movement', (moveData) => {
+    const lobby = lobbies[socket.roomId];
+    if (lobby && lobby.players[socket.id]) {
+      lobby.players[socket.id].lastPosition = moveData.position;
+    }
     socket.to(socket.roomId).emit('player_moved', { id: socket.id, ...moveData });
+  });
+
+  socket.on('inventory_update', ({ inventory, carriedKeys }) => {
+    const lobby = lobbies[socket.roomId];
+    if (lobby && lobby.players[socket.id]) {
+      lobby.players[socket.id].inventory = inventory;
+      lobby.players[socket.id].carriedKeys = carriedKeys;
+    }
   });
 
   socket.on('panic_hide', () => {
@@ -473,6 +485,30 @@ io.on('connection', (socket) => {
       const lobby = lobbies[roomId];
       const leftPlayer = lobby.players[socket.id];
       delete lobby.players[socket.id];
+
+      // Drop player's items and keys if game is active
+      if (lobby.gameStarted && leftPlayer && leftPlayer.lastPosition && leftPlayer.team === 'Human') {
+        if (leftPlayer.inventory) {
+          leftPlayer.inventory.forEach(itemName => {
+            if (itemName && itemName !== '') {
+              io.to(roomId).emit('item_dropped_sync', {
+                id: 'item_' + Math.random().toString(36).substr(2, 9),
+                name: itemName,
+                position: leftPlayer.lastPosition
+              });
+            }
+          });
+        }
+        if (leftPlayer.carriedKeys) {
+          leftPlayer.carriedKeys.forEach(key => {
+            io.to(roomId).emit('key_dropped_sync', {
+              typeName: key.typeName,
+              symbol: key.symbol,
+              position: leftPlayer.lastPosition
+            });
+          });
+        }
+      }
 
       const remainingPlayers = Object.keys(lobby.players);
 
