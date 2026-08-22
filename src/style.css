@@ -81,6 +81,7 @@ body, html {
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  background: radial-gradient(ellipse at 50% 40%, rgba(239, 68, 68, 0.14) 0%, rgba(15, 23, 42, 0.8) 55%, #030712 100%);
 }
 
 /* Glass panel base container */
@@ -89,9 +90,9 @@ body, html {
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--panel-border);
-  box-shadow: var(--neon-shadow), inset 0 0 10px rgba(0, 0, 0, 0.5);
-  border-radius: 12px;
-  padding: 2rem;
+  box-shadow: var(--neon-shadow), inset 0 0 15px rgba(0, 0, 0, 0.6);
+  border-radius: 16px;
+  padding: 2.5rem 2rem;
   color: var(--text-main);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   max-height: 95vh;
@@ -105,34 +106,41 @@ body, html {
 
 /* Auth / Entry view styling */
 #auth-view {
-  width: 100%;
-  max-width: 460px;
+  width: 92%;
+  max-width: 580px;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   animation: fadeIn 0.6s ease-out;
 }
 
+@media (min-width: 1200px) {
+  #auth-view {
+    max-width: 640px;
+    padding: 3rem 2.5rem;
+  }
+}
+
 .logo-container {
   text-align: center;
-  margin-top: 25px;
+  margin-top: 15px;
 }
 
 .logo-container h1 {
   font-family: 'Orbitron', sans-serif;
-  font-size: clamp(1.8rem, 6vw, 2.2rem);
+  font-size: clamp(2.2rem, 5vw, 2.8rem);
   font-weight: 900;
-  letter-spacing: clamp(1px, 2vw, 2px);
+  letter-spacing: 3px;
   color: var(--primary-accent);
-  text-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
-  margin-bottom: 0.25rem;
+  text-shadow: 0 0 25px rgba(239, 68, 68, 0.7);
+  margin-bottom: 0.35rem;
   text-transform: uppercase;
 }
 
 .logo-container p {
   color: var(--text-muted);
-  font-size: 0.9rem;
-  letter-spacing: 2px;
+  font-size: 1rem;
+  letter-spacing: 3px;
   text-transform: uppercase;
 }
 
