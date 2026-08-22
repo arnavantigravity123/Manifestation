@@ -2139,34 +2139,6 @@ function checkInteractions() {
       break;
     }
   }
-}
-
-function collectClueLocal(digitIndex) {
-  const note = codeClueNotes.find(n => n.digitIndex === digitIndex);
-  if (note && !note.collected) {
-    note.collected = true;
-    note.mesh.material.emissiveIntensity = 0.1;
-  }
-
-  const digitNames = ['1ST', '2ND', '3RD', '4TH'];
-  const digits = window.cipherCodeDigits || [null, null, null, null];
-  const revealedDigit = digits[digitIndex];
-
-  triggerNotification(`cipher clue found! ${digitNames[digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
-
-  const cipherHUD = document.getElementById('hud-cipher-info');
-  if (cipherHUD) {
-    const display = digits.map((d, idx) => {
-      const collected = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
-      return collected ? d : '_';
-    }).join(' ');
-    cipherHUD.textContent = `CODE: ${display}`;
-  }
-
-  if (typeof keypadUI !== 'undefined' && keypadUI.style.display !== 'none') {
-    keypadScreen.textContent = getKeypadDisplayString();
-  }
-}
 
   // 5. Check proximity to Pick-up Items (find empty slot & check unique items)
   for (let i = 0; i < itemsInMaze.length; i++) {
@@ -2196,6 +2168,33 @@ function collectClueLocal(digitIndex) {
       }
       break;
     }
+  }
+}
+
+function collectClueLocal(digitIndex) {
+  const note = codeClueNotes.find(n => n.digitIndex === digitIndex);
+  if (note && !note.collected) {
+    note.collected = true;
+    note.mesh.material.emissiveIntensity = 0.1;
+  }
+
+  const digitNames = ['1ST', '2ND', '3RD', '4TH'];
+  const digits = window.cipherCodeDigits || [null, null, null, null];
+  const revealedDigit = digits[digitIndex];
+
+  triggerNotification(`cipher clue found! ${digitNames[digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
+
+  const cipherHUD = document.getElementById('hud-cipher-info');
+  if (cipherHUD) {
+    const display = digits.map((d, idx) => {
+      const collected = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
+      return collected ? d : '_';
+    }).join(' ');
+    cipherHUD.textContent = `CODE: ${display}`;
+  }
+
+  if (typeof keypadUI !== 'undefined' && keypadUI.style.display !== 'none') {
+    keypadScreen.textContent = getKeypadDisplayString();
   }
 }
 
