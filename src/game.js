@@ -100,7 +100,7 @@ let moveForward = false, moveBackward = false, moveLeft = false, moveRight = fal
 let velocity = new THREE.Vector3();
 let direction = new THREE.Vector3();
 let prevTime = performance.now();
-const defaultMobileDetect = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.matchMedia("(max-width: 768px)").matches;
+const defaultMobileDetect = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 export let isMobileDevice = defaultMobileDetect;
 if (isMobileDevice) {
   document.body.classList.add('is-mobile');
@@ -350,26 +350,23 @@ export function initGame(socket, socketId, matchConfig) {
     if (subtext) subtext.textContent = '(Drag Screen to Look | Joystick to Move | Tap UI to Act)';
   }
 
-  container.addEventListener('click', () => {
+  const handleEnterGame = () => {
     if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
     if (isMinimapExpanded) return;
-    if (isMobileDevice) {
-      window.mobileGameActive = true;
-      ptrOverlay.style.display = 'none';
-    } else {
+    window.mobileGameActive = true;
+    ptrOverlay.style.display = 'none';
+    if (!isMobileDevice && container && container.requestPointerLock) {
       container.requestPointerLock();
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-  });
-  document.getElementById('resume-click-target').addEventListener('click', () => {
-    if (isMobileDevice) {
-      window.mobileGameActive = true;
-      ptrOverlay.style.display = 'none';
-    } else {
-      container.requestPointerLock();
-    }
-    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-  });
+  };
+
+  container.addEventListener('click', handleEnterGame);
+  const resumeBtn = document.getElementById('resume-click-target');
+  if (resumeBtn) {
+    resumeBtn.addEventListener('click', handleEnterGame);
+    resumeBtn.addEventListener('touchstart', handleEnterGame, { passive: false });
+  }
 
   document.addEventListener('pointerlockchange', () => {
     if (isMobileDevice) return;
@@ -1757,7 +1754,6 @@ function setupControls() {
   });
   
   document.addEventListener('mousedown', (e) => {
-    if (isMobileDevice) return;
     if (document.pointerLockElement !== document.getElementById('canvas-container') || (isCaptured && !window.isSpectating)) return;
     if (e.button === 0 && !window.isSpectating) { // Left click
       useActiveItem();
@@ -1766,7 +1762,6 @@ function setupControls() {
 
   // Mouse camera rotation controller
   document.addEventListener('mousemove', (e) => {
-    if (isMobileDevice) return;
     if (document.pointerLockElement !== document.getElementById('canvas-container') || (isCaptured && !window.isSpectating)) return;
     
     // Ignore massive spikes caused by browser Pointer Lock bugs
