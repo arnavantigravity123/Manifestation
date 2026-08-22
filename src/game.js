@@ -2080,9 +2080,6 @@ function updateInteractionPrompt() {
     if (distToGate < minDistance) {
       minDistance = distToGate;
       const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
-      const carriedSymbols = carriedKeys.map(k => k.symbol);
-      const hasFirstKey = functionalKeysRevealed.length > 0 && carriedSymbols.includes(functionalKeysRevealed[0]);
-      const hasSecondKey = functionalKeysRevealed.length > 1 && carriedSymbols.includes(functionalKeysRevealed[1]);
 
       if (!gateSolved) {
         if (!breakersFixed) {
@@ -2094,10 +2091,15 @@ function updateInteractionPrompt() {
           promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
         }
       } else {
-        if (hasFirstKey && hasSecondKey && breakersFixed) {
+        const uninsertedKeyIndex = carriedKeys.findIndex(k => functionalKeysRevealed.includes(k.symbol) && !insertedGateKeys.includes(k.symbol));
+
+        if (insertedGateKeys.length >= 2 && breakersFixed) {
           promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
+        } else if (uninsertedKeyIndex !== -1) {
+          const keyToInsert = carriedKeys[uninsertedKeyIndex];
+          promptText = isMobileDevice ? `Tap INTERACT to Insert [${keyToInsert.symbol}]` : `Press <kbd>E</kbd> to Insert [${keyToInsert.symbol}]`;
         } else {
-          promptText = `ACCESS DENIED: Need Twin Keys to Escape`;
+          promptText = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
         }
       }
     }
@@ -3034,15 +3036,7 @@ function setupSocketListeners() {
     gateSolved = true;
     functionalKeysRevealed = realKeySymbols;
 
-    const carriedSymbols = carriedKeys.map(k => k.symbol);
-    const hasFirstKey = carriedSymbols.includes(realKeySymbols[0]);
-    const hasSecondKey = carriedSymbols.includes(realKeySymbols[1]);
-
-    if (hasFirstKey && hasSecondKey) {
-      triggerNotification(`cipher solved! twin keys revealed: [${realKeySymbols.join(', ')}]. PRESS E ON GATE TO ESCAPE!`);
-    } else {
-      triggerNotification(`cipher solved! twin keys revealed: [${realKeySymbols.join(', ')}]`);
-    }
+    triggerNotification(`Cipher cracked! Twin functional keys revealed: [${realKeySymbols.join(' & ')}]`);
     
     const keypadModal = document.getElementById('keypad-modal-ui');
     if (keypadModal) {
@@ -3052,15 +3046,13 @@ function setupSocketListeners() {
       }
     }
 
-    const lockLabel = document.getElementById('terminal-lock-label');
-    lockLabel.textContent = "Twin Keys Required";
-    lockLabel.style.color = "var(--secondary-accent)";
-    lockLabel.style.textShadow = "0 0 10px rgba(245, 158, 11, 0.6)";
-
     const cipherHUD = document.getElementById('hud-cipher-info');
-    cipherHUD.textContent = `Keys: ${realKeySymbols.join(' & ')}`;
+    if (cipherHUD) {
+      cipherHUD.textContent = `Keys: ${realKeySymbols.join(' & ')}`;
+    }
     
-    showExitGate();
+    updateGateHUD();
+    checkWinCondition();
   });
 
   // Keypad failure penalty trigger
