@@ -2915,9 +2915,12 @@ function setupSocketListeners() {
       const pUsername = currentLobby && currentLobby.players[id] ? currentLobby.players[id].username : 'Unknown';
       const capMesh = isGhost ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername);
       
-      // Setup thermal camera support
+      // Setup thermal camera support (Cyan for teammates, Red for ghosts)
       const meshThermalMat = new THREE.MeshBasicMaterial({ 
-        color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
+        color: isGhost ? 0xff5555 : 0x38bdf8, 
+        fog: false, 
+        depthTest: false, 
+        side: THREE.DoubleSide 
       });
       capMesh.traverse(c => {
         if (c.isMesh) {
@@ -2927,7 +2930,7 @@ function setupSocketListeners() {
           c.userData.normalMat = c.material;
           c.userData.thermalMat = new THREE.SpriteMaterial({
             map: c.material.map,
-            color: 0xffffff,
+            color: isGhost ? 0xff5555 : 0x38bdf8,
             fog: false,
             depthTest: false,
             transparent: true,
@@ -4344,7 +4347,7 @@ function animate() {
         scene.fog.color.setHex(0x330000);
         scene.fog.density = 0.02; // Red thermal vision
 
-        // Make AI ghosts bright and glowing
+        // Make AI ghosts bright and glowing (red heat signature)
         ghosts3D.forEach(g => {
           g.traverse(c => {
             if ((c.isMesh || c.isSprite) && c.userData.thermalMat && c.material !== c.userData.thermalMat) {
@@ -4353,16 +4356,14 @@ function animate() {
             }
           });
         });
-        // Make network ghost players bright and glowing
+        // Make network players (Ghosts in red, Teammates in cyan) visible through walls
         Object.values(players3D).forEach(p => {
-          if (p.userData && p.userData.type === 'Ghost') {
-            p.traverse(c => {
-              if ((c.isMesh || c.isSprite) && c.userData.thermalMat && c.material !== c.userData.thermalMat) {
-                c.material = c.userData.thermalMat;
-                c.renderOrder = 999;
-              }
-            });
-          }
+          p.traverse(c => {
+            if ((c.isMesh || c.isSprite) && c.userData.thermalMat && c.material !== c.userData.thermalMat) {
+              c.material = c.userData.thermalMat;
+              c.renderOrder = 999;
+            }
+          });
         });
       } else {
         const fogDensity = Math.max(0.01, 0.05 - (fixedBreakersCount * 0.015));
@@ -4379,16 +4380,14 @@ function animate() {
             }
           });
         });
-        // Disable X-Ray vision for network ghost players
+        // Disable X-Ray vision for network players
         Object.values(players3D).forEach(p => {
-          if (p.userData && p.userData.type === 'Ghost') {
-            p.traverse(c => {
-              if ((c.isMesh || c.isSprite) && c.userData.normalMat && c.material !== c.userData.normalMat) {
-                c.material = c.userData.normalMat;
-                c.renderOrder = 0;
-              }
-            });
-          }
+          p.traverse(c => {
+            if ((c.isMesh || c.isSprite) && c.userData.normalMat && c.material !== c.userData.normalMat) {
+              c.material = c.userData.normalMat;
+              c.renderOrder = 0;
+            }
+          });
         });
       }
     }
