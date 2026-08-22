@@ -3826,20 +3826,37 @@ function setupMinimap() {
 }
 
 function updateEnvironmentLighting() {
-  const mult = getVisionMultiplier();
+  let mult = getVisionMultiplier();
+  
   if (myTeam === 'Ghost') {
     ambientLight.intensity = 2.0 * mult;
+    ambientLight.color.setHex(0x444455);
   } else {
+    // Dramatically scale up ambient light if breakers are fixed
+    if (fixedBreakersCount === 1) {
+      ambientLight.color.setHex(0x333344);
+      mult *= 1.8;
+    } else if (fixedBreakersCount === 2) {
+      ambientLight.color.setHex(0x555566);
+      mult *= 2.5;
+    } else if (fixedBreakersCount >= 3) {
+      ambientLight.color.setHex(0x888899);
+      mult *= 3.5;
+    } else {
+      ambientLight.color.setHex(0x222233);
+    }
+
     if (!isMobileDevice) {
       ambientLight.intensity = 1.5 * mult;
     } else {
       ambientLight.intensity = 2.0 * mult;
     }
     
-    // Boost flashlight range and width slightly
+    // Boost flashlight range and width slightly based on original mult
+    const baseMult = getVisionMultiplier();
     if (flashLight) {
-      flashLight.distance = 45 * mult;
-      flashLight.angle = (Math.PI / 3) * mult;
+      flashLight.distance = 45 * baseMult;
+      flashLight.angle = (Math.PI / 3) * baseMult;
     }
   }
 }
@@ -3853,6 +3870,15 @@ function fixBreakerLocal(breakerId) {
   fixedBreakersCount++;
   
   updateEnvironmentLighting();
+
+  const breakersInfo = document.getElementById('hud-breakers-info');
+  if (breakersInfo) {
+    breakersInfo.textContent = `POWER: ${fixedBreakersCount} / ${totalBreakersRequired} BREAKERS REPAIRED`;
+    if (fixedBreakersCount >= totalBreakersRequired) {
+      breakersInfo.style.color = '#10b981';
+      breakersInfo.textContent = 'POWER: FULLY RESTORED';
+    }
+  }
 
   triggerNotification(`circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
   checkWinCondition();
