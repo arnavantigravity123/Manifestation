@@ -147,6 +147,12 @@ io.on('connection', (socket) => {
   });
 
   function joinRoomHandler(socket, { roomId, username, skinId = null, isPublic = false }) {
+    if (socket.roomId && socket.roomId !== roomId && lobbies[socket.roomId]) {
+      delete lobbies[socket.roomId].players[socket.id];
+      socket.leave(socket.roomId);
+      updateLobbyState(socket.roomId);
+    }
+
     socket.join(roomId);
     
     if (!lobbies[roomId]) {

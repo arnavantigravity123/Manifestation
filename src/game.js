@@ -236,7 +236,27 @@ export function initGame(socket, socketId, matchConfig) {
   // Reset core game state variables for clean start/re-entry
   currentViewIndex = 0;
   activeViewCamera = null;
-  localPlayerVisual = null;
+  if (localPlayerVisual) {
+    camera.remove(localPlayerVisual);
+    localPlayerVisual = null;
+  }
+
+  // Remove any stale player meshes from scene
+  if (typeof players3D !== 'undefined') {
+    Object.keys(players3D).forEach(id => {
+      if (players3D[id]) {
+        scene.remove(players3D[id]);
+        players3D[id].traverse(child => {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        });
+      }
+    });
+    players3D = {};
+  }
   
   currentHP = 100;
   currentSanity = 100;
@@ -2871,6 +2891,9 @@ function checkWinCondition() {
 // Setup network synchronization
 function setupSocketListeners() {
   socketClient.on('player_moved', ({ id, position, rotation, team, characterClass }) => {
+    // Ignore local player position broadcasts so we don't spawn a clone on ourselves
+    if (!id || id === myId) return;
+
     // If player mesh exists but team has changed, remove it to spawn the correct mesh type
     if (players3D[id] && players3D[id].userData && players3D[id].userData.type !== team) {
       scene.remove(players3D[id]);
