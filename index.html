@@ -82,17 +82,24 @@
           <button id="watch-ad-btn" class="action-btn" style="width: auto; padding: 0.4rem 0.8rem; font-size: 0.8rem; background: linear-gradient(135deg, #10b981, #047857); border: 1px solid #34d399;">📺 Watch Ad (+50 💰)</button>
         </div>
         
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+          <!-- Default Skin -->
+          <div style="background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.5rem;">
+            <img src="/assets/human_sprite.png" alt="Standard Issue" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 0.5rem; background: #1a1a2e;" />
+            <h4 style="color: white; margin: 0 0 0.5rem 0; font-size: 0.9rem;">Standard Issue</h4>
+            <button class="action-btn buy-skin-btn" data-skin-id="skin_default" data-price="0" style="padding: 0.4rem; font-size: 0.8rem;">EQUIP</button>
+          </div>
+
           <!-- Neon Cyborg Skin -->
           <div style="background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.5rem;">
-            <img src="/assets/skin_neon_cyborg.jpg" alt="Neon Cyborg" style="width: 100%; border-radius: 4px; margin-bottom: 0.5rem;" />
+            <img src="/assets/skin_neon_cyborg.jpg" alt="Neon Cyborg" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 0.5rem;" />
             <h4 style="color: white; margin: 0 0 0.5rem 0; font-size: 0.9rem;">Neon Cyborg</h4>
             <button class="action-btn buy-skin-btn" data-skin-id="skin_cyborg" data-price="200" style="padding: 0.4rem; font-size: 0.8rem;">Buy - 200 💰</button>
           </div>
           
           <!-- Shadow Ghost Skin -->
           <div style="background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.5rem;">
-            <img src="/assets/skin_shadow_ghost.jpg" alt="Shadow Ghost" style="width: 100%; border-radius: 4px; margin-bottom: 0.5rem;" />
+            <img src="/assets/skin_shadow_ghost.jpg" alt="Shadow Ghost" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 0.5rem;" />
             <h4 style="color: white; margin: 0 0 0.5rem 0; font-size: 0.9rem;">Shadow Entity</h4>
             <button class="action-btn buy-skin-btn" data-skin-id="skin_shadow" data-price="350" style="padding: 0.4rem; font-size: 0.8rem;">Buy - 350 💰</button>
           </div>

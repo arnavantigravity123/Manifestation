@@ -210,10 +210,10 @@ function updateSkinButtons() {
     const skinId = btn.getAttribute('data-skin-id');
     const price = btn.getAttribute('data-price');
     
-    if (skinId === equipped) {
+    if (skinId === equipped || (skinId === 'skin_default' && !equipped)) {
       btn.textContent = 'EQUIPPED';
       btn.style.background = '#059669';
-    } else if (localStorage.getItem(`unlocked_${skinId}`)) {
+    } else if (localStorage.getItem(`unlocked_${skinId}`) || price === '0') {
       btn.textContent = 'EQUIP';
       btn.style.background = '#3b82f6';
     } else {
@@ -231,7 +231,7 @@ buySkinBtns.forEach(btn => {
     const price = parseInt(e.target.getAttribute('data-price'));
     const skinId = e.target.getAttribute('data-skin-id');
     
-    if (localStorage.getItem(`unlocked_${skinId}`)) {
+    if (localStorage.getItem(`unlocked_${skinId}`) || price === 0) {
       // Already owned, just equip
       localStorage.setItem('manifestation_equipped_skin', skinId);
       updateSkinButtons();
