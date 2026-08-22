@@ -1159,7 +1159,7 @@ function generateCollectibles(keysCount) {
     mesh.userData.keyTypeLabel = kt.label;
     scene.add(mesh);
 
-    keysInMaze.push({ mesh, symbol: symbols[i % 10], index: i, typeName: kt.label });
+    keysInMaze.push({ id: 'key_' + i, mesh, symbol: symbols[i % 10], index: i, typeName: kt.label });
   }
 
   // Spawn code clue notes — small glowing plates hinting at the cipher code digits
@@ -2105,7 +2105,8 @@ function checkInteractions() {
       // Check if we retrieved the exact matching real keys
       checkWinCondition();
 
-      // Emit event (triggers maze realignment)
+      // Emit events
+      if (typeof socketClient !== 'undefined') socketClient.emit('key_picked_up', { keyId: key.id });
       socketClient.emit('solve_puzzle_room');
       keysInMaze.splice(i, 1);
       break;
@@ -2131,28 +2132,41 @@ function checkInteractions() {
     if (note.collected) continue;
     const distToNote = camera.position.distanceTo(note.mesh.position);
     if (distToNote < 4.5) {
-      note.collected = true;
-      note.mesh.material.emissiveIntensity = 0.1; // dim it so it looks consumed
-
-      const digitNames = ['1ST', '2ND', '3RD', '4TH'];
-      const digits = window.cipherCodeDigits || [null, null, null, null];
-      const revealedDigit = digits[note.digitIndex];
-
-      triggerNotification(`cipher clue found! ${digitNames[note.digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
-
-      // Update the cipher HUD to show collected digits so far (unknown ones shown as _)
-      const cipherHUD = document.getElementById('hud-cipher-info');
-      if (cipherHUD) {
-        const display = digits.map((d, idx) => {
-          const collected = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
-          return collected ? d : '_';
-        }).join(' ');
-        cipherHUD.textContent = `CODE: ${display}`;
+      if (typeof socketClient !== 'undefined') {
+        socketClient.emit('clue_collected', { digitIndex: note.digitIndex });
       }
+      collectClueLocal(note.digitIndex);
+      break;
+    }
+  }
+}
 
-      // Also live-update the keypad screen if it's currently open
-      if (keypadUI && keypadUI.style.display !== 'none') {
-        keypadScreen.textContent = getKeypadDisplayString();
+function collectClueLocal(digitIndex) {
+  const note = codeClueNotes.find(n => n.digitIndex === digitIndex);
+  if (note && !note.collected) {
+    note.collected = true;
+    note.mesh.material.emissiveIntensity = 0.1;
+  }
+
+  const digitNames = ['1ST', '2ND', '3RD', '4TH'];
+  const digits = window.cipherCodeDigits || [null, null, null, null];
+  const revealedDigit = digits[digitIndex];
+
+  triggerNotification(`cipher clue found! ${digitNames[digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
+
+  const cipherHUD = document.getElementById('hud-cipher-info');
+  if (cipherHUD) {
+    const display = digits.map((d, idx) => {
+      const collected = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
+      return collected ? d : '_';
+    }).join(' ');
+    cipherHUD.textContent = `CODE: ${display}`;
+  }
+
+  if (typeof keypadUI !== 'undefined' && keypadUI.style.display !== 'none') {
+    keypadScreen.textContent = getKeypadDisplayString();
+  }
+}
       }
       break;
     }
@@ -2866,6 +2880,25 @@ function setupSocketListeners() {
     realignMazeCorridors(realignmentState);
   });
   
+  socketClient.on('clue_collected_sync', ({ digitIndex }) => {
+    collectClueLocal(digitIndex);
+  });
+
+  socketClient.on('key_picked_up_sync', ({ keyId }) => {
+    const idx = keysInMaze.findIndex(k => k.id === keyId);
+    if (idx !== -1) {
+      const key = keysInMaze[idx];
+      scene.remove(key.mesh);
+      key.mesh.traverse(child => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) child.material.dispose();
+        }
+      });
+      keysInMaze.splice(idx, 1);
+    }
+  });
+
   socketClient.on('sound_beacon', ({ producerId, volume, position }) => {
     latestSoundBeacon = { position, volume, time: performance.now() };
 

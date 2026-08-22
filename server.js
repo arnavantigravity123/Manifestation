@@ -370,6 +370,16 @@ io.on('connection', (socket) => {
     });
   });
 
+  socket.on('clue_collected', ({ digitIndex }) => {
+    const { roomId } = socket;
+    socket.to(roomId).emit('clue_collected_sync', { digitIndex });
+  });
+
+  socket.on('key_picked_up', ({ keyId }) => {
+    const { roomId } = socket;
+    socket.to(roomId).emit('key_picked_up_sync', { keyId });
+  });
+
   socket.on('player_movement', (moveData) => {
     socket.to(socket.roomId).emit('player_moved', { id: socket.id, ...moveData });
   });
