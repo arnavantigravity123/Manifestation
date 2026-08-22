@@ -1303,22 +1303,28 @@ function generateConsumableItems() {
     { name: 'Breaker Remote', map: textureLoader.load('/assets/remote_sprite.png') }
   ];
 
-  // Generate 1 EMF, 1 Thermal, 1 Breaker Remote, then randomly pick Battery/Pills/MedKit/Salt
+  // Generate 1 EMF, 1 Thermal, 1 Breaker Remote, 6 guaranteed Battery Packs, then randomly pick remaining items
   const itemsToSpawn = [
     itemTypes[1], // EMF
     itemTypes[2], // Thermal
-    itemTypes[6]  // Breaker Remote
+    itemTypes[6], // Breaker Remote
+    itemTypes[0], // Battery Pack 1
+    itemTypes[0], // Battery Pack 2
+    itemTypes[0], // Battery Pack 3
+    itemTypes[0], // Battery Pack 4
+    itemTypes[0], // Battery Pack 5
+    itemTypes[0]  // Battery Pack 6
   ];
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 10; i++) {
     const rand = seededRandom();
     if (rand > 0.7) {
-      itemsToSpawn.push(itemTypes[0]); // 30% Battery
+      itemsToSpawn.push(itemTypes[0]); // Extra Battery (avg ~3 more)
     } else if (rand > 0.4) {
-      itemsToSpawn.push(itemTypes[3]); // 30% Sanity Pills
+      itemsToSpawn.push(itemTypes[3]); // Sanity Pills
     } else if (rand > 0.2) {
-      itemsToSpawn.push(itemTypes[4]); // 20% Med Kit
+      itemsToSpawn.push(itemTypes[4]); // Med Kit
     } else {
-      itemsToSpawn.push(itemTypes[5]); // 20% Salt Cannister
+      itemsToSpawn.push(itemTypes[5]); // Salt Cannister
     }
   }
 
@@ -3943,21 +3949,21 @@ function drawMinimap() {
   const cellSize = canvas.width / mazeSize;
   
   // Clear canvas
-  ctx.fillStyle = '#050a10';
+  ctx.fillStyle = myTeam === 'Ghost' ? '#0a0512' : '#050a10';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-  // Draw discovered cells
+  // Draw cells (Ghosts see entire realigned maze, Humans see explored cells)
   for (let r = 0; r < mazeSize; r++) {
     for (let c = 0; c < mazeSize; c++) {
       if (myTeam === 'Ghost' || visitedCells.has(`${r},${c}`)) {
         const type = mazeLayout[r][c];
         if (type === 1) {
           // Wall
-          ctx.fillStyle = '#1e293b'; 
+          ctx.fillStyle = myTeam === 'Ghost' ? '#1f1330' : '#1e293b'; 
           ctx.fillRect(c * cellSize, r * cellSize, cellSize + 0.5, cellSize + 0.5);
         } else {
           // Floor
-          ctx.fillStyle = '#64748b';
+          ctx.fillStyle = myTeam === 'Ghost' ? '#4c1d95' : '#64748b';
           ctx.fillRect(c * cellSize, r * cellSize, cellSize + 0.5, cellSize + 0.5);
         }
       }
@@ -3972,8 +3978,24 @@ function drawMinimap() {
     ctx.fill();
   }
 
-  // Draw Teammates
   const blockSize = 4.5;
+
+  // Draw AI Ghosts on minimap if player is Ghost
+  if (myTeam === 'Ghost' && typeof ghosts3D !== 'undefined') {
+    ghosts3D.forEach(g => {
+      const gc = (g.position.x / blockSize) + (mazeSize / 2);
+      const gr = (g.position.z / blockSize) + (mazeSize / 2);
+      ctx.save();
+      ctx.translate(gc * cellSize, gr * cellSize);
+      ctx.fillStyle = '#c084fc'; // Purple AI Ghost marker
+      ctx.beginPath();
+      ctx.arc(0, 0, cellSize * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+
+  // Draw Teammates
   Object.values(players3D).forEach(p => {
     if (p.userData && p.userData.type === myTeam) {
       const tc = (p.position.x / blockSize) + (mazeSize / 2);
@@ -3981,7 +4003,7 @@ function drawMinimap() {
       
       ctx.save();
       ctx.translate(tc * cellSize, tr * cellSize);
-      ctx.fillStyle = '#3b82f6'; // Team blue
+      ctx.fillStyle = myTeam === 'Ghost' ? '#a855f7' : '#3b82f6'; // Ghost purple / Human blue
       ctx.beginPath();
       ctx.arc(0, 0, cellSize * 0.45, 0, Math.PI * 2);
       ctx.fill();
@@ -4005,7 +4027,7 @@ function drawMinimap() {
   // Canvas rotate() is clockwise. So we use negative to match.
   ctx.rotate(-camera.rotation.y); 
   
-  ctx.fillStyle = '#10b981'; // bright green
+  ctx.fillStyle = myTeam === 'Ghost' ? '#ec4899' : '#10b981'; // Pink/Magenta for Ghost, Green for Human
   ctx.beginPath();
   // Draw an arrow pointing UP (-Z is Up on minimap)
   ctx.moveTo(0, -cellSize * 0.8);
@@ -4756,8 +4778,10 @@ function animate() {
   }
 
   // Update and draw Minimap
-  if (window.gameReady && myTeam === 'Human') {
-    updateMinimapVisibility();
+  if (window.gameReady) {
+    if (myTeam === 'Human') {
+      updateMinimapVisibility();
+    }
     drawMinimap();
   }
 
