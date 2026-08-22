@@ -2875,10 +2875,10 @@ function setupSocketListeners() {
       
       if (applyEffect) {
         window.flashlightDisabledBySiphon = true;
-        triggerNotification("Breaker Siphon! Flashlights disrupted (15s)");
+        triggerNotification("Breaker Siphon! Flashlights disrupted (10s)");
         setTimeout(() => {
           window.flashlightDisabledBySiphon = false;
-        }, 15000);
+        }, 10000);
       }
     }
   });
