@@ -469,20 +469,35 @@ export function initGame(socket, socketId, matchConfig) {
     camera.position.set(0, 1.6, 0);
   }
 
-  // Easter Egg: Ariadne's Thread to the Vault
+  // Easter Egg: Ariadne's Thread to the Vault (Pathfinds strictly through corridors)
   const myPlayer = currentLobby.players[myId];
   if (myPlayer && myPlayer.username === 'Ariadne_999') {
-    const threadGeo = new THREE.PlaneGeometry(0.4, 72);
-    const threadMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
-    const thread = new THREE.Mesh(threadGeo, threadMat);
-    thread.rotation.x = -Math.PI / 2;
-    thread.position.set(0, 0.05, -36);
-    scene.add(thread);
+    const startGrid = worldToGrid(camera.position.x, camera.position.z);
+    const endGrid = worldToGrid(gateCoordinates.x, gateCoordinates.z);
+    const pathNodes = bfsPath(startGrid.col, startGrid.row, endGrid.col, endGrid.row);
+
+    const threadMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
     
-    for (let i = 0; i < 72; i += 10) {
-      const pLight = new THREE.PointLight(0x00ffff, 10, 5);
-      pLight.position.set(0, 0.5, -i);
-      scene.add(pLight);
+    if (pathNodes && pathNodes.length > 1) {
+      for (let i = 0; i < pathNodes.length - 1; i++) {
+        const p1 = pathNodes[i];
+        const p2 = pathNodes[i + 1];
+        const dx = p2.x - p1.x;
+        const dz = p2.z - p1.z;
+        const length = Math.sqrt(dx * dx + dz * dz);
+        const segGeo = new THREE.PlaneGeometry(0.5, length);
+        const seg = new THREE.Mesh(segGeo, threadMat);
+        seg.rotation.x = -Math.PI / 2;
+        seg.rotation.z = -Math.atan2(dx, dz);
+        seg.position.set((p1.x + p2.x) / 2, 0.04, (p1.z + p2.z) / 2);
+        scene.add(seg);
+
+        if (i % 3 === 0) {
+          const pLight = new THREE.PointLight(0x00ffff, 8, 6);
+          pLight.position.set(p1.x, 0.4, p1.z);
+          scene.add(pLight);
+        }
+      }
     }
 
     // Auto-complete objectives for testing
