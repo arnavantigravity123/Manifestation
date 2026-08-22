@@ -1253,18 +1253,17 @@ function generateCollectibles(keysCount) {
   });
   codeClueNotes = [];
 
-  const symbols = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa'];
+  // Guarantee unique separated corridor positions for each key
+  const availableCorridors = shuffleArray([...openCorridors]);
 
   for (let i = 0; i < keysCount; i++) {
-    const typeIdx = i % KEY_TYPES.length;
-    const kt = KEY_TYPES[typeIdx];
+    const kt = KEY_TYPES[i % KEY_TYPES.length];
     const mesh = createKeyMeshGroup(kt.color, kt.emissive);
 
     let x = 0, z = 0;
-    if (openCorridors.length > 0) {
-      const randIdx = Math.floor(seededRandom() * openCorridors.length);
-      x = openCorridors[randIdx].x;
-      z = openCorridors[randIdx].z;
+    if (availableCorridors.length > i) {
+      x = availableCorridors[i].x;
+      z = availableCorridors[i].z;
     } else {
       const angle = (i / keysCount) * Math.PI * 2;
       x = Math.cos(angle) * (15 + seededRandom() * 20);
@@ -1275,7 +1274,7 @@ function generateCollectibles(keysCount) {
     mesh.userData.keyTypeLabel = kt.label;
     scene.add(mesh);
 
-    keysInMaze.push({ id: 'key_' + i, mesh, symbol: symbols[i % 10], index: i, typeName: kt.label });
+    keysInMaze.push({ id: 'key_' + i, mesh, symbol: kt.label, index: i, typeName: kt.label });
   }
 
   // Spawn code clue notes — small glowing plates hinting at the cipher code digits
