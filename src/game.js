@@ -876,22 +876,47 @@ function generateMaze(keysCount = 8) {
   layout[Math.floor(mazeSize/2)][Math.floor(mazeSize/2)] = 0; // Ensure true center spawn is safe
 
   // Randomly select one of the 4 cardinal boundaries for the Master Gate (Vault)
-  // This guarantees the vault is always accessible from the center but its location is randomized each match
-  window.vaultEdge = ['N', 'S', 'E', 'W'][Math.floor(Math.random() * 4)];
-  window.vaultR = 0; window.vaultC = centerCoord; // Defaults
-
+  window.vaultEdge = ['N', 'S', 'E', 'W'][Math.floor(seededRandom() * 4)];
+  
+  // Find all possible exit points along the chosen edge that are adjacent to the maze paths
+  let possibleExits = [];
   if (window.vaultEdge === 'N') {
-    for (let i = 1; i <= centerCoord; i++) layout[i][centerCoord] = 0;
-    window.vaultR = 0; window.vaultC = centerCoord;
+    for (let c = 1; c < mazeSize - 1; c++) if (layout[1][c] === 0) possibleExits.push(c);
+    if (possibleExits.length > 0) {
+      window.vaultC = possibleExits[Math.floor(seededRandom() * possibleExits.length)];
+      window.vaultR = 0;
+      layout[0][window.vaultC] = 0;
+    }
   } else if (window.vaultEdge === 'S') {
-    for (let i = centerCoord; i < mazeSize - 1; i++) layout[i][centerCoord] = 0;
-    window.vaultR = mazeSize - 1; window.vaultC = centerCoord;
+    for (let c = 1; c < mazeSize - 1; c++) if (layout[mazeSize - 2][c] === 0) possibleExits.push(c);
+    if (possibleExits.length > 0) {
+      window.vaultC = possibleExits[Math.floor(seededRandom() * possibleExits.length)];
+      window.vaultR = mazeSize - 1;
+      layout[mazeSize - 1][window.vaultC] = 0;
+    }
   } else if (window.vaultEdge === 'E') {
-    for (let i = centerCoord; i < mazeSize - 1; i++) layout[centerCoord][i] = 0;
-    window.vaultR = centerCoord; window.vaultC = mazeSize - 1;
+    for (let r = 1; r < mazeSize - 1; r++) if (layout[r][mazeSize - 2] === 0) possibleExits.push(r);
+    if (possibleExits.length > 0) {
+      window.vaultR = possibleExits[Math.floor(seededRandom() * possibleExits.length)];
+      window.vaultC = mazeSize - 1;
+      layout[window.vaultR][mazeSize - 1] = 0;
+    }
   } else if (window.vaultEdge === 'W') {
-    for (let i = 1; i <= centerCoord; i++) layout[centerCoord][i] = 0;
-    window.vaultR = centerCoord; window.vaultC = 0;
+    for (let r = 1; r < mazeSize - 1; r++) if (layout[r][1] === 0) possibleExits.push(r);
+    if (possibleExits.length > 0) {
+      window.vaultR = possibleExits[Math.floor(seededRandom() * possibleExits.length)];
+      window.vaultC = 0;
+      layout[window.vaultR][0] = 0;
+    }
+  }
+
+  // Fallback if no paths touch the chosen edge (rare)
+  if (possibleExits.length === 0) {
+    window.vaultC = centerCoord;
+    if (window.vaultEdge === 'N') { window.vaultR = 0; for (let i = 1; i <= centerCoord; i++) layout[i][centerCoord] = 0; }
+    else if (window.vaultEdge === 'S') { window.vaultR = mazeSize - 1; for (let i = centerCoord; i < mazeSize - 1; i++) layout[i][centerCoord] = 0; }
+    else if (window.vaultEdge === 'E') { window.vaultR = centerCoord; window.vaultC = mazeSize - 1; for (let i = centerCoord; i < mazeSize - 1; i++) layout[centerCoord][i] = 0; }
+    else if (window.vaultEdge === 'W') { window.vaultR = centerCoord; window.vaultC = 0; for (let i = 1; i <= centerCoord; i++) layout[centerCoord][i] = 0; }
   }
 
   // Scatter sliding doors (type 2)
@@ -1298,7 +1323,7 @@ function generateConsumableItems() {
     scene.add(mesh);
 
     itemsInMaze.push({
-      id: 'item_' + Math.random().toString(36).substr(2, 9),
+      id: 'item_' + seededRandom().toString(36).substr(2, 9),
       mesh: mesh,
       name: type.name
     });
