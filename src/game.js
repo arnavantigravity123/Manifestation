@@ -1294,7 +1294,8 @@ function toggleCameraView() {
   // Make sure we have a local player visual if we enter TPS
   if (mode !== 'fps' && !localPlayerVisual) {
     const pSkinId = localStorage.getItem('manifestation_equipped_skin') || null;
-    localPlayerVisual = myTeam === 'Ghost' ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId);
+    const pUsername = localStorage.getItem('manifestation_username') || 'Operative';
+    localPlayerVisual = myTeam === 'Ghost' ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername);
     // Align visual downwards slightly since camera is at eye level (1.6)
     localPlayerVisual.position.set(0, myTeam === 'Ghost' ? -1.25 : -1.6, 0);
     camera.add(localPlayerVisual);
@@ -2677,7 +2678,8 @@ function setupSocketListeners() {
     if (!players3D[id]) {
       const isGhost = team === 'Ghost';
       const pSkinId = currentLobby && currentLobby.players[id] ? currentLobby.players[id].skinId : null;
-      const capMesh = isGhost ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId);
+      const pUsername = currentLobby && currentLobby.players[id] ? currentLobby.players[id].username : 'Unknown';
+      const capMesh = isGhost ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername);
       
       // Setup thermal camera support
       const meshThermalMat = new THREE.MeshBasicMaterial({ 
@@ -2819,7 +2821,8 @@ function setupSocketListeners() {
       
       // Spawn human mesh in its place
       const pSkinId = currentLobby && currentLobby.players[id] ? currentLobby.players[id].skinId : null;
-      const humanMesh = createHumanMeshGroup(pSkinId);
+      const pUsername = currentLobby && currentLobby.players[id] ? currentLobby.players[id].username : 'Unknown';
+      const humanMesh = createHumanMeshGroup(pSkinId, pUsername);
       humanMesh.position.copy(originalPosition);
       humanMesh.rotation.copy(originalRotation);
       scene.add(humanMesh);
@@ -3393,7 +3396,7 @@ function playGhostCaptureAnimation(callback) {
   }, 3000);
 }
 
-function createHumanMeshGroup(skinId) {
+function createHumanMeshGroup(skinId, username) {
   const group = new THREE.Group();
   
   if (skinId) {
@@ -3428,6 +3431,34 @@ function createHumanMeshGroup(skinId) {
     sprite.position.y = 1.4;
     group.add(sprite);
   }
+
+  if (username) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    
+    // Background for legibility
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Text
+    ctx.font = 'bold 36px monospace';
+    ctx.fillStyle = '#10b981'; // Cyber green
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(username, canvas.width/2, canvas.height/2 + 2);
+    
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, fog: false });
+    const textSprite = new THREE.Sprite(mat);
+    textSprite.scale.set(1.5, 0.375, 1);
+    textSprite.position.y = 2.8; // Place it well above the head
+    
+    // We add it to the group, but ThreeJS sprites always face the camera automatically
+    group.add(textSprite);
+  }
+
 
   // Keep userData compatible with the animation loop
   group.userData = {
