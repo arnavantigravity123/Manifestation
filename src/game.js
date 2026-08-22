@@ -2223,7 +2223,7 @@ function useActiveItem() {
       return;
     }
     triggerNotification("Breaker Siphon deployed!");
-    socketClient.emit('breaker_siphon');
+    socketClient.emit('breaker_siphon', { position: { x: camera.position.x, z: camera.position.z } });
     abilityCooldowns[item] = now + 30000; // 30s cooldown
   } else if (item === "Sound Scrambler") {
     const now = Date.now();
@@ -2232,7 +2232,7 @@ function useActiveItem() {
       return;
     }
     triggerNotification("Scrambler unleashed!");
-    socketClient.emit('sound_scramble');
+    socketClient.emit('sound_scramble', { position: { x: camera.position.x, z: camera.position.z } });
     abilityCooldowns[item] = now + 40000; // 40s cooldown
   } else if (item === "Chalk / UV Spray") {
     deployChalkDecal(camera.position);
@@ -2858,23 +2858,41 @@ function setupSocketListeners() {
     }
   });
 
-  socketClient.on('ghost_breaker_siphon', () => {
+  socketClient.on('ghost_breaker_siphon', (data) => {
     if (myTeam === 'Human') {
-      window.flashlightDisabledBySiphon = true;
-      triggerNotification("Breaker Siphon! Flashlights disrupted (15s)");
-      setTimeout(() => {
-        window.flashlightDisabledBySiphon = false;
-      }, 15000);
+      const effectRadius = 15 * 4.5; // 15 blocks
+      let applyEffect = true;
+      if (data && data.position) {
+        const dist = Math.hypot(camera.position.x - data.position.x, camera.position.z - data.position.z);
+        if (dist > effectRadius) applyEffect = false;
+      }
+      
+      if (applyEffect) {
+        window.flashlightDisabledBySiphon = true;
+        triggerNotification("Breaker Siphon! Flashlights disrupted (15s)");
+        setTimeout(() => {
+          window.flashlightDisabledBySiphon = false;
+        }, 15000);
+      }
     }
   });
 
-  socketClient.on('ghost_sound_scramble', () => {
+  socketClient.on('ghost_sound_scramble', (data) => {
     if (myTeam === 'Human') {
-      window.sensorsScrambled = true;
-      triggerNotification("Signal scrambled! Sensors offline (10s)");
-      setTimeout(() => {
-        window.sensorsScrambled = false;
-      }, 10000);
+      const effectRadius = 15 * 4.5;
+      let applyEffect = true;
+      if (data && data.position) {
+        const dist = Math.hypot(camera.position.x - data.position.x, camera.position.z - data.position.z);
+        if (dist > effectRadius) applyEffect = false;
+      }
+
+      if (applyEffect) {
+        window.sensorsScrambled = true;
+        triggerNotification("Signal scrambled! Sensors offline (10s)");
+        setTimeout(() => {
+          window.sensorsScrambled = false;
+        }, 10000);
+      }
     }
   });
 
@@ -4200,13 +4218,19 @@ function animate() {
             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(ghost.quaternion);
             ghost.position.addScaledVector(forward, 8);
           } else if (gClass === 'Poltergeist') {
-            triggerNotification("Poltergeist bot deployed Breaker Siphon!");
-            window.flashlightDisabledBySiphon = true;
-            setTimeout(() => { window.flashlightDisabledBySiphon = false; }, 10000);
+            const dist = camera.position.distanceTo(ghost.position);
+            if (dist <= 15 * 4.5) {
+              triggerNotification("Poltergeist bot deployed Breaker Siphon!");
+              window.flashlightDisabledBySiphon = true;
+              setTimeout(() => { window.flashlightDisabledBySiphon = false; }, 10000);
+            }
           } else if (gClass === 'Banshee') {
-            triggerNotification("Banshee bot scrambled your sensors!");
-            window.sensorsScrambled = true;
-            setTimeout(() => { window.sensorsScrambled = false; }, 5000);
+            const dist = camera.position.distanceTo(ghost.position);
+            if (dist <= 15 * 4.5) {
+              triggerNotification("Banshee bot scrambled your sensors!");
+              window.sensorsScrambled = true;
+              setTimeout(() => { window.sensorsScrambled = false; }, 5000);
+            }
           }
         }
       }

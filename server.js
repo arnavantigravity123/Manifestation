@@ -405,9 +405,9 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('ghost_mimic_clone', { id: socket.id });
   });
 
-  socket.on('breaker_siphon', () => {
+  socket.on('breaker_siphon', (data) => {
     console.log(`[Lobby ${socket.roomId}] Player ${socket.id} (Poltergeist) used Breaker Siphon.`);
-    socket.to(socket.roomId).emit('ghost_breaker_siphon', { id: socket.id });
+    socket.to(socket.roomId).emit('ghost_breaker_siphon', { id: socket.id, position: data ? data.position : null });
   });
 
   socket.on('breaker_remote', () => {
@@ -419,9 +419,9 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('breaker_fixed_sync', { breakerId });
   });
 
-  socket.on('sound_scramble', () => {
+  socket.on('sound_scramble', (data) => {
     console.log(`[Lobby ${socket.roomId}] Player ${socket.id} (Banshee) used Sound Scramble.`);
-    socket.to(socket.roomId).emit('ghost_sound_scramble', { id: socket.id });
+    socket.to(socket.roomId).emit('ghost_sound_scramble', { id: socket.id, position: data ? data.position : null });
   });
 
   socket.on('item_dropped', (data) => {
