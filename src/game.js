@@ -784,11 +784,36 @@ function bfsPath(startCol, startRow, endCol, endRow) {
   
   return []; // No path found
 }
+let floorMesh = null;
+let ceilingMesh = null;
+
 function generateMaze(keysCount = 8) {
   // Clear any existing walls
-  walls.forEach(w => scene.remove(w));
+  walls.forEach(w => {
+    scene.remove(w);
+    if (w.geometry) w.geometry.dispose();
+    if (w.material) {
+      if (Array.isArray(w.material)) {
+        w.material.forEach(m => m.dispose());
+      } else {
+        w.material.dispose();
+      }
+    }
+  });
   walls = [];
   slidingWallSegments = [];
+
+  // Cleanup old floor and ceiling
+  if (floorMesh) {
+    scene.remove(floorMesh);
+    if (floorMesh.geometry) floorMesh.geometry.dispose();
+    if (floorMesh.material) floorMesh.material.dispose();
+  }
+  if (ceilingMesh) {
+    scene.remove(ceilingMesh);
+    if (ceilingMesh.geometry) ceilingMesh.geometry.dispose();
+    if (ceilingMesh.material) ceilingMesh.material.dispose();
+  }
 
   // Ground plane with photorealistic floor texture
   const textureLoader = new THREE.TextureLoader();
@@ -805,10 +830,10 @@ function generateMaze(keysCount = 8) {
     roughness: 0.92,
     metalness: 0.05
   });
-  const floor = new THREE.Mesh(floorGeo, floorMat);
-  floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
-  scene.add(floor);
+  floorMesh = new THREE.Mesh(floorGeo, floorMat);
+  floorMesh.rotation.x = -Math.PI / 2;
+  floorMesh.receiveShadow = true;
+  scene.add(floorMesh);
 
   // Ceiling with photorealistic texture
   const ceilTex = textureLoader.load('/assets/ceiling_texture.png');
@@ -822,10 +847,10 @@ function generateMaze(keysCount = 8) {
     roughness: 0.95,
     metalness: 0.0
   });
-  const ceiling = new THREE.Mesh(ceilGeo, ceilMat);
-  ceiling.rotation.x = Math.PI / 2;
-  ceiling.position.y = 4.5; // Match wall height exactly
-  scene.add(ceiling);
+  ceilingMesh = new THREE.Mesh(ceilGeo, ceilMat);
+  ceilingMesh.rotation.x = Math.PI / 2;
+  ceilingMesh.position.y = 4.5; // Match wall height exactly
+  scene.add(ceilingMesh);
 
   // Grid layout for corridors (Massive Procedural Generation)
   const blockSize = 4.5;
@@ -962,8 +987,18 @@ function generateMaze(keysCount = 8) {
 
   gateCoordinates = { x: vaultXPos + offsetX, z: vaultZPos + offsetZ };
   
-  if (gateMeshRef) { scene.remove(gateMeshRef); gateMeshRef = null; }
-  if (padMeshRef) { scene.remove(padMeshRef); padMeshRef = null; }
+  if (gateMeshRef) { 
+    scene.remove(gateMeshRef); 
+    if (gateMeshRef.geometry) gateMeshRef.geometry.dispose();
+    if (gateMeshRef.material) gateMeshRef.material.dispose();
+    gateMeshRef = null; 
+  }
+  if (padMeshRef) { 
+    scene.remove(padMeshRef); 
+    if (padMeshRef.geometry) padMeshRef.geometry.dispose();
+    if (padMeshRef.material) padMeshRef.material.dispose();
+    padMeshRef = null; 
+  }
   
   const gateGeo = new THREE.PlaneGeometry(4.5, 4); // Match corridor width
   const vaultTex = textureLoader.load('/assets/vault_door.png');
@@ -1058,11 +1093,23 @@ const KEY_TYPES = [
 
 function generateCollectibles(keysCount) {
   // Clear any existing keys
-  keysInMaze.forEach(k => scene.remove(k.mesh));
+  keysInMaze.forEach(k => {
+    scene.remove(k.mesh);
+    k.mesh.traverse(child => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      }
+    });
+  });
   keysInMaze = [];
 
   // Also clear old code clue notes
-  codeClueNotes.forEach(n => scene.remove(n.mesh));
+  codeClueNotes.forEach(n => {
+    scene.remove(n.mesh);
+    if (n.mesh.geometry) n.mesh.geometry.dispose();
+    if (n.mesh.material) n.mesh.material.dispose();
+  });
   codeClueNotes = [];
 
   const symbols = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa'];
@@ -1118,7 +1165,11 @@ function generateCodeClues() {
 }
 
 function generateCircuitBreakers() {
-  circuitBreakers.forEach(b => scene.remove(b.mesh));
+  circuitBreakers.forEach(b => {
+    scene.remove(b.mesh);
+    if (b.mesh.geometry) b.mesh.geometry.dispose();
+    if (b.mesh.material) b.mesh.material.dispose();
+  });
   circuitBreakers = [];
   fixedBreakersCount = 0;
 
@@ -1184,7 +1235,11 @@ function generateCircuitBreakers() {
 }
 
 function generateConsumableItems() {
-  itemsInMaze.forEach(item => scene.remove(item.mesh));
+  itemsInMaze.forEach(item => {
+    scene.remove(item.mesh);
+    if (item.mesh.geometry) item.mesh.geometry.dispose();
+    if (item.mesh.material) item.mesh.material.dispose();
+  });
   itemsInMaze = [];
 
   const textureLoader = new THREE.TextureLoader();
@@ -2007,6 +2062,12 @@ function checkInteractions() {
       }
       // Picked up!
       scene.remove(key.mesh);
+      key.mesh.traverse(child => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) child.material.dispose();
+        }
+      });
       carriedKeys.push({ symbol: key.symbol, typeName: key.typeName });
       foundKeysList.push(key.symbol);
 
@@ -2089,6 +2150,8 @@ function checkInteractions() {
       if (emptyIndex !== -1) {
         inventory[emptyIndex] = item.name;
         scene.remove(item.mesh);
+        if (item.mesh.geometry) item.mesh.geometry.dispose();
+        if (item.mesh.material) item.mesh.material.dispose();
         itemsInMaze.splice(i, 1);
         if (window.socket) window.socket.emit('item_picked_up', { id: item.id });
         triggerNotification(`Picked up ${item.name}`);
@@ -2189,7 +2252,11 @@ function useActiveItem() {
       const points = [new THREE.Vector3(camera.position.x, 0.1, camera.position.z), new THREE.Vector3(closestPos.x, 0.1, closestPos.z)];
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material);
       scene.add(line);
-      setTimeout(() => scene.remove(line), 5000);
+      setTimeout(() => {
+        scene.remove(line);
+        if (line.geometry) line.geometry.dispose();
+        if (line.material) line.material.dispose();
+      }, 5000);
     }
     abilityCooldowns[item] = now + 20000; // 20s cooldown
   } else if (item === "Infiltration Clone") {
@@ -2672,6 +2739,15 @@ function setupSocketListeners() {
     // If player mesh exists but team has changed, remove it to spawn the correct mesh type
     if (players3D[id] && players3D[id].userData && players3D[id].userData.type !== team) {
       scene.remove(players3D[id]);
+      players3D[id].traverse(child => {
+        if (child.isMesh || child.isSprite) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      });
       delete players3D[id];
     }
 
@@ -2818,6 +2894,15 @@ function setupSocketListeners() {
       
       // Remove ghost mesh
       scene.remove(players3D[id]);
+      players3D[id].traverse(child => {
+        if (child.isMesh || child.isSprite) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      });
       
       // Spawn human mesh in its place
       const pSkinId = currentLobby && currentLobby.players[id] ? currentLobby.players[id].skinId : null;
@@ -3012,7 +3097,10 @@ function setupSocketListeners() {
     // Teammate picked up an item, remove it locally
     const index = itemsInMaze.findIndex(item => item.id === id);
     if (index !== -1) {
-      scene.remove(itemsInMaze[index].mesh);
+      const itemMesh = itemsInMaze[index].mesh;
+      scene.remove(itemMesh);
+      if (itemMesh.geometry) itemMesh.geometry.dispose();
+      if (itemMesh.material) itemMesh.material.dispose();
       itemsInMaze.splice(index, 1);
     }
   });
@@ -3916,6 +4004,8 @@ function animate() {
             triggerNotification("Stepped in salt! You are slowed!");
             setTimeout(() => {
               scene.remove(trap);
+              if (trap.geometry) trap.geometry.dispose();
+              if (trap.material) trap.material.dispose();
               const idx = saltTraps.indexOf(trap);
               if (idx > -1) saltTraps.splice(idx, 1);
             }, 3000);
@@ -4117,6 +4207,8 @@ function animate() {
             decal.material.color.setHex(0xff3333);
             setTimeout(() => {
               scene.remove(decal);
+              if (decal.geometry) decal.geometry.dispose();
+              if (decal.material) decal.material.dispose();
               const idx = chalkDecals.indexOf(decal);
               if (idx > -1) chalkDecals.splice(idx, 1);
             }, 3000);
@@ -4164,6 +4256,8 @@ function animate() {
             }
             setTimeout(() => {
               scene.remove(trap);
+              if (trap.geometry) trap.geometry.dispose();
+              if (trap.material) trap.material.dispose();
               const idx = saltTraps.indexOf(trap);
               if (idx > -1) saltTraps.splice(idx, 1);
             }, 3000);
