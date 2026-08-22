@@ -217,74 +217,81 @@
       <!-- 3. Active Game HUD Overlay -->
       <div id="hud-overlay" style="display: none;">
         
-        <!-- Top row: Status indicators & inventory gauges -->
+        <!-- Top row: Vitals, Pause, and Map -->
         <div class="hud-top">
-          <!-- Vitals / Sanity -->
-          <div class="vitals-box hud-panel">
-            <div class="gauge-row">
-              <div class="gauge-label">
-                <span>Vital Status (HP)</span>
-                <span id="hp-value">100 HP</span>
+          <!-- Top Left Column: Vitals and Terminal Info -->
+          <div style="display: flex; flex-direction: column; gap: 1rem;">
+            <!-- Player Vitals (Top Left) -->
+            <div class="vitals-box hud-panel">
+              <div class="gauge-row">
+                <div class="gauge-label">
+                  <span>Health</span>
+                  <span id="hp-value">100 HP</span>
+                </div>
+                <div class="gauge-bar-bg">
+                  <div id="hp-bar" class="gauge-bar-fill hp" style="width: 100%;"></div>
+                </div>
               </div>
-              <div class="gauge-bar-bg">
-                <div id="hp-bar" class="gauge-bar-fill hp" style="width: 100%;"></div>
+              <div class="gauge-row">
+                <div class="gauge-label">
+                  <span>Sanity</span>
+                  <span id="sanity-value">100%</span>
+                </div>
+                <div class="gauge-bar-bg">
+                  <div id="sanity-bar" class="gauge-bar-fill fear" style="width: 100%;"></div>
+                </div>
+              </div>
+              <div id="flashlight-gauge-row" class="gauge-row">
+                <div class="gauge-label">
+                  <span>Flashlight Battery</span>
+                  <span id="flashlight-value">100%</span>
+                </div>
+                <div class="gauge-bar-bg">
+                  <div id="flashlight-bar" class="gauge-bar-fill battery" style="width: 100%;"></div>
+                </div>
+              </div>
+              <div id="stamina-gauge-row" class="gauge-row">
+                <div class="gauge-label">
+                  <span>Stamina <span style="font-size:0.65rem;opacity:0.7;">[SHIFT to sprint]</span></span>
+                  <span id="stamina-value">100%</span>
+                </div>
+                <div class="gauge-bar-bg">
+                  <div id="stamina-bar" class="gauge-bar-fill" style="width: 100%; background: linear-gradient(90deg, #f59e0b, #fbbf24);"></div>
+                </div>
               </div>
             </div>
-            <div class="gauge-row">
-              <div class="gauge-label">
-                <span>Sanity Stable Index</span>
-                <span id="sanity-value">100%</span>
+
+            <!-- Escape Tracker -->
+            <div class="terminal-status hud-panel">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                 <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Master Gate Protocol</div>
+                 <button id="quit-game-btn" style="pointer-events: auto; padding: 0.2rem 0.6rem; background: rgba(239, 68, 68, 0.2); border: 1px solid red; color: white; cursor: pointer; border-radius: 4px; font-family: inherit; font-size: 0.7rem; display: none;">ABORT</button>
               </div>
-              <div class="gauge-bar-bg">
-                <div id="sanity-bar" class="gauge-bar-fill fear" style="width: 100%;"></div>
-              </div>
-            </div>
-            <div id="flashlight-gauge-row" class="gauge-row">
-              <div class="gauge-label">
-                <span>Flashlight Battery</span>
-                <span id="flashlight-value">100%</span>
-              </div>
-              <div class="gauge-bar-bg">
-                <div id="flashlight-bar" class="gauge-bar-fill battery" style="width: 100%;"></div>
-              </div>
-            </div>
-            <div id="stamina-gauge-row" class="gauge-row">
-              <div class="gauge-label">
-                <span>Stamina <span style="font-size:0.65rem;opacity:0.7;">[SHIFT to sprint]</span></span>
-                <span id="stamina-value">100%</span>
-              </div>
-              <div class="gauge-bar-bg">
-                <div id="stamina-bar" class="gauge-bar-fill" style="width: 100%; background: linear-gradient(90deg, #f59e0b, #fbbf24);"></div>
-              </div>
+              <div id="terminal-lock-label" class="status-indicator">SECURED (3-TIER LOCK)</div>
+              <div id="hud-cipher-info" class="terminal-clues">FIND HINTS FOR 4-DIGIT CODE</div>
+              <div id="keys-hud-info" style="font-size: 0.75rem; margin-top: 0.4rem; color: var(--secondary-accent);">KEYS: 0 / 2 RETRIEVED</div>
             </div>
           </div>
 
-          <!-- Escape Tracker -->
-          <div class="terminal-status hud-panel">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-               <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Master Gate Protocol</div>
-               <button id="quit-game-btn" style="pointer-events: auto; padding: 0.2rem 0.6rem; background: rgba(239, 68, 68, 0.2); border: 1px solid red; color: white; cursor: pointer; border-radius: 4px; font-family: inherit; font-size: 0.7rem;">ABORT</button>
+          <!-- Top Middle Column: Pause Button -->
+          <div style="display: flex; flex-direction: column; align-items: center; pointer-events: auto;">
+             <button id="global-pause-btn" class="action-btn" style="padding: 0.5rem 2rem; background: rgba(59, 130, 246, 0.5); border: 1px solid #3b82f6; color: white; font-size: 1.2rem; cursor: pointer; text-transform: uppercase; font-family: 'Orbitron', sans-serif;">PAUSE (ESC)</button>
+          </div>
+
+          <!-- Minimap UI (Top Right) -->
+          <div id="minimap-wrapper" class="interactive-hud">
+            <div id="minimap-header">MINIMAP <span>(Press M or Click)</span></div>
+            <div id="minimap-container">
+              <canvas id="minimap-canvas" width="200" height="200"></canvas>
             </div>
-            <div id="terminal-lock-label" class="status-indicator">SECURED (3-TIER LOCK)</div>
-            <div id="hud-cipher-info" class="terminal-clues">FIND HINTS FOR 4-DIGIT CODE</div>
-            <div id="keys-hud-info" style="font-size: 0.75rem; margin-top: 0.4rem; color: var(--secondary-accent);">KEYS: 0 / 2 RETRIEVED</div>
+            <!-- Expanded UI buttons -->
+            <div id="minimap-expanded-controls" style="display: none;">
+              <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">Click map to place a mark</div>
+              <button id="minimap-btn-clear" class="minimap-btn">Clear Marks</button>
+              <button id="minimap-btn-close" class="minimap-btn" style="background: rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.8);">Close [X]</button>
+            </div>
           </div>
         </div>
-
-        <!-- Minimap UI (Top Right) -->
-        <div id="minimap-wrapper" class="interactive-hud">
-          <div id="minimap-header">MINIMAP <span>(Press M or Click)</span></div>
-          <div id="minimap-container">
-            <canvas id="minimap-canvas" width="200" height="200"></canvas>
-          </div>
-          <!-- Expanded UI buttons -->
-          <div id="minimap-expanded-controls" style="display: none;">
-            <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">Click map to place a mark</div>
-            <button id="minimap-btn-clear" class="minimap-btn">Clear Marks</button>
-            <button id="minimap-btn-close" class="minimap-btn" style="background: rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.8);">Close [X]</button>
-          </div>
-        </div>
-
 
         <!-- Center: Interactive Crosshair -->
         <div class="crosshair"></div>

@@ -1908,14 +1908,24 @@ function setupControls() {
     }
 
     const handlePause = (e) => {
-      if (!isMobileDevice) return;
       e.preventDefault();
       e.stopPropagation();
-      window.mobileGameActive = false;
-      ptrOverlay.style.display = 'flex';
+      if (isMobileDevice) {
+        window.mobileGameActive = false;
+        ptrOverlay.style.display = 'flex';
+      } else {
+        document.exitPointerLock();
+      }
     };
-    pauseBtn.addEventListener('touchstart', handlePause, { passive: false });
-    pauseBtn.addEventListener('click', handlePause);
+    if (pauseBtn) {
+      pauseBtn.addEventListener('touchstart', handlePause, { passive: false });
+      pauseBtn.addEventListener('click', handlePause);
+    }
+    const globalPauseBtn = document.getElementById('global-pause-btn');
+    if (globalPauseBtn) {
+      globalPauseBtn.addEventListener('touchstart', handlePause, { passive: false });
+      globalPauseBtn.addEventListener('click', handlePause);
+    }
 
     // Mouse scroll wheel for cycling active slot
     document.addEventListener('wheel', (e) => {

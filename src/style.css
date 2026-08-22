@@ -630,9 +630,7 @@ input[type="text"]:focus {
 
 /* Minimap UI */
 #minimap-wrapper {
-  position: absolute;
-  top: 130px; /* Below the terminal status */
-  right: 20px;
+  position: relative;
   background: rgba(10, 15, 30, 0.85);
   border: 1px solid rgba(16, 185, 129, 0.3);
   box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
@@ -675,9 +673,11 @@ input[type="text"]:focus {
 
 /* Expanded Minimap State */
 #minimap-wrapper.expanded {
+  position: absolute;
   top: 50%;
-  right: 50%;
-  transform: translate(50%, -50%);
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
   padding: 1.5rem;
   border-color: rgba(16, 185, 129, 0.8);
   box-shadow: 0 0 40px rgba(16, 185, 129, 0.5);
