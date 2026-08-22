@@ -1754,7 +1754,7 @@ function setupControls() {
   });
   
   document.addEventListener('mousedown', (e) => {
-    if (document.pointerLockElement !== document.getElementById('canvas-container') || (isCaptured && !window.isSpectating)) return;
+    if (!document.pointerLockElement || (isCaptured && !window.isSpectating)) return;
     if (e.button === 0 && !window.isSpectating) { // Left click
       useActiveItem();
     }
@@ -1762,7 +1762,7 @@ function setupControls() {
 
   // Mouse camera rotation controller
   document.addEventListener('mousemove', (e) => {
-    if (document.pointerLockElement !== document.getElementById('canvas-container') || (isCaptured && !window.isSpectating)) return;
+    if (!document.pointerLockElement || (isCaptured && !window.isSpectating)) return;
     
     // Ignore massive spikes caused by browser Pointer Lock bugs
     if (Math.abs(e.movementX) > 200 || Math.abs(e.movementY) > 200) return;
