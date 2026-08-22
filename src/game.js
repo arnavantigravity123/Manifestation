@@ -774,6 +774,8 @@ function playEMFSound(frequency) {
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
+
+  window.lastEmfBeepTime = performance.now();
   
   // Beep sound
   const osc = audioCtx.createOscillator();
@@ -4732,20 +4734,25 @@ function animate() {
       networkTimer = 0;
     }
 
-    // Process Microphone volume (only for Humans)
+    // Process Microphone volume (only for Humans, filter out local EMF beeps)
     if (myTeam === 'Human' && audioAnalyser && !isCaptured) {
-      audioAnalyser.getByteFrequencyData(audioDataArray);
-      let sum = 0;
-      for(let i=0; i<audioDataArray.length; i++) sum += audioDataArray[i];
-      const avgVolume = sum / audioDataArray.length;
+      const timeSinceEmfBeep = performance.now() - (window.lastEmfBeepTime || 0);
       
-      if (avgVolume > 20) { // Threshold for talking/yelling
-        socketClient.emit('sound_produced', {
-          volume: avgVolume,
-          position: { x: camera.position.x, z: camera.position.z }
-        });
-        // Immediately alert local ghost AI
-        latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, volume: avgVolume, time: performance.now() };
+      // Only process microphone if EMF hasn't beeped in the last 450ms (prevents speaker-to-mic feedback)
+      if (timeSinceEmfBeep > 450) {
+        audioAnalyser.getByteFrequencyData(audioDataArray);
+        let sum = 0;
+        for(let i=0; i<audioDataArray.length; i++) sum += audioDataArray[i];
+        const avgVolume = sum / audioDataArray.length;
+        
+        if (avgVolume > 20) { // Threshold for talking/yelling
+          socketClient.emit('sound_produced', {
+            volume: avgVolume,
+            position: { x: camera.position.x, z: camera.position.z }
+          });
+          // Immediately alert local ghost AI
+          latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, volume: avgVolume, time: performance.now() };
+        }
       }
     }
 
