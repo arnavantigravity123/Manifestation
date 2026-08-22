@@ -3046,7 +3046,7 @@ function setupSocketListeners() {
     const keypadModal = document.getElementById('keypad-modal-ui');
     if (keypadModal) {
       keypadModal.style.display = 'none';
-      if (!isMobileDevice && document.pointerLockElement !== document.getElementById('canvas-container')) {
+      if (!isMobileDevice && !document.pointerLockElement) {
         document.getElementById('canvas-container').requestPointerLock();
       }
     }
@@ -4313,7 +4313,7 @@ function animate() {
   const delta = (time - prevTime) / 1000;
   prevTime = time;
 
-  const isActive = isMobileDevice ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) : (document.pointerLockElement === document.getElementById('canvas-container') && (!isCaptured || window.isSpectating));
+  const isActive = isMobileDevice ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) : (Boolean(document.pointerLockElement) && (!isCaptured || window.isSpectating));
   if (isActive) {
     // 1. Process movement physics with friction
     velocity.x -= velocity.x * 10.0 * delta;
@@ -5012,7 +5012,7 @@ function animate() {
     }
   });
   // Handle ghost initial spawning — only after splash screen and pointer lock / active game
-  const readyToSpawn = isMobileDevice ? (window.gameReady && window.mobileGameActive) : (window.gameReady && document.pointerLockElement === document.getElementById('canvas-container'));
+  const readyToSpawn = isMobileDevice ? (window.gameReady && window.mobileGameActive) : (window.gameReady && Boolean(document.pointerLockElement));
   if (ghosts3D.length === 0 && currentLobby && currentLobby.settings.ghostsCount > 0 && readyToSpawn) {
     spawnGhostAIs(currentLobby.settings.ghostsCount);
   }
