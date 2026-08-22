@@ -242,6 +242,7 @@ export function initGame(socket, socketId, matchConfig) {
   currentSanity = 100;
   isPanicked = false;
   isCaptured = false;
+  window.isSpectating = false;
   hasEscaped = false;
   panicTimer = 0;
   speedBoostTimer = 0;
@@ -257,6 +258,22 @@ export function initGame(socket, socketId, matchConfig) {
   visitedCells.clear();
   mapMarks = [];
   isMinimapExpanded = false;
+
+  const spectateBtn = document.getElementById('spectate-btn');
+  if (spectateBtn) {
+    spectateBtn.onclick = () => {
+      document.getElementById('captured-overlay').style.display = 'none';
+      window.isSpectating = true;
+      if (isMobileDevice) {
+        window.mobileGameActive = true;
+        const mobileCtrl = document.getElementById('mobile-controls-container');
+        if (mobileCtrl) mobileCtrl.style.display = 'flex';
+      } else {
+        document.getElementById('canvas-container').requestPointerLock();
+      }
+      triggerNotification("SPECTATOR MODE ENGAGED. Move freely.");
+    };
+  }
 
   setupMinimap();
 
@@ -2033,7 +2050,7 @@ function updateInteractionPrompt() {
 }
 
 function checkInteractions() {
-  if (myTeam === 'Ghost') return;
+  if (myTeam === 'Ghost' || window.isSpectating) return;
 
   // 1. Check proximity to Keypad Terminal (Master Gate)
   const gateVec = new THREE.Vector3(gateCoordinates.x, 2, gateCoordinates.z);
@@ -2199,6 +2216,7 @@ function collectClueLocal(digitIndex) {
 }
 
 function useActiveItem() {
+  if (window.isSpectating) return;
   const item = inventory[activeSlot];
   if (!item) return;
 
@@ -2475,6 +2493,7 @@ function setupKeypadListeners() {
 
 // Drop the active item in inventory
 function dropActiveItem() {
+  if (window.isSpectating) return;
   const item = inventory[activeSlot];
   if (!item || item === "") {
     triggerNotification("No item in active slot to drop.");
@@ -3993,7 +4012,7 @@ function animate() {
   const delta = (time - prevTime) / 1000;
   prevTime = time;
 
-  const isActive = isMobileDevice ? (window.mobileGameActive && !isCaptured) : (document.pointerLockElement === document.getElementById('canvas-container') && !isCaptured);
+  const isActive = isMobileDevice ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) : (document.pointerLockElement === document.getElementById('canvas-container') && (!isCaptured || window.isSpectating));
   if (isActive) {
     // 1. Process movement physics with friction
     velocity.x -= velocity.x * 10.0 * delta;
@@ -4003,13 +4022,10 @@ function animate() {
     direction.x = Number(moveRight) - Number(moveLeft);
     direction.normalize(); // Ensure consistent speed
 
-    // Speed details
-    // Human WALK: 90  (~9 u/s after friction)
-    // Juggernaut ghost player: 75 (~7.5 u/s) — faster than normal ghosts, but noticeably slower than human walk
-    // All other ghost players: 55 (~5.5 u/s) — clearly slower than a walking human
-    let baseGhostSpeed = 55.0;
-    if (myTeam === 'Ghost' && myClass === 'Juggernaut') baseGhostSpeed = 75.0;
-    let speed = myTeam === 'Ghost' ? baseGhostSpeed : 90.0;
+    let speed = myTeam === 'Ghost' ? 55.0 : 90.0;
+    if (myTeam === 'Ghost' && myClass === 'Juggernaut') speed = 75.0;
+    
+    if (window.isSpectating) speed = 250.0; // Fast roaming
 
     // --- Sprint logic (humans only) ---
     if (myTeam === 'Human') {
@@ -4107,36 +4123,49 @@ function animate() {
 
     camera.translateX(-velocity.x * delta);
     camera.translateZ(velocity.z * delta);
-    camera.position.y = 1.6; // Lock height
+    if (window.isSpectating) {
+      if (document.getElementById('canvas-container').requestPointerLock) {
+        // Simple vertical controls for PC: E to go up, Q to go down
+        // (Since jump isn't naturally mapped, we'll map vertical flight to moveForward pitch)
+        const forward = new THREE.Vector3();
+        camera.getWorldDirection(forward);
+        const flySpeed = direction.z * speed * delta;
+        camera.position.y -= forward.y * flySpeed;
+      }
+    } else {
+      camera.position.y = 1.6; // Lock height if not spectating
+    }
 
     // Robust AABB Wall collision checking
-    const playerRadius = 0.8; // Radius to prevent near-clipping
-    const wallHalfSize = 4.5 / 2;
-    
-    // Run two iterations to smoothly resolve corner pinches
-    for (let iter = 0; iter < 2; iter++) {
-      walls.forEach(wall => {
-        if (wall.position.y < 0) return; // Skip walls shifted below floor level (open sliding gates)
-        
-        const px = camera.position.x;
-        const pz = camera.position.z;
-        const wx = wall.position.x;
-        const wz = wall.position.z;
-        
-        const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : wallHalfSize;
-        const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : wallHalfSize;
-        
-        const overlapX = (hx + playerRadius) - Math.abs(px - wx);
-        const overlapZ = (hz + playerRadius) - Math.abs(pz - wz);
-        
-        if (overlapX > 0 && overlapZ > 0) {
-          if (overlapX < overlapZ) {
-            camera.position.x += (px > wx ? overlapX : -overlapX);
-          } else {
-            camera.position.z += (pz > wz ? overlapZ : -overlapZ);
+    if (!window.isSpectating) {
+      const playerRadius = 0.8; // Radius to prevent near-clipping
+      const wallHalfSize = 4.5 / 2;
+      
+      // Run two iterations to smoothly resolve corner pinches
+      for (let iter = 0; iter < 2; iter++) {
+        walls.forEach(wall => {
+          if (wall.position.y < 0) return; // Skip walls shifted below floor level (open sliding gates)
+          
+          const px = camera.position.x;
+          const pz = camera.position.z;
+          const wx = wall.position.x;
+          const wz = wall.position.z;
+          
+          const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : wallHalfSize;
+          const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : wallHalfSize;
+          
+          const overlapX = (hx + playerRadius) - Math.abs(px - wx);
+          const overlapZ = (hz + playerRadius) - Math.abs(pz - wz);
+          
+          if (overlapX > 0 && overlapZ > 0) {
+            if (overlapX < overlapZ) {
+              camera.position.x += (px > wx ? overlapX : -overlapX);
+            } else {
+              camera.position.z += (pz > wz ? overlapZ : -overlapZ);
+            }
           }
-        }
-      });
+        });
+      }
     }
 
     // 2. Active sensors & sanity ticks
@@ -4526,7 +4555,7 @@ function animate() {
 
     // 5. Emit movement states
     networkTimer += delta;
-    if (networkTimer >= 0.05) { // 20Hz update
+    if (networkTimer >= 0.05 && !window.isSpectating) { // 20Hz update, skip if spectating
       socketClient.emit('player_movement', {
         position: { x: camera.position.x, z: camera.position.z },
         rotation: { y: camera.rotation.y },
