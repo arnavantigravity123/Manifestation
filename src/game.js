@@ -469,35 +469,31 @@ export function initGame(socket, socketId, matchConfig) {
     camera.position.set(0, 1.6, 0);
   }
 
-  // Easter Egg: Ariadne's Thread to the Vault (Pathfinds strictly through corridors)
+  // Easter Egg: Ariadne's Thread to the Vault (Straight direct beacon beam to the vault for Ariadne_999)
   const myPlayer = currentLobby.players[myId];
   if (myPlayer && myPlayer.username === 'Ariadne_999') {
-    const startGrid = worldToGrid(camera.position.x, camera.position.z);
-    const endGrid = worldToGrid(gateCoordinates.x, gateCoordinates.z);
-    const pathNodes = bfsPath(startGrid.col, startGrid.row, endGrid.col, endGrid.row);
+    const startX = camera.position.x;
+    const startZ = camera.position.z;
+    const targetX = gateCoordinates.x;
+    const targetZ = gateCoordinates.z;
+    const dx = targetX - startX;
+    const dz = targetZ - startZ;
+    const totalDist = Math.sqrt(dx * dx + dz * dz);
+    const angle = Math.atan2(dx, dz);
 
+    const threadGeo = new THREE.PlaneGeometry(0.5, totalDist);
     const threadMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
-    
-    if (pathNodes && pathNodes.length > 1) {
-      for (let i = 0; i < pathNodes.length - 1; i++) {
-        const p1 = pathNodes[i];
-        const p2 = pathNodes[i + 1];
-        const dx = p2.x - p1.x;
-        const dz = p2.z - p1.z;
-        const length = Math.sqrt(dx * dx + dz * dz);
-        const segGeo = new THREE.PlaneGeometry(0.5, length);
-        const seg = new THREE.Mesh(segGeo, threadMat);
-        seg.rotation.x = -Math.PI / 2;
-        seg.rotation.z = -Math.atan2(dx, dz);
-        seg.position.set((p1.x + p2.x) / 2, 0.04, (p1.z + p2.z) / 2);
-        scene.add(seg);
+    const thread = new THREE.Mesh(threadGeo, threadMat);
+    thread.rotation.x = -Math.PI / 2;
+    thread.rotation.z = -angle;
+    thread.position.set((startX + targetX) / 2, 0.04, (startZ + targetZ) / 2);
+    scene.add(thread);
 
-        if (i % 3 === 0) {
-          const pLight = new THREE.PointLight(0x00ffff, 8, 6);
-          pLight.position.set(p1.x, 0.4, p1.z);
-          scene.add(pLight);
-        }
-      }
+    for (let d = 0; d < totalDist; d += 8) {
+      const frac = d / totalDist;
+      const pLight = new THREE.PointLight(0x00ffff, 8, 6);
+      pLight.position.set(startX + dx * frac, 0.4, startZ + dz * frac);
+      scene.add(pLight);
     }
 
     // Auto-complete objectives for testing
@@ -3046,6 +3042,14 @@ function setupSocketListeners() {
       }
     }
 
+    // Remove the 3D keypad terminal mesh from the wall now that code is cracked
+    if (padMeshRef) {
+      scene.remove(padMeshRef);
+      if (padMeshRef.geometry) padMeshRef.geometry.dispose();
+      if (padMeshRef.material) padMeshRef.material.dispose();
+      padMeshRef = null;
+    }
+
     const cipherHUD = document.getElementById('hud-cipher-info');
     if (cipherHUD) {
       cipherHUD.textContent = `Keys: ${realKeySymbols.join(' & ')}`;
@@ -3646,18 +3650,36 @@ function playEscapeCinematic(callback) {
     }
   }
 
-  // Phase 3: Camera auto-walk forward through the gate (after 2.5s)
+  // Phase 3: Camera auto-walk forward directly through the vault gate
   setTimeout(() => {
     const walkDuration = 1500;
     const walkStart = performance.now();
+    const startX = camera.position.x;
     const startZ = camera.position.z;
-    const walkTarget = startZ - 8; // Walk 8 units forward through the gate
+    
+    // Direction from camera position straight through the gate
+    let dirX = gateCoordinates.x - startX;
+    let dirZ = gateCoordinates.z - startZ;
+    const len = Math.sqrt(dirX * dirX + dirZ * dirZ);
+    if (len > 0.001) {
+      dirX /= len;
+      dirZ /= len;
+    } else {
+      dirX = 0;
+      dirZ = -1;
+    }
+
+    // Pass through the gate coordinates and continue 6 units beyond the doorway
+    const walkTargetX = gateCoordinates.x + dirX * 6;
+    const walkTargetZ = gateCoordinates.z + dirZ * 6;
     
     const walkAnim = (now) => {
       const elapsed = now - walkStart;
       const progress = Math.min(elapsed / walkDuration, 1);
       const eased = progress * progress; // Ease in
-      camera.position.z = startZ + (walkTarget - startZ) * eased;
+      camera.position.x = startX + (walkTargetX - startX) * eased;
+      camera.position.z = startZ + (walkTargetZ - startZ) * eased;
+      camera.lookAt(walkTargetX, 1.6, walkTargetZ);
       if (progress < 1) requestAnimationFrame(walkAnim);
     };
     requestAnimationFrame(walkAnim);
