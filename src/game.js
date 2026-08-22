@@ -2866,7 +2866,7 @@ function setupSocketListeners() {
 
   socketClient.on('ghost_breaker_siphon', (data) => {
     if (myTeam === 'Human') {
-      const effectRadius = 15 * 4.5; // 15 blocks
+      const effectRadius = 6 * 4.5; // 6 blocks
       let applyEffect = true;
       if (data && data.position) {
         const dist = Math.hypot(camera.position.x - data.position.x, camera.position.z - data.position.z);
@@ -2885,7 +2885,7 @@ function setupSocketListeners() {
 
   socketClient.on('ghost_sound_scramble', (data) => {
     if (myTeam === 'Human') {
-      const effectRadius = 15 * 4.5;
+      const effectRadius = 6 * 4.5;
       let applyEffect = true;
       if (data && data.position) {
         const dist = Math.hypot(camera.position.x - data.position.x, camera.position.z - data.position.z);
@@ -4225,14 +4225,14 @@ function animate() {
             ghost.position.addScaledVector(forward, 8);
           } else if (gClass === 'Poltergeist') {
             const dist = camera.position.distanceTo(ghost.position);
-            if (dist <= 15 * 4.5) {
+            if (dist <= 6 * 4.5) {
               triggerNotification("Poltergeist bot deployed Breaker Siphon!");
               window.flashlightDisabledBySiphon = true;
               setTimeout(() => { window.flashlightDisabledBySiphon = false; }, 10000);
             }
           } else if (gClass === 'Banshee') {
             const dist = camera.position.distanceTo(ghost.position);
-            if (dist <= 15 * 4.5) {
+            if (dist <= 6 * 4.5) {
               triggerNotification("Banshee bot scrambled your sensors!");
               window.sensorsScrambled = true;
               setTimeout(() => { window.sensorsScrambled = false; }, 5000);
