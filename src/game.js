@@ -4584,6 +4584,15 @@ function animate() {
           }
         });
       }
+
+      // Hard Map Boundary Safety Clamp (Prevents glitching outside walls or void falling)
+      const maxPlayableLimit = (mazeSizeGlobal / 2 - 1.0) * 4.5;
+      camera.position.x = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, camera.position.x));
+      camera.position.z = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, camera.position.z));
+      if (camera.position.y < -2.0 || isNaN(camera.position.y)) {
+        camera.position.set(0, 1.6, 0); // Safety recovery to center spawn
+        velocity.set(0, 0, 0);
+      }
     }
 
     // 2. Active sensors & sanity ticks

@@ -553,15 +553,18 @@ roleModeSelect.addEventListener('change', () => {
 
 readyStartBtn.addEventListener('click', () => {
   if (!currentLobby || !socket) return;
-  const myPlayer = currentLobby.players[myId];
+  
+  // Robust player lookup by myId or by username
+  let myPlayer = currentLobby.players[myId];
+  if (!myPlayer) {
+    const uname = getUsername();
+    myPlayer = Object.values(currentLobby.players).find(p => p.username === uname);
+    if (myPlayer) myId = myPlayer.id;
+  }
   if (!myPlayer) return;
 
   if (myPlayer.isHost) {
-    if (currentLobby.canStart) {
-      socket.emit('start_match');
-    } else {
-      alert("Cannot start: Ghost quota is not fulfilled! Put bots ON or assign players to Ghost team.");
-    }
+    socket.emit('start_match');
   } else {
     socket.emit('update_player', {
       isReady: !myPlayer.isReady

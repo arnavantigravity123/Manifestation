@@ -71,8 +71,13 @@ function updateLobbyState(roomId) {
   lobby.settings.botGhostsCount = botGhostsCount;
 
   // Check start validation
-  const isQuotaFulfilled = activeGhostsCount >= minRequiredGhosts && humanCount > 0;
-  lobby.canStart = isQuotaFulfilled;
+  const mode = lobby.settings.roleSelectionMode;
+  const isRandomOrHidden = (mode === 'random' || mode === 'hidden');
+  const isQuotaFulfilled = isRandomOrHidden 
+    ? (playersList.length > 0)
+    : (activeGhostsCount >= minRequiredGhosts && (humanCount > 0 || actualHumanGhostPlayers > 0 || lobby.settings.botsEnabled));
+  
+  lobby.canStart = Boolean(isQuotaFulfilled && playersList.length > 0);
 
   // Broadcast updated lobby
   io.to(roomId).emit('lobby_update', lobby);
@@ -193,16 +198,33 @@ io.on('connection', (socket) => {
     }
 
     const lobby = lobbies[roomId];
-    const isHost = Object.keys(lobby.players).length === 0;
+    
+    // De-duplicate: Clean up any old ghost/stale connection for this same username in the room
+    const cleanUsername = username || `Survivor #${Math.floor(1000 + Math.random() * 9000)}`;
+    const existingEntry = Object.entries(lobby.players).find(([sId, p]) => p.username === cleanUsername && sId !== socket.id);
+    
+    let isHost = Object.keys(lobby.players).length === 0;
+    let isReady = isHost;
+    let team = 'Human';
+    let characterClass = 'Locksmith';
+
+    if (existingEntry) {
+      const [oldId, oldPlayer] = existingEntry;
+      isHost = oldPlayer.isHost;
+      isReady = oldPlayer.isReady || isHost;
+      team = oldPlayer.team || 'Human';
+      characterClass = oldPlayer.characterClass || 'Locksmith';
+      delete lobby.players[oldId];
+    }
 
     lobby.players[socket.id] = {
       id: socket.id,
-      username: username || `Survivor #${Math.floor(1000 + Math.random() * 9000)}`,
+      username: cleanUsername,
       skinId: skinId,
-      team: 'Human', // Default team
-      characterClass: 'Locksmith', // Default subclass
+      team,
+      characterClass,
       isHost,
-      isReady: isHost, // Host is ready by default
+      isReady,
     };
 
     socket.roomId = roomId;
