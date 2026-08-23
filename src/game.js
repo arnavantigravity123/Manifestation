@@ -1045,10 +1045,39 @@ function generateMaze(keysCount = 8) {
     else if (window.vaultEdge === 'W') { window.vaultR = centerCoord; window.vaultC = 0; for (let i = 1; i <= centerCoord; i++) layout[centerCoord][i] = 0; }
   }
 
+  // Easter Egg: For Ariadne_999, carve a direct unobstructed straight hallway from center spawn (0, 0) directly to the Master Gate vault
+  const myPlayerCheck = (currentLobby && currentLobby.players) ? currentLobby.players[myId] : null;
+  const currentUsername = (myPlayerCheck && myPlayerCheck.username) || sessionStorage.getItem('rejoinUsername') || window.myUsername || '';
+  const isAriadneUser = currentUsername === 'Ariadne_999';
+
+  if (isAriadneUser) {
+    if (window.vaultEdge === 'N') {
+      window.vaultR = 0;
+      window.vaultC = centerCoord;
+      for (let r = 0; r <= centerCoord; r++) layout[r][centerCoord] = 0;
+    } else if (window.vaultEdge === 'S') {
+      window.vaultR = mazeSize - 1;
+      window.vaultC = centerCoord;
+      for (let r = centerCoord; r < mazeSize; r++) layout[r][centerCoord] = 0;
+    } else if (window.vaultEdge === 'W') {
+      window.vaultR = centerCoord;
+      window.vaultC = 0;
+      for (let c = 0; c <= centerCoord; c++) layout[centerCoord][c] = 0;
+    } else if (window.vaultEdge === 'E') {
+      window.vaultR = centerCoord;
+      window.vaultC = mazeSize - 1;
+      for (let c = centerCoord; c < mazeSize; c++) layout[centerCoord][c] = 0;
+    }
+  }
+
   // Scatter sliding doors (type 2)
   for(let i=0; i < 40; i++) {
     const rx = 1 + Math.floor(seededRandom() * (mazeSize-2));
     const rz = 1 + Math.floor(seededRandom() * (mazeSize-2));
+    if (isAriadneUser) {
+      if ((window.vaultEdge === 'N' || window.vaultEdge === 'S') && rx === centerCoord) continue;
+      if ((window.vaultEdge === 'E' || window.vaultEdge === 'W') && rz === centerCoord) continue;
+    }
     if (layout[rz][rx] === 1) layout[rz][rx] = 2; 
   }
 
