@@ -55,23 +55,23 @@ const totalGhostsDisplay = document.getElementById('total-ghosts-display');
 const quitLobbyBtn = document.getElementById('quit-lobby-btn');
 const quitGameBtn = document.getElementById('quit-game-btn');
 
-// Class Data definitions
+// Class Data definitions (Accurate in-game loadouts & active abilities)
 const classesData = {
   Human: {
-    Locksmith: { desc: "Perk: Rapid decryption. Interactive speed boosts when bypassing terminal ciphers and puzzle hubs." },
-    Trapper: { desc: "Perk: Defensive coordinator. Deploys salt barriers and electric shock mines to massive slow ghosts." },
-    Scout: { desc: "Perk: Equipped with motion-tracking radar tablet displaying real-time entity paths in a short range." },
-    Medic: { desc: "Perk: Health specialist. Can revive captured teammates locked in environmental traps and give speed buffs." },
-    "Flashlight Expert": { desc: "Perk: High-intensity wide-angle UV blast capable of blinding or exposing invisible Mimics/Ghosts." },
-    Quartermaster: { desc: "Perk (Deep Pockets): Inventory expanded to 8 slots. Ability: Deploys equipment cache for team." }
+    Locksmith: { desc: "Loadout: EMF Radar, Thermal Camera, Breaker Remote, Battery Pack. Ability: Deploys Breaker Remote to instantly freeze all ghosts for 6s. Passive Thermal X-Ray vision when held." },
+    Trapper: { desc: "Loadout: Salt Cannister, Chalk / UV Spray, Battery Pack, Adrenaline Shot. Ability: Deploys salt barriers slowing passing ghosts by 80%, spray chalk maze markers, and trigger 10s adrenaline speed bursts." },
+    Scout: { desc: "Loadout: EMF Radar, Sanity Pills, Battery Pack, Adrenaline Shot. Ability: 50m long-range EMF ghost proximity tracking, sanity restoration, and rapid 10s sprint bursts for fast map exploration." },
+    Medic: { desc: "Loadout: Defibrillator (Multiplayer) / EMF Radar (Solo), Sanity Pills, Med Kit, Battery Pack. Ability: Discharges Defibrillator to instantly revive captured teammates, restores 50 HP with Med Kits, and stabilizes sanity." },
+    "Flashlight Expert": { desc: "Loadout: EMF Radar, Thermal Camera, 2x Battery Packs. Ability: Dual battery packs for maximum high-beam flashlight uptime combined with passive Thermal Camera wall-piercing X-Ray vision." },
+    Quartermaster: { desc: "Loadout (Deep Pockets): 12 Inventory Slots. Starts packed with Salt Cannister, Chalk Spray, Adrenaline, Med Kit, Sanity Pills, EMF Radar, and 2x Batteries." }
   },
   Ghost: {
-    Stalker: { desc: "Perk (Tank Tracker): Slow but durable. Can track blood trails left by injured humans or sprinting players." },
-    Mimic: { desc: "Perk (Deceiver): Infiltration master. Can clone a human teammate's appearance and username to strike." },
-    Juggernaut: { desc: "Perk: Heavy audio hunter. Gains extreme speed bursts when tracking sprinting or talking survivors." },
-    Phantom: { desc: "Perk: Fast-striking jumping ghost. High mobility leap to cut off corridors and escape lines." },
-    Poltergeist: { desc: "Perk: Saboteur. Can trigger remote puzzle regress or drop circuit breakers to plunge areas in total darkness." },
-    Banshee: { desc: "Perk: Auditory distortion tracker. Projects static screaming to scramble nearby human sensors." }
+    Stalker: { desc: "Loadout: Ghost Claws, Scent Tracker. Ability: Casts Scent Tracker to project a direct glowing tracking tether leading straight to the nearest human survivor (20s CD)." },
+    Mimic: { desc: "Loadout: Ghost Claws, Infiltration Clone. Ability: Activates Infiltration Clone to disguise yourself as a human survivor for deceptive ambushes (30s CD)." },
+    Juggernaut: { desc: "Loadout: Ghost Claws, Audio Amplifiers. Perk: Innately faster base movement speed (75 vs 55). Ability: Engages Audio Amplifiers for a 10s extreme hyper-speed hunting frenzy (45s CD)." },
+    Phantom: { desc: "Loadout: Ghost Claws, Vapor Leap. Ability: Casts Vapor Leap to instantly phase and teleport 12 meters forward, closing distance and ambushing fleeing survivors (15s CD)." },
+    Poltergeist: { desc: "Loadout: Ghost Claws, Breaker Siphon. Ability: Deploys Breaker Siphon in a 27m radius to overload and disable human flashlights for 10 seconds (30s CD)." },
+    Banshee: { desc: "Loadout: Ghost Claws, Sound Scrambler. Ability: Unleashes an auditory shockwave across a 27m radius, blinding and scrambling human sensors for 10 seconds (40s CD)." }
   }
 };
 
