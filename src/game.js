@@ -4524,32 +4524,6 @@ function animate() {
         speed *= 0.2; // 80% slow down, matching AI slow down ratio
       }
 
-      // Check if blinded by any human player's flashlight cone
-      let blindedByHuman = false;
-      Object.keys(players3D).forEach(id => {
-        const pMesh = players3D[id];
-        const isHuman = pMesh.userData && pMesh.userData.type === 'Human';
-        if (isHuman) {
-          const dist = camera.position.distanceTo(pMesh.position);
-          if (dist < 15) {
-            // Reconstruct human forward vector based on network rotation
-            const humanForward = new THREE.Vector3(-Math.sin(pMesh.rotation.y), 0, -Math.cos(pMesh.rotation.y)).normalize();
-            const dirToGhost = new THREE.Vector3().subVectors(camera.position, pMesh.position).normalize();
-            const dot = humanForward.dot(dirToGhost);
-            if (dot > 0.88) { // 25 degree cone
-              blindedByHuman = true;
-            }
-          }
-        }
-      });
-
-      if (blindedByHuman) {
-        speed *= 0.5; // 50% slow down when blinded by flashlight
-        if (Math.random() < 0.01) { // Throttle warning notification
-          triggerNotification("BLINDED BY FLASHLIGHT! Speed reduced.");
-        }
-      }
-
       // Breaker Remote freeze for human Ghost players
       if (window.ghostsFrozen) {
         speed = 0;
@@ -4827,25 +4801,6 @@ function animate() {
             }, 3000);
           }
         }
-      }
-
-      // Check if blinded by player's flashlight
-      let isBlinded = false;
-      if (myTeam === 'Human' && flashLight && flashLight.intensity > 50) {
-        const dist = camera.position.distanceTo(ghost.position);
-        if (dist < 15) {
-          const dirToGhost = new THREE.Vector3().subVectors(ghost.position, camera.position).normalize();
-          const forward = new THREE.Vector3();
-          camera.getWorldDirection(forward);
-          const dot = forward.dot(dirToGhost);
-          if (dot > 0.88) { // 25 degree cone
-            isBlinded = true;
-          }
-        }
-      }
-
-      if (isBlinded) {
-        moveSpeed *= 0.5; // 50% slow down when blinded by flashlight
       }
 
       // AI State Machine Initialization
