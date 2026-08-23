@@ -717,7 +717,7 @@ function renderCarriedKeysHUD() {
 
     if (i < carriedKeys.length) {
       const k = carriedKeys[i];
-      const isReal = functionalKeysRevealed.includes(k.symbol);
+      const isReal = gateSolved && functionalKeysRevealed.includes(k.symbol);
       const typeName = k.typeName || 'Unknown Key';
       const color = keyColors[typeName] || '#ffffff';
       slot.style.borderColor = color;
@@ -742,7 +742,7 @@ function renderCarriedKeysHUD() {
         star.textContent = '★';
         star.style.fontSize = '0.5rem';
         star.style.color = '#fbbf24';
-        star.title = 'Functional key!';
+        star.title = 'Twin key verified!';
         slot.appendChild(star);
       }
     } else {
@@ -766,8 +766,7 @@ function renderCarriedKeysHUD() {
   // Update keys-hud-info count
   const keyHud = document.getElementById('keys-hud-info');
   if (keyHud) {
-    const realCarried = carriedKeys.filter(k => functionalKeysRevealed.includes(k.symbol)).length;
-    keyHud.textContent = `KEYS: ${carriedKeys.length}/${MAX_CARRIED_KEYS} carried  •  ${realCarried}/2 functional`;
+    keyHud.textContent = `GATE KEYS: ${insertedGateKeys.length}/2 INSTALLED (${carriedKeys.length}/${MAX_CARRIED_KEYS} in hand)`;
   }
 }
 
@@ -2263,8 +2262,8 @@ function checkInteractions() {
       carriedKeys.push({ symbol: key.symbol, typeName: key.typeName });
       foundKeysList.push(key.symbol);
 
-      const isReal = functionalKeysRevealed.includes(key.symbol);
-      triggerNotification(`Picked up [${key.typeName}]${isReal ? ' ★ FUNCTIONAL KEY!' : ''} (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
+      const isReal = gateSolved && functionalKeysRevealed.includes(key.symbol);
+      triggerNotification(`Picked up [${key.typeName}]${isReal ? ' ★ (Twin Key Verified)' : ''} (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
 
       // Refresh the carried-keys HUD
       renderCarriedKeysHUD();
@@ -2965,7 +2964,7 @@ function updateGateHUD() {
       keysHud.textContent = `GATE KEYS: 2 / 2 INSTALLED (GATE READY!)`;
     } else {
       keysHud.style.color = "var(--secondary-accent)";
-      keysHud.textContent = `GATE KEYS: ${insertedGateKeys.length} / 2 INSTALLED (${realCarried}/2 in hand)`;
+      keysHud.textContent = `GATE KEYS: ${insertedGateKeys.length} / 2 INSTALLED (${carriedKeys.length}/${MAX_CARRIED_KEYS} in hand)`;
     }
   }
   const lockLabel = document.getElementById('terminal-lock-label');
