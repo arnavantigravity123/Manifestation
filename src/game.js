@@ -3425,16 +3425,20 @@ function setupSocketListeners() {
       if (overlay && title && details) {
         overlay.style.display = 'flex';
       
-      if (winner === 'Human') {
+      const isMyWin = (myTeam === winner);
+
+      if (isMyWin) {
         title.textContent = "VICTORY";
-        title.style.color = "#10b981";
-        title.style.textShadow = "0 0 20px rgba(16, 185, 129, 0.6)";
-        details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 1rem; font-size: 1.3rem;">SURVIVORS ESCAPED!</div>`;
+        title.style.color = myTeam === 'Ghost' ? "#a855f7" : "#10b981";
+        title.style.textShadow = myTeam === 'Ghost' ? "0 0 20px rgba(168, 85, 247, 0.7)" : "0 0 20px rgba(16, 185, 129, 0.7)";
+        const victoryMsg = myTeam === 'Ghost' ? "ALL SURVIVORS HARVESTED!" : "SURVIVORS ESCAPED!";
+        details.innerHTML = `<div style="font-weight:bold; color: ${title.style.color}; margin-bottom: 1rem; font-size: 1.3rem;">${victoryMsg}</div>`;
       } else {
         title.textContent = "DEFEAT";
         title.style.color = "#ef4444";
         title.style.textShadow = "0 0 20px rgba(239, 68, 68, 0.6)";
-        details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 1rem; font-size: 1.3rem;">ALL SURVIVORS ELIMINATED!</div>`;
+        const defeatMsg = myTeam === 'Ghost' ? "SURVIVORS ESCAPED THE LABYRINTH!" : "ALL SURVIVORS ELIMINATED!";
+        details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 1rem; font-size: 1.3rem;">${defeatMsg}</div>`;
       }
 
       // Add detailed player status list
