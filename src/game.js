@@ -562,12 +562,22 @@ export function initGame(socket, socketId, matchConfig) {
 const EXTRA_CARRY_SLOTS = ['', '', '', ''];
 
 function setupInventory() {
+  const isSolo = Boolean(
+    (currentLobby && currentLobby.id && currentLobby.id.startsWith('solo-')) ||
+    (sessionStorage.getItem('rejoinIsSolo') === 'true') ||
+    (currentLobby && currentLobby.players && Object.keys(currentLobby.players).length <= 1 && (!currentLobby.id || !currentLobby.isPublic))
+  );
+
+  const medicLoadout = isSolo
+    ? ["Sanity Pills", "Med Kit", "Battery Pack", "EMF Radar", ...EXTRA_CARRY_SLOTS]
+    : ["Defibrillator", "Sanity Pills", "Med Kit", "Battery Pack", ...EXTRA_CARRY_SLOTS];
+
   const humanClasses = {
     // Base 4 class items + 4 universal carry slots = 8 slots total
     Locksmith:          ["EMF Radar", "Thermal Camera", "Breaker Remote", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
     Trapper:            ["Salt Cannister", "Chalk / UV Spray", "Battery Pack", "Adrenaline Shot", ...EXTRA_CARRY_SLOTS],
     Scout:              ["EMF Radar", "Sanity Pills", "Battery Pack", "Adrenaline Shot",     ...EXTRA_CARRY_SLOTS],
-    Medic:              ["Defibrillator", "EMF Radar", "Med Kit", "Battery Pack",    ...EXTRA_CARRY_SLOTS],
+    Medic:              medicLoadout,
     "Flashlight Expert":["EMF Radar", "Thermal Camera", "Battery Pack", "Battery Pack",     ...EXTRA_CARRY_SLOTS],
     // Quartermaster: 8 class items + 4 empty carry slots (12 total slots)
     Quartermaster: ["EMF Radar", "Salt Cannister", "Chalk / UV Spray", "Adrenaline Shot", "Sanity Pills", "Med Kit", "Battery Pack", "Battery Pack", "", "", "", ""]
