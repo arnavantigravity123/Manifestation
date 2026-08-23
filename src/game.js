@@ -2145,12 +2145,17 @@ function updateInteractionPrompt() {
   // 4. Check Code Clue Notes (Glowing Cipher Pages)
   for (let i = 0; i < codeClueNotes.length; i++) {
     const clue = codeClueNotes[i];
-    if (clue.isCollected) continue;
     const { looking: lookingAtClue, dist: distToClue } = isLookingAtTarget(clue.mesh.position, 4.0);
     if (lookingAtClue) {
       if (distToClue < minDistance) {
         minDistance = distToClue;
-        promptText = isMobileDevice ? `Tap INTERACT to inspect Cipher Clue #${clue.digitIndex + 1}` : `Press <kbd>E</kbd> to inspect Cipher Clue #${clue.digitIndex + 1}`;
+        if (clue.collected) {
+          const digits = window.cipherCodeDigits || [];
+          const revealedDigit = digits[clue.digitIndex] !== undefined ? digits[clue.digitIndex] : '?';
+          promptText = `Cipher Clue #${clue.digitIndex + 1}: [ ${revealedDigit} ] (Code Already Read)`;
+        } else {
+          promptText = isMobileDevice ? `Tap INTERACT to inspect Cipher Clue #${clue.digitIndex + 1}` : `Press <kbd>E</kbd> to inspect Cipher Clue #${clue.digitIndex + 1}`;
+        }
       }
     }
   }
@@ -2291,14 +2296,23 @@ function checkInteractions() {
   // 4. Check proximity to Code Clue Notes (yellow glowing slabs)
   for (let i = 0; i < codeClueNotes.length; i++) {
     const note = codeClueNotes[i];
-    if (note.collected) continue;
     const distToNote = camera.position.distanceTo(note.mesh.position);
     if (distToNote < 4.5) {
-      if (typeof socketClient !== 'undefined') {
-        socketClient.emit('clue_collected', { digitIndex: note.digitIndex });
+      const { looking: lookingAtNote } = isLookingAtTarget(note.mesh.position, 4.5);
+      if (lookingAtNote) {
+        if (note.collected) {
+          const digitNames = ['1ST', '2ND', '3RD', '4TH'];
+          const digits = window.cipherCodeDigits || [];
+          const revealedDigit = digits[note.digitIndex] !== undefined ? digits[note.digitIndex] : '?';
+          triggerNotification(`Code already read! ${digitNames[note.digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
+        } else {
+          if (typeof socketClient !== 'undefined') {
+            socketClient.emit('clue_collected', { digitIndex: note.digitIndex });
+          }
+          collectClueLocal(note.digitIndex);
+        }
+        break;
       }
-      collectClueLocal(note.digitIndex);
-      break;
     }
   }
 
