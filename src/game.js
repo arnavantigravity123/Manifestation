@@ -286,6 +286,8 @@ export function initGame(socket, socketId, matchConfig) {
     spectateBtn.onclick = () => {
       document.getElementById('captured-overlay').style.display = 'none';
       window.isSpectating = true;
+      camera.position.y = Math.max(camera.position.y, 6.0);
+      updateEnvironmentLighting();
       if (isMobileDevice) {
         window.mobileGameActive = true;
         const mobileCtrl = document.getElementById('mobile-controls-container');
@@ -293,7 +295,7 @@ export function initGame(socket, socketId, matchConfig) {
       } else {
         (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
       }
-      triggerNotification("SPECTATOR MODE ENGAGED. Move freely.");
+      triggerNotification("SPECTATOR MODE ENGAGED: Full Brightness & 0 Fog.");
     };
   }
 
@@ -4168,6 +4170,17 @@ function setupMinimap() {
 }
 
 function updateEnvironmentLighting() {
+  if (window.isSpectating) {
+    if (ambientLight) {
+      ambientLight.color.setHex(0xffffff);
+      ambientLight.intensity = 4.0;
+    }
+    if (scene && scene.fog) {
+      scene.fog.density = 0;
+    }
+    return;
+  }
+
   let mult = getVisionMultiplier();
   
   if (myTeam === 'Ghost') {
@@ -4597,8 +4610,16 @@ function animate() {
       }
     } 
     
-    // Process Thermal Camera regardless of panic
-    if (myTeam === 'Human') {
+    // Process Thermal Camera regardless of panic (skip if spectating)
+    if (window.isSpectating) {
+      if (ambientLight) {
+        ambientLight.color.setHex(0xffffff);
+        ambientLight.intensity = 4.0;
+      }
+      if (scene && scene.fog) {
+        scene.fog.density = 0;
+      }
+    } else if (myTeam === 'Human') {
       // Thermal Camera passive effect
       if (inventory[activeSlot] === "Thermal Camera") {
         if (!scene.fog) scene.fog = new THREE.FogExp2(0x330000, 0.015);
