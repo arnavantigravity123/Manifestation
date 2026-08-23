@@ -400,7 +400,7 @@ export function initGame(socket, socketId, matchConfig) {
   // Setup ThreeJS scene
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000); // Pure black to eliminate any gap visibility
-  scene.fog = new THREE.FogExp2(myTeam === 'Human' ? 0x030712 : 0x1e1b4b, 0.05);
+  scene.fog = new THREE.FogExp2(0x000000, 0.015);
 
   const w = container.clientWidth || window.innerWidth;
   const h = container.clientHeight || window.innerHeight;
@@ -4498,9 +4498,9 @@ function animate() {
       if (panicTimer <= 0) {
         isPanicked = false;
         if (inventory[activeSlot] !== "Thermal Camera") {
-          const fogDensity = myTeam === 'Human' ? Math.max(0.01, 0.05 - (fixedBreakersCount * 0.015)) : 0.05;
-          if (!scene.fog) scene.fog = new THREE.FogExp2(myTeam === 'Human' ? 0x030712 : 0x1e1b4b, fogDensity);
-          scene.fog.color.setHex(myTeam === 'Human' ? 0x030712 : 0x1e1b4b);
+          const fogDensity = myTeam === 'Human' ? Math.max(0.005, 0.018 - (fixedBreakersCount * 0.004)) : 0.015;
+          if (!scene.fog) scene.fog = new THREE.FogExp2(0x000000, fogDensity);
+          scene.fog.color.setHex(0x000000);
           scene.fog.density = fogDensity;
         }
         if (flashLight) flashLight.intensity = 200;
@@ -4512,9 +4512,9 @@ function animate() {
     if (myTeam === 'Human') {
       // Thermal Camera passive effect
       if (inventory[activeSlot] === "Thermal Camera") {
-        if (!scene.fog) scene.fog = new THREE.FogExp2(0x330000, 0.02);
+        if (!scene.fog) scene.fog = new THREE.FogExp2(0x330000, 0.015);
         scene.fog.color.setHex(0x330000);
-        scene.fog.density = 0.02; // Red thermal vision
+        scene.fog.density = 0.015; // Red thermal vision
 
         // Make AI ghosts bright and glowing (red heat signature)
         ghosts3D.forEach(g => {
@@ -4535,9 +4535,9 @@ function animate() {
           });
         });
       } else {
-        const fogDensity = Math.max(0.01, 0.05 - (fixedBreakersCount * 0.015));
-        if (!scene.fog) scene.fog = new THREE.FogExp2(0x030712, fogDensity);
-        scene.fog.color.setHex(0x030712);
+        const fogDensity = Math.max(0.005, 0.018 - (fixedBreakersCount * 0.004));
+        if (!scene.fog) scene.fog = new THREE.FogExp2(0x000000, fogDensity);
+        scene.fog.color.setHex(0x000000);
         scene.fog.density = fogDensity;
 
         // Disable X-Ray vision for AI ghosts
