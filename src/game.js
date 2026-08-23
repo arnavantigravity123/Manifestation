@@ -4521,21 +4521,26 @@ function animate() {
       }
     }
 
-    if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
-    if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
-
-    camera.translateX(-velocity.x * delta);
-    camera.translateZ(velocity.z * delta);
     if (window.isSpectating) {
-      if (!isMobileDevice) {
-        // Simple vertical controls for PC: E to go up, Q to go down
-        // (Since jump isn't naturally mapped, we'll map vertical flight to moveForward pitch)
-        const forward = new THREE.Vector3();
-        camera.getWorldDirection(forward);
-        const flySpeed = direction.z * speed * delta;
-        camera.position.y -= forward.y * flySpeed;
+      // 6-DOF Free-Cam Spectator Flight
+      const forward = new THREE.Vector3();
+      camera.getWorldDirection(forward); // Unit vector in 3D look direction
+
+      const right = new THREE.Vector3();
+      right.crossVectors(forward, camera.up).normalize();
+
+      if (moveForward || moveBackward) {
+        camera.position.addScaledVector(forward, direction.z * (speed / 10.0) * delta);
+      }
+      if (moveLeft || moveRight) {
+        camera.position.addScaledVector(right, direction.x * (speed / 10.0) * delta);
       }
     } else {
+      if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
+      if (moveLeft || moveRight) velocity.x -= direction.x * speed * delta;
+
+      camera.translateX(-velocity.x * delta);
+      camera.translateZ(velocity.z * delta);
       camera.position.y = 1.6; // Lock height if not spectating
     }
 
