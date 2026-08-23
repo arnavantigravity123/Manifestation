@@ -171,6 +171,9 @@ let speedBoostTimer = 0;
 let latestSoundBeacon = null;
 let flashLight = null;
 let ambientLight = null;
+let spectatorSunLight = null;
+let spectatorHemiLight = null;
+let spectatorCamLight = null;
 let flashlightBattery = 100;
 
 // Puzzle configuration
@@ -4178,8 +4181,25 @@ function updateEnvironmentLighting() {
       ambientLight.color.setHex(0xffffff);
       ambientLight.intensity = 4.0;
     }
-    if (scene && scene.fog) {
-      scene.fog.density = 0;
+    if (scene) {
+      scene.fog = null; // Completely remove fog
+      scene.background = new THREE.Color(0x1e293b); // Clean slate sky background
+      
+      if (!spectatorSunLight) {
+        spectatorSunLight = new THREE.DirectionalLight(0xffffff, 3.5);
+        spectatorSunLight.position.set(0, 60, 0);
+        spectatorSunLight.target.position.set(0, 0, 0);
+        scene.add(spectatorSunLight);
+        scene.add(spectatorSunLight.target);
+      }
+      if (!spectatorHemiLight) {
+        spectatorHemiLight = new THREE.HemisphereLight(0xffffff, 0x64748b, 3.0);
+        scene.add(spectatorHemiLight);
+      }
+      if (!spectatorCamLight && camera) {
+        spectatorCamLight = new THREE.PointLight(0xffffff, 300, 200);
+        camera.add(spectatorCamLight);
+      }
     }
     return;
   }
@@ -4615,12 +4635,10 @@ function animate() {
     
     // Process Thermal Camera regardless of panic (skip if spectating)
     if (window.isSpectating) {
+      if (scene && scene.fog) scene.fog = null;
       if (ambientLight) {
         ambientLight.color.setHex(0xffffff);
         ambientLight.intensity = 4.0;
-      }
-      if (scene && scene.fog) {
-        scene.fog.density = 0;
       }
     } else if (myTeam === 'Human') {
       // Thermal Camera passive effect
