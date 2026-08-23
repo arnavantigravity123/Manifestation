@@ -2918,7 +2918,7 @@ function triggerPanicHide() {
 // Procedural EMF Loop pings
 let emfPingTimer = 0;
 function processEMFSensors(delta) {
-  if (myTeam !== 'Human' || inventory[activeSlot] !== 'EMF Radar') return;
+  if (myTeam !== 'Human' || window.isSpectating || inventory[activeSlot] !== 'EMF Radar') return;
 
   // Track closest ghost
   let closestDist = 9999;
@@ -2956,7 +2956,10 @@ function processEMFSensors(delta) {
 
 // Proximity micro-vibrations and sanity regression
 function processSanity(delta) {
-  if (myTeam !== 'Human') return;
+  if (myTeam !== 'Human' || window.isSpectating) {
+    if (window.isSpectating) document.body.style.filter = 'none';
+    return;
+  }
 
   // If near any active ghost, sanity decays!
   let nearGhost = false;
@@ -2993,7 +2996,7 @@ function getVisionMultiplier() {
 }
 
 function processFlashlightBattery(delta) {
-  if (myTeam !== 'Human') return;
+  if (myTeam !== 'Human' || window.isSpectating) return;
   if (!flashLight) return;
 
   const mult = getVisionMultiplier();
@@ -3366,7 +3369,7 @@ function setupSocketListeners() {
   });
 
   socketClient.on('ghost_breaker_siphon', (data) => {
-    if (myTeam === 'Human') {
+    if (myTeam === 'Human' && !window.isSpectating) {
       const effectRadius = 6 * 4.5; // 6 blocks
       let applyEffect = true;
       if (data && data.position) {
@@ -3385,7 +3388,7 @@ function setupSocketListeners() {
   });
 
   socketClient.on('ghost_sound_scramble', (data) => {
-    if (myTeam === 'Human') {
+    if (myTeam === 'Human' && !window.isSpectating) {
       const effectRadius = 6 * 4.5;
       let applyEffect = true;
       if (data && data.position) {
@@ -4673,6 +4676,7 @@ function animate() {
 
     // Helper function to apply damage if human is near a ghost
     const applyGhostDamageToHuman = (ghostPos) => {
+      if (window.isSpectating) return;
       const distToPlayer = ghostPos.distanceTo(new THREE.Vector3(camera.position.x, ghostPos.y, camera.position.z));
       if (distToPlayer < 1.5 && myTeam === 'Human' && !isPanicked) {
         currentHP = Math.max(0, currentHP - delta * 45);
@@ -4897,14 +4901,14 @@ function animate() {
             ghost.position.addScaledVector(forward, 8);
           } else if (gClass === 'Poltergeist') {
             const dist = targetPos.distanceTo(ghost.position);
-            if (dist <= 6 * 4.5 && myTeam === 'Human') {
+            if (dist <= 6 * 4.5 && myTeam === 'Human' && !window.isSpectating) {
               triggerNotification("Poltergeist bot deployed Breaker Siphon!");
               window.flashlightDisabledBySiphon = true;
               setTimeout(() => { window.flashlightDisabledBySiphon = false; }, 10000);
             }
           } else if (gClass === 'Banshee') {
             const dist = targetPos.distanceTo(ghost.position);
-            if (dist <= 6 * 4.5 && myTeam === 'Human') {
+            if (dist <= 6 * 4.5 && myTeam === 'Human' && !window.isSpectating) {
               triggerNotification("Banshee bot scrambled your sensors!");
               window.sensorsScrambled = true;
               setTimeout(() => { window.sensorsScrambled = false; }, 5000);
