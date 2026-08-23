@@ -3251,6 +3251,12 @@ function setupSocketListeners() {
     if (currentLobby && currentLobby.players && currentLobby.players[targetId]) {
       currentLobby.players[targetId].isCaptured = false;
     }
+    if (players3D[targetId]) {
+      if (players3D[targetId].userData) {
+        players3D[targetId].userData.isCaptured = false;
+      }
+      players3D[targetId].visible = true;
+    }
     triggerNotification(`⚡ [${medicName}] revived Operative ${revivedName}!`);
 
     if (targetId === myId) {
@@ -3258,6 +3264,18 @@ function setupSocketListeners() {
       window.isSpectating = false;
       currentHP = 75;
       currentSanity = 75;
+      isPanicked = false;
+      panicTimer = 0;
+      camera.position.y = 1.6;
+
+      // Restore carry slots so player can hold items and pick up dropped gear
+      if (!inventory || inventory.length === 0 || inventory.every(s => !s || s === '')) {
+        inventory = ['', '', '', '', '', '', '', ''];
+      }
+      activeSlot = 0;
+      renderHUDInventory();
+      renderCarriedKeysHUD();
+      updateEnvironmentLighting();
       
       const hpVal = document.getElementById('hp-value');
       const hpBar = document.getElementById('hp-bar');
