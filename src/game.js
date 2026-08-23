@@ -2097,27 +2097,31 @@ function updateInteractionPrompt() {
     if (distToGate < minDistance) {
       minDistance = distToGate;
       const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
-      const uninsertedKeyIndex = carriedKeys.findIndex(k => 
-        isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
-      );
 
-      if (uninsertedKeyIndex !== -1) {
-        const keyToInsert = carriedKeys[uninsertedKeyIndex];
-        const keyId = getKeyIdentifier(keyToInsert);
-        promptText = isMobileDevice ? `Tap INTERACT to Insert [${keyId}]` : `Press <kbd>E</kbd> to Insert [${keyId}]`;
+      if (!breakersFixed) {
+        promptText = `ACCESS DENIED: Need 3 Breakers to power terminal (${fixedBreakersCount}/${totalBreakersRequired})`;
       } else if (!gateSolved) {
-        if (!breakersFixed) {
-          promptText = `ACCESS DENIED: Need 3 Breakers to power terminal (${fixedBreakersCount}/${totalBreakersRequired})`;
-        } else if (window.securityLockoutActive) {
+        if (window.securityLockoutActive) {
           const remaining = Math.max(1, Math.ceil((window.securityLockoutEndTime - performance.now()) / 1000));
           promptText = `ACCESS DENIED: Security Lockout (${remaining}s remaining)`;
         } else {
           promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
         }
-      } else if (insertedGateKeys.length >= 2 && breakersFixed) {
-        promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
       } else {
-        promptText = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
+        // Gate keypad is cracked! Now players can insert keys
+        const uninsertedKeyIndex = carriedKeys.findIndex(k => 
+          isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
+        );
+
+        if (uninsertedKeyIndex !== -1) {
+          const keyToInsert = carriedKeys[uninsertedKeyIndex];
+          const keyId = getKeyIdentifier(keyToInsert);
+          promptText = isMobileDevice ? `Tap INTERACT to Insert [${keyId}]` : `Press <kbd>E</kbd> to Insert [${keyId}]`;
+        } else if (insertedGateKeys.length >= 2) {
+          promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
+        } else {
+          promptText = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
+        }
       }
     }
   }
@@ -2200,7 +2204,22 @@ function checkInteractions() {
   if (lookingAtGate) {
     const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
-    // Check if player has any matching functional key to insert into gate
+    if (!breakersFixed) {
+      triggerNotification(`Master Gate needs power! Fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
+      return;
+    }
+
+    if (!gateSolved) {
+      if (window.securityLockoutActive) {
+        const remaining = Math.max(1, Math.ceil((window.securityLockoutEndTime - performance.now()) / 1000));
+        triggerNotification(`ACCESS DENIED: Keypad locked out for ${remaining} more seconds!`);
+        return;
+      }
+      openKeypadModal();
+      return;
+    }
+
+    // Gate cipher is solved! Now players can insert twin keys or escape
     const uninsertedKeyIndex = carriedKeys.findIndex(k => 
       isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
     );
@@ -2221,32 +2240,26 @@ function checkInteractions() {
       return;
     }
 
-    if (!gateSolved) {
-      if (!breakersFixed || window.securityLockoutActive) {
-        if (!breakersFixed) triggerNotification(`Master Gate needs power! Fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
-        if (window.securityLockoutActive) {
-          const remaining = Math.max(1, Math.ceil((window.securityLockoutEndTime - performance.now()) / 1000));
-          triggerNotification(`ACCESS DENIED: Keypad locked out for ${remaining} more seconds!`);
-        }
-        return; // Prevent opening keypad
+    // Check if player is carrying a decoy key
+    if (carriedKeys.length > 0 && insertedGateKeys.length < 2) {
+      triggerNotification(`Key does not fit! [${carriedKeys[0].typeName || 'Key'}] is not one of the twin gate keys.`);
+      return;
+    }
+
+    if (insertedGateKeys.length >= 2 && breakersFixed) {
+      // All conditions satisfied -> Escape victory!
+      if (socketClient) {
+        socketClient.emit('human_escaped', { id: socketClient.id });
       }
-      openKeypadModal();
+      isCaptured = true; // Lock controls during cinematic
+      window.isEscaping = true;
+      playEscapeCinematic(() => {
+        document.getElementById('hud-overlay').style.display = 'none';
+        if (document.pointerLockElement) document.exitPointerLock();
+        window.mobileGameActive = false;
+      });
     } else {
-      if (insertedGateKeys.length >= 2 && breakersFixed) {
-        // All conditions satisfied -> Escape victory!
-        if (socketClient) {
-          socketClient.emit('human_escaped', { id: socketClient.id });
-        }
-        isCaptured = true; // Lock controls during cinematic
-        window.isEscaping = true;
-        playEscapeCinematic(() => {
-          document.getElementById('hud-overlay').style.display = 'none';
-          if (document.pointerLockElement) document.exitPointerLock();
-          window.mobileGameActive = false;
-        });
-      } else {
-        triggerNotification(`Master Gate requires remaining twin key! (${insertedGateKeys.length}/2 installed: [${insertedGateKeys.join(', ') || 'None'}])`);
-      }
+      triggerNotification(`Master Gate requires remaining twin key! (${insertedGateKeys.length}/2 installed: [${insertedGateKeys.join(', ') || 'None'}])`);
     }
     return;
   }
