@@ -1139,10 +1139,10 @@ function generateMaze(keysCount = 8) {
   const slidingWallMat = new THREE.MeshStandardMaterial({
     map: generatedTex,
     bumpMap: wallBumpTex,
-    bumpScale: 0.25,
-    color: 0x78350f,
-    roughness: 0.6,
-    metalness: 0.4
+    bumpScale: 0.8,
+    color: 0x3e4c5e, // Dark ancient stone to match labyrinth
+    roughness: 0.92,
+    metalness: 0.03
   });
 
   // Overlap tiles aggressively (+0.5 units) to completely seal all gaps
@@ -1530,10 +1530,10 @@ function realignMazeCorridors(realignmentState) {
   // Display shifting alert
   triggerNotification(`maze realignment triggered! walls shifting...`);
 
-  // Move sliding wall pieces either up into the ceiling or sliding sideways
+  // Move sliding wall pieces either completely flush (2.25) or completely submerged under the floor (-5.0)
   slidingWallSegments.forEach((segment, idx) => {
-    // Odd/Even shift patterns
-    const targetY = (solvedCount % 2 === 0) ? (idx % 2 === 0 ? 3.5 / 2 : -3) : (idx % 2 === 0 ? -3 : 3.5 / 2);
+    // Odd/Even shift patterns: 2.25 is full ceiling height wall, -5.0 is completely below floor
+    const targetY = (solvedCount % 2 === 0) ? (idx % 2 === 0 ? 2.25 : -5.0) : (idx % 2 === 0 ? -5.0 : 2.25);
     
     // Update mazeLayout immediately for pathfinding path recalculation
     if (segment.userData && segment.userData.col !== undefined) {
@@ -1542,7 +1542,6 @@ function realignMazeCorridors(realignmentState) {
     }
 
     // Smooth sliding animation
-    let currentY = segment.position.y;
     const anim = () => {
       if (Math.abs(segment.position.y - targetY) > 0.05) {
         segment.position.y += (targetY - segment.position.y) * 0.1;
