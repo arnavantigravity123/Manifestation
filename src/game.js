@@ -150,7 +150,8 @@ let keysInMaze = [];
 let saltTraps = [];
 let circuitBreakers = [];
 let fixedBreakersCount = 0;
-const totalBreakersRequired = 3;
+let totalBreakersRequired = 3;
+window.gameDifficulty = 'medium';
 let ghostPathMeshes = [];
 let chalkDecals = [];
 
@@ -450,6 +451,8 @@ export function initGame(socket, socketId, matchConfig) {
 
   // Store the cipher code digits (revealed one at a time by clue notes in the maze)
   window.cipherCodeDigits = matchConfig.puzzleState.codeDigits || [null, null, null, null];
+  window.gameDifficulty = (matchConfig.puzzleState && matchConfig.puzzleState.difficulty) || 'medium';
+  totalBreakersRequired = (matchConfig.puzzleState && matchConfig.puzzleState.totalBreakers) || 3;
 
   // Know which 2 keys are functional from the start (players must find them via trial/error or clues)
   if (matchConfig.puzzleState.realKeySymbols && matchConfig.puzzleState.realKeySymbols.length > 0) {
@@ -2160,7 +2163,7 @@ function updateInteractionPrompt() {
       const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
 
       if (!breakersFixed) {
-        promptText = `ACCESS DENIED: Need 3 Breakers to power terminal (${fixedBreakersCount}/${totalBreakersRequired})`;
+        promptText = `ACCESS DENIED: Need ${totalBreakersRequired} Breakers to power terminal (${fixedBreakersCount}/${totalBreakersRequired})`;
       } else if (!gateSolved) {
         if (window.securityLockoutActive) {
           const remaining = Math.max(1, Math.ceil((window.securityLockoutEndTime - performance.now()) / 1000));
@@ -2440,16 +2443,27 @@ function collectClueLocal(digitIndex) {
   const digitNames = ['1ST', '2ND', '3RD', '4TH'];
   const digits = window.cipherCodeDigits || [null, null, null, null];
   const revealedDigit = digits[digitIndex];
-
-  triggerNotification(`cipher clue found! ${digitNames[digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
-
   const cipherHUD = document.getElementById('hud-cipher-info');
-  if (cipherHUD) {
-    const display = digits.map((d, idx) => {
-      const collected = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
-      return collected ? d : '_';
-    }).join(' ');
-    cipherHUD.textContent = `CODE: ${display}`;
+
+  if (window.gameDifficulty === 'impossible') {
+    triggerNotification(`cipher clue discovered! [ ${revealedDigit} ] (Position Unknown)`);
+    if (cipherHUD) {
+      const foundDigits = codeClueNotes
+        .filter(n => n.collected)
+        .map(n => digits[n.digitIndex]);
+      cipherHUD.textContent = `UNORDERED DIGITS: [ ${foundDigits.join(', ')} ] (${foundDigits.length}/4 found)`;
+      cipherHUD.style.color = '#f59e0b';
+    }
+  } else {
+    triggerNotification(`cipher clue found! ${digitNames[digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
+    if (cipherHUD) {
+      const display = digits.map((d, idx) => {
+        const collected = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
+        return collected ? d : '_';
+      }).join(' ');
+      cipherHUD.textContent = `CODE: ${display}`;
+      cipherHUD.style.color = '#38bdf8';
+    }
   }
 
   if (typeof keypadUI !== 'undefined' && keypadUI.style.display !== 'none') {
@@ -4803,10 +4817,37 @@ function animate() {
       checkChalkDecals(ghost.position);
 
       // Check salt traps (triggering & consumption)
-      let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? 6.5 : 4.0;
+      let baseMoveSpeed = 4.0;
+      let juggernautSpeed = 6.5;
+      if (window.gameDifficulty === 'easy') {
+        baseMoveSpeed = 3.0;
+        juggernautSpeed = 5.0;
+      } else if (window.gameDifficulty === 'hard') {
+        baseMoveSpeed = 5.2;
+        juggernautSpeed = 7.5;
+      } else if (window.gameDifficulty === 'impossible') {
+        baseMoveSpeed = 6.0;
+        juggernautSpeed = 8.5;
+      }
+
+      let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? juggernautSpeed : baseMoveSpeed;
+
+      // In Impossible mode, ghosts trigger frequent surprise speed bursts!
+      if (window.gameDifficulty === 'impossible') {
+        if (!ghost.userData.randomBoostTimer) {
+          ghost.userData.randomBoostTimer = 5.0 + Math.random() * 8.0;
+        } else {
+          ghost.userData.randomBoostTimer -= delta;
+          if (ghost.userData.randomBoostTimer <= 0) {
+            ghost.userData.speedBoostTimer = 3.5; // 3.5s hyper surge!
+            ghost.userData.randomBoostTimer = 8.0 + Math.random() * 10.0;
+          }
+        }
+      }
+
       if (ghost.userData.speedBoostTimer && ghost.userData.speedBoostTimer > 0) {
         ghost.userData.speedBoostTimer -= delta;
-        moveSpeed = 8.5;
+        moveSpeed = (window.gameDifficulty === 'impossible') ? 9.5 : 8.5;
       }
       for (let i = saltTraps.length - 1; i >= 0; i--) {
         const trap = saltTraps[i];

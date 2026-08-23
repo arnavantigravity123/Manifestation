@@ -26,12 +26,22 @@ const io = new Server(server, {
 // roomId -> roomState
 const lobbies = {};
 
-function calculateRequiredGhosts(humanCount, botsEnabled) {
+function calculateRequiredGhosts(humanCount, botsEnabled, difficulty = 'medium') {
   if (humanCount === 0) return 0;
-  if (humanCount === 1 && botsEnabled) {
-    return 3; // Single-player baseline: Minimum of 3 AI Ghosts in Solo Mode
+  
+  if (difficulty === 'easy') {
+    return 2;
+  } else if (difficulty === 'hard') {
+    return 6;
+  } else if (difficulty === 'impossible') {
+    return 8;
+  } else {
+    // Medium (default)
+    if (humanCount === 1 && botsEnabled) {
+      return 3; // Minimum 3 ghosts in Solo Medium
+    }
+    return Math.min(50, Math.max(3, humanCount * 2));
   }
-  return Math.min(50, humanCount * 2); // Core scaling formula: Humans * 2, capped at 50
 }
 
 function updateLobbyState(roomId) {
@@ -45,7 +55,7 @@ function updateLobbyState(roomId) {
   const actualHumanGhostPlayers = playersList.filter(p => p.team === 'Ghost').length;
 
   // Calculate quota requirements
-  const minRequiredGhosts = calculateRequiredGhosts(humanCount, lobby.settings.botsEnabled);
+  const minRequiredGhosts = calculateRequiredGhosts(humanCount, lobby.settings.botsEnabled, lobby.settings.difficulty);
   lobby.settings.minGhostsRequired = minRequiredGhosts;
 
   let activeGhostsCount = actualHumanGhostPlayers;
@@ -166,6 +176,7 @@ io.on('connection', (socket) => {
         isPublic: isPublic,
         players: {},
         settings: {
+          difficulty: 'medium',
           botsEnabled: true,
           roleSelectionMode: 'manual', // 'manual', 'random', 'hidden'
           minGhostsRequired: 3,
@@ -256,6 +267,7 @@ io.on('connection', (socket) => {
     const player = lobbies[roomId].players[socket.id];
     if (!player || !player.isHost) return;
 
+    if (settings.difficulty !== undefined) lobbies[roomId].settings.difficulty = settings.difficulty;
     if (settings.botsEnabled !== undefined) lobbies[roomId].settings.botsEnabled = settings.botsEnabled;
     if (settings.roleSelectionMode !== undefined) lobbies[roomId].settings.roleSelectionMode = settings.roleSelectionMode;
 
@@ -323,6 +335,12 @@ io.on('connection', (socket) => {
       });
     }
 
+    const diff = lobby.settings.difficulty || 'medium';
+    let totalBreakers = 3;
+    if (diff === 'easy') totalBreakers = 2;
+    else if (diff === 'hard') totalBreakers = 4;
+    else if (diff === 'impossible') totalBreakers = 6;
+
     lobby.puzzleState = {
       cipherCode: code,
       cipherSolved: false,
@@ -332,6 +350,8 @@ io.on('connection', (socket) => {
       realKeySymbols: realKeyIndexes.map(idx => keySymbols[idx]),
       puzzleRoomsSolved: 0,
       mazeGeometrySeed: Math.random(),
+      difficulty: diff,
+      totalBreakers: totalBreakers,
     };
 
     io.to(roomId).emit('match_started', {
@@ -345,10 +365,12 @@ io.on('connection', (socket) => {
         // Each index is one digit of the 4-digit code, revealed by clue notes in the maze
         codeDigits: code.split('').map(Number),
         mazeGeometrySeed: lobby.puzzleState.mazeGeometrySeed,
+        difficulty: diff,
+        totalBreakers: totalBreakers,
       }
     });
 
-    console.log(`Match started for Room ${roomId}.`);
+    console.log(`Match started for Room ${roomId} on difficulty: ${diff} (${totalBreakers} breakers, ${lobby.settings.ghostsCount} ghosts).`);
   });
 
   socket.on('try_cipher', (inputCode) => {

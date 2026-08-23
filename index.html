@@ -34,6 +34,16 @@
           <button id="vip-store-btn" class="action-btn" style="background: linear-gradient(135deg, #d4af37, #996515); border: 1px solid #fde047; font-weight: bold; text-shadow: 0 0 5px rgba(255,255,255,0.5);">💎 UPGRADE TO VIP 💎</button>
           <button id="open-skins-btn" class="action-btn" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: 1px solid #60a5fa; font-weight: bold;">🛍️ OPERATIVE ARSENAL (SKINS)</button>
           
+          <div class="form-group" style="margin: 0.5rem 0 0.2rem 0;">
+            <label for="solo-difficulty-select" style="font-size: 0.8rem; color: #94a3b8; font-family: 'Orbitron', sans-serif;">Containment Difficulty</label>
+            <select id="solo-difficulty-select" class="select-control" style="padding: 0.4rem; font-size: 0.85rem; width: 100%;">
+              <option value="easy">🟢 Easy (2 Ghosts, 2 Breakers)</option>
+              <option value="medium" selected>🟡 Medium (3 Ghosts, 3 Breakers)</option>
+              <option value="hard">🔴 Hard (6 Ghosts, 4 Breakers)</option>
+              <option value="impossible">💀 Impossible (8 Ghosts, 6 Breakers, Unordered Code)</option>
+            </select>
+          </div>
+
           <button id="solo-btn" class="action-btn" style="background: linear-gradient(135deg, #4f46e5, #312e81); border: 1px solid #6366f1;">Deploy Solo Protocol</button>
           
           <div style="border-top: 1px dashed rgba(255,255,255,0.2); margin: 0.5rem 0;"></div>
@@ -165,6 +175,15 @@
                 <span>Master Bot Toggle</span>
                 <input type="checkbox" id="bot-toggle" checked style="width: 20px; height: 20px; cursor: pointer;" />
               </div>
+            </div>
+            <div class="config-card">
+              <h3>Difficulty Level</h3>
+              <select id="lobby-difficulty-select" class="select-control">
+                <option value="easy">🟢 Easy (2 Ghosts, 2 Breakers)</option>
+                <option value="medium" selected>🟡 Medium (3-4 Ghosts, 3 Breakers)</option>
+                <option value="hard">🔴 Hard (6 Ghosts, 4 Breakers)</option>
+                <option value="impossible">💀 Impossible (8 Ghosts, 6 Breakers, Unordered Code)</option>
+              </select>
             </div>
             <div class="config-card">
               <h3>Role Selection</h3>

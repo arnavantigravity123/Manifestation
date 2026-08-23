@@ -34,6 +34,8 @@ const playersList = document.getElementById('players-list');
 const hostSettingsPanel = document.getElementById('host-settings-panel');
 const botToggle = document.getElementById('bot-toggle');
 const roleModeSelect = document.getElementById('role-mode-select');
+const lobbyDifficultySelect = document.getElementById('lobby-difficulty-select');
+const soloDifficultySelect = document.getElementById('solo-difficulty-select');
 
 // Lobby Subclass & Team Elements
 const chooseHumanBtn = document.getElementById('choose-human');
@@ -298,10 +300,11 @@ function initializeSocketConnection() {
 
   socket.on('joined_room_success', ({ roomId, isPublic }) => {
     if (isSoloMode) {
+      const selectedDiff = (soloDifficultySelect && soloDifficultySelect.value) || 'medium';
       const soloHumanClasses = ['Locksmith', 'Trapper', 'Scout', 'Medic', 'Flashlight Expert', 'Quartermaster'];
-      const randomClass = soloHumanClasses[Math.floor(Math.random() * soloHumanClasses.length)];
-      socket.emit('update_settings', { botsEnabled: true });
-      socket.emit('update_player', { team: 'Human', characterClass: randomClass });
+      const chosenClass = localStorage.getItem('manifestation_class') || soloHumanClasses[Math.floor(Math.random() * soloHumanClasses.length)];
+      socket.emit('update_settings', { botsEnabled: true, difficulty: selectedDiff });
+      socket.emit('update_player', { team: 'Human', characterClass: chosenClass });
       setTimeout(() => {
         socket.emit('start_match');
         soloLoadingOverlay.style.display = 'none';
@@ -441,11 +444,19 @@ function renderLobby() {
 
   if (myPlayer.isHost) {
     hostSettingsPanel.style.display = 'grid';
-    roleModeSelect.value = currentLobby.settings.roleSelectionMode;
-    readyStartBtn.textContent = currentLobby.canStart ? "Start Breach" : "Awaiting Quota";
+    readyStartBtn.textContent = "Start Breach Sequence";
+    readyStartBtn.disabled = !currentLobby.canStart;
+    if (lobbyDifficultySelect && currentLobby.settings?.difficulty) {
+      lobbyDifficultySelect.value = currentLobby.settings.difficulty;
+      lobbyDifficultySelect.disabled = false;
+    }
   } else {
     hostSettingsPanel.style.display = 'none';
     readyStartBtn.textContent = myPlayer.isReady ? "Ready (Waiting)" : "Ready Up";
+    if (lobbyDifficultySelect && currentLobby.settings?.difficulty) {
+      lobbyDifficultySelect.value = currentLobby.settings.difficulty;
+      lobbyDifficultySelect.disabled = true;
+    }
   }
 
   const players = Object.values(currentLobby.players);
@@ -536,6 +547,22 @@ const savedRoleMode = localStorage.getItem('manifestation_role_mode');
 if (savedRoleMode) {
   roleModeSelect.value = savedRoleMode;
 }
+const savedDifficulty = localStorage.getItem('manifestation_difficulty') || 'medium';
+if (soloDifficultySelect) soloDifficultySelect.value = savedDifficulty;
+if (lobbyDifficultySelect) lobbyDifficultySelect.value = savedDifficulty;
+
+soloDifficultySelect?.addEventListener('change', () => {
+  localStorage.setItem('manifestation_difficulty', soloDifficultySelect.value);
+  if (lobbyDifficultySelect) lobbyDifficultySelect.value = soloDifficultySelect.value;
+});
+
+lobbyDifficultySelect?.addEventListener('change', () => {
+  localStorage.setItem('manifestation_difficulty', lobbyDifficultySelect.value);
+  if (soloDifficultySelect) soloDifficultySelect.value = lobbyDifficultySelect.value;
+  if (currentLobby && currentLobby.players[myId]?.isHost) {
+    socket.emit('update_settings', { difficulty: lobbyDifficultySelect.value });
+  }
+});
 
 botToggle.addEventListener('change', () => {
   localStorage.setItem('manifestation_bots_enabled', botToggle.checked ? 'true' : 'false');
