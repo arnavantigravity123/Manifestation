@@ -1054,19 +1054,47 @@ function generateMaze(keysCount = 8) {
     if (window.vaultEdge === 'N') {
       window.vaultR = 0;
       window.vaultC = centerCoord;
-      for (let r = 0; r <= centerCoord; r++) layout[r][centerCoord] = 0;
+      for (let r = 1; r <= centerCoord; r++) {
+        layout[r][centerCoord] = 0; // Open straight corridor
+        layout[r][centerCoord - 1] = 1; // Solid left wall
+        layout[r][centerCoord + 1] = 1; // Solid right wall
+      }
+      layout[0][centerCoord] = 1; // Solid back wall behind vault
+      layout[0][centerCoord - 1] = 1;
+      layout[0][centerCoord + 1] = 1;
     } else if (window.vaultEdge === 'S') {
       window.vaultR = mazeSize - 1;
       window.vaultC = centerCoord;
-      for (let r = centerCoord; r < mazeSize; r++) layout[r][centerCoord] = 0;
+      for (let r = centerCoord; r < mazeSize - 1; r++) {
+        layout[r][centerCoord] = 0; // Open straight corridor
+        layout[r][centerCoord - 1] = 1; // Solid left wall
+        layout[r][centerCoord + 1] = 1; // Solid right wall
+      }
+      layout[mazeSize - 1][centerCoord] = 1; // Solid back wall behind vault
+      layout[mazeSize - 1][centerCoord - 1] = 1;
+      layout[mazeSize - 1][centerCoord + 1] = 1;
     } else if (window.vaultEdge === 'W') {
       window.vaultR = centerCoord;
       window.vaultC = 0;
-      for (let c = 0; c <= centerCoord; c++) layout[centerCoord][c] = 0;
+      for (let c = 1; c <= centerCoord; c++) {
+        layout[centerCoord][c] = 0; // Open straight corridor
+        layout[centerCoord - 1][c] = 1; // Solid top wall
+        layout[centerCoord + 1][c] = 1; // Solid bottom wall
+      }
+      layout[centerCoord][0] = 1; // Solid back wall behind vault
+      layout[centerCoord - 1][0] = 1;
+      layout[centerCoord + 1][0] = 1;
     } else if (window.vaultEdge === 'E') {
       window.vaultR = centerCoord;
       window.vaultC = mazeSize - 1;
-      for (let c = centerCoord; c < mazeSize; c++) layout[centerCoord][c] = 0;
+      for (let c = centerCoord; c < mazeSize - 1; c++) {
+        layout[centerCoord][c] = 0; // Open straight corridor
+        layout[centerCoord - 1][c] = 1; // Solid top wall
+        layout[centerCoord + 1][c] = 1; // Solid bottom wall
+      }
+      layout[centerCoord][mazeSize - 1] = 1; // Solid back wall behind vault
+      layout[centerCoord - 1][mazeSize - 1] = 1;
+      layout[centerCoord + 1][mazeSize - 1] = 1;
     }
   }
 
@@ -1075,8 +1103,8 @@ function generateMaze(keysCount = 8) {
     const rx = 1 + Math.floor(seededRandom() * (mazeSize-2));
     const rz = 1 + Math.floor(seededRandom() * (mazeSize-2));
     if (isAriadneUser) {
-      if ((window.vaultEdge === 'N' || window.vaultEdge === 'S') && rx === centerCoord) continue;
-      if ((window.vaultEdge === 'E' || window.vaultEdge === 'W') && rz === centerCoord) continue;
+      if ((window.vaultEdge === 'N' || window.vaultEdge === 'S') && Math.abs(rx - centerCoord) <= 1) continue;
+      if ((window.vaultEdge === 'E' || window.vaultEdge === 'W') && Math.abs(rz - centerCoord) <= 1) continue;
     }
     if (layout[rz][rx] === 1) layout[rz][rx] = 2; 
   }
