@@ -4492,8 +4492,8 @@ function animate() {
     direction.x = Number(moveRight) - Number(moveLeft);
     direction.normalize(); // Ensure consistent speed
 
-    let speed = myTeam === 'Ghost' ? 55.0 : 90.0;
-    if (myTeam === 'Ghost' && myClass === 'Juggernaut') speed = 75.0;
+    let speed = myTeam === 'Ghost' ? 50.0 : 90.0;
+    if (myTeam === 'Ghost' && myClass === 'Juggernaut') speed = 65.0;
     
     if (window.isSpectating) speed = 250.0; // Fast roaming
 
@@ -4501,7 +4501,7 @@ function animate() {
     if (myTeam === 'Human') {
       const moving = moveForward || moveBackward || moveLeft || moveRight;
       if (isSprinting && moving && stamina > 0) {
-        speed *= 1.55; // sprint multiplier
+        speed *= 1.55; // sprint multiplier (up to 13.95 m/s)
         stamina = Math.max(0, stamina - STAMINA_DRAIN_RATE * delta);
         if (stamina <= 0) {
           isSprinting = false;
@@ -4526,7 +4526,12 @@ function animate() {
 
     if (speedBoostTimer > 0) {
       speedBoostTimer -= delta;
-      speed *= 1.5;
+      // Boost capped strictly below human walking (90.0 force)
+      if (myTeam === 'Ghost') {
+        speed = Math.min(78.0, speed * 1.25);
+      } else {
+        speed *= 1.5;
+      }
     }
 
     // Salt trap slow down and Flashlight Blinding for human Ghost players
@@ -4817,38 +4822,41 @@ function animate() {
       checkChalkDecals(ghost.position);
 
       // Check salt traps (triggering & consumption)
-      let baseMoveSpeed = 4.0;
-      let juggernautSpeed = 6.5;
+      let baseMoveSpeed = 3.8;
+      let juggernautSpeed = 5.2;
       if (window.gameDifficulty === 'easy') {
-        baseMoveSpeed = 3.0;
-        juggernautSpeed = 5.0;
+        baseMoveSpeed = 2.8;
+        juggernautSpeed = 4.2;
       } else if (window.gameDifficulty === 'hard') {
-        baseMoveSpeed = 5.2;
-        juggernautSpeed = 7.5;
+        baseMoveSpeed = 4.8;
+        juggernautSpeed = 6.2;
       } else if (window.gameDifficulty === 'impossible') {
-        baseMoveSpeed = 6.0;
-        juggernautSpeed = 8.5;
+        baseMoveSpeed = 5.8;
+        juggernautSpeed = 7.0;
       }
 
       let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? juggernautSpeed : baseMoveSpeed;
 
-      // In Impossible mode, ghosts trigger frequent surprise speed bursts!
+      // In Impossible mode, ghosts trigger occasional speed surges (capped at 7.8 m/s, strictly slower than human walking 9.0 m/s)
       if (window.gameDifficulty === 'impossible') {
         if (!ghost.userData.randomBoostTimer) {
-          ghost.userData.randomBoostTimer = 5.0 + Math.random() * 8.0;
+          ghost.userData.randomBoostTimer = 6.0 + Math.random() * 8.0;
         } else {
           ghost.userData.randomBoostTimer -= delta;
           if (ghost.userData.randomBoostTimer <= 0) {
-            ghost.userData.speedBoostTimer = 3.5; // 3.5s hyper surge!
-            ghost.userData.randomBoostTimer = 8.0 + Math.random() * 10.0;
+            ghost.userData.speedBoostTimer = 3.0; // 3s surge
+            ghost.userData.randomBoostTimer = 9.0 + Math.random() * 10.0;
           }
         }
       }
 
       if (ghost.userData.speedBoostTimer && ghost.userData.speedBoostTimer > 0) {
         ghost.userData.speedBoostTimer -= delta;
-        moveSpeed = (window.gameDifficulty === 'impossible') ? 9.5 : 8.5;
+        moveSpeed = 7.8; // Hard capped below human walking 9.0 m/s
       }
+
+      // Hard safety limit: Ghosts can NEVER exceed 7.8 m/s under any circumstances
+      moveSpeed = Math.min(7.8, moveSpeed);
       for (let i = saltTraps.length - 1; i >= 0; i--) {
         const trap = saltTraps[i];
         if (ghost.position.distanceTo(trap.position) < 2.5) {
