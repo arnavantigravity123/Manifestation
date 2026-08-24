@@ -270,10 +270,10 @@
         
         <!-- Top row: Vitals, Pause, and Map -->
         <!-- Top row: Vitals, Pause/Cam, and Map -->
+        <!-- Top row: Vitals (Left), Objectives & Controls (Center), Minimap & Radar (Right) -->
         <div class="hud-top">
-          <!-- Top Left Column: Vitals and Terminal Info -->
+          <!-- Top Left: Compact Vitals Gauge -->
           <div class="hud-left-column">
-            <!-- Player Vitals (Top Left) -->
             <div class="vitals-box hud-panel">
               <div class="gauge-row">
                 <div class="gauge-label">
@@ -304,7 +304,7 @@
               </div>
               <div id="stamina-gauge-row" class="gauge-row">
                 <div class="gauge-label">
-                  <span>Stamina <span style="font-size:0.65rem;opacity:0.7;">[SHIFT to sprint]</span></span>
+                  <span>Stamina <span style="font-size:0.6rem;opacity:0.7;">[SHIFT]</span></span>
                   <span id="stamina-value">100%</span>
                 </div>
                 <div class="gauge-bar-bg">
@@ -312,37 +312,47 @@
                 </div>
               </div>
             </div>
+          </div>
 
-            <!-- Escape Tracker -->
-            <div class="terminal-status hud-panel">
-              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                 <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Master Gate Protocol</div>
-                 <button id="quit-game-btn" style="pointer-events: auto; padding: 0.2rem 0.6rem; background: rgba(239, 68, 68, 0.2); border: 1px solid red; color: white; cursor: pointer; border-radius: 4px; font-family: inherit; font-size: 0.7rem; display: none;">ABORT</button>
+          <!-- Top Middle: Controls (Pause / Cam) and Slim Objective Ribbon -->
+          <div class="top-center-hud">
+             <div class="top-controls-group">
+                <button id="btn-mobile-pause" class="unified-pause-btn">⏸️ PAUSE</button>
+                <button id="btn-camera-toggle" class="unified-cam-btn" title="Toggle Camera View (V)">🎥 CAM</button>
+             </div>
+             <!-- Sleek Horizontal Master Gate Objective Ribbon -->
+             <div class="terminal-status hud-panel compact-objective-bar">
+                <div id="terminal-lock-label" class="status-indicator">SECURED (3-TIER LOCK)</div>
+                <div class="objective-inline-stats">
+                  <span id="hud-breakers-info">⚡ 0/3 BREAKERS</span>
+                  <span id="keys-hud-info">🔑 0/2 KEYS</span>
+                  <span id="hud-cipher-info">📝 4-DIGIT CODE</span>
+                </div>
+                <button id="quit-game-btn" style="pointer-events: auto; padding: 0.2rem 0.6rem; background: rgba(239, 68, 68, 0.2); border: 1px solid red; color: white; cursor: pointer; border-radius: 4px; font-family: inherit; font-size: 0.7rem; display: none;">ABORT</button>
+             </div>
+          </div>
+
+          <!-- Top Right: Radar & Minimap UI -->
+          <div class="top-right-hud" style="display: flex; gap: 0.4rem; align-items: flex-start;">
+            <!-- Spatial Sound Radar -->
+            <div id="radar-panel" class="hud-panel mini-radar">
+              <div class="sensor-widget">
+                <div class="radar-sweep"></div>
+                <div id="radar-blip-element" class="radar-blip"></div>
               </div>
-              <div id="terminal-lock-label" class="status-indicator">SECURED (3-TIER LOCK)</div>
-              <div id="hud-cipher-info" class="terminal-clues">FIND HINTS FOR 4-DIGIT CODE</div>
-              <div id="hud-breakers-info" style="font-size: 0.75rem; margin-top: 0.4rem; color: #f59e0b;">POWER: 0 / 3 BREAKERS REPAIRED</div>
-              <div id="keys-hud-info" style="font-size: 0.75rem; margin-top: 0.2rem; color: var(--secondary-accent);">KEYS: 0 / 2 RETRIEVED</div>
             </div>
-          </div>
 
-          <!-- Top Middle Column: Unified Pause & Camera Change Button -->
-          <div class="top-controls-group">
-             <button id="btn-mobile-pause" class="unified-pause-btn">⏸️ PAUSE</button>
-             <button id="btn-camera-toggle" class="unified-cam-btn" title="Toggle Camera View (V)">🎥 CAM</button>
-          </div>
-
-          <!-- Minimap UI (Top Right) -->
-          <div id="minimap-wrapper" class="interactive-hud">
-            <div id="minimap-header">MINIMAP <span>(Press M or Click)</span></div>
-            <div id="minimap-container">
-              <canvas id="minimap-canvas" width="200" height="200"></canvas>
-            </div>
-            <!-- Expanded UI buttons -->
-            <div id="minimap-expanded-controls" style="display: none;">
-              <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">Click map to place a mark</div>
-              <button id="minimap-btn-clear" class="minimap-btn">Clear Marks</button>
-              <button id="minimap-btn-close" class="minimap-btn" style="background: rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.8);">Close [X]</button>
+            <div id="minimap-wrapper" class="interactive-hud">
+              <div id="minimap-header">MINIMAP <span>(Press M / Tap)</span></div>
+              <div id="minimap-container">
+                <canvas id="minimap-canvas" width="200" height="200"></canvas>
+              </div>
+              <!-- Expanded UI buttons -->
+              <div id="minimap-expanded-controls" style="display: none;">
+                <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">Click map to place a mark</div>
+                <button id="minimap-btn-clear" class="minimap-btn">Clear Marks</button>
+                <button id="minimap-btn-close" class="minimap-btn" style="background: rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.8);">Close [X]</button>
+              </div>
             </div>
           </div>
         </div>
@@ -351,27 +361,20 @@
         <div class="crosshair"></div>
         <div id="interaction-prompt"></div>
 
-        <!-- Bottom row: Sensor sweep & Active inventory hotbar -->
+        <!-- Bottom row: Ultra-Sleek Hotbar & Carried Keys Bar -->
         <div class="hud-bottom">
-          <!-- Spatial Sound Radar -->
-          <div id="radar-panel" class="hud-panel" style="padding: 0.5rem; border-radius: 50%;">
-            <div class="sensor-widget">
-              <div class="radar-sweep"></div>
-              <div id="radar-blip-element" class="radar-blip"></div>
-            </div>
-          </div>
-
-          <!-- Hotbar Inventory -->
-          <div class="hud-panel interactive-hud">
+          <div class="hud-panel interactive-hud sleek-hotbar-container">
             <div id="hud-inventory" class="inventory-grid">
               <!-- Grid slots of current items -->
             </div>
-            <!-- Key Pocket — shows up to 3 carried keys -->
-            <div style="margin-top: 0.4rem; font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; text-align:center;">Key Pocket</div>
-            <div id="hud-carried-keys" class="key-pocket-grid">
-              <!-- Rendered by renderCarriedKeysHUD() -->
+            <!-- Integrated Key Pocket (Inline with hotbar) -->
+            <div class="inline-key-pocket">
+              <div class="key-pocket-label">KEYS</div>
+              <div id="hud-carried-keys" class="key-pocket-grid">
+                <!-- Rendered by renderCarriedKeysHUD() -->
+              </div>
             </div>
-            <div id="hud-subclass-badge" style="text-align: center; font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem; text-transform: uppercase; letter-spacing: 2px;">
+            <div id="hud-subclass-badge" style="display: none;">
               CLASS: LOCKSMITH
             </div>
           </div>
