@@ -2821,25 +2821,23 @@ function spawnDroppedItemLocal(id, name, pos) {
   else if (name === 'Thermal Camera') texPath = '/assets/thermal_sprite.png';
   else if (name === 'Sanity Pills') texPath = '/assets/pills_sprite.png';
   else if (name === 'Med Kit') texPath = '/assets/medkit_sprite.png';
+  else if (name === 'Salt Cannister') texPath = '/assets/salt_sprite.png';
+  else if (name === 'Breaker Remote') texPath = '/assets/remote_sprite.png';
+  else if (name === 'Adrenaline Shot') texPath = '/assets/pills_sprite.png';
+  else if (name === 'Chalk / UV Spray') texPath = '/assets/salt_sprite.png';
+  else if (name === 'Defibrillator') texPath = '/assets/medkit_sprite.png';
+  else texPath = '/assets/battery_sprite.png'; // Safe fallback for any new item
 
-  let mesh;
-  if (texPath !== '') {
-    const spriteMat = new THREE.SpriteMaterial({ 
-      map: textureLoader.load(texPath), 
-      color: 0xffffff,
-      fog: true,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    mesh = new THREE.Sprite(spriteMat);
-    mesh.scale.set(0.6, 0.6, 1);
-  } else {
-    // Fallback for class-specific untextured items
-    const itemGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.6, 8);
-    const itemMat = new THREE.MeshStandardMaterial({ color: 0xa855f7, emissive: 0xa855f7, emissiveIntensity: 0.2 });
-    mesh = new THREE.Mesh(itemGeo, itemMat);
-  }
+  const spriteMat = new THREE.SpriteMaterial({ 
+    map: textureLoader.load(texPath), 
+    color: 0xffffff,
+    fog: true,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const mesh = new THREE.Sprite(spriteMat);
+  mesh.scale.set(0.65, 0.65, 1);
   
   mesh.position.copy(pos);
   mesh.position.y = 0.35; // ensure it is on floor
