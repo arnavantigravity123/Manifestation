@@ -269,9 +269,10 @@
       <div id="hud-overlay" style="display: none;">
         
         <!-- Top row: Vitals, Pause, and Map -->
+        <!-- Top row: Vitals, Pause/Cam, and Map -->
         <div class="hud-top">
           <!-- Top Left Column: Vitals and Terminal Info -->
-          <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="hud-left-column">
             <!-- Player Vitals (Top Left) -->
             <div class="vitals-box hud-panel">
               <div class="gauge-row">
@@ -325,9 +326,10 @@
             </div>
           </div>
 
-          <!-- Top Middle Column: Unified Pause Button -->
-          <div style="display: flex; flex-direction: column; align-items: center; pointer-events: auto; z-index: 20;">
-             <button id="btn-mobile-pause" class="unified-pause-btn">PAUSE</button>
+          <!-- Top Middle Column: Unified Pause & Camera Change Button -->
+          <div class="top-controls-group">
+             <button id="btn-mobile-pause" class="unified-pause-btn">⏸️ PAUSE</button>
+             <button id="btn-camera-toggle" class="unified-cam-btn" title="Toggle Camera View (V)">🎥 CAM</button>
           </div>
 
           <!-- Minimap UI (Top Right) -->
@@ -387,6 +389,7 @@
             <button id="btn-mobile-use" class="mobile-action-btn btn-use">USE</button>
             <button id="btn-mobile-interact" class="mobile-action-btn btn-interact">INTERACT</button>
             <button id="btn-mobile-special" class="mobile-action-btn btn-special">SPECIAL</button>
+            <button id="btn-mobile-camera" class="mobile-action-btn btn-cam">🎥 CAM</button>
             <button id="btn-mobile-drop" class="mobile-action-btn btn-drop">DROP KEY</button>
             <button id="btn-mobile-drop-item" class="mobile-action-btn btn-drop-item">DROP ITEM</button>
           </div>

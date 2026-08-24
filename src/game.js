@@ -100,7 +100,7 @@ let moveForward = false, moveBackward = false, moveLeft = false, moveRight = fal
 let velocity = new THREE.Vector3();
 let direction = new THREE.Vector3();
 let prevTime = performance.now();
-const defaultMobileDetect = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const defaultMobileDetect = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 export let isMobileDevice = defaultMobileDetect;
 if (isMobileDevice) {
   document.body.classList.add('is-mobile');
@@ -2278,6 +2278,24 @@ function setupControls() {
       globalPauseBtn.addEventListener('touchstart', handlePause, { passive: false });
       globalPauseBtn.addEventListener('click', handlePause);
     }
+
+    // Camera view toggle buttons (top header & mobile action pad)
+    const cameraToggleBtns = [
+      document.getElementById('btn-camera-toggle'),
+      document.getElementById('btn-mobile-camera')
+    ].filter(Boolean);
+
+    cameraToggleBtns.forEach(cBtn => {
+      const handleCam = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!isCaptured && window.gameReady) {
+          toggleCameraView();
+        }
+      };
+      cBtn.addEventListener('touchstart', handleCam, { passive: false });
+      cBtn.addEventListener('click', handleCam);
+    });
 
     // Mouse scroll wheel for cycling active slot
     document.addEventListener('wheel', (e) => {

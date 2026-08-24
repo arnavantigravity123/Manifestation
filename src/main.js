@@ -9,6 +9,11 @@ let currentLobby = null;
 let myId = null;
 let isSoloMode = false;
 
+const isTouchCapable = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+if (isTouchCapable) {
+  document.body.classList.add('is-mobile');
+}
+
 // DOM Elements
 const authView = document.getElementById('auth-view');
 const lobbyView = document.getElementById('lobby-view');
