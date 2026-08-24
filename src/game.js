@@ -4526,9 +4526,13 @@ function animate() {
 
     if (speedBoostTimer > 0) {
       speedBoostTimer -= delta;
-      // Boost capped strictly below human walking (90.0 force)
       if (myTeam === 'Ghost') {
-        speed = Math.min(78.0, speed * 1.25);
+        // Juggernaut in Rage reaches 10.5 m/s (faster than 9.0 m/s walking, forcing humans to sprint!)
+        if (myClass === 'Juggernaut') {
+          speed = 105.0; // 10.5 m/s Rage speed
+        } else {
+          speed = Math.min(78.0, speed * 1.25);
+        }
       } else {
         speed *= 1.5;
       }
@@ -4837,14 +4841,15 @@ function animate() {
 
       let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? juggernautSpeed : baseMoveSpeed;
 
-      // In Impossible mode, ghosts trigger occasional speed surges (capped at 7.8 m/s, strictly slower than human walking 9.0 m/s)
+      // When a Juggernaut is raging or surges, it reaches 10.5 m/s (faster than 9.0 m/s walking, forcing humans to sprint!)
+      // Other standard ghosts surge at 7.8 m/s (strictly slower than 9.0 m/s walking)
       if (window.gameDifficulty === 'impossible') {
         if (!ghost.userData.randomBoostTimer) {
           ghost.userData.randomBoostTimer = 6.0 + Math.random() * 8.0;
         } else {
           ghost.userData.randomBoostTimer -= delta;
           if (ghost.userData.randomBoostTimer <= 0) {
-            ghost.userData.speedBoostTimer = 3.0; // 3s surge
+            ghost.userData.speedBoostTimer = 3.5; // 3.5s surge
             ghost.userData.randomBoostTimer = 9.0 + Math.random() * 10.0;
           }
         }
@@ -4852,11 +4857,12 @@ function animate() {
 
       if (ghost.userData.speedBoostTimer && ghost.userData.speedBoostTimer > 0) {
         ghost.userData.speedBoostTimer -= delta;
-        moveSpeed = 7.8; // Hard capped below human walking 9.0 m/s
+        moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? 10.5 : 7.8;
       }
 
-      // Hard safety limit: Ghosts can NEVER exceed 7.8 m/s under any circumstances
-      moveSpeed = Math.min(7.8, moveSpeed);
+      // Hard safety limit: Normal ghosts capped at 7.8 m/s; Juggernauts capped at 10.5 m/s
+      const maxAllowed = (ghost.userData.ghostClass === 'Juggernaut') ? 10.5 : 7.8;
+      moveSpeed = Math.min(maxAllowed, moveSpeed);
       for (let i = saltTraps.length - 1; i >= 0; i--) {
         const trap = saltTraps[i];
         if (ghost.position.distanceTo(trap.position) < 2.5) {
