@@ -26,20 +26,27 @@ const io = new Server(server, {
 // roomId -> roomState
 const lobbies = {};
 
+function calculateMazeSize(difficulty = 'medium') {
+  if (difficulty === 'easy') return 21;
+  if (difficulty === 'hard') return 41;
+  if (difficulty === 'impossible') return 51;
+  return 31; // medium
+}
+
 function calculateRequiredGhosts(humanCount, botsEnabled, difficulty = 'medium') {
   if (humanCount === 0) return 0;
   
   if (difficulty === 'easy') {
-    return 2;
+    // Formula: max(2, Humans × 1)
+    return Math.min(50, Math.max(2, Math.ceil(humanCount * 1.0)));
   } else if (difficulty === 'hard') {
-    return 6;
+    // Formula: max(6, Humans × 3)
+    return Math.min(50, Math.max(6, Math.ceil(humanCount * 3.0)));
   } else if (difficulty === 'impossible') {
-    return 8;
+    // Formula: max(8, Humans × 4)
+    return Math.min(50, Math.max(8, Math.ceil(humanCount * 4.0)));
   } else {
-    // Medium (default)
-    if (humanCount === 1 && botsEnabled) {
-      return 3; // Minimum 3 ghosts in Solo Medium
-    }
+    // Medium (default): Formula: max(3, Humans × 2)
     return Math.min(50, Math.max(3, humanCount * 2));
   }
 }
@@ -340,6 +347,7 @@ io.on('connection', (socket) => {
     if (diff === 'easy') totalBreakers = 2;
     else if (diff === 'hard') totalBreakers = 4;
     else if (diff === 'impossible') totalBreakers = 6;
+    const mazeSize = calculateMazeSize(diff);
 
     lobby.puzzleState = {
       cipherCode: code,
@@ -352,6 +360,7 @@ io.on('connection', (socket) => {
       mazeGeometrySeed: Math.random(),
       difficulty: diff,
       totalBreakers: totalBreakers,
+      mazeSize: mazeSize,
     };
 
     io.to(roomId).emit('match_started', {
@@ -367,10 +376,11 @@ io.on('connection', (socket) => {
         mazeGeometrySeed: lobby.puzzleState.mazeGeometrySeed,
         difficulty: diff,
         totalBreakers: totalBreakers,
+        mazeSize: mazeSize,
       }
     });
 
-    console.log(`Match started for Room ${roomId} on difficulty: ${diff} (${totalBreakers} breakers, ${lobby.settings.ghostsCount} ghosts).`);
+    console.log(`Match started for Room ${roomId} on difficulty: ${diff} (Map Size: ${mazeSize}x${mazeSize}, ${totalBreakers} breakers, ${lobby.settings.ghostsCount} ghosts).`);
   });
 
   socket.on('try_cipher', (inputCode) => {

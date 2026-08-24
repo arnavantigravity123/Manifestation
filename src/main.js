@@ -69,12 +69,12 @@ const classesData = {
     Quartermaster: { desc: "Loadout (Deep Pockets): 12 Inventory Slots. Starts packed with Salt Cannister, Chalk Spray, Adrenaline, Med Kit, Sanity Pills, EMF Radar, and 2x Batteries." }
   },
   Ghost: {
-    Stalker: { desc: "Loadout: Ghost Claws, Scent Tracker. Ability: Casts Scent Tracker to project a direct glowing tracking tether leading straight to the nearest human survivor (20s CD)." },
-    Mimic: { desc: "Loadout: Ghost Claws, Infiltration Clone. Ability: Activates Infiltration Clone to disguise yourself as a human survivor for deceptive ambushes (30s CD)." },
-    Juggernaut: { desc: "Loadout: Ghost Claws, Audio Amplifiers. Perk: Heavy audio tracking. Ability: Engages Audio Amplifiers for a 10s Rage surge (scales 5.5 m/s to 10.5 m/s based on mode difficulty) (45s CD)." },
-    Phantom: { desc: "Loadout: Ghost Claws, Vapor Leap. Ability: Casts Vapor Leap to instantly phase and teleport 12 meters forward, closing distance and ambushing fleeing survivors (15s CD)." },
-    Poltergeist: { desc: "Loadout: Ghost Claws, Breaker Siphon. Ability: Deploys Breaker Siphon in a 27m radius to overload and disable human flashlights for 10 seconds (30s CD)." },
-    Banshee: { desc: "Loadout: Ghost Claws, Sound Scrambler. Ability: Unleashes an auditory shockwave across a 27m radius, blinding and scrambling human sensors for 10 seconds (40s CD)." }
+    Stalker: { desc: "Loadout: Ghost Claws, Scent Tracker. Ability: Casts Scent Tracker to project a tracking tether to the nearest survivor (tether duration: 3.5s - 10s, CD: 28s - 10s based on difficulty)." },
+    Mimic: { desc: "Loadout: Ghost Claws, Infiltration Clone. Ability: Activates Infiltration Clone to disguise yourself as a human survivor (duration: 8s - 25s, CD: 40s - 16s based on difficulty)." },
+    Juggernaut: { desc: "Loadout: Ghost Claws, Audio Amplifiers. Perk: Heavy audio tracking. Ability: Engages Rage surge (duration: 7s - 18s, speed: 5.5 - 10.5 m/s, CD: 60s - 24s based on difficulty)." },
+    Phantom: { desc: "Loadout: Ghost Claws, Vapor Leap. Ability: Casts Vapor Leap to instantly phase-teleport forward (distance: 8m - 22m, CD: 22s - 7s based on difficulty)." },
+    Poltergeist: { desc: "Loadout: Ghost Claws, Breaker Siphon. Ability: Deploys Breaker Siphon to overload and disable human flashlights (radius: 18m - 45m, duration: 6s - 18s, CD: 42s - 14s based on difficulty)." },
+    Banshee: { desc: "Loadout: Ghost Claws, Sound Scrambler. Ability: Unleashes an auditory shockwave blinding and scrambling human sensors (radius: 18m - 45m, duration: 5s - 16s, CD: 50s - 20s based on difficulty)." }
   }
 };
 
@@ -473,6 +473,33 @@ function renderLobby() {
   botCountDisplay.textContent = currentLobby.settings.botGhostsCount;
   totalGhostsDisplay.textContent = currentLobby.settings.ghostsCount;
 
+  // Update Dynamic Ghost Formula Engine Display & Active Pill
+  const currentDiff = currentLobby.settings?.difficulty || 'medium';
+  const formulaDisplay = document.getElementById('lobby-formula-display');
+  if (formulaDisplay) {
+    if (currentDiff === 'easy') formulaDisplay.textContent = 'Formula: max(2, Humans × 1)';
+    else if (currentDiff === 'hard') formulaDisplay.textContent = 'Formula: max(6, Humans × 3)';
+    else if (currentDiff === 'impossible') formulaDisplay.textContent = 'Formula: max(8, Humans × 4)';
+    else formulaDisplay.textContent = 'Formula: max(3, Humans × 2)';
+  }
+
+  ['easy', 'medium', 'hard', 'impossible'].forEach(d => {
+    const pill = document.getElementById(`formula-pill-${d}`);
+    if (pill) {
+      if (d === currentDiff) {
+        pill.style.transform = 'scale(1.05)';
+        pill.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.4)';
+        pill.style.borderColor = '#38bdf8';
+        pill.style.filter = 'brightness(1.2)';
+      } else {
+        pill.style.transform = 'none';
+        pill.style.boxShadow = 'none';
+        pill.style.borderColor = '';
+        pill.style.filter = 'none';
+      }
+    }
+  });
+
   // Lock subclass customization if host has set random/hidden roles
   const customizerBox = document.querySelector('.customizer-box');
   const roleMode = currentLobby.settings.roleSelectionMode;
@@ -566,15 +593,25 @@ soloClassSelect?.addEventListener('change', () => {
 });
 
 soloDifficultySelect?.addEventListener('change', () => {
-  localStorage.setItem('manifestation_difficulty', soloDifficultySelect.value);
-  if (lobbyDifficultySelect) lobbyDifficultySelect.value = soloDifficultySelect.value;
+  const diff = soloDifficultySelect.value;
+  localStorage.setItem('manifestation_difficulty', diff);
+  window.gameDifficulty = diff;
+  if (typeof window.getMazeSizeForDifficulty === 'function') {
+    window.mazeSizeGlobal = window.getMazeSizeForDifficulty(diff);
+  }
+  if (lobbyDifficultySelect) lobbyDifficultySelect.value = diff;
 });
 
 lobbyDifficultySelect?.addEventListener('change', () => {
-  localStorage.setItem('manifestation_difficulty', lobbyDifficultySelect.value);
-  if (soloDifficultySelect) soloDifficultySelect.value = lobbyDifficultySelect.value;
+  const diff = lobbyDifficultySelect.value;
+  localStorage.setItem('manifestation_difficulty', diff);
+  window.gameDifficulty = diff;
+  if (typeof window.getMazeSizeForDifficulty === 'function') {
+    window.mazeSizeGlobal = window.getMazeSizeForDifficulty(diff);
+  }
+  if (soloDifficultySelect) soloDifficultySelect.value = diff;
   if (currentLobby && currentLobby.players[myId]?.isHost) {
-    socket.emit('update_settings', { difficulty: lobbyDifficultySelect.value });
+    socket.emit('update_settings', { difficulty: diff });
   }
 });
 

@@ -151,7 +151,182 @@ let saltTraps = [];
 let circuitBreakers = [];
 let fixedBreakersCount = 0;
 let totalBreakersRequired = 3;
-window.gameDifficulty = 'medium';
+window.gameDifficulty = localStorage.getItem('manifestation_difficulty') || 'medium';
+
+function getMazeSizeForDifficulty(difficulty = window.gameDifficulty || 'medium') {
+  if (difficulty === 'easy') return 21;
+  if (difficulty === 'hard') return 41;
+  if (difficulty === 'impossible') return 51;
+  return 31; // medium
+}
+window.getMazeSizeForDifficulty = getMazeSizeForDifficulty;
+window.mazeSizeGlobal = getMazeSizeForDifficulty(window.gameDifficulty);
+
+function getGhostAbilityParams(difficulty = window.gameDifficulty || 'medium') {
+  switch (difficulty) {
+    case 'easy':
+      return {
+        // Ghost Claws
+        clawsCooldown: 7000,
+        clawsRange: 3.2,
+        // Scent Tracker (Stalker)
+        scentDuration: 3500,
+        scentCooldown: 28000,
+        // Infiltration Clone (Mimic)
+        cloneDuration: 8000,
+        cloneCooldown: 40000,
+        // Audio Amplifiers (Juggernaut)
+        rageDurationPlayer: 7.0,
+        rageDurationBot: 3.5,
+        rageCooldown: 60000,
+        // Vapor Leap (Phantom)
+        leapDistancePlayer: 8.0,
+        leapDistanceBot: 5.0,
+        leapCooldown: 22000,
+        // Breaker Siphon (Poltergeist)
+        siphonDuration: 6000,
+        siphonRadius: 4 * 4.5, // 18m
+        siphonCooldown: 42000,
+        // Sound Scrambler (Banshee)
+        scrambleDuration: 5000,
+        scrambleRadius: 4 * 4.5, // 18m
+        scrambleCooldown: 50000,
+        // Bot Combat & Perception
+        botAbilityCooldownMin: 22.0,
+        botAbilityCooldownMax: 32.0,
+        botSightRange: 9.0, // ~2 blocks
+        botLoseSightDuration: 2.0,
+        // Hearing radii multipliers (in block lengths)
+        hearingWalking: 3.5,
+        hearingSprinting: 6.0,
+        hearingWhisper: 10.0,
+        hearingScream: 25.0,
+        // Sanity proximity drain rate per second
+        sanityDrainRate: 2.5
+      };
+    case 'hard':
+      return {
+        // Ghost Claws
+        clawsCooldown: 3500,
+        clawsRange: 4.8,
+        // Scent Tracker (Stalker)
+        scentDuration: 7500,
+        scentCooldown: 14000,
+        // Infiltration Clone (Mimic)
+        cloneDuration: 18000,
+        cloneCooldown: 22000,
+        // Audio Amplifiers (Juggernaut)
+        rageDurationPlayer: 14.0,
+        rageDurationBot: 7.0,
+        rageCooldown: 32000,
+        // Vapor Leap (Phantom)
+        leapDistancePlayer: 16.0,
+        leapDistanceBot: 12.0,
+        leapCooldown: 10000,
+        // Breaker Siphon (Poltergeist)
+        siphonDuration: 14000,
+        siphonRadius: 8 * 4.5, // 36m
+        siphonCooldown: 20000,
+        // Sound Scrambler (Banshee)
+        scrambleDuration: 12000,
+        scrambleRadius: 8 * 4.5, // 36m
+        scrambleCooldown: 28000,
+        // Bot Combat & Perception
+        botAbilityCooldownMin: 10.0,
+        botAbilityCooldownMax: 16.0,
+        botSightRange: 18.0, // 4 blocks
+        botLoseSightDuration: 5.5,
+        // Hearing radii multipliers
+        hearingWalking: 7.0,
+        hearingSprinting: 12.0,
+        hearingWhisper: 18.0,
+        hearingScream: 45.0,
+        // Sanity proximity drain rate per second
+        sanityDrainRate: 6.0
+      };
+    case 'impossible':
+      return {
+        // Ghost Claws
+        clawsCooldown: 2500,
+        clawsRange: 5.5,
+        // Scent Tracker (Stalker)
+        scentDuration: 10000,
+        scentCooldown: 10000,
+        // Mimic Clone (Mimic)
+        cloneDuration: 25000,
+        cloneCooldown: 16000,
+        // Audio Amplifiers (Juggernaut)
+        rageDurationPlayer: 18.0,
+        rageDurationBot: 9.0,
+        rageCooldown: 24000,
+        // Vapor Leap (Phantom)
+        leapDistancePlayer: 22.0,
+        leapDistanceBot: 16.0,
+        leapCooldown: 7000,
+        // Breaker Siphon (Poltergeist)
+        siphonDuration: 18000,
+        siphonRadius: 10 * 4.5, // 45m
+        siphonCooldown: 14000,
+        // Sound Scrambler (Banshee)
+        scrambleDuration: 16000,
+        scrambleRadius: 10 * 4.5, // 45m
+        scrambleCooldown: 20000,
+        // Bot Combat & Perception
+        botAbilityCooldownMin: 6.0,
+        botAbilityCooldownMax: 10.0,
+        botSightRange: 24.0, // 5.3 blocks
+        botLoseSightDuration: 8.0,
+        // Hearing radii multipliers
+        hearingWalking: 9.0,
+        hearingSprinting: 16.0,
+        hearingWhisper: 24.0,
+        hearingScream: 60.0,
+        // Sanity proximity drain rate per second
+        sanityDrainRate: 8.5
+      };
+    case 'medium':
+    default:
+      return {
+        // Ghost Claws
+        clawsCooldown: 5000,
+        clawsRange: 4.0,
+        // Scent Tracker (Stalker)
+        scentDuration: 5000,
+        scentCooldown: 20000,
+        // Mimic Clone (Mimic)
+        cloneDuration: 12000,
+        cloneCooldown: 30000,
+        // Audio Amplifiers (Juggernaut)
+        rageDurationPlayer: 10.0,
+        rageDurationBot: 5.0,
+        rageCooldown: 45000,
+        // Vapor Leap (Phantom)
+        leapDistancePlayer: 12.0,
+        leapDistanceBot: 8.0,
+        leapCooldown: 15000,
+        // Breaker Siphon (Poltergeist)
+        siphonDuration: 10000,
+        siphonRadius: 6 * 4.5, // 27m
+        siphonCooldown: 30000,
+        // Sound Scrambler (Banshee)
+        scrambleDuration: 8000,
+        scrambleRadius: 6 * 4.5, // 27m
+        scrambleCooldown: 40000,
+        // Bot Combat & Perception
+        botAbilityCooldownMin: 16.0,
+        botAbilityCooldownMax: 24.0,
+        botSightRange: 13.5, // 3 blocks
+        botLoseSightDuration: 3.5,
+        // Hearing radii multipliers
+        hearingWalking: 5.0,
+        hearingSprinting: 9.0,
+        hearingWhisper: 14.0,
+        hearingScream: 35.0,
+        // Sanity proximity drain rate per second
+        sanityDrainRate: 4.0
+      };
+  }
+}
 let ghostPathMeshes = [];
 let chalkDecals = [];
 
@@ -453,6 +628,8 @@ export function initGame(socket, socketId, matchConfig) {
   window.cipherCodeDigits = matchConfig.puzzleState.codeDigits || [null, null, null, null];
   window.gameDifficulty = (matchConfig.puzzleState && matchConfig.puzzleState.difficulty) || 'medium';
   totalBreakersRequired = (matchConfig.puzzleState && matchConfig.puzzleState.totalBreakers) || 3;
+  mazeSizeGlobal = (matchConfig.puzzleState && matchConfig.puzzleState.mazeSize) || getMazeSizeForDifficulty(window.gameDifficulty);
+  window.mazeSizeGlobal = mazeSizeGlobal;
 
   // Know which 2 keys are functional from the start (players must find them via trial/error or clues)
   if (matchConfig.puzzleState.realKeySymbols && matchConfig.puzzleState.realKeySymbols.length > 0) {
@@ -465,13 +642,14 @@ export function initGame(socket, socketId, matchConfig) {
   // Set spawn positions
   if (myTeam === 'Ghost') {
     // Pick a random open corridor far from the center (where humans spawn)
-    const farCorridors = openCorridors.filter(c => Math.abs(c.x) > 20 || Math.abs(c.z) > 20);
+    const minFarDist = Math.max(10, mazeSizeGlobal * 4.5 * 0.25);
+    const farCorridors = openCorridors.filter(c => Math.abs(c.x) > minFarDist || Math.abs(c.z) > minFarDist);
     if (farCorridors.length > 0) {
       const spawnIdx = Math.floor(Math.random() * farCorridors.length);
       const spawnNode = farCorridors[spawnIdx];
       camera.position.set(spawnNode.x, 1.6, spawnNode.z);
     } else {
-      camera.position.set(20, 1.6, 20);
+      camera.position.set(minFarDist, 1.6, minFarDist);
     }
   } else {
     // Humans spawn grouped together at the center
@@ -949,13 +1127,19 @@ function generateMaze(keysCount = 8) {
     if (ceilingMesh.material) ceilingMesh.material.dispose();
   }
 
-  // Ground plane with photorealistic floor texture
+  // Ground plane with photorealistic floor texture scaled to difficulty map size
+  const blockSize = mazeBlockSize || 4.5;
+  const mazeSize = (typeof mazeSizeGlobal !== 'undefined' && mazeSizeGlobal) ? mazeSizeGlobal : getMazeSizeForDifficulty(window.gameDifficulty);
+  mazeSizeGlobal = mazeSize;
+  window.mazeSizeGlobal = mazeSize;
+
+  const floorExtent = Math.max(300, (mazeSize * blockSize) + 120);
   const textureLoader = new THREE.TextureLoader();
   const floorTex = textureLoader.load('/assets/floor_texture.png');
   floorTex.wrapS = THREE.RepeatWrapping;
   floorTex.wrapT = THREE.RepeatWrapping;
-  floorTex.repeat.set(8, 8);
-  const floorGeo = new THREE.PlaneGeometry(300, 300);
+  floorTex.repeat.set(Math.max(6, Math.round(mazeSize / 4)), Math.max(6, Math.round(mazeSize / 4)));
+  const floorGeo = new THREE.PlaneGeometry(floorExtent, floorExtent);
   const floorMat = new THREE.MeshStandardMaterial({ 
     map: floorTex,
     bumpMap: floorTex,
@@ -969,12 +1153,12 @@ function generateMaze(keysCount = 8) {
   floorMesh.receiveShadow = true;
   scene.add(floorMesh);
 
-  // Ceiling with photorealistic texture
+  // Ceiling with photorealistic texture scaled to difficulty map size
   const ceilTex = textureLoader.load('/assets/ceiling_texture.png');
   ceilTex.wrapS = THREE.RepeatWrapping;
   ceilTex.wrapT = THREE.RepeatWrapping;
-  ceilTex.repeat.set(6, 6);
-  const ceilGeo = new THREE.PlaneGeometry(300, 300);
+  ceilTex.repeat.set(Math.max(5, Math.round(mazeSize / 5)), Math.max(5, Math.round(mazeSize / 5)));
+  const ceilGeo = new THREE.PlaneGeometry(floorExtent, floorExtent);
   const ceilMat = new THREE.MeshStandardMaterial({ 
     map: ceilTex,
     color: 0x060a12, 
@@ -986,9 +1170,7 @@ function generateMaze(keysCount = 8) {
   ceilingMesh.position.y = 4.5; // Match wall height exactly
   scene.add(ceilingMesh);
 
-  // Grid layout for corridors (Massive Procedural Generation)
-  const blockSize = 4.5;
-  const mazeSize = 35; // 35x35 blocks = massive
+  // Grid layout for corridors (Procedurally Scaled with Difficulty)
   const layout = Array(mazeSize).fill(0).map(() => Array(mazeSize).fill(1));
   
   function carve(x, z) {
@@ -1106,8 +1288,9 @@ function generateMaze(keysCount = 8) {
     }
   }
 
-  // Scatter sliding doors (type 2)
-  for(let i=0; i < 40; i++) {
+  // Scatter sliding doors (type 2) scaled to map size
+  const slidingDoorCount = Math.round(mazeSize * 1.15);
+  for(let i=0; i < slidingDoorCount; i++) {
     const rx = 1 + Math.floor(seededRandom() * (mazeSize-2));
     const rz = 1 + Math.floor(seededRandom() * (mazeSize-2));
     if (isAriadneUser) {
@@ -2539,8 +2722,7 @@ function useActiveItem() {
     triggerNotification("thermal camera is passively active when held.");
   } else if (item === "Ghost Claws") {
     if (myTeam !== 'Ghost') return;
-    
-    // 5-second cooldown on Ghost Claws attacks
+    const gParams = getGhostAbilityParams();
     const now = Date.now();
     if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
       triggerNotification(`Ghost Claws recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
@@ -2548,7 +2730,7 @@ function useActiveItem() {
     }
 
     let closestId = null;
-    let closestDist = 4.0;
+    let closestDist = gParams.clawsRange;
     Object.keys(players3D).forEach(id => {
       const dist = camera.position.distanceTo(players3D[id].position);
       const isHuman = players3D[id].userData && players3D[id].userData.type === 'Human';
@@ -2560,17 +2742,18 @@ function useActiveItem() {
     if (closestId) {
       socketClient.emit('capture_human', { targetId: closestId });
       triggerNotification("Captured a survivor!");
-      abilityCooldowns[item] = now + 5000;
+      abilityCooldowns[item] = now + gParams.clawsCooldown;
     } else {
       triggerNotification("No survivor in range.");
     }
   } else if (item === "Scent Tracker") {
+    const gParams = getGhostAbilityParams();
     const now = Date.now();
     if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
       triggerNotification(`Scent Tracker recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
       return;
     }
-    triggerNotification("Scent tracking active.");
+    triggerNotification(`Scent tracking active (${(gParams.scentDuration / 1000).toFixed(1)}s).`);
     let closestDist = 9999;
     let closestPos = null;
     Object.keys(players3D).forEach(id => {
@@ -2590,58 +2773,63 @@ function useActiveItem() {
         scene.remove(line);
         if (line.geometry) line.geometry.dispose();
         if (line.material) line.material.dispose();
-      }, 5000);
+      }, gParams.scentDuration);
     }
-    abilityCooldowns[item] = now + 20000; // 20s cooldown
+    abilityCooldowns[item] = now + gParams.scentCooldown;
   } else if (item === "Infiltration Clone") {
+    const gParams = getGhostAbilityParams();
     const now = Date.now();
     if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
       triggerNotification(`Clone recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
       return;
     }
-    triggerNotification("Mimic clone active! You appear human.");
+    triggerNotification(`Mimic clone active (${Math.round(gParams.cloneDuration / 1000)}s)! You appear human.`);
     socketClient.emit('mimic_clone');
-    abilityCooldowns[item] = now + 30000; // 30s cooldown
+    abilityCooldowns[item] = now + gParams.cloneCooldown;
   } else if (item === "Audio Amplifiers") {
+    const gParams = getGhostAbilityParams();
     const now = Date.now();
     if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
       triggerNotification(`Amplifiers recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
       return;
     }
-    triggerNotification("Audio Amplifiers engaged! Extreme speed.");
-    speedBoostTimer = 10;
-    abilityCooldowns[item] = now + 45000; // 45s cooldown
+    triggerNotification(`Audio Amplifiers engaged (${gParams.rageDurationPlayer}s)! Extreme speed.`);
+    speedBoostTimer = gParams.rageDurationPlayer;
+    abilityCooldowns[item] = now + gParams.rageCooldown;
   } else if (item === "Vapor Leap") {
+    const gParams = getGhostAbilityParams();
     const now = Date.now();
     if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
       triggerNotification(`Vapor Leap recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
       return;
     }
-    triggerNotification("Vapor Leap!");
+    triggerNotification(`Vapor Leap (${gParams.leapDistancePlayer}m)!`);
     const forward = new THREE.Vector3();
     camera.getWorldDirection(forward);
     forward.y = 0;
     forward.normalize();
-    camera.position.addScaledVector(forward, 12);
-    abilityCooldowns[item] = now + 15000; // 15s cooldown
+    camera.position.addScaledVector(forward, gParams.leapDistancePlayer);
+    abilityCooldowns[item] = now + gParams.leapCooldown;
   } else if (item === "Breaker Siphon") {
+    const gParams = getGhostAbilityParams();
     const now = Date.now();
     if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
       triggerNotification(`Siphon recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
       return;
     }
-    triggerNotification("Breaker Siphon deployed!");
+    triggerNotification(`Breaker Siphon deployed (${gParams.siphonRadius.toFixed(0)}m radius)!`);
     socketClient.emit('breaker_siphon', { position: { x: camera.position.x, z: camera.position.z } });
-    abilityCooldowns[item] = now + 30000; // 30s cooldown
+    abilityCooldowns[item] = now + gParams.siphonCooldown;
   } else if (item === "Sound Scrambler") {
+    const gParams = getGhostAbilityParams();
     const now = Date.now();
     if (abilityCooldowns[item] && abilityCooldowns[item] > now) {
       triggerNotification(`Scrambler recharging (${Math.ceil((abilityCooldowns[item] - now) / 1000)}s)`);
       return;
     }
-    triggerNotification("Scrambler unleashed!");
+    triggerNotification(`Scrambler unleashed (${gParams.scrambleRadius.toFixed(0)}m radius)!`);
     socketClient.emit('sound_scramble', { position: { x: camera.position.x, z: camera.position.z } });
-    abilityCooldowns[item] = now + 40000; // 40s cooldown
+    abilityCooldowns[item] = now + gParams.scrambleCooldown;
   } else if (item === "Chalk / UV Spray") {
     deployChalkDecal(camera.position);
     socketClient.emit('chalk_spray', { position: { x: camera.position.x, z: camera.position.z } });
@@ -2975,14 +3163,20 @@ function processSanity(delta) {
     return;
   }
 
-  // If near any active ghost, sanity decays!
+  // If near any active ghost (AI or player ghost), sanity decays!
+  const gParams = getGhostAbilityParams();
   let nearGhost = false;
   ghosts3D.forEach(g => {
     if (camera.position.distanceTo(g.position) < 8) nearGhost = true;
   });
+  Object.values(players3D).forEach(p => {
+    if (p.userData && p.userData.type === 'Ghost' && camera.position.distanceTo(p.position) < 8) {
+      nearGhost = true;
+    }
+  });
 
   if (nearGhost) {
-    currentSanity = Math.max(0, currentSanity - delta * 4); // Fast decay
+    currentSanity = Math.max(0, currentSanity - delta * gParams.sanityDrainRate); // Difficulty scaled fast decay
   } else {
     currentSanity = Math.max(0, currentSanity - delta * 0.2); // Idle slow decay in labyrinth
   }
@@ -3396,13 +3590,14 @@ function setupSocketListeners() {
           scene.add(ghostMesh);
           players3D[id] = ghostMesh;
         }
-      }, 15000);
+      }, getGhostAbilityParams().cloneDuration);
     }
   });
 
   socketClient.on('ghost_breaker_siphon', (data) => {
     if (myTeam === 'Human' && !window.isSpectating) {
-      const effectRadius = 6 * 4.5; // 6 blocks
+      const gParams = getGhostAbilityParams();
+      const effectRadius = gParams.siphonRadius;
       let applyEffect = true;
       if (data && data.position) {
         const dist = Math.hypot(camera.position.x - data.position.x, camera.position.z - data.position.z);
@@ -3411,17 +3606,18 @@ function setupSocketListeners() {
       
       if (applyEffect) {
         window.flashlightDisabledBySiphon = true;
-        triggerNotification("Breaker Siphon! Flashlights disrupted (10s)");
+        triggerNotification(`Breaker Siphon! Flashlights disrupted (${Math.round(gParams.siphonDuration / 1000)}s)`);
         setTimeout(() => {
           window.flashlightDisabledBySiphon = false;
-        }, 10000);
+        }, gParams.siphonDuration);
       }
     }
   });
 
   socketClient.on('ghost_sound_scramble', (data) => {
     if (myTeam === 'Human' && !window.isSpectating) {
-      const effectRadius = 6 * 4.5;
+      const gParams = getGhostAbilityParams();
+      const effectRadius = gParams.scrambleRadius;
       let applyEffect = true;
       if (data && data.position) {
         const dist = Math.hypot(camera.position.x - data.position.x, camera.position.z - data.position.z);
@@ -3430,10 +3626,10 @@ function setupSocketListeners() {
 
       if (applyEffect) {
         window.sensorsScrambled = true;
-        triggerNotification("Signal scrambled! Sensors offline (10s)");
+        triggerNotification(`Signal scrambled! Sensors offline (${Math.round(gParams.scrambleDuration / 1000)}s)`);
         setTimeout(() => {
           window.sensorsScrambled = false;
-        }, 10000);
+        }, gParams.scrambleDuration);
       }
     }
   });
@@ -4174,7 +4370,7 @@ function setupMinimap() {
         const py = (e.clientY - rect.top) * scaleY;
         
         // Map canvas coordinates to grid
-        const mazeSize = 35;
+        const mazeSize = mazeSizeGlobal;
         const cellSize = canvas.width / mazeSize;
         const c = Math.floor(px / cellSize);
         const r = Math.floor(py / cellSize);
@@ -4293,7 +4489,7 @@ function fixBreakerLocal(breakerId) {
 
 function updateMinimapVisibility() {
   if (!mazeLayout || mazeLayout.length === 0) return;
-  const mazeSize = 35;
+  const mazeSize = mazeSizeGlobal;
   const blockSize = 4.5;
   
   // Calculate current grid cell
@@ -4346,7 +4542,7 @@ function drawMinimap() {
   if (!canvas || !mazeLayout || mazeLayout.length === 0) return;
   const ctx = canvas.getContext('2d');
   
-  const mazeSize = 35;
+  const mazeSize = mazeSizeGlobal;
   const cellSize = canvas.width / mazeSize;
   
   // Clear canvas
@@ -4894,20 +5090,22 @@ function animate() {
       }
 
       // AI State Machine Initialization
+      const gParams = getGhostAbilityParams();
       if (!ghost.userData.aiState) {
         ghost.userData.aiState = 'WANDER';
         ghost.userData.targetGrid = null;
         ghost.userData.loseSightTimer = 0;
         ghost.userData.lastSoundTime = 0;
-        ghost.userData.abilityCooldown = 15.0 + Math.random() * 10.0;
+        const initialSpread = gParams.botAbilityCooldownMax - gParams.botAbilityCooldownMin;
+        ghost.userData.abilityCooldown = gParams.botAbilityCooldownMin + Math.random() * initialSpread;
       }
 
       // Check Line of Sight (LOS) ONLY if there is an active Human
       let canSeePlayer = false;
-      if (targetPos && distToPlayer < 13.5) { // 3 blocks max sight range
+      if (targetPos && distToPlayer < gParams.botSightRange) {
         const rayOrigin = new THREE.Vector3(ghost.position.x, 2.0, ghost.position.z);
         const directionToPlayer = new THREE.Vector3().subVectors(targetPos, rayOrigin).normalize();
-        const raycaster = new THREE.Raycaster(rayOrigin, directionToPlayer, 0, 15);
+        const raycaster = new THREE.Raycaster(rayOrigin, directionToPlayer, 0, gParams.botSightRange + 1.5);
         const intersects = raycaster.intersectObjects(walls);
         if (intersects.length === 0 || intersects[0].distance > distToPlayer) {
           canSeePlayer = true;
@@ -4924,7 +5122,7 @@ function animate() {
           ghost.userData.targetGrid = null;
         } else {
           ghost.userData.loseSightTimer += delta;
-          if (ghost.userData.loseSightTimer > 3.0) {
+          if (ghost.userData.loseSightTimer > gParams.botLoseSightDuration) {
             ghost.userData.aiState = 'WANDER'; // Lost player
             ghost.userData.targetGrid = null;
           }
@@ -4935,8 +5133,9 @@ function animate() {
       if (targetPos) {
         if (ghost.userData.abilityCooldown > 0) {
           ghost.userData.abilityCooldown -= delta;
-        } else if (distToPlayer < 25) {
-          ghost.userData.abilityCooldown = 20.0 + Math.random() * 10.0;
+        } else if (distToPlayer < (gParams.botSightRange + 10)) {
+          const cdSpread = gParams.botAbilityCooldownMax - gParams.botAbilityCooldownMin;
+          ghost.userData.abilityCooldown = gParams.botAbilityCooldownMin + Math.random() * cdSpread;
           const gClass = ghost.userData.ghostClass;
           
           if (gClass === 'Stalker') {
@@ -4945,7 +5144,7 @@ function animate() {
             ghost.userData.targetGrid = worldToGrid(targetPos.x, targetPos.z);
             ghost.userData.pathTime = 0;
           } else if (gClass === 'Mimic') {
-            if (myTeam === 'Human') triggerNotification("A Mimic bot is disguising itself!");
+            if (myTeam === 'Human') triggerNotification(`A Mimic bot is disguising itself (${Math.round(gParams.cloneDuration / 1000)}s)!`);
             if (typeof preloadedHumanModel !== 'undefined' && preloadedHumanModel) {
               const mimicModel = SkeletonUtils.clone(preloadedHumanModel);
               ghost.add(mimicModel);
@@ -4953,28 +5152,28 @@ function animate() {
               setTimeout(() => {
                 ghost.remove(mimicModel);
                 ghost.children.forEach(c => { c.visible = true; });
-              }, 10000);
+              }, gParams.cloneDuration);
             }
           } else if (gClass === 'Juggernaut') {
-            if (myTeam === 'Human') triggerNotification("A Juggernaut bot is enraged!");
-            ghost.userData.speedBoostTimer = 5.0;
+            if (myTeam === 'Human') triggerNotification(`A Juggernaut bot is enraged (${gParams.rageDurationBot}s)!`);
+            ghost.userData.speedBoostTimer = gParams.rageDurationBot;
           } else if (gClass === 'Phantom') {
-            if (myTeam === 'Human') triggerNotification("A Phantom bot used Vapor Leap!");
+            if (myTeam === 'Human') triggerNotification(`A Phantom bot used Vapor Leap (${gParams.leapDistanceBot}m)!`);
             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(ghost.quaternion);
-            ghost.position.addScaledVector(forward, 8);
+            ghost.position.addScaledVector(forward, gParams.leapDistanceBot);
           } else if (gClass === 'Poltergeist') {
             const dist = targetPos.distanceTo(ghost.position);
-            if (dist <= 6 * 4.5 && myTeam === 'Human' && !window.isSpectating) {
-              triggerNotification("Poltergeist bot deployed Breaker Siphon!");
+            if (dist <= gParams.siphonRadius && myTeam === 'Human' && !window.isSpectating) {
+              triggerNotification(`Poltergeist bot deployed Breaker Siphon (${Math.round(gParams.siphonDuration / 1000)}s)!`);
               window.flashlightDisabledBySiphon = true;
-              setTimeout(() => { window.flashlightDisabledBySiphon = false; }, 10000);
+              setTimeout(() => { window.flashlightDisabledBySiphon = false; }, gParams.siphonDuration);
             }
           } else if (gClass === 'Banshee') {
             const dist = targetPos.distanceTo(ghost.position);
-            if (dist <= 6 * 4.5 && myTeam === 'Human' && !window.isSpectating) {
-              triggerNotification("Banshee bot scrambled your sensors!");
+            if (dist <= gParams.scrambleRadius && myTeam === 'Human' && !window.isSpectating) {
+              triggerNotification(`Banshee bot scrambled your sensors (${Math.round(gParams.scrambleDuration / 1000)}s)!`);
               window.sensorsScrambled = true;
-              setTimeout(() => { window.sensorsScrambled = false; }, 5000);
+              setTimeout(() => { window.sensorsScrambled = false; }, gParams.scrambleDuration);
             }
           }
         }
@@ -4984,10 +5183,10 @@ function animate() {
       if (latestSoundBeacon && latestSoundBeacon.time > ghost.userData.lastSoundTime && ghost.userData.aiState !== 'CHASE') {
         const distToSound = ghost.position.distanceTo(new THREE.Vector3(latestSoundBeacon.position.x, ghost.position.y, latestSoundBeacon.position.z));
         let hearingRadius = 0;
-        if (latestSoundBeacon.volume <= 1.0) hearingRadius = 5 * mazeBlockSize; // Walking
-        else if (latestSoundBeacon.volume <= 2.0) hearingRadius = 9 * mazeBlockSize; // Sprinting
-        else if (latestSoundBeacon.volume <= 35) hearingRadius = 14 * mazeBlockSize; // Whisper
-        else hearingRadius = 35 * mazeBlockSize; // Scream
+        if (latestSoundBeacon.volume <= 1.0) hearingRadius = gParams.hearingWalking * mazeBlockSize; // Walking
+        else if (latestSoundBeacon.volume <= 2.0) hearingRadius = gParams.hearingSprinting * mazeBlockSize; // Sprinting
+        else if (latestSoundBeacon.volume <= 35) hearingRadius = gParams.hearingWhisper * mazeBlockSize; // Whisper
+        else hearingRadius = gParams.hearingScream * mazeBlockSize; // Scream
 
         if (distToSound <= hearingRadius) {
           ghost.userData.aiState = 'INVESTIGATE';

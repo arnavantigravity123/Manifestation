@@ -37,10 +37,10 @@
           <div class="form-group" style="margin: 0.5rem 0 0.2rem 0;">
             <label for="solo-difficulty-select" style="font-size: 0.8rem; color: #94a3b8; font-family: 'Orbitron', sans-serif;">Containment Difficulty</label>
             <select id="solo-difficulty-select" class="select-control" style="padding: 0.4rem; font-size: 0.85rem; width: 100%;">
-              <option value="easy">🟢 Easy (2 Ghosts, 2 Breakers)</option>
-              <option value="medium" selected>🟡 Medium (3 Ghosts, 3 Breakers)</option>
-              <option value="hard">🔴 Hard (6 Ghosts, 4 Breakers)</option>
-              <option value="impossible">💀 Impossible (8 Ghosts, 6 Breakers, Unordered Code)</option>
+              <option value="easy">🟢 Easy [Small Map | Formula: max(2, H × 1) | 2 Breakers]</option>
+              <option value="medium" selected>🟡 Medium [Standard Map | Formula: max(3, H × 2) | 3 Breakers]</option>
+              <option value="hard">🔴 Hard [Large Map | Formula: max(6, H × 3) | 4 Breakers]</option>
+              <option value="impossible">💀 Impossible [Colossal Map | Formula: max(8, H × 4) | 6 Breakers]</option>
             </select>
           </div>
 
@@ -152,7 +152,7 @@
           <div class="scaling-matrix-card">
             <div class="scaling-header">
               <span>LOBBY THREAT & SCALING ENGINE</span>
-              <span>Formula: [Humans × 2 = Min Ghosts]</span>
+              <span id="lobby-formula-display" style="color: #38bdf8; font-weight: bold;">Formula: max(3, Humans × 2)</span>
             </div>
             <div class="scaling-metrics">
               <div class="metric-box">
@@ -170,6 +170,25 @@
               <div class="metric-box">
                 <h4 id="total-ghosts-display">0</h4>
                 <p>Total Active Ghosts</p>
+              </div>
+            </div>
+            <!-- Difficulty Formulas Guide Table -->
+            <div class="formula-breakdown-table" style="margin-top: 0.8rem; padding-top: 0.6rem; border-top: 1px dashed rgba(255, 255, 255, 0.1); display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; font-size: 0.75rem; text-align: center;">
+              <div id="formula-pill-easy" class="formula-pill" style="padding: 0.35rem 0.2rem; border-radius: 4px; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); color: #4ade80; transition: all 0.2s;">
+                <div style="font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 0.7rem;">🟢 EASY</div>
+                <div style="font-size: 0.68rem; margin-top: 2px;">max(2, H × 1)</div>
+              </div>
+              <div id="formula-pill-medium" class="formula-pill" style="padding: 0.35rem 0.2rem; border-radius: 4px; background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.25); color: #facc15; transition: all 0.2s;">
+                <div style="font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 0.7rem;">🟡 MEDIUM</div>
+                <div style="font-size: 0.68rem; margin-top: 2px;">max(3, H × 2)</div>
+              </div>
+              <div id="formula-pill-hard" class="formula-pill" style="padding: 0.35rem 0.2rem; border-radius: 4px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); color: #f87171; transition: all 0.2s;">
+                <div style="font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 0.7rem;">🔴 HARD</div>
+                <div style="font-size: 0.68rem; margin-top: 2px;">max(6, H × 3)</div>
+              </div>
+              <div id="formula-pill-impossible" class="formula-pill" style="padding: 0.35rem 0.2rem; border-radius: 4px; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); color: #c084fc; transition: all 0.2s;">
+                <div style="font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 0.7rem;">💀 IMPOSSIBLE</div>
+                <div style="font-size: 0.68rem; margin-top: 2px;">max(8, H × 4)</div>
               </div>
             </div>
           </div>
@@ -192,10 +211,10 @@
             <div class="config-card">
               <h3>Difficulty Level</h3>
               <select id="lobby-difficulty-select" class="select-control">
-                <option value="easy">🟢 Easy (2 Ghosts, 2 Breakers)</option>
-                <option value="medium" selected>🟡 Medium (3-4 Ghosts, 3 Breakers)</option>
-                <option value="hard">🔴 Hard (6 Ghosts, 4 Breakers)</option>
-                <option value="impossible">💀 Impossible (8 Ghosts, 6 Breakers, Unordered Code)</option>
+                <option value="easy">🟢 Easy [Small Map | Formula: max(2, H × 1) | 2 Breakers]</option>
+                <option value="medium" selected>🟡 Medium [Standard Map | Formula: max(3, H × 2) | 3 Breakers]</option>
+                <option value="hard">🔴 Hard [Large Map | Formula: max(6, H × 3) | 4 Breakers]</option>
+                <option value="impossible">💀 Impossible [Colossal Map | Formula: max(8, H × 4) | 6 Breakers]</option>
               </select>
             </div>
             <div class="config-card">
