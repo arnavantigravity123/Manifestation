@@ -71,7 +71,7 @@ const classesData = {
   Ghost: {
     Stalker: { desc: "Loadout: Ghost Claws, Scent Tracker. Ability: Casts Scent Tracker to project a direct glowing tracking tether leading straight to the nearest human survivor (20s CD)." },
     Mimic: { desc: "Loadout: Ghost Claws, Infiltration Clone. Ability: Activates Infiltration Clone to disguise yourself as a human survivor for deceptive ambushes (30s CD)." },
-    Juggernaut: { desc: "Loadout: Ghost Claws, Audio Amplifiers. Perk: Innately heavy movement. Ability: Engages Audio Amplifiers for a 10s extreme hyper-speed Rage surge (10.5 m/s) (45s CD)." },
+    Juggernaut: { desc: "Loadout: Ghost Claws, Audio Amplifiers. Perk: Heavy audio tracking. Ability: Engages Audio Amplifiers for a 10s Rage surge (scales 5.5 m/s to 10.5 m/s based on mode difficulty) (45s CD)." },
     Phantom: { desc: "Loadout: Ghost Claws, Vapor Leap. Ability: Casts Vapor Leap to instantly phase and teleport 12 meters forward, closing distance and ambushing fleeing survivors (15s CD)." },
     Poltergeist: { desc: "Loadout: Ghost Claws, Breaker Siphon. Ability: Deploys Breaker Siphon in a 27m radius to overload and disable human flashlights for 10 seconds (30s CD)." },
     Banshee: { desc: "Loadout: Ghost Claws, Sound Scrambler. Ability: Unleashes an auditory shockwave across a 27m radius, blinding and scrambling human sensors for 10 seconds (40s CD)." }

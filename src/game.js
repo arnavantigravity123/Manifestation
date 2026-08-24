@@ -4525,9 +4525,12 @@ function animate() {
     if (speedBoostTimer > 0) {
       speedBoostTimer -= delta;
       if (myTeam === 'Ghost') {
-        // Juggernaut in Rage reaches 10.5 m/s (faster than 9.0 m/s walking, forcing humans to sprint!)
+        // Mode-scaled Juggernaut rage speeds (Easy: 5.5 m/s, Med: 7.5 m/s, Hard: 9.5 m/s, Impossible: 10.5 m/s)
         if (myClass === 'Juggernaut') {
-          speed = 105.0; // 10.5 m/s Rage speed
+          if (window.gameDifficulty === 'easy') speed = 55.0;
+          else if (window.gameDifficulty === 'medium') speed = 75.0;
+          else if (window.gameDifficulty === 'hard') speed = 95.0;
+          else speed = 105.0;
         } else {
           speed = Math.min(78.0, speed * 1.25);
         }
@@ -4826,28 +4829,36 @@ function animate() {
       // Check salt traps (triggering & consumption)
       let baseMoveSpeed = 3.8;
       let juggernautSpeed = 5.2;
+      let juggernautRageSpeed = 7.5;
+      let standardSurgeSpeed = 5.2;
+
       if (window.gameDifficulty === 'easy') {
         baseMoveSpeed = 2.8;
         juggernautSpeed = 4.2;
+        juggernautRageSpeed = 5.5;
+        standardSurgeSpeed = 3.8;
       } else if (window.gameDifficulty === 'hard') {
         baseMoveSpeed = 4.8;
         juggernautSpeed = 6.2;
+        juggernautRageSpeed = 9.5;
+        standardSurgeSpeed = 6.8;
       } else if (window.gameDifficulty === 'impossible') {
         baseMoveSpeed = 5.8;
         juggernautSpeed = 7.0;
+        juggernautRageSpeed = 10.5;
+        standardSurgeSpeed = 7.8;
       }
 
       let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? juggernautSpeed : baseMoveSpeed;
 
-      // When a Juggernaut is raging or surges, it reaches 10.5 m/s (faster than 9.0 m/s walking, forcing humans to sprint!)
-      // Other standard ghosts surge at 7.8 m/s (strictly slower than 9.0 m/s walking)
-      if (window.gameDifficulty === 'impossible') {
+      // In Impossible and Hard modes, ghosts can trigger occasional speed surges
+      if (window.gameDifficulty === 'impossible' || window.gameDifficulty === 'hard') {
         if (!ghost.userData.randomBoostTimer) {
           ghost.userData.randomBoostTimer = 6.0 + Math.random() * 8.0;
         } else {
           ghost.userData.randomBoostTimer -= delta;
           if (ghost.userData.randomBoostTimer <= 0) {
-            ghost.userData.speedBoostTimer = 3.5; // 3.5s surge
+            ghost.userData.speedBoostTimer = 3.5;
             ghost.userData.randomBoostTimer = 9.0 + Math.random() * 10.0;
           }
         }
@@ -4855,11 +4866,11 @@ function animate() {
 
       if (ghost.userData.speedBoostTimer && ghost.userData.speedBoostTimer > 0) {
         ghost.userData.speedBoostTimer -= delta;
-        moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? 10.5 : 7.8;
+        moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? juggernautRageSpeed : standardSurgeSpeed;
       }
 
-      // Hard safety limit: Normal ghosts capped at 7.8 m/s; Juggernauts capped at 10.5 m/s
-      const maxAllowed = (ghost.userData.ghostClass === 'Juggernaut') ? 10.5 : 7.8;
+      // Hard safety limit: Normal ghosts capped at standardSurgeSpeed; Juggernauts capped at juggernautRageSpeed
+      const maxAllowed = (ghost.userData.ghostClass === 'Juggernaut') ? juggernautRageSpeed : standardSurgeSpeed;
       moveSpeed = Math.min(maxAllowed, moveSpeed);
       for (let i = saltTraps.length - 1; i >= 0; i--) {
         const trap = saltTraps[i];
