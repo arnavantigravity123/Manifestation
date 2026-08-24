@@ -2039,21 +2039,34 @@ function setupControls() {
     let lastLookX = 0;
     let lastLookY = 0;
 
-    // Listen on document to bypass pointer-events touch bugs in mobile viewports
+    // Listen on document for looking around, but ignore all touch events on interactive buttons and HUD
     document.addEventListener('touchstart', (e) => {
-      if (!isMobileDevice) return;
       if ((isCaptured && !window.isSpectating) || !window.gameReady) return;
       
-      // Ignore touch starts on joystick or action buttons
-      if (e.target.closest('#mobile-joystick') || e.target.closest('#mobile-actions') || e.target.closest('#btn-mobile-pause')) {
+      // Ignore touch starts on ANY interactive UI, buttons, joystick, or action panels
+      if (
+        e.target.closest('#mobile-joystick') || 
+        e.target.closest('#mobile-actions') || 
+        e.target.closest('.mobile-action-btn') ||
+        e.target.closest('.mobile-sprint-btn') ||
+        e.target.closest('#btn-mobile-pause') ||
+        e.target.closest('#btn-camera-toggle') ||
+        e.target.closest('.unified-pause-btn') ||
+        e.target.closest('.unified-cam-btn') ||
+        e.target.closest('.top-controls-group') ||
+        e.target.closest('.top-center-hud') ||
+        e.target.closest('.interactive-hud') ||
+        e.target.closest('#hud-inventory') ||
+        e.target.closest('.inventory-slot') ||
+        e.target.closest('.key-slot') ||
+        e.target.closest('#minimap-wrapper') ||
+        e.target.closest('button')
+      ) {
         return;
       }
 
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
-        if (t.clientX < window.innerWidth * 0.45 && t.clientY > window.innerHeight * 0.45) {
-          continue;
-        }
         if (lookTouchId === null) {
           lookTouchId = t.identifier;
           lastLookX = t.clientX;
@@ -2064,7 +2077,6 @@ function setupControls() {
     }, { passive: false });
 
     document.addEventListener('touchmove', (e) => {
-      if (!isMobileDevice) return;
       if (isCaptured || !window.gameReady) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
@@ -2086,7 +2098,6 @@ function setupControls() {
     }, { passive: false });
 
     const clearLookTouch = (e) => {
-      if (!isMobileDevice) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (t.identifier === lookTouchId) {
@@ -2098,84 +2109,81 @@ function setupControls() {
     document.addEventListener('touchend', clearLookTouch);
     document.addEventListener('touchcancel', clearLookTouch);
 
-    // Joystick logic
+    // Joystick touch controls with responsive bounding box
     const joystickBase = document.getElementById('joystick-base');
     const joystickKnob = document.getElementById('joystick-knob');
     let joystickTouchId = null;
-    let joystickStart = { x: 0, y: 0 };
-    const maxJoystickDistance = 35;
+    let joyCenterX = 0;
+    let joyCenterY = 0;
 
-    joystickBase.addEventListener('touchstart', (e) => {
-      if (!isMobileDevice) return;
-      if (joystickTouchId !== null) return;
-      const touch = e.targetTouches[0];
-      joystickTouchId = touch.identifier;
-      const rect = joystickBase.getBoundingClientRect();
-      joystickStart.x = rect.left + rect.width / 2;
-      joystickStart.y = rect.top + rect.height / 2;
-      updateJoystick(touch.clientX, touch.clientY);
-      e.preventDefault();
-    }, { passive: false });
-
-    window.addEventListener('touchmove', (e) => {
-      if (!isMobileDevice) return;
-      if (joystickTouchId === null) return;
-      for (let i = 0; i < e.touches.length; i++) {
-        const touch = e.touches[i];
-        if (touch.identifier === joystickTouchId) {
-          updateJoystick(touch.clientX, touch.clientY);
-          e.preventDefault();
-        }
-      }
-    }, { passive: false });
-
-    const resetJoystick = () => {
-      joystickTouchId = null;
-      joystickKnob.style.transform = 'translate(0px, 0px)';
+    const resetJoy = () => {
       moveForward = false;
       moveBackward = false;
       moveLeft = false;
       moveRight = false;
-      isSprinting = false;
+      joystickKnob.style.transform = `translate(0px, 0px)`;
+      joystickTouchId = null;
     };
 
-    window.addEventListener('touchend', (e) => {
-      if (!isMobileDevice) return;
-      if (joystickTouchId === null) return;
+    joystickBase.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (joystickTouchId !== null) return;
+      const t = e.changedTouches[0];
+      joystickTouchId = t.identifier;
+      const rect = joystickBase.getBoundingClientRect();
+      joyCenterX = rect.left + rect.width / 2;
+      joyCenterY = rect.top + rect.height / 2;
+      handleJoyMove(t.clientX, t.clientY);
+    }, { passive: false });
+
+    joystickBase.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       for (let i = 0; i < e.changedTouches.length; i++) {
-        const touch = e.changedTouches[i];
-        if (touch.identifier === joystickTouchId) {
-          resetJoystick();
+        const t = e.changedTouches[i];
+        if (t.identifier === joystickTouchId) {
+          handleJoyMove(t.clientX, t.clientY);
+          break;
+        }
+      }
+    }, { passive: false });
+
+    joystickBase.addEventListener('touchend', (e) => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joystickTouchId) {
+          resetJoy();
+          break;
         }
       }
     });
 
-    window.addEventListener('touchcancel', (e) => {
-      if (!isMobileDevice) return;
-      if (joystickTouchId === null) return;
+    joystickBase.addEventListener('touchcancel', (e) => {
       for (let i = 0; i < e.changedTouches.length; i++) {
-        const touch = e.changedTouches[i];
-        if (touch.identifier === joystickTouchId) {
-          resetJoystick();
+        if (e.changedTouches[i].identifier === joystickTouchId) {
+          resetJoy();
+          break;
         }
       }
     });
 
-    function updateJoystick(clientX, clientY) {
-      let dx = clientX - joystickStart.x;
-      let dy = clientY - joystickStart.y;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-
-      if (dist > maxJoystickDistance) {
-        dx = (dx / dist) * maxJoystickDistance;
-        dy = (dy / dist) * maxJoystickDistance;
-      }
-
-      joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
-
-      const joyX = dx / maxJoystickDistance;
-      const joyY = dy / maxJoystickDistance;
-
+    function handleJoyMove(clientX, clientY) {
+      const dx = clientX - joyCenterX;
+      const dy = clientY - joyCenterY;
+      const dist = Math.hypot(dx, dy);
+      const maxRadius = 38;
+      
+      const angle = Math.atan2(dy, dx);
+      const clampDist = Math.min(dist, maxRadius);
+      
+      const kx = Math.cos(angle) * clampDist;
+      const ky = Math.sin(angle) * clampDist;
+      
+      joystickKnob.style.transform = `translate(${kx}px, ${ky}px)`;
+      
+      const joyX = kx / maxRadius;
+      const joyY = ky / maxRadius;
+      
       moveForward = joyY < -0.2;
       moveBackward = joyY > 0.2;
       moveLeft = joyX < -0.2;
@@ -2190,36 +2198,38 @@ function setupControls() {
     const ptrOverlay = document.getElementById('pointer-lock-overlay');
 
     const handleUse = (e) => {
-      if (!isMobileDevice) return;
       e.preventDefault();
       e.stopPropagation();
       if (!isCaptured && window.gameReady) useActiveItem();
     };
-    useBtn.addEventListener('touchstart', handleUse, { passive: false });
-    useBtn.addEventListener('click', handleUse);
+    if (useBtn) {
+      useBtn.addEventListener('touchstart', handleUse, { passive: false });
+      useBtn.addEventListener('click', handleUse);
+    }
 
     const handleInteract = (e) => {
-      if (!isMobileDevice) return;
       e.preventDefault();
       e.stopPropagation();
       if (!isCaptured && window.gameReady) checkInteractions();
     };
-    interactBtn.addEventListener('touchstart', handleInteract, { passive: false });
-    interactBtn.addEventListener('click', handleInteract);
+    if (interactBtn) {
+      interactBtn.addEventListener('touchstart', handleInteract, { passive: false });
+      interactBtn.addEventListener('click', handleInteract);
+    }
 
     const handleSpecial = (e) => {
-      if (!isMobileDevice) return;
       e.preventDefault();
       e.stopPropagation();
       if (!isCaptured && window.gameReady) triggerPanicHide();
     };
-    specialBtn.addEventListener('touchstart', handleSpecial, { passive: false });
-    specialBtn.addEventListener('click', handleSpecial);
+    if (specialBtn) {
+      specialBtn.addEventListener('touchstart', handleSpecial, { passive: false });
+      specialBtn.addEventListener('click', handleSpecial);
+    }
 
     const dropBtn = document.getElementById('btn-mobile-drop');
     if (dropBtn) {
       const handleDrop = (e) => {
-        if (!isMobileDevice) return;
         e.preventDefault();
         e.stopPropagation();
         if (!isCaptured && window.gameReady) dropKey();
@@ -2231,7 +2241,6 @@ function setupControls() {
     const dropItemBtn = document.getElementById('btn-mobile-drop-item');
     if (dropItemBtn) {
       const handleDropItem = (e) => {
-        if (!isMobileDevice) return;
         e.preventDefault();
         e.stopPropagation();
         if (!isCaptured && window.gameReady) dropActiveItem();
@@ -2244,7 +2253,6 @@ function setupControls() {
     const sprintBtn = document.getElementById('btn-mobile-sprint');
     if (sprintBtn) {
       const handleSprintToggle = (e) => {
-        if (!isMobileDevice) return;
         e.preventDefault();
         e.stopPropagation();
         if (isSprinting) {
@@ -2262,10 +2270,9 @@ function setupControls() {
     const handlePause = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (isMobileDevice) {
-        window.mobileGameActive = false;
-        ptrOverlay.style.display = 'flex';
-      } else {
+      window.mobileGameActive = false;
+      if (ptrOverlay) ptrOverlay.style.display = 'flex';
+      if (document.exitPointerLock && document.pointerLockElement) {
         document.exitPointerLock();
       }
     };

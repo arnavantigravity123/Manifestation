@@ -1056,6 +1056,8 @@ input[type="text"]:focus {
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   user-select: none;
+  pointer-events: auto !important;
+  touch-action: manipulation;
 }
 
 .unified-cam-btn {
