@@ -36,6 +36,7 @@ const botToggle = document.getElementById('bot-toggle');
 const roleModeSelect = document.getElementById('role-mode-select');
 const lobbyDifficultySelect = document.getElementById('lobby-difficulty-select');
 const soloDifficultySelect = document.getElementById('solo-difficulty-select');
+const soloClassSelect = document.getElementById('solo-class-select');
 
 // Lobby Subclass & Team Elements
 const chooseHumanBtn = document.getElementById('choose-human');
@@ -302,7 +303,13 @@ function initializeSocketConnection() {
     if (isSoloMode) {
       const selectedDiff = (soloDifficultySelect && soloDifficultySelect.value) || 'medium';
       const soloHumanClasses = ['Locksmith', 'Trapper', 'Scout', 'Medic', 'Flashlight Expert', 'Quartermaster'];
-      const chosenClass = localStorage.getItem('manifestation_class') || soloHumanClasses[Math.floor(Math.random() * soloHumanClasses.length)];
+      const chosenSoloSetting = (soloClassSelect && soloClassSelect.value) || localStorage.getItem('manifestation_solo_class') || 'Random';
+      
+      let chosenClass = chosenSoloSetting;
+      if (!chosenClass || chosenClass === 'Random' || !soloHumanClasses.includes(chosenClass)) {
+        chosenClass = soloHumanClasses[Math.floor(Math.random() * soloHumanClasses.length)];
+      }
+
       socket.emit('update_settings', { botsEnabled: true, difficulty: selectedDiff });
       socket.emit('update_player', { team: 'Human', characterClass: chosenClass });
       setTimeout(() => {
@@ -550,6 +557,13 @@ if (savedRoleMode) {
 const savedDifficulty = localStorage.getItem('manifestation_difficulty') || 'medium';
 if (soloDifficultySelect) soloDifficultySelect.value = savedDifficulty;
 if (lobbyDifficultySelect) lobbyDifficultySelect.value = savedDifficulty;
+
+const savedSoloClass = localStorage.getItem('manifestation_solo_class') || 'Random';
+if (soloClassSelect) soloClassSelect.value = savedSoloClass;
+
+soloClassSelect?.addEventListener('change', () => {
+  localStorage.setItem('manifestation_solo_class', soloClassSelect.value);
+});
 
 soloDifficultySelect?.addEventListener('change', () => {
   localStorage.setItem('manifestation_difficulty', soloDifficultySelect.value);
