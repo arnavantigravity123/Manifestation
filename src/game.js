@@ -645,19 +645,20 @@ export function initGame(socket, socketId, matchConfig) {
   setupProceduralAudio();
 
   // Lightings
-  ambientLight = new THREE.AmbientLight(0x222233, 1.5); // Slightly dark, not pitch black
+  ambientLight = new THREE.AmbientLight(0x445566, 2.0); // Balanced ambient for clear corridor visibility
   scene.add(ambientLight);
 
   if (myTeam === 'Human') {
     // Add player flashlight
-    flashLight = new THREE.SpotLight(0xffffff, 80, 45, Math.PI / 3, 0.5, 1.5);
+    flashLight = new THREE.SpotLight(0xffffff, 100, 50, Math.PI / 3, 0.4, 1.2);
     flashLight.position.set(0, 0, 0);
     flashLight.castShadow = true;
     const shadowRes = isMobileDevice ? 512 : 1024;
     flashLight.shadow.mapSize.set(shadowRes, shadowRes);
-    flashLight.shadow.bias = -0.0005;
+    flashLight.shadow.bias = -0.0001;
+    flashLight.shadow.normalBias = 0.04;
     flashLight.shadow.camera.near = 0.5;
-    flashLight.shadow.camera.far = 40;
+    flashLight.shadow.camera.far = 45;
     camera.add(flashLight);
     camera.add(flashLight.target);
     flashLight.target.position.set(0, 0, -1);
@@ -1263,6 +1264,7 @@ function generateMaze(keysCount = 8) {
   floorMesh = new THREE.Mesh(floorGeo, floorMat);
   floorMesh.rotation.x = -Math.PI / 2;
   floorMesh.receiveShadow = true;
+  floorMesh.frustumCulled = false;
   scene.add(floorMesh);
 
   // Ceiling with photorealistic texture scaled to difficulty map size
@@ -1279,6 +1281,7 @@ function generateMaze(keysCount = 8) {
   ceilingMesh = new THREE.Mesh(ceilGeo, ceilMat);
   ceilingMesh.rotation.x = Math.PI / 2;
   ceilingMesh.position.y = 4.5; // Match wall height exactly
+  ceilingMesh.frustumCulled = false;
   scene.add(ceilingMesh);
 
   // Grid layout for corridors (Procedurally Scaled with Difficulty)
@@ -1420,19 +1423,19 @@ function generateMaze(keysCount = 8) {
   const wallMat = new THREE.MeshStandardMaterial({ 
     map: generatedTex,
     bumpMap: wallBumpTex,
-    bumpScale: 0.8,
-    color: 0x475569,
-    roughness: 0.92,
-    metalness: 0.03
+    bumpScale: 0.25,
+    color: 0x64748b, // Clean balanced stone tone for visibility
+    roughness: 0.85,
+    metalness: 0.05
   });
   
   const slidingWallMat = new THREE.MeshStandardMaterial({
     map: generatedTex,
     bumpMap: wallBumpTex,
-    bumpScale: 0.8,
-    color: 0x3e4c5e,
-    roughness: 0.92,
-    metalness: 0.03
+    bumpScale: 0.25,
+    color: 0x475569,
+    roughness: 0.85,
+    metalness: 0.05
   });
 
   const wallGeo = new THREE.BoxGeometry(blockSize + 0.5, 4.5, blockSize + 0.5);
@@ -1470,14 +1473,19 @@ function generateMaze(keysCount = 8) {
     staticWallsInstancedMesh = new THREE.InstancedMesh(wallGeo, wallMat, staticWallTransforms.length);
     staticWallsInstancedMesh.castShadow = true;
     staticWallsInstancedMesh.receiveShadow = true;
+    staticWallsInstancedMesh.frustumCulled = false; // Prevent premature culling of whole labyrinth
     
     for (let i = 0; i < staticWallTransforms.length; i++) {
       const t = staticWallTransforms[i];
       _scratchDummy.position.set(t.x, t.y, t.z);
+      _scratchDummy.rotation.set(0, 0, 0);
+      _scratchDummy.scale.set(1, 1, 1);
       _scratchDummy.updateMatrix();
       staticWallsInstancedMesh.setMatrixAt(i, _scratchDummy.matrix);
     }
     staticWallsInstancedMesh.instanceMatrix.needsUpdate = true;
+    staticWallsInstancedMesh.computeBoundingBox();
+    staticWallsInstancedMesh.computeBoundingSphere();
     scene.add(staticWallsInstancedMesh);
   }
 
