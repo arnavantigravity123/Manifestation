@@ -773,22 +773,67 @@ input[type="text"]:focus {
 
 /* Expanded Minimap State */
 #minimap-wrapper.expanded {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  right: auto;
-  transform: translate(-50%, -50%);
-  padding: 1.5rem;
-  border-color: rgba(16, 185, 129, 0.8);
-  box-shadow: 0 0 40px rgba(16, 185, 129, 0.5);
-  z-index: 9999;
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  right: auto !important;
+  transform: translate(-50%, -50%) !important;
+  padding: 0.8rem 1rem !important;
+  background: rgba(10, 15, 30, 0.96) !important;
+  border: 2px solid rgba(16, 185, 129, 0.8) !important;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.95), 0 0 30px rgba(16, 185, 129, 0.4) !important;
+  border-radius: 12px !important;
+  z-index: 9999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  max-height: 94vh !important;
+  max-width: 94vw !important;
+  pointer-events: auto !important;
   cursor: crosshair;
 }
 
+#minimap-wrapper.expanded #minimap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  color: #34d399;
+}
+
+.minimap-close-icon {
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.7);
+  color: #fca5a5;
+  font-size: 0.85rem;
+  font-weight: 900;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+  transition: all 0.15s ease;
+}
+
+.minimap-close-icon:active {
+  transform: scale(0.9);
+  background: rgba(239, 68, 68, 0.6);
+  color: white;
+}
+
 #minimap-wrapper.expanded #minimap-container {
-  /* Scale the canvas visually using CSS without changing its resolution, or we redraw it at higher res */
-  width: 400px;
-  height: 400px;
+  width: min(60vh, 60vw, 280px);
+  height: min(60vh, 60vw, 280px);
+  overflow: hidden;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  border-radius: 6px;
+  background: #000;
 }
 
 #minimap-wrapper.expanded #minimap-canvas {
@@ -797,21 +842,40 @@ input[type="text"]:focus {
   image-rendering: pixelated;
 }
 
+#minimap-expanded-controls {
+  margin-top: 0.4rem;
+  text-align: center;
+  width: 100%;
+}
+
 .minimap-btn {
-  margin-top: 10px;
-  padding: 0.5rem 1rem;
+  padding: 0.35rem 0.8rem;
   background: rgba(16, 185, 129, 0.2);
   border: 1px solid rgba(16, 185, 129, 0.5);
   color: white;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.8rem;
+  font-size: 0.65rem;
+  font-weight: 700;
   cursor: pointer;
   border-radius: 4px;
-  transition: background 0.2s;
+  transition: all 0.15s ease;
+  pointer-events: auto !important;
+  touch-action: manipulation;
 }
 
 .minimap-btn:hover {
   background: rgba(16, 185, 129, 0.4);
+}
+
+.minimap-btn-danger {
+  background: rgba(239, 68, 68, 0.3) !important;
+  border-color: rgba(239, 68, 68, 0.8) !important;
+  color: #fca5a5 !important;
+}
+
+.minimap-btn:active {
+  transform: scale(0.94);
+  filter: brightness(1.3);
 }
 
 /* Bottom HUD: Ultra-Sleek, Compact Horizontal Strip */

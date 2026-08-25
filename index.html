@@ -343,15 +343,20 @@
             </div>
 
             <div id="minimap-wrapper" class="interactive-hud">
-              <div id="minimap-header">MINIMAP <span>(Press M / Tap)</span></div>
+              <div id="minimap-header">
+                <span id="minimap-title-text">MINIMAP (Press M / Tap)</span>
+                <button id="minimap-top-close-btn" class="minimap-close-icon" style="display: none;" title="Close Map">✕</button>
+              </div>
               <div id="minimap-container">
                 <canvas id="minimap-canvas" width="200" height="200"></canvas>
               </div>
               <!-- Expanded UI buttons -->
               <div id="minimap-expanded-controls" style="display: none;">
-                <div style="font-size: 0.8rem; color: #aaa; margin-bottom: 5px;">Click map to place a mark</div>
-                <button id="minimap-btn-clear" class="minimap-btn">Clear Marks</button>
-                <button id="minimap-btn-close" class="minimap-btn" style="background: rgba(239, 68, 68, 0.4); border-color: rgba(239, 68, 68, 0.8);">Close [X]</button>
+                <div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 4px;">Tap map to place/remove marks</div>
+                <div style="display: flex; gap: 6px; justify-content: center;">
+                  <button id="minimap-btn-clear" class="minimap-btn">Clear Marks</button>
+                  <button id="minimap-btn-close" class="minimap-btn minimap-btn-danger">✕ CLOSE MAP</button>
+                </div>
               </div>
             </div>
           </div>

@@ -1862,23 +1862,42 @@ function setupControls() {
       case 'KeyM':
         const wrapper = document.getElementById('minimap-wrapper');
         const controls = document.getElementById('minimap-expanded-controls');
+        const topClose = document.getElementById('minimap-top-close-btn');
+        const titleText = document.getElementById('minimap-title-text');
         if (wrapper && controls && window.gameReady && myTeam === 'Human') {
           if (!isMinimapExpanded) {
             isMinimapExpanded = true;
             wrapper.classList.add('expanded');
             controls.style.display = 'block';
+            if (topClose) topClose.style.display = 'flex';
+            if (titleText) titleText.textContent = 'TACTICAL MAP';
             if (document.pointerLockElement) document.exitPointerLock();
             drawMinimap();
           } else {
             isMinimapExpanded = false;
             wrapper.classList.remove('expanded');
             controls.style.display = 'none';
-            const ptrOverlay = document.getElementById('pointer-lock-overlay');
-            if (ptrOverlay && !window.isMobileDevice) {
-              ptrOverlay.style.display = 'flex';
+            if (topClose) topClose.style.display = 'none';
+            if (titleText) titleText.textContent = 'MINIMAP (Press M / Tap)';
+            if (!window.isMobileDevice && window.gameReady && !isCaptured) {
               (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
             }
+            drawMinimap();
           }
+        }
+        break;
+      case 'Escape':
+        if (isMinimapExpanded) {
+          const mapWrap = document.getElementById('minimap-wrapper');
+          const mapCtrl = document.getElementById('minimap-expanded-controls');
+          const topCls = document.getElementById('minimap-top-close-btn');
+          const ttlTxt = document.getElementById('minimap-title-text');
+          isMinimapExpanded = false;
+          if (mapWrap) mapWrap.classList.remove('expanded');
+          if (mapCtrl) mapCtrl.style.display = 'none';
+          if (topCls) topCls.style.display = 'none';
+          if (ttlTxt) ttlTxt.textContent = 'MINIMAP (Press M / Tap)';
+          drawMinimap();
         }
         break;
       case 'Digit1': if (inventory.length > 0) { activeSlot = 0; renderHUDInventory(); } break;
@@ -4368,26 +4387,50 @@ function setupMinimap() {
   const controls = document.getElementById('minimap-expanded-controls');
   const btnClose = document.getElementById('minimap-btn-close');
   const btnClear = document.getElementById('minimap-btn-clear');
+  const topCloseBtn = document.getElementById('minimap-top-close-btn');
 
   if (!wrapper || !canvas) return;
   minimapSetupDone = true;
 
+  const closeMinimap = (e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    isMinimapExpanded = false;
+    wrapper.classList.remove('expanded');
+    controls.style.display = 'none';
+    if (topCloseBtn) topCloseBtn.style.display = 'none';
+    const titleText = document.getElementById('minimap-title-text');
+    if (titleText) titleText.textContent = 'MINIMAP (Press M / Tap)';
+    if (!isMobileDevice && window.gameReady && !isCaptured) {
+      (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
+    }
+    drawMinimap();
+  };
+
+  const openMinimap = () => {
+    isMinimapExpanded = true;
+    wrapper.classList.add('expanded');
+    controls.style.display = 'block';
+    if (topCloseBtn) topCloseBtn.style.display = 'flex';
+    const titleText = document.getElementById('minimap-title-text');
+    if (titleText) titleText.textContent = 'TACTICAL MAP';
+    if (document.pointerLockElement) document.exitPointerLock();
+    drawMinimap();
+  };
+
   // Toggle map expansion
   wrapper.addEventListener('click', (e) => {
     // Ignore clicks on buttons inside the wrapper
-    if (e.target.tagName === 'BUTTON') return;
+    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
     
     if (!isMinimapExpanded) {
-      isMinimapExpanded = true;
-      wrapper.classList.add('expanded');
-      controls.style.display = 'block';
-      if (document.pointerLockElement) document.exitPointerLock();
-      drawMinimap(); // Redraw immediately
+      openMinimap();
     } else {
       // If clicking directly on the canvas while expanded, drop a mark
       if (e.target.id === 'minimap-canvas') {
         const rect = canvas.getBoundingClientRect();
-        // Since canvas CSS width is 400px but internal is 200px
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
         
@@ -4401,28 +4444,39 @@ function setupMinimap() {
         const r = Math.floor(py / cellSize);
         
         if (c >= 0 && c < mazeSize && r >= 0 && r < mazeSize) {
-          mapMarks.push({r, c});
+          // Toggle mark: if already exists, remove it; else add it
+          const existingIdx = mapMarks.findIndex(m => m.r === r && m.c === c);
+          if (existingIdx !== -1) {
+            mapMarks.splice(existingIdx, 1);
+          } else {
+            mapMarks.push({r, c});
+          }
           drawMinimap();
         }
       }
     }
   });
 
-  btnClose.addEventListener('click', (e) => {
-    e.stopPropagation(); // prevent wrapper click
-    isMinimapExpanded = false;
-    wrapper.classList.remove('expanded');
-    controls.style.display = 'none';
-    if (!isMobileDevice) {
-      (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
-    }
-  });
+  if (btnClose) {
+    btnClose.addEventListener('click', closeMinimap);
+    btnClose.addEventListener('touchstart', closeMinimap, { passive: false });
+  }
 
-  btnClear.addEventListener('click', (e) => {
-    e.stopPropagation();
-    mapMarks = [];
-    drawMinimap();
-  });
+  if (topCloseBtn) {
+    topCloseBtn.addEventListener('click', closeMinimap);
+    topCloseBtn.addEventListener('touchstart', closeMinimap, { passive: false });
+  }
+
+  if (btnClear) {
+    const handleClear = (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      mapMarks = [];
+      drawMinimap();
+    };
+    btnClear.addEventListener('click', handleClear);
+    btnClear.addEventListener('touchstart', handleClear, { passive: false });
+  }
 }
 
 function updateEnvironmentLighting() {
