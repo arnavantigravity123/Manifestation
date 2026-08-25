@@ -4999,6 +4999,7 @@ function drawMinimap() {
 
 // 3D Game Loop rendering
 let animationFrameId = null;
+let networkTimer = 0;
 function animate() {
   if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
   animationFrameId = requestAnimationFrame(animate);
