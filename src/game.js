@@ -630,10 +630,15 @@ export function initGame(socket, socketId, matchConfig) {
   window.camera = camera;
 
   // 3. Renderer setup
-  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = new THREE.WebGLRenderer({ 
+    antialias: !isMobileDevice,
+    powerPreference: "high-performance",
+    precision: isMobileDevice ? "mediump" : "highp"
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileDevice ? 1.0 : 1.5));
   renderer.setSize(w, h);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   container.appendChild(renderer.domElement);
 
   // Setup Audio Context for procedural EMF sound
@@ -648,6 +653,11 @@ export function initGame(socket, socketId, matchConfig) {
     flashLight = new THREE.SpotLight(0xffffff, 80, 45, Math.PI / 3, 0.5, 1.5);
     flashLight.position.set(0, 0, 0);
     flashLight.castShadow = true;
+    const shadowRes = isMobileDevice ? 512 : 1024;
+    flashLight.shadow.mapSize.set(shadowRes, shadowRes);
+    flashLight.shadow.bias = -0.0005;
+    flashLight.shadow.camera.near = 0.5;
+    flashLight.shadow.camera.far = 40;
     camera.add(flashLight);
     camera.add(flashLight.target);
     flashLight.target.position.set(0, 0, -1);
@@ -1131,8 +1141,69 @@ function bfsPath(startCol, startRow, endCol, endRow) {
   
   return []; // No path found
 }
+
+// Ultra-Fast 2D Grid Raymarching for Bot Line of Sight (Zero 3D raycasting overhead)
+function hasGridLineOfSight(x1, z1, x2, z2) {
+  if (!mazeLayout || !mazeLayout[0]) return true;
+  const blockSize = mazeBlockSize || 4.5;
+  const totalCols = mazeLayout[0].length;
+  const totalRows = mazeLayout.length;
+
+  const c1 = Math.floor((x1 / blockSize) + totalCols / 2);
+  const r1 = Math.floor((z1 / blockSize) + totalRows / 2);
+  const c2 = Math.floor((x2 / blockSize) + totalCols / 2);
+  const r2 = Math.floor((z2 / blockSize) + totalRows / 2);
+
+  let dx = Math.abs(c2 - c1);
+  let dz = Math.abs(r2 - r1);
+  let sx = (c1 < c2) ? 1 : -1;
+  let sz = (r1 < r2) ? 1 : -1;
+  let err = dx - dz;
+
+  let currC = c1;
+  let currR = r1;
+
+  while (true) {
+    if (currR >= 0 && currR < totalRows && currC >= 0 && currC < totalCols) {
+      if (mazeLayout[currR][currC] === 1) {
+        if (!(currC === c1 && currR === r1) && !(currC === c2 && currR === r2)) {
+          return false; // Obstructed by wall
+        }
+      }
+    }
+    if (currC === c2 && currR === r2) break;
+    let e2 = 2 * err;
+    if (e2 > -dz) { err -= dz; currC += sx; }
+    if (e2 < dx) { err += dx; currR += sz; }
+  }
+  return true;
+}
+
 let floorMesh = null;
 let ceilingMesh = null;
+let staticWallsInstancedMesh = null;
+
+// Shared Texture Cache to prevent duplicate GPU memory allocations
+const textureCache = new Map();
+function getLoadedTexture(url, wrapRepeat = null) {
+  const cacheKey = wrapRepeat ? `${url}_${wrapRepeat.x}_${wrapRepeat.y}` : url;
+  if (!textureCache.has(cacheKey)) {
+    const tex = new THREE.TextureLoader().load(url);
+    if (wrapRepeat) {
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(wrapRepeat.x, wrapRepeat.y);
+    }
+    textureCache.set(cacheKey, tex);
+  }
+  return textureCache.get(cacheKey);
+}
+
+// Reusable scratch objects to eliminate Garbage Collection allocations in render loops
+const _scratchVec3_1 = new THREE.Vector3();
+const _scratchVec3_2 = new THREE.Vector3();
+const _scratchEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+const _scratchDummy = new THREE.Object3D();
 
 function generateMaze(keysCount = 8) {
   // Clear any existing walls
@@ -1149,6 +1220,14 @@ function generateMaze(keysCount = 8) {
   });
   walls = [];
   slidingWallSegments = [];
+
+  // Cleanup old InstancedMesh for static walls
+  if (staticWallsInstancedMesh) {
+    scene.remove(staticWallsInstancedMesh);
+    if (staticWallsInstancedMesh.geometry) staticWallsInstancedMesh.geometry.dispose();
+    if (staticWallsInstancedMesh.material) staticWallsInstancedMesh.material.dispose();
+    staticWallsInstancedMesh = null;
+  }
 
   // Cleanup old floor and ceiling
   if (floorMesh) {
@@ -1169,11 +1248,9 @@ function generateMaze(keysCount = 8) {
   window.mazeSizeGlobal = mazeSize;
 
   const floorExtent = Math.max(300, (mazeSize * blockSize) + 120);
-  const textureLoader = new THREE.TextureLoader();
-  const floorTex = textureLoader.load('/assets/floor_texture.png');
-  floorTex.wrapS = THREE.RepeatWrapping;
-  floorTex.wrapT = THREE.RepeatWrapping;
-  floorTex.repeat.set(Math.max(6, Math.round(mazeSize / 4)), Math.max(6, Math.round(mazeSize / 4)));
+  const floorRep = Math.max(6, Math.round(mazeSize / 4));
+  const floorTex = getLoadedTexture('/assets/floor_texture.png', { x: floorRep, y: floorRep });
+  
   const floorGeo = new THREE.PlaneGeometry(floorExtent, floorExtent);
   const floorMat = new THREE.MeshStandardMaterial({ 
     map: floorTex,
@@ -1189,10 +1266,9 @@ function generateMaze(keysCount = 8) {
   scene.add(floorMesh);
 
   // Ceiling with photorealistic texture scaled to difficulty map size
-  const ceilTex = textureLoader.load('/assets/ceiling_texture.png');
-  ceilTex.wrapS = THREE.RepeatWrapping;
-  ceilTex.wrapT = THREE.RepeatWrapping;
-  ceilTex.repeat.set(Math.max(5, Math.round(mazeSize / 5)), Math.max(5, Math.round(mazeSize / 5)));
+  const ceilRep = Math.max(5, Math.round(mazeSize / 5));
+  const ceilTex = getLoadedTexture('/assets/ceiling_texture.png', { x: ceilRep, y: ceilRep });
+  
   const ceilGeo = new THREE.PlaneGeometry(floorExtent, floorExtent);
   const ceilMat = new THREE.MeshStandardMaterial({ 
     map: ceilTex,
@@ -1335,23 +1411,16 @@ function generateMaze(keysCount = 8) {
     if (layout[rz][rx] === 1) layout[rz][rx] = 2; 
   }
 
-  // Store layout globally for ghost pathfinding
-  mazeLayout = layout.map(row => row.map(cell => cell === 0 ? 0 : 1)); // 0=open, 1=wall (treat sliding doors as walls for pathfinding)
+  // Store layout globally for ghost pathfinding & spatial collision
+  mazeLayout = layout.map(row => row.map(cell => cell === 0 ? 0 : 1)); // 0=open, 1=wall
 
-  const generatedTex = textureLoader.load('/assets/wall_texture.png');
-  generatedTex.wrapS = THREE.RepeatWrapping;
-  generatedTex.wrapT = THREE.RepeatWrapping;
-  generatedTex.repeat.set(1, 1);
-
-  const wallBumpTex = new THREE.TextureLoader().load('/assets/wall_bump_map.png');
-  wallBumpTex.wrapS = THREE.RepeatWrapping;
-  wallBumpTex.wrapT = THREE.RepeatWrapping;
-  wallBumpTex.repeat.set(1, 1);
+  const generatedTex = getLoadedTexture('/assets/wall_texture.png', { x: 1, y: 1 });
+  const wallBumpTex = getLoadedTexture('/assets/wall_bump_map.png', { x: 1, y: 1 });
 
   const wallMat = new THREE.MeshStandardMaterial({ 
     map: generatedTex,
     bumpMap: wallBumpTex,
-    bumpScale: 0.8, // restoring the high bump scale for physical depth since it wasn't the issue
+    bumpScale: 0.8,
     color: 0x475569,
     roughness: 0.92,
     metalness: 0.03
@@ -1361,39 +1430,55 @@ function generateMaze(keysCount = 8) {
     map: generatedTex,
     bumpMap: wallBumpTex,
     bumpScale: 0.8,
-    color: 0x3e4c5e, // Dark ancient stone to match labyrinth
+    color: 0x3e4c5e,
     roughness: 0.92,
     metalness: 0.03
   });
 
-  // Overlap tiles aggressively (+0.5 units) to completely seal all gaps
   const wallGeo = new THREE.BoxGeometry(blockSize + 0.5, 4.5, blockSize + 0.5);
 
   openCorridors = []; // Reset for new maze
+  const staticWallTransforms = [];
+
   for (let r = 0; r < layout.length; r++) {
     for (let c = 0; c < layout[r].length; c++) {
       const type = layout[r][c];
       const xPos = (c - layout[r].length / 2) * blockSize + blockSize/2;
       const zPos = (r - layout.length / 2) * blockSize + blockSize/2;
 
-      if (type === 1 || type === 2) {
-        const wallMesh = new THREE.Mesh(wallGeo, type === 2 ? slidingWallMat : wallMat);
+      if (type === 1) {
+        // Static wall: collect position for batch InstancedMesh
+        staticWallTransforms.push({ x: xPos, y: 4.5 / 2, z: zPos });
+      } else if (type === 2) {
+        // Dynamic sliding door: separate mesh for smooth height animations
+        const wallMesh = new THREE.Mesh(wallGeo, slidingWallMat);
         wallMesh.position.set(xPos, 4.5 / 2, zPos);
         wallMesh.castShadow = true;
         wallMesh.receiveShadow = true;
+        wallMesh.userData = { isSliding: true, col: c, row: r };
         scene.add(wallMesh);
         walls.push(wallMesh);
-
-        if (type === 2) {
-          wallMesh.userData = { isSliding: true, col: c, row: r };
-          // Keep track of sliding corridors for realignments
-          slidingWallSegments.push(wallMesh);
-        }
+        slidingWallSegments.push(wallMesh);
       } else {
-        // type === 0 means open corridor — record world position for ghost spawning
         openCorridors.push({ x: xPos, z: zPos });
       }
     }
+  }
+
+  // Build GPU InstancedMesh for ALL static walls (1 single draw call instead of 2000!)
+  if (staticWallTransforms.length > 0) {
+    staticWallsInstancedMesh = new THREE.InstancedMesh(wallGeo, wallMat, staticWallTransforms.length);
+    staticWallsInstancedMesh.castShadow = true;
+    staticWallsInstancedMesh.receiveShadow = true;
+    
+    for (let i = 0; i < staticWallTransforms.length; i++) {
+      const t = staticWallTransforms[i];
+      _scratchDummy.position.set(t.x, t.y, t.z);
+      _scratchDummy.updateMatrix();
+      staticWallsInstancedMesh.setMatrixAt(i, _scratchDummy.matrix);
+    }
+    staticWallsInstancedMesh.instanceMatrix.needsUpdate = true;
+    scene.add(staticWallsInstancedMesh);
   }
 
   // Draw the Master Gate — Photorealistic Vault Door
@@ -1608,7 +1693,7 @@ function generateCircuitBreakers() {
 
   // A flat 3D box that mounts flush against a wall
   const breakerGeo = new THREE.BoxGeometry(0.8, 1.2, 0.15);
-  const breakerTex = new THREE.TextureLoader().load('/assets/breaker_texture.png');
+  const breakerTex = getLoadedTexture('/assets/breaker_texture.png');
   // Initial color slightly red tinted to show it is broken/needs fixing
   const breakerMat = new THREE.MeshStandardMaterial({ map: breakerTex, color: 0xffaaaa, roughness: 0.4, metalness: 0.8 });
   
@@ -1675,15 +1760,14 @@ function generateConsumableItems() {
   });
   itemsInMaze = [];
 
-  const textureLoader = new THREE.TextureLoader();
   const itemTypes = [
-    { name: 'Battery Pack', map: textureLoader.load('/assets/battery_sprite.png') },
-    { name: 'EMF Radar', map: textureLoader.load('/assets/emf_sprite.png') },
-    { name: 'Thermal Camera', map: textureLoader.load('/assets/thermal_sprite.png') },
-    { name: 'Sanity Pills', map: textureLoader.load('/assets/pills_sprite.png') },
-    { name: 'Med Kit', map: textureLoader.load('/assets/medkit_sprite.png') },
-    { name: 'Salt Cannister', map: textureLoader.load('/assets/salt_sprite.png') },
-    { name: 'Breaker Remote', map: textureLoader.load('/assets/remote_sprite.png') }
+    { name: 'Battery Pack', map: getLoadedTexture('/assets/battery_sprite.png') },
+    { name: 'EMF Radar', map: getLoadedTexture('/assets/emf_sprite.png') },
+    { name: 'Thermal Camera', map: getLoadedTexture('/assets/thermal_sprite.png') },
+    { name: 'Sanity Pills', map: getLoadedTexture('/assets/pills_sprite.png') },
+    { name: 'Med Kit', map: getLoadedTexture('/assets/medkit_sprite.png') },
+    { name: 'Salt Cannister', map: getLoadedTexture('/assets/salt_sprite.png') },
+    { name: 'Breaker Remote', map: getLoadedTexture('/assets/remote_sprite.png') }
   ];
 
   // Generate 1 EMF, 1 Thermal, 1 Breaker Remote, 6 guaranteed Battery Packs, then randomly pick remaining items
@@ -4248,7 +4332,7 @@ function createHumanMeshGroup(skinId, username) {
   if (skinId) {
     const texPath = skinId === 'skin_cyborg' ? '/assets/skin_neon_cyborg.jpg' : '/assets/skin_shadow_ghost.jpg';
     const spriteMat = new THREE.SpriteMaterial({ 
-      map: new THREE.TextureLoader().load(texPath), 
+      map: getLoadedTexture(texPath), 
       color: 0xffffff,
       fog: true,
       transparent: true,
@@ -4265,7 +4349,7 @@ function createHumanMeshGroup(skinId, username) {
     group.add(clone);
   } else {
     const spriteMat = new THREE.SpriteMaterial({ 
-      map: new THREE.TextureLoader().load('/assets/human_sprite.png'), 
+      map: getLoadedTexture('/assets/human_sprite.png'), 
       color: 0xffffff,
       fog: true,
       transparent: true,
@@ -4475,7 +4559,7 @@ function createGhostMeshGroup(skinId) {
   if (skinId) {
     const texPath = skinId === 'skin_cyborg' ? '/assets/skin_neon_cyborg.jpg' : '/assets/skin_shadow_ghost.jpg';
     const spriteMat = new THREE.SpriteMaterial({ 
-      map: new THREE.TextureLoader().load(texPath), 
+      map: getLoadedTexture(texPath), 
       color: 0xffffff,
       fog: true,
       transparent: true,
@@ -4494,7 +4578,7 @@ function createGhostMeshGroup(skinId) {
   } else {
     // Fallback to sprite
     const spriteMat = new THREE.SpriteMaterial({ 
-      map: new THREE.TextureLoader().load('/assets/ghost_sprite.png'), 
+      map: getLoadedTexture('/assets/ghost_sprite.png'), 
       color: 0xffdddd, // slightly tint red
       fog: true,
       transparent: true,
@@ -4916,7 +5000,6 @@ function drawMinimap() {
 
 // 3D Game Loop rendering
 let animationFrameId = null;
-let networkTimer = 0;
 function animate() {
   if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
   animationFrameId = requestAnimationFrame(animate);
@@ -4931,22 +5014,21 @@ function animate() {
       activeViewCamera.position.copy(camera.position);
       activeViewCamera.quaternion.copy(camera.quaternion);
     } else {
-      const offset = new THREE.Vector3();
-      const euler = new THREE.Euler(0, camera.rotation.y, 0, 'YXZ');
+      _scratchEuler.set(0, camera.rotation.y, 0, 'YXZ');
       
       if (mode === 'tps_shoulder') {
-        offset.set(0.8, 0.5, 3);
+        _scratchVec3_1.set(0.8, 0.5, 3);
         activeViewCamera.rotation.set(camera.rotation.x, camera.rotation.y, 0, 'YXZ');
       } else if (mode === 'tps_far') {
-        offset.set(0, 1.5, 6);
+        _scratchVec3_1.set(0, 1.5, 6);
         activeViewCamera.rotation.set(camera.rotation.x - 0.1, camera.rotation.y, 0, 'YXZ');
       } else if (mode === 'top_down') {
-        offset.set(0, 15, 0);
+        _scratchVec3_1.set(0, 15, 0);
         activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
       }
       
-      offset.applyEuler(euler);
-      activeViewCamera.position.copy(camera.position).add(offset);
+      _scratchVec3_1.applyEuler(_scratchEuler);
+      activeViewCamera.position.copy(camera.position).add(_scratchVec3_1);
     }
   }
 
@@ -5013,33 +5095,8 @@ function animate() {
       }
     }
 
-    // Salt trap slow down and Flashlight Blinding for human Ghost players
+    // Freeze effect (Breaker Remote)
     if (myTeam === 'Ghost') {
-      let nearSalt = false;
-      for (let i = saltTraps.length - 1; i >= 0; i--) {
-        const trap = saltTraps[i];
-        const dist = camera.position.distanceTo(trap.position);
-        if (dist < 2.5) {
-          nearSalt = true;
-          if (!trap.userData || !trap.userData.triggered) {
-            trap.userData = trap.userData || {};
-            trap.userData.triggered = true;
-            triggerNotification("Stepped in salt! You are slowed!");
-            setTimeout(() => {
-              scene.remove(trap);
-              if (trap.geometry) trap.geometry.dispose();
-              if (trap.material) trap.material.dispose();
-              const idx = saltTraps.indexOf(trap);
-              if (idx > -1) saltTraps.splice(idx, 1);
-            }, 3000);
-          }
-        }
-      }
-      if (nearSalt) {
-        speed *= 0.2; // 80% slow down, matching AI slow down ratio
-      }
-
-      // Breaker Remote freeze for human Ghost players
       if (window.ghostsFrozen) {
         speed = 0;
         velocity.set(0, 0, 0);
@@ -5047,18 +5104,15 @@ function animate() {
     }
 
     if (window.isSpectating) {
-      // 6-DOF Free-Cam Spectator Flight
-      const forward = new THREE.Vector3();
-      camera.getWorldDirection(forward); // Unit vector in 3D look direction
-
-      const right = new THREE.Vector3();
-      right.crossVectors(forward, camera.up).normalize();
+      // 6-DOF Free-Cam Spectator Flight using preallocated scratch vectors
+      camera.getWorldDirection(_scratchVec3_1);
+      _scratchVec3_2.crossVectors(_scratchVec3_1, camera.up).normalize();
 
       if (moveForward || moveBackward) {
-        camera.position.addScaledVector(forward, direction.z * (speed / 10.0) * delta);
+        camera.position.addScaledVector(_scratchVec3_1, direction.z * (speed / 10.0) * delta);
       }
       if (moveLeft || moveRight) {
-        camera.position.addScaledVector(right, direction.x * (speed / 10.0) * delta);
+        camera.position.addScaledVector(_scratchVec3_2, direction.x * (speed / 10.0) * delta);
       }
     } else {
       if (moveForward || moveBackward) velocity.z -= direction.z * speed * delta;
@@ -5069,39 +5123,69 @@ function animate() {
       camera.position.y = 1.6; // Lock height if not spectating
     }
 
-    // Robust AABB Wall collision checking
+    // High-Performance O(1) Spatial Grid AABB Wall Collision Checking
     if (!window.isSpectating) {
-      const playerRadius = 0.8; // Radius to prevent near-clipping
-      const wallHalfSize = 4.5 / 2;
-      
+      const playerRadius = 0.8;
+      const blockSize = mazeBlockSize || 4.5;
+      const wallHalfSize = blockSize / 2;
+      const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : mazeSizeGlobal;
+      const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
+
+      // Convert player position to maze grid coordinates
+      const pGridC = Math.floor((camera.position.x / blockSize) + totalCols / 2);
+      const pGridR = Math.floor((camera.position.z / blockSize) + totalRows / 2);
+
       // Run two iterations to smoothly resolve corner pinches
       for (let iter = 0; iter < 2; iter++) {
-        walls.forEach(wall => {
-          if (wall.position.y < 0) return; // Skip walls shifted below floor level (open sliding gates)
-          
-          const px = camera.position.x;
-          const pz = camera.position.z;
-          const wx = wall.position.x;
-          const wz = wall.position.z;
-          
-          const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : wallHalfSize;
-          const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : wallHalfSize;
-          
-          const overlapX = (hx + playerRadius) - Math.abs(px - wx);
-          const overlapZ = (hz + playerRadius) - Math.abs(pz - wz);
-          
-          if (overlapX > 0 && overlapZ > 0) {
-            if (overlapX < overlapZ) {
-              camera.position.x += (px > wx ? overlapX : -overlapX);
-            } else {
-              camera.position.z += (pz > wz ? overlapZ : -overlapZ);
+        const px = camera.position.x;
+        const pz = camera.position.z;
+
+        // 1. Test immediate 3x3 grid neighborhood for static walls
+        for (let r = Math.max(0, pGridR - 1); r <= Math.min(totalRows - 1, pGridR + 1); r++) {
+          for (let c = Math.max(0, pGridC - 1); c <= Math.min(totalCols - 1, pGridC + 1); c++) {
+            if (mazeLayout && mazeLayout[r] && mazeLayout[r][c] === 1) {
+              const wx = (c - totalCols / 2) * blockSize + blockSize / 2;
+              const wz = (r - totalRows / 2) * blockSize + blockSize / 2;
+
+              const overlapX = (wallHalfSize + playerRadius) - Math.abs(px - wx);
+              const overlapZ = (wallHalfSize + playerRadius) - Math.abs(pz - wz);
+
+              if (overlapX > 0 && overlapZ > 0) {
+                if (overlapX < overlapZ) {
+                  camera.position.x += (px > wx ? overlapX : -overlapX);
+                } else {
+                  camera.position.z += (pz > wz ? overlapZ : -overlapZ);
+                }
+              }
             }
           }
-        });
+        }
+
+        // 2. Test active dynamic walls (sliding doors & gate blocker)
+        for (let i = 0; i < walls.length; i++) {
+          const wall = walls[i];
+          if (wall.position.y < 0) continue; // Skip lowered sliding doors
+          
+          const wx = wall.position.x;
+          const wz = wall.position.z;
+          const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : wallHalfSize;
+          const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : wallHalfSize;
+
+          const overlapX = (hx + playerRadius) - Math.abs(camera.position.x - wx);
+          const overlapZ = (hz + playerRadius) - Math.abs(camera.position.z - wz);
+
+          if (overlapX > 0 && overlapZ > 0) {
+            if (overlapX < overlapZ) {
+              camera.position.x += (camera.position.x > wx ? overlapX : -overlapX);
+            } else {
+              camera.position.z += (camera.position.z > wz ? overlapZ : -overlapZ);
+            }
+          }
+        }
       }
 
       // Hard Map Boundary Safety Clamp (Prevents glitching outside walls or void falling)
-      const maxPlayableLimit = (mazeSizeGlobal / 2 - 1.0) * 4.5;
+      const maxPlayableLimit = (mazeSizeGlobal / 2 - 1.0) * blockSize;
       camera.position.x = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, camera.position.x));
       camera.position.z = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, camera.position.z));
       if (camera.position.y < -2.0 || isNaN(camera.position.y)) {
@@ -5391,16 +5475,10 @@ function animate() {
         ghost.userData.abilityCooldown = gParams.botAbilityCooldownMin + Math.random() * initialSpread;
       }
 
-      // Check Line of Sight (LOS) ONLY if there is an active Human
+      // High-Performance Grid-Based Line of Sight (LOS)
       let canSeePlayer = false;
       if (targetPos && distToPlayer < gParams.botSightRange) {
-        const rayOrigin = new THREE.Vector3(ghost.position.x, 2.0, ghost.position.z);
-        const directionToPlayer = new THREE.Vector3().subVectors(targetPos, rayOrigin).normalize();
-        const raycaster = new THREE.Raycaster(rayOrigin, directionToPlayer, 0, gParams.botSightRange + 1.5);
-        const intersects = raycaster.intersectObjects(walls);
-        if (intersects.length === 0 || intersects[0].distance > distToPlayer) {
-          canSeePlayer = true;
-        }
+        canSeePlayer = hasGridLineOfSight(ghost.position.x, ghost.position.z, targetPos.x, targetPos.z);
       }
 
       // State Transitions
