@@ -461,13 +461,22 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('player_panicked', { id: socket.id });
   });
 
-  socket.on('capture_human', ({ targetId }) => {
+  socket.on('capture_human', (payload) => {
+    const { targetId, position, rotation, username, characterClass, skinId } = payload || {};
     console.log(`[Lobby ${socket.roomId}] Player ${targetId} captured.`);
     const lobby = lobbies[socket.roomId];
     if (lobby && lobby.players[targetId]) {
       lobby.players[targetId].isCaptured = true;
     }
-    socket.to(socket.roomId).emit('human_captured', { targetId, capturerId: socket.id });
+    socket.to(socket.roomId).emit('human_captured', { 
+      targetId, 
+      capturerId: socket.id,
+      position,
+      rotation,
+      username: username || (lobby && lobby.players[targetId]?.username) || 'Operative',
+      characterClass: characterClass || (lobby && lobby.players[targetId]?.characterClass) || 'Survivor',
+      skinId: skinId || (lobby && lobby.players[targetId]?.skinId)
+    });
     checkMatchEndCondition(socket.roomId);
   });
 

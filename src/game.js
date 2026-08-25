@@ -378,6 +378,9 @@ let visitedCells = new Set();
 let mapMarks = [];
 let isMinimapExpanded = false;
 
+// Persistent Dead Bodies tracking
+let deadBodies = [];
+
 let seededRandom = Math.random;
 // --- Map Generator ---
 function mulberry32(a) {
@@ -419,6 +422,21 @@ export function initGame(socket, socketId, matchConfig) {
   if (localPlayerVisual) {
     camera.remove(localPlayerVisual);
     localPlayerVisual = null;
+  }
+
+  // Remove any stale dead bodies from previous matches
+  if (deadBodies && deadBodies.length > 0) {
+    deadBodies.forEach(corpse => {
+      if (scene) scene.remove(corpse);
+      corpse.traverse(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      });
+    });
+    deadBodies = [];
   }
 
   // Remove any stale player meshes from scene
@@ -465,16 +483,23 @@ export function initGame(socket, socketId, matchConfig) {
     spectateBtn.onclick = () => {
       document.getElementById('captured-overlay').style.display = 'none';
       window.isSpectating = true;
-      camera.position.y = Math.max(camera.position.y, 6.0);
+      camera.position.y = Math.max(camera.position.y, 5.0);
       updateEnvironmentLighting();
+      
+      const resumeTarget = document.getElementById('resume-click-target');
+      if (resumeTarget) resumeTarget.textContent = 'CLICK TO RESUME SPECTATING';
+
       if (isMobileDevice) {
         window.mobileGameActive = true;
         const mobileCtrl = document.getElementById('mobile-controls-container');
         if (mobileCtrl) mobileCtrl.style.display = 'flex';
       } else {
-        (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
+        const lockTarget = (renderer && renderer.domElement) || container;
+        if (lockTarget && lockTarget.requestPointerLock) {
+          lockTarget.requestPointerLock();
+        }
       }
-      triggerNotification("SPECTATOR MODE ENGAGED: Full Brightness & 0 Fog.");
+      triggerNotification("SPECTATOR MODE: Roam with WASD. Click anywhere to relink mouse.");
     };
   }
 
@@ -531,7 +556,7 @@ export function initGame(socket, socketId, matchConfig) {
     if (subtext) subtext.textContent = '(Drag Screen to Look | Joystick to Move | Tap UI to Act)';
   }
 
-  const handleEnterGame = () => {
+  const handleEnterGame = (e) => {
     if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
     if (isMinimapExpanded) return;
     window.mobileGameActive = true;
@@ -540,7 +565,11 @@ export function initGame(socket, socketId, matchConfig) {
       // Lock on the canvas element (renderer.domElement) — browsers require pointer lock on canvas, not a div
       const lockTarget = (renderer && renderer.domElement) || container;
       if (lockTarget && lockTarget.requestPointerLock) {
-        lockTarget.requestPointerLock();
+        try {
+          lockTarget.requestPointerLock();
+        } catch(err) {
+          console.warn('Pointer lock request error:', err);
+        }
       }
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
@@ -558,10 +587,16 @@ export function initGame(socket, socketId, matchConfig) {
     if (document.pointerLockElement) {
       ptrOverlay.style.display = 'none';
     } else {
-      // Don't show pause overlay if the keypad modal or minimap is open
+      // Don't show pause overlay if the keypad modal or minimap or game over is open
       if ((typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') || isMinimapExpanded) {
         ptrOverlay.style.display = 'none';
+      } else if (document.getElementById('captured-overlay').style.display === 'flex' || document.getElementById('end-game-overlay').style.display === 'flex') {
+        ptrOverlay.style.display = 'none';
       } else {
+        const resumeTarget = document.getElementById('resume-click-target');
+        if (resumeTarget) {
+          resumeTarget.textContent = window.isSpectating ? 'CLICK TO RESUME SPECTATING' : 'CLICK TO RESUME LABYRINTH';
+        }
         ptrOverlay.style.display = 'flex';
       }
     }
@@ -3552,24 +3587,37 @@ function setupSocketListeners() {
     }
   });
 
-  socketClient.on('human_captured', ({ targetId }) => {
+  socketClient.on('human_captured', (data) => {
+    const { targetId, position, rotation, username, characterClass, skinId } = data || {};
     if (currentLobby && currentLobby.players && currentLobby.players[targetId]) {
       currentLobby.players[targetId].isCaptured = true;
     }
     if (targetId === myId) {
-      isCaptured = true;
-      socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) was captured by a Ghost.` });
-      playGhostCaptureAnimation(() => {
-        if (document.pointerLockElement) document.exitPointerLock();
-        window.mobileGameActive = false;
-        document.getElementById('hud-overlay').style.display = 'none';
-        const mobileCtrl = document.getElementById('mobile-controls-container');
-        if (mobileCtrl) mobileCtrl.style.display = 'none';
-        document.getElementById('captured-overlay').style.display = 'flex';
-      });
-    } else if (players3D[targetId]) {
-      scene.remove(players3D[targetId]);
-      delete players3D[targetId];
+      if (!isCaptured) {
+        isCaptured = true;
+        const myUsername = username || (currentLobby && currentLobby.players[myId]?.username) || 'Operative';
+        spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, skinId);
+        playGhostCaptureAnimation(() => {
+          if (document.pointerLockElement) document.exitPointerLock();
+          window.mobileGameActive = false;
+          document.getElementById('hud-overlay').style.display = 'none';
+          const mobileCtrl = document.getElementById('mobile-controls-container');
+          if (mobileCtrl) mobileCtrl.style.display = 'none';
+          document.getElementById('captured-overlay').style.display = 'flex';
+        });
+      }
+    } else {
+      const spawnPos = position || (players3D[targetId] && players3D[targetId].position);
+      const spawnRot = rotation || (players3D[targetId] && players3D[targetId].rotation.y) || 0;
+      const targetUser = username || (currentLobby && currentLobby.players[targetId]?.username) || 'Operative';
+      const targetClass = characterClass || (currentLobby && currentLobby.players[targetId]?.characterClass) || 'Survivor';
+      if (spawnPos) {
+        spawnDeadBody(spawnPos, spawnRot, targetUser, targetClass, skinId);
+      }
+      if (players3D[targetId]) {
+        scene.remove(players3D[targetId]);
+        delete players3D[targetId];
+      }
     }
   });
 
@@ -4268,6 +4316,157 @@ function createHumanMeshGroup(skinId, username) {
   };
   
   return group;
+}
+
+export function spawnDeadBody(position, rotationY = 0, username = 'Operative', characterClass = 'Survivor', skinId = null) {
+  if (!scene || !position) return null;
+
+  const corpseGroup = new THREE.Group();
+  const posX = position.x || 0;
+  const posY = 0.04;
+  const posZ = position.z || 0;
+  corpseGroup.position.set(posX, posY, posZ);
+
+  // 1. Dark Blood Pool / Void Corruption Decal on floor
+  const poolGeo = new THREE.CircleGeometry(0.85, 24);
+  const poolMat = new THREE.MeshStandardMaterial({
+    color: 0x450a0a, // Deep blood crimson / void residue
+    roughness: 0.15,
+    metalness: 0.2,
+    transparent: true,
+    opacity: 0.88,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1
+  });
+  const poolMesh = new THREE.Mesh(poolGeo, poolMat);
+  poolMesh.rotation.x = -Math.PI / 2;
+  poolMesh.position.y = 0.01;
+  corpseGroup.add(poolMesh);
+
+  // 2. 3D Body Mesh lying on the floor
+  if (preloadedHumanModel) {
+    try {
+      const clone = SkeletonUtils.clone(preloadedHumanModel);
+      clone.rotation.x = -Math.PI / 2; // Lie flat on back
+      clone.rotation.z = rotationY || 0;
+      clone.position.set(0, 0.1, 0);
+      clone.scale.set(1, 1, 1);
+      clone.traverse(c => {
+        if (c.isMesh && c.material) {
+          c.material = c.material.clone();
+          c.material.color.multiplyScalar(0.45); // Darken deceased player
+          c.castShadow = true;
+          c.receiveShadow = true;
+        }
+      });
+      corpseGroup.add(clone);
+    } catch(e) {
+      console.warn('Failed to clone preloaded model for corpse:', e);
+      addProceduralCorpse(corpseGroup, rotationY);
+    }
+  } else {
+    addProceduralCorpse(corpseGroup, rotationY);
+  }
+
+  // 3. Floating Deceased Nameplate
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(15, 5, 5, 0.7)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.font = 'bold 24px monospace';
+  ctx.fillStyle = '#ef4444';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`☠ ${username} (K.I.A.)`, canvas.width / 2, canvas.height / 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  const textMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, fog: false });
+  const textSprite = new THREE.Sprite(textMat);
+  textSprite.scale.set(1.4, 0.35, 1);
+  textSprite.position.set(0, 0.75, 0);
+  corpseGroup.add(textSprite);
+
+  // 4. Subtle eerie purple spirit dissipation smoke
+  const particleGeo = new THREE.BufferGeometry();
+  const particleCount = 25;
+  const positions = new Float32Array(particleCount * 3);
+  for (let i = 0; i < particleCount; i++) {
+    positions[i * 3] = (Math.random() - 0.5) * 0.8;
+    positions[i * 3 + 1] = Math.random() * 0.9;
+    positions[i * 3 + 2] = (Math.random() - 0.5) * 0.8;
+  }
+  particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const particleMat = new THREE.PointsMaterial({
+    color: 0xa855f7,
+    size: 0.07,
+    transparent: true,
+    opacity: 0.45,
+    blending: THREE.AdditiveBlending
+  });
+  const smokePoints = new THREE.Points(particleGeo, particleMat);
+  corpseGroup.add(smokePoints);
+
+  scene.add(corpseGroup);
+  deadBodies.push(corpseGroup);
+  return corpseGroup;
+}
+
+function addProceduralCorpse(group, rotationY) {
+  const bodySubgroup = new THREE.Group();
+  
+  // Torso / Hazmat suit
+  const torsoGeo = new THREE.BoxGeometry(0.5, 0.22, 0.8);
+  const torsoMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.7 });
+  const torso = new THREE.Mesh(torsoGeo, torsoMat);
+  torso.position.set(0, 0.11, 0);
+  torso.castShadow = true;
+  bodySubgroup.add(torso);
+
+  // Head with helmet
+  const headGeo = new THREE.SphereGeometry(0.18, 12, 12);
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.3 });
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.position.set(0, 0.12, -0.55);
+  bodySubgroup.add(head);
+
+  // Visor
+  const visorGeo = new THREE.BoxGeometry(0.18, 0.08, 0.08);
+  const visorMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.2, metalness: 0.8, emissive: 0x0284c7, emissiveIntensity: 0.2 });
+  const visor = new THREE.Mesh(visorGeo, visorMat);
+  visor.position.set(0, 0.18, -0.55);
+  bodySubgroup.add(visor);
+
+  // Left & Right Arms sprawled
+  const armGeo = new THREE.BoxGeometry(0.15, 0.12, 0.6);
+  const armMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 });
+  const leftArm = new THREE.Mesh(armGeo, armMat);
+  leftArm.position.set(-0.35, 0.08, -0.1);
+  leftArm.rotation.y = 0.4;
+  bodySubgroup.add(leftArm);
+
+  const rightArm = new THREE.Mesh(armGeo, armMat);
+  rightArm.position.set(0.35, 0.08, -0.1);
+  rightArm.rotation.y = -0.5;
+  bodySubgroup.add(rightArm);
+
+  // Left & Right Legs sprawled
+  const legGeo = new THREE.BoxGeometry(0.18, 0.14, 0.7);
+  const legMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+  const leftLeg = new THREE.Mesh(legGeo, legMat);
+  leftLeg.position.set(-0.18, 0.08, 0.65);
+  leftLeg.rotation.y = -0.15;
+  bodySubgroup.add(leftLeg);
+
+  const rightLeg = new THREE.Mesh(legGeo, legMat);
+  rightLeg.position.set(0.18, 0.08, 0.65);
+  rightLeg.rotation.y = 0.25;
+  bodySubgroup.add(rightLeg);
+
+  bodySubgroup.rotation.y = rotationY || 0;
+  group.add(bodySubgroup);
 }
 
 function createGhostMeshGroup(skinId) {
@@ -5002,10 +5201,23 @@ function animate() {
         
         if (currentHP <= 0 && !isCaptured) {
           isCaptured = true;
+
+          const myUsername = (currentLobby && currentLobby.players && currentLobby.players[myId]?.username) || 'Operative';
+          const mySkin = (currentLobby && currentLobby.players && currentLobby.players[myId]?.skinId) || null;
+
+          // Spawn persistent dead body model at exact death location
+          spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, mySkin);
           
           if (socketClient) {
-            socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myId} (${myClass}) has been captured by the void.` });
-            socketClient.emit('capture_human', { targetId: myId }); // Tell server we died!
+            socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myUsername} (${myClass}) has been captured by the void.` });
+            socketClient.emit('capture_human', { 
+              targetId: myId,
+              position: { x: camera.position.x, y: 0.04, z: camera.position.z },
+              rotation: camera.rotation.y,
+              username: myUsername,
+              characterClass: myClass,
+              skinId: mySkin
+            }); // Tell server we died with corpse location
 
             // Drop all items and keys
             inventory.forEach(itemName => {
