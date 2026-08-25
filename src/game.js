@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 let preloadedGhostModel = null;
 let preloadedHumanModel = null;
@@ -1182,7 +1183,7 @@ function hasGridLineOfSight(x1, z1, x2, z2) {
 
 let floorMesh = null;
 let ceilingMesh = null;
-let staticWallsInstancedMesh = null;
+let staticWallsMesh = null;
 
 // Shared Texture Cache to prevent duplicate GPU memory allocations
 const textureCache = new Map();
@@ -1222,12 +1223,12 @@ function generateMaze(keysCount = 8) {
   walls = [];
   slidingWallSegments = [];
 
-  // Cleanup old InstancedMesh for static walls
-  if (staticWallsInstancedMesh) {
-    scene.remove(staticWallsInstancedMesh);
-    if (staticWallsInstancedMesh.geometry) staticWallsInstancedMesh.geometry.dispose();
-    if (staticWallsInstancedMesh.material) staticWallsInstancedMesh.material.dispose();
-    staticWallsInstancedMesh = null;
+  // Cleanup old merged mesh for static walls
+  if (staticWallsMesh) {
+    scene.remove(staticWallsMesh);
+    if (staticWallsMesh.geometry) staticWallsMesh.geometry.dispose();
+    if (staticWallsMesh.material) staticWallsMesh.material.dispose();
+    staticWallsMesh = null;
   }
 
   // Cleanup old floor and ceiling
@@ -1441,7 +1442,7 @@ function generateMaze(keysCount = 8) {
   const wallGeo = new THREE.BoxGeometry(blockSize + 0.5, 4.5, blockSize + 0.5);
 
   openCorridors = []; // Reset for new maze
-  const staticWallTransforms = [];
+  const wallGeometries = [];
 
   for (let r = 0; r < layout.length; r++) {
     for (let c = 0; c < layout[r].length; c++) {
@@ -1450,8 +1451,10 @@ function generateMaze(keysCount = 8) {
       const zPos = (r - layout.length / 2) * blockSize + blockSize/2;
 
       if (type === 1) {
-        // Static wall: collect position for batch InstancedMesh
-        staticWallTransforms.push({ x: xPos, y: 4.5 / 2, z: zPos });
+        // Static wall: create transformed geometry for single merged mesh (1 draw call, native shadow support!)
+        const singleGeo = new THREE.BoxGeometry(blockSize + 0.5, 4.5, blockSize + 0.5);
+        singleGeo.translate(xPos, 4.5 / 2, zPos);
+        wallGeometries.push(singleGeo);
       } else if (type === 2) {
         // Dynamic sliding door: separate mesh for smooth height animations
         const wallMesh = new THREE.Mesh(wallGeo, slidingWallMat);
@@ -1468,25 +1471,16 @@ function generateMaze(keysCount = 8) {
     }
   }
 
-  // Build GPU InstancedMesh for ALL static walls (1 single draw call instead of 2000!)
-  if (staticWallTransforms.length > 0) {
-    staticWallsInstancedMesh = new THREE.InstancedMesh(wallGeo, wallMat, staticWallTransforms.length);
-    staticWallsInstancedMesh.castShadow = true;
-    staticWallsInstancedMesh.receiveShadow = true;
-    staticWallsInstancedMesh.frustumCulled = false; // Prevent premature culling of whole labyrinth
+  // Build a single merged Mesh for ALL static walls (1 single draw call, native shadow & light support!)
+  if (wallGeometries.length > 0) {
+    const mergedGeo = BufferGeometryUtils.mergeGeometries(wallGeometries, false);
+    staticWallsMesh = new THREE.Mesh(mergedGeo, wallMat);
+    staticWallsMesh.castShadow = true;
+    staticWallsMesh.receiveShadow = true;
+    scene.add(staticWallsMesh);
     
-    for (let i = 0; i < staticWallTransforms.length; i++) {
-      const t = staticWallTransforms[i];
-      _scratchDummy.position.set(t.x, t.y, t.z);
-      _scratchDummy.rotation.set(0, 0, 0);
-      _scratchDummy.scale.set(1, 1, 1);
-      _scratchDummy.updateMatrix();
-      staticWallsInstancedMesh.setMatrixAt(i, _scratchDummy.matrix);
-    }
-    staticWallsInstancedMesh.instanceMatrix.needsUpdate = true;
-    staticWallsInstancedMesh.computeBoundingBox();
-    staticWallsInstancedMesh.computeBoundingSphere();
-    scene.add(staticWallsInstancedMesh);
+    // Dispose intermediate individual geometries to free memory
+    wallGeometries.forEach(g => g.dispose());
   }
 
   // Draw the Master Gate — Photorealistic Vault Door
