@@ -1522,9 +1522,7 @@ function generateMaze(keysCount = 8) {
   }
   
   const gateGeo = new THREE.PlaneGeometry(4.5, 4); // Match corridor width
-  const vaultTex = textureLoader.load('/assets/vault_door.png');
-  vaultTex.wrapS = THREE.ClampToEdgeWrapping;
-  vaultTex.wrapT = THREE.ClampToEdgeWrapping;
+  const vaultTex = getLoadedTexture('/assets/vault_door.png');
   const gateMat = new THREE.MeshStandardMaterial({ 
     map: vaultTex,
     color: 0x8899aa,
@@ -1553,7 +1551,7 @@ function generateMaze(keysCount = 8) {
 
   // Add a photorealistic keypad to the wall next to the door
   const padGeo = new THREE.PlaneGeometry(0.6, 0.9);
-  const padTex = textureLoader.load('/assets/keypad.png');
+  const padTex = getLoadedTexture('/assets/keypad.png');
   const padMat = new THREE.MeshStandardMaterial({ map: padTex, metalness: 0.5, roughness: 0.5 });
   const padMesh = new THREE.Mesh(padGeo, padMat);
   padMesh.position.set(gateCoordinates.x + padOffsetX, 1.5, gateCoordinates.z + padOffsetZ);
@@ -3167,7 +3165,6 @@ function dropActiveItem() {
 }
 
 function spawnDroppedItemLocal(id, name, pos) {
-  const textureLoader = new THREE.TextureLoader();
   let texPath = '';
   if (name === 'Battery Pack') texPath = '/assets/battery_sprite.png';
   else if (name === 'EMF Radar') texPath = '/assets/emf_sprite.png';
@@ -3182,7 +3179,7 @@ function spawnDroppedItemLocal(id, name, pos) {
   else texPath = '/assets/battery_sprite.png'; // Safe fallback for any new item
 
   const spriteMat = new THREE.SpriteMaterial({ 
-    map: textureLoader.load(texPath), 
+    map: getLoadedTexture(texPath), 
     color: 0xffffff,
     fog: true,
     transparent: true,

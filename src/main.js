@@ -1,9 +1,16 @@
 import { io } from 'socket.io-client';
 import { initGame, setMobileMode } from './game.js';
 import { Purchases } from '@revenuecat/purchases-capacitor';
+import { Capacitor } from '@capacitor/core';
 
-// Initialize RevenueCat
-Purchases.configure({ apiKey: "test_cMsleegvwoeSHogVfNJSxcSJCqj" });
+// Initialize RevenueCat safely only on Native mobile platforms
+if (Capacitor.isNativePlatform()) {
+  try {
+    Purchases.configure({ apiKey: "test_cMsleegvwoeSHogVfNJSxcSJCqj" });
+  } catch (err) {
+    console.warn("RevenueCat native configuration warning:", err);
+  }
+}
 let socket = null;
 let currentLobby = null;
 let myId = null;
