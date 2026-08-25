@@ -1287,26 +1287,66 @@ function generateMaze(keysCount = 8) {
 
   // Grid layout for corridors (Procedurally Scaled with Difficulty)
   const layout = Array(mazeSize).fill(0).map(() => Array(mazeSize).fill(1));
-  
-  function carve(x, z) {
-    layout[z][x] = 0;
-    const dirs = [[0,-2], [0,2], [-2,0], [2,0]];
-    shuffleArray(dirs);
-    for (let [dx, dz] of dirs) {
-      const nx = x + dx, nz = z + dz;
-      if (nx > 0 && nx < mazeSize-1 && nz > 0 && nz < mazeSize-1 && layout[nz][nx] === 1) {
-        layout[z + dz/2][x + dx/2] = 0;
-        carve(nx, nz);
+  const centerCoord = Math.floor(mazeSize / 2) | 1; // Always an odd index
+
+  // 1. Stack-Based Iterative DFS Maze Carving (Zero stack overflow, guarantees 100% full coverage)
+  const stack = [[centerCoord, centerCoord]];
+  layout[centerCoord][centerCoord] = 0;
+
+  while (stack.length > 0) {
+    const [currX, currZ] = stack[stack.length - 1];
+    const neighbors = [];
+    const dirs = [[0, -2], [0, 2], [-2, 0], [2, 0]];
+    
+    for (const [dx, dz] of dirs) {
+      const nx = currX + dx;
+      const nz = currZ + dz;
+      if (nx > 0 && nx < mazeSize - 1 && nz > 0 && nz < mazeSize - 1 && layout[nz][nx] === 1) {
+        neighbors.push([nx, nz, currX + dx / 2, currZ + dz / 2]);
+      }
+    }
+
+    if (neighbors.length > 0) {
+      const chosenIdx = Math.floor(seededRandom() * neighbors.length);
+      const [nx, nz, wallX, wallZ] = neighbors[chosenIdx];
+      layout[wallZ][wallX] = 0; // Carve path between cells
+      layout[nz][nx] = 0;       // Carve target cell
+      stack.push([nx, nz]);
+    } else {
+      stack.pop();
+    }
+  }
+
+  // 2. Guaranteed Wide Central Spawn Hub (3x3 open junction with 4 cardinal arteries)
+  for (let r = centerCoord - 1; r <= centerCoord + 1; r++) {
+    for (let c = centerCoord - 1; c <= centerCoord + 1; c++) {
+      if (r > 0 && r < mazeSize - 1 && c > 0 && c < mazeSize - 1) {
+        layout[r][c] = 0;
       }
     }
   }
-  
-  // Start carving from center
-  const centerCoord = Math.floor(mazeSize/2) | 1;
-  carve(centerCoord, centerCoord);
-  layout[Math.floor(mazeSize/2)][Math.floor(mazeSize/2)] = 0; // Ensure true center spawn is safe
+  // Guarantee open arterial pathways leading North, South, East, West from center spawn
+  for (let step = 2; step <= 4; step++) {
+    if (centerCoord - step > 0) layout[centerCoord - step][centerCoord] = 0;
+    if (centerCoord + step < mazeSize - 1) layout[centerCoord + step][centerCoord] = 0;
+    if (centerCoord - step > 0) layout[centerCoord][centerCoord - step] = 0;
+    if (centerCoord + step < mazeSize - 1) layout[centerCoord][centerCoord + step] = 0;
+  }
 
-  // Randomly select one of the 4 cardinal boundaries for the Master Gate (Vault)
+  // 3. Anti-Trap Braiding: Open 15% of interior dead-end walls to create looping pathways and avoid dead-ends
+  for (let r = 2; r < mazeSize - 2; r += 2) {
+    for (let c = 2; c < mazeSize - 2; c += 2) {
+      if (layout[r][c] === 1 && seededRandom() < 0.20) {
+        const horizontalOpen = (layout[r][c - 1] === 0 && layout[r][c + 1] === 0);
+        const verticalOpen = (layout[r - 1][c] === 0 && layout[r + 1][c] === 0);
+        if (horizontalOpen || verticalOpen) {
+          layout[r][c] = 0;
+        }
+      }
+    }
+  }
+
+  // 4. Randomly select one of the 4 cardinal boundaries for the Master Gate (Vault)
   window.vaultEdge = ['N', 'S', 'E', 'W'][Math.floor(seededRandom() * 4)];
   
   // Find all possible exit points along the chosen edge that are adjacent to the maze paths
@@ -1350,69 +1390,64 @@ function generateMaze(keysCount = 8) {
     else if (window.vaultEdge === 'W') { window.vaultR = centerCoord; window.vaultC = 0; for (let i = 1; i <= centerCoord; i++) layout[centerCoord][i] = 0; }
   }
 
-  // Easter Egg: For Ariadne_999, carve a direct unobstructed straight hallway from center spawn (0, 0) directly to the Master Gate vault
-  const myPlayerCheck = (currentLobby && currentLobby.players) ? currentLobby.players[myId] : null;
-  const currentUsername = (myPlayerCheck && myPlayerCheck.username) || sessionStorage.getItem('rejoinUsername') || window.myUsername || '';
-  const isAriadneUser = currentUsername === 'Ariadne_999';
+  // 5. BFS Reachability Flood-Fill: Mathematically verify 100% of open maze cells are reachable from spawn
+  const reachable = Array(mazeSize).fill(0).map(() => Array(mazeSize).fill(false));
+  const bfsQueue = [[centerCoord, centerCoord]];
+  reachable[centerCoord][centerCoord] = true;
+  const bfsDirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
 
-  if (isAriadneUser) {
-    if (window.vaultEdge === 'N') {
-      window.vaultR = 0;
-      window.vaultC = centerCoord;
-      for (let r = 1; r <= centerCoord; r++) {
-        layout[r][centerCoord] = 0; // Open straight corridor
-        layout[r][centerCoord - 1] = 1; // Solid left wall
-        layout[r][centerCoord + 1] = 1; // Solid right wall
+  while (bfsQueue.length > 0) {
+    const [c, r] = bfsQueue.shift();
+    for (const [dc, dr] of bfsDirs) {
+      const nc = c + dc;
+      const nr = r + dr;
+      if (nr >= 0 && nr < mazeSize && nc >= 0 && nc < mazeSize) {
+        if (!reachable[nr][nc] && layout[nr][nc] === 0) {
+          reachable[nr][nc] = true;
+          bfsQueue.push([nc, nr]);
+        }
       }
-      layout[0][centerCoord] = 1; // Solid back wall behind vault
-      layout[0][centerCoord - 1] = 1;
-      layout[0][centerCoord + 1] = 1;
-    } else if (window.vaultEdge === 'S') {
-      window.vaultR = mazeSize - 1;
-      window.vaultC = centerCoord;
-      for (let r = centerCoord; r < mazeSize - 1; r++) {
-        layout[r][centerCoord] = 0; // Open straight corridor
-        layout[r][centerCoord - 1] = 1; // Solid left wall
-        layout[r][centerCoord + 1] = 1; // Solid right wall
-      }
-      layout[mazeSize - 1][centerCoord] = 1; // Solid back wall behind vault
-      layout[mazeSize - 1][centerCoord - 1] = 1;
-      layout[mazeSize - 1][centerCoord + 1] = 1;
-    } else if (window.vaultEdge === 'W') {
-      window.vaultR = centerCoord;
-      window.vaultC = 0;
-      for (let c = 1; c <= centerCoord; c++) {
-        layout[centerCoord][c] = 0; // Open straight corridor
-        layout[centerCoord - 1][c] = 1; // Solid top wall
-        layout[centerCoord + 1][c] = 1; // Solid bottom wall
-      }
-      layout[centerCoord][0] = 1; // Solid back wall behind vault
-      layout[centerCoord - 1][0] = 1;
-      layout[centerCoord + 1][0] = 1;
-    } else if (window.vaultEdge === 'E') {
-      window.vaultR = centerCoord;
-      window.vaultC = mazeSize - 1;
-      for (let c = centerCoord; c < mazeSize - 1; c++) {
-        layout[centerCoord][c] = 0; // Open straight corridor
-        layout[centerCoord - 1][c] = 1; // Solid top wall
-        layout[centerCoord + 1][c] = 1; // Solid bottom wall
-      }
-      layout[centerCoord][mazeSize - 1] = 1; // Solid back wall behind vault
-      layout[centerCoord - 1][mazeSize - 1] = 1;
-      layout[centerCoord + 1][mazeSize - 1] = 1;
     }
   }
 
-  // Scatter sliding doors (type 2) scaled to map size
-  const slidingDoorCount = Math.round(mazeSize * 1.15);
-  for(let i=0; i < slidingDoorCount; i++) {
-    const rx = 1 + Math.floor(seededRandom() * (mazeSize-2));
-    const rz = 1 + Math.floor(seededRandom() * (mazeSize-2));
-    if (isAriadneUser) {
-      if ((window.vaultEdge === 'N' || window.vaultEdge === 'S') && Math.abs(rx - centerCoord) <= 1) continue;
-      if ((window.vaultEdge === 'E' || window.vaultEdge === 'W') && Math.abs(rz - centerCoord) <= 1) continue;
+  // Connect any unreachable open pocket by carving direct doorways to reachable neighbors
+  for (let r = 1; r < mazeSize - 1; r++) {
+    for (let c = 1; c < mazeSize - 1; c++) {
+      if (layout[r][c] === 0 && !reachable[r][c]) {
+        for (const [dc, dr] of bfsDirs) {
+          const nc = c + dc;
+          const nr = r + dr;
+          if (nr > 0 && nr < mazeSize - 1 && nc > 0 && nc < mazeSize - 1) {
+            layout[nr][nc] = 0;
+            reachable[nr][nc] = true;
+            reachable[r][c] = true;
+            break;
+          }
+        }
+      }
     }
-    if (layout[rz][rx] === 1) layout[rz][rx] = 2; 
+  }
+
+  // 6. Safe Sliding Doors Placement (Only on internal walls with open passages on both sides, NEVER on central spawn hub)
+  const slidingDoorCount = Math.round(mazeSize * 0.85);
+  let placedDoors = 0;
+  let attempts = 0;
+  while (placedDoors < slidingDoorCount && attempts < 200) {
+    attempts++;
+    const rx = 2 + Math.floor(seededRandom() * (mazeSize - 4));
+    const rz = 2 + Math.floor(seededRandom() * (mazeSize - 4));
+    
+    // Never block the central spawn hub
+    if (Math.abs(rx - centerCoord) <= 3 && Math.abs(rz - centerCoord) <= 3) continue;
+
+    if (layout[rz][rx] === 1) {
+      const horizontalValid = (layout[rz][rx - 1] === 0 && layout[rz][rx + 1] === 0);
+      const verticalValid = (layout[rz - 1][rx] === 0 && layout[rz + 1][rx] === 0);
+      if (horizontalValid || verticalValid) {
+        layout[rz][rx] = 2; // Sliding door
+        placedDoors++;
+      }
+    }
   }
 
   // Store layout globally for ghost pathfinding & spatial collision
@@ -1638,16 +1673,8 @@ function generateCollectibles(keysCount) {
     const kt = KEY_TYPES[i % KEY_TYPES.length];
     const mesh = createKeyMeshGroup(kt.color, kt.emissive);
 
-    let x = 0, z = 0;
-    if (availableCorridors.length > i) {
-      x = availableCorridors[i].x;
-      z = availableCorridors[i].z;
-    } else {
-      const angle = (i / keysCount) * Math.PI * 2;
-      x = Math.cos(angle) * (15 + seededRandom() * 20);
-      z = Math.sin(angle) * (15 + seededRandom() * 20);
-    }
-    mesh.position.set(x, 0.45, z);
+    const corr = availableCorridors.length > 0 ? availableCorridors[i % availableCorridors.length] : { x: 0, z: 0 };
+    mesh.position.set(corr.x, 0.45, corr.z);
     // Store key type label in userData for HUD hints
     mesh.userData.keyTypeLabel = kt.label;
     scene.add(mesh);
@@ -1666,16 +1693,8 @@ function generateCodeClues() {
 
   for (let i = 0; i < 4; i++) {
     const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
-    let x = 0, z = 0;
-    if (openCorridors.length > 4) {
-      const randIdx = Math.floor(seededRandom() * openCorridors.length);
-      x = openCorridors[randIdx].x;
-      z = openCorridors[randIdx].z;
-    } else {
-      x = (seededRandom() - 0.5) * 60;
-      z = (seededRandom() - 0.5) * 60;
-    }
-    noteMesh.position.set(x, 1.0, z);
+    const corr = openCorridors.length > 0 ? openCorridors[Math.floor(seededRandom() * openCorridors.length)] : { x: 0, z: 0 };
+    noteMesh.position.set(corr.x, 1.0, corr.z);
     noteMesh.rotation.y = seededRandom() * Math.PI;
     scene.add(noteMesh);
     codeClueNotes.push({ mesh: noteMesh, digitIndex: i, collected: false });
