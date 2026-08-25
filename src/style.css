@@ -570,36 +570,36 @@ input[type="text"]:focus {
 .vitals-box {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  min-width: 120px;
-  max-width: 155px;
-  padding: 0.35rem 0.55rem;
+  gap: 0.4rem;
+  min-width: 210px;
+  max-width: 250px;
+  padding: 0.6rem 0.85rem;
   background: rgba(10, 15, 30, 0.85);
   border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 6px;
+  border-radius: 8px;
   backdrop-filter: blur(8px);
 }
 
 .gauge-row {
   display: flex;
   flex-direction: column;
-  gap: 0.12rem;
+  gap: 0.2rem;
 }
 
 .gauge-label {
   display: flex;
   justify-content: space-between;
-  font-size: 0.58rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
 }
 
 .gauge-bar-bg {
   width: 100%;
-  height: 5px;
+  height: 7px;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
@@ -629,7 +629,7 @@ input[type="text"]:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   pointer-events: auto;
   z-index: 50;
 }
@@ -638,27 +638,27 @@ input[type="text"]:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 0.2rem 0.65rem !important;
+  gap: 4px;
+  padding: 0.35rem 1.1rem !important;
   background: rgba(10, 15, 30, 0.9) !important;
   border: 1px solid rgba(239, 68, 68, 0.3) !important;
-  border-radius: 6px !important;
-  box-shadow: 0 0 12px rgba(0, 0, 0, 0.6) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 0 16px rgba(0, 0, 0, 0.6) !important;
 }
 
 .compact-objective-bar .status-indicator {
-  font-size: 0.62rem;
+  font-size: 0.82rem;
   font-weight: 900;
   color: var(--primary-accent);
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   margin: 0;
-  text-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
 }
 
 .objective-inline-stats {
   display: flex;
-  gap: 8px;
-  font-size: 0.55rem;
+  gap: 14px;
+  font-size: 0.72rem;
   color: var(--text-muted);
   font-family: 'Orbitron', monospace;
 }
@@ -878,10 +878,10 @@ input[type="text"]:focus {
   filter: brightness(1.3);
 }
 
-/* Bottom HUD: Ultra-Sleek, Compact Horizontal Strip */
+/* Bottom HUD: Sleek, High-Legibility Horizontal Strip for Desktop */
 .hud-bottom {
   position: absolute;
-  bottom: 8px;
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -895,39 +895,40 @@ input[type="text"]:focus {
   display: flex !important;
   flex-direction: row !important;
   align-items: center !important;
-  gap: 0.45rem !important;
-  padding: 0.2rem 0.45rem !important;
-  background: rgba(10, 15, 30, 0.8) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 6px !important;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.7) !important;
+  gap: 0.6rem !important;
+  padding: 0.35rem 0.75rem !important;
+  background: rgba(10, 15, 30, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8) !important;
   pointer-events: auto !important;
 }
 
 .inventory-grid {
   display: flex;
-  gap: 0.2rem;
+  gap: 0.35rem;
   align-items: center;
 }
 
 .inventory-slot {
-  width: 30px;
-  height: 30px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
   display: flex;
   justify-content: center;
   align-items: center;
   position: relative;
-  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.6);
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .inventory-slot.active {
   border-color: #38bdf8;
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.5), inset 0 0 4px rgba(0, 0, 0, 0.5);
-  background: rgba(56, 189, 248, 0.1);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.6), inset 0 0 6px rgba(0, 0, 0, 0.6);
+  background: rgba(56, 189, 248, 0.15);
 }
 
 .inventory-slot.on-cooldown {
@@ -941,7 +942,7 @@ input[type="text"]:focus {
   width: 100%;
   height: 100%;
   background: rgba(10, 5, 20, 0.85);
-  border-radius: 3px;
+  border-radius: 5px;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -950,31 +951,33 @@ input[type="text"]:focus {
 }
 
 .slot-cooldown-text {
-  font-size: 0.6rem;
+  font-size: 0.82rem;
   font-weight: 900;
   color: #f59e0b;
   font-family: 'Orbitron', monospace;
-  text-shadow: 0 0 6px rgba(245, 158, 11, 0.9);
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.9);
 }
 
 .inventory-slot-index {
   position: absolute;
-  top: 1px;
-  left: 2px;
-  font-size: 0.42rem;
+  top: 2px;
+  left: 4px;
+  font-size: 0.65rem;
   color: var(--text-muted);
+  font-weight: 700;
 }
 
 .inventory-slot span:not(.inventory-slot-index) {
-  font-size: 0.4rem !important;
+  font-size: 0.62rem !important;
   font-weight: 700;
   text-align: center;
-  line-height: 1;
+  line-height: 1.1;
+  padding: 2px;
 }
 
 .inventory-item-icon {
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
 }
 
@@ -982,35 +985,35 @@ input[type="text"]:focus {
 .inline-key-pocket {
   display: flex;
   align-items: center;
-  gap: 0.2rem;
-  padding-left: 0.35rem;
-  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  gap: 0.35rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .key-pocket-label {
-  font-size: 0.46rem;
+  font-size: 0.62rem;
   font-weight: bold;
   color: var(--text-muted);
   font-family: 'Orbitron', monospace;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
 }
 
 .key-pocket-grid {
   display: flex;
-  gap: 0.18rem;
+  gap: 0.25rem;
 }
 
 .key-slot {
-  width: 26px;
-  height: 26px;
-  background: rgba(10, 15, 30, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
+  width: 38px;
+  height: 38px;
+  background: rgba(10, 15, 30, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  font-size: 0.75rem;
+  font-size: 1.1rem;
 }
 
 /* Global warning overlays & notifications */
