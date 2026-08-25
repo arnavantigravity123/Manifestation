@@ -407,7 +407,7 @@
 
       <!-- 4. Dynamic Terminal Cipher Keypad Interface (Interactive in-game) -->
       <div id="keypad-modal-ui" class="keypad-modal" style="display: none;">
-        <div style="text-align: center; font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">KEYPAD CIPHER TERMINAL</div>
+        <div class="keypad-title">KEYPAD CIPHER TERMINAL</div>
         <div id="keypad-screen-display" class="keypad-screen">----</div>
         <div class="keypad-grid">
           <button class="keypad-btn">1</button>
@@ -419,11 +419,11 @@
           <button class="keypad-btn">7</button>
           <button class="keypad-btn">8</button>
           <button class="keypad-btn">9</button>
-          <button id="keypad-clear" class="keypad-btn" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3);">CLR</button>
+          <button id="keypad-clear" class="keypad-btn btn-clear">CLR</button>
           <button class="keypad-btn">0</button>
-          <button id="keypad-submit" class="keypad-btn" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">ENT</button>
+          <button id="keypad-submit" class="keypad-btn btn-enter">ENT</button>
         </div>
-        <button id="keypad-close" class="action-btn" style="padding: 0.5rem; font-size: 0.8rem;">Disengage Device</button>
+        <button id="keypad-close" class="keypad-close-btn">DISENGAGE DEVICE</button>
       </div>
 
       <!-- 5. Pointer Lock & Intro Splash -->
