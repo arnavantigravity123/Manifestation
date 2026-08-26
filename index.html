@@ -24,6 +24,22 @@
           <h1>Manifestation</h1>
           <p>Labyrinth Escape Protocol</p>
         </div>
+
+        <!-- Account Status Header -->
+        <div id="account-status-bar" class="account-bar">
+          <div id="account-guest-view" class="account-info">
+            <span class="account-badge guest-badge">👤 GUEST</span>
+            <button id="open-auth-modal-btn" class="account-action-btn">🔑 LOGIN / REGISTER</button>
+          </div>
+          <div id="account-logged-view" class="account-info" style="display: none;">
+            <div class="account-user-details">
+              <span id="account-username-display" class="account-username">Operative</span>
+              <span id="account-vip-badge" class="account-badge vip-badge" style="display: none;">👑 VIP</span>
+              <span id="account-credits-display" class="account-credits">💰 0</span>
+            </div>
+            <button id="account-logout-btn" class="account-logout-btn" title="Log Out">LOGOUT</button>
+          </div>
+        </div>
         
         <div class="form-group">
           <label for="username-input">Operative Call-Sign</label>
@@ -78,6 +94,53 @@
         <div id="solo-loading-overlay" style="display: none; text-align: center; color: var(--primary-accent); margin-top: 1rem; font-family: 'Orbitron', sans-serif;">
           INITIALIZING SOLO CONTAINMENT...
         </div>
+      </div>
+
+      <!-- Account Login & Registration Modal -->
+      <div id="account-auth-modal" class="glass-panel auth-modal" style="display: none;">
+        <div class="auth-modal-header">
+          <h2>TERMINAL ACCESS</h2>
+          <p>Register or Login to save VIP status, Credits, & Skins across devices</p>
+        </div>
+
+        <div class="auth-tabs">
+          <button id="tab-login-btn" class="auth-tab active" type="button">LOGIN</button>
+          <button id="tab-register-btn" class="auth-tab" type="button">CREATE ACCOUNT</button>
+        </div>
+
+        <!-- Login Form -->
+        <form id="login-form" class="auth-form">
+          <div class="form-group">
+            <label for="login-username">Operative Call-Sign</label>
+            <input type="text" id="login-username" placeholder="Call-sign (e.g., Arnav)" required autocomplete="username" />
+          </div>
+          <div class="form-group">
+            <label for="login-password">Security Passcode</label>
+            <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password" />
+          </div>
+          <button type="submit" id="submit-login-btn" class="action-btn auth-submit-btn">ACCESS TERMINAL</button>
+        </form>
+
+        <!-- Register Form -->
+        <form id="register-form" class="auth-form" style="display: none;">
+          <div class="form-group">
+            <label for="register-username">New Operative Call-Sign</label>
+            <input type="text" id="register-username" placeholder="3+ characters" required autocomplete="username" />
+          </div>
+          <div class="form-group">
+            <label for="register-password">Security Passcode</label>
+            <input type="password" id="register-password" placeholder="4+ characters" required autocomplete="new-password" />
+          </div>
+          <div class="form-group">
+            <label for="register-password-confirm">Confirm Passcode</label>
+            <input type="password" id="register-password-confirm" placeholder="Repeat passcode" required autocomplete="new-password" />
+          </div>
+          <button type="submit" id="submit-register-btn" class="action-btn auth-submit-btn" style="background: linear-gradient(135deg, #059669, #064e3b);">INITIALIZE ACCOUNT</button>
+        </form>
+
+        <div id="auth-status-msg" class="auth-status-text"></div>
+
+        <button id="close-auth-modal-btn" type="button" class="action-btn auth-close-btn">CANCEL / CONTINUE AS GUEST</button>
       </div>
 
       <!-- VIP Paywall Modal -->

@@ -4,6 +4,8 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -21,6 +23,58 @@ const io = new Server(server, {
     methods: ["GET", "POST"]
   }
 });
+
+// ==========================================
+// Persistent User Account & VIP Store
+// ==========================================
+const DATA_DIR = join(__dirname, 'data');
+const USERS_FILE = join(DATA_DIR, 'users.json');
+
+if (!fs.existsSync(DATA_DIR)) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  } catch (e) {
+    console.error("Error creating data directory:", e);
+  }
+}
+
+function loadUsers() {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+    }
+  } catch (e) {
+    console.error("Error loading users database:", e);
+  }
+  return {};
+}
+
+function saveUsers(users) {
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+  } catch (e) {
+    console.error("Error saving users database:", e);
+  }
+}
+
+function hashPassword(password, salt) {
+  return crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+}
+
+function sanitizeUser(u) {
+  return {
+    username: u.username,
+    isVip: !!u.isVip,
+    credits: u.credits || 0,
+    unlockedSkins: u.unlockedSkins || ['skin_default'],
+    equippedSkin: u.equippedSkin || 'skin_default',
+    preferredClass: u.preferredClass || 'Random',
+    stats: u.stats || { matchesPlayed: 0, escapes: 0, captures: 0 },
+    createdAt: u.createdAt
+  };
+}
+
+const activeSessions = new Map(); // token -> username
 
 // Lobby/Game State
 // roomId -> roomState
@@ -141,6 +195,129 @@ function endMatch(roomId, winner) {
 
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`);
+
+  // ==========================================
+  // Authentication & Persistent User Handlers
+  // ==========================================
+  socket.on('auth_register', ({ username, password }, callback) => {
+    if (!username || !password || username.trim().length < 3 || password.length < 4) {
+      return callback && callback({ success: false, msg: 'Call-sign must be at least 3 chars & password at least 4 chars.' });
+    }
+    const cleanUsername = username.trim();
+    const users = loadUsers();
+    const lookupKey = cleanUsername.toLowerCase();
+
+    if (users[lookupKey]) {
+      return callback && callback({ success: false, msg: 'Call-sign is already registered. Please login.' });
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = hashPassword(password, salt);
+    const newUser = {
+      username: cleanUsername,
+      passwordHash,
+      salt,
+      isVip: false,
+      credits: 100, // Welcome headstart
+      unlockedSkins: ['skin_default'],
+      equippedSkin: 'skin_default',
+      preferredClass: 'Random',
+      stats: { matchesPlayed: 0, escapes: 0, captures: 0 },
+      createdAt: new Date().toISOString()
+    };
+
+    users[lookupKey] = newUser;
+    saveUsers(users);
+
+    const token = crypto.randomBytes(32).toString('hex');
+    activeSessions.set(token, lookupKey);
+
+    console.log(`[AUTH] New Operative registered: ${cleanUsername}`);
+    return callback && callback({ success: true, token, user: sanitizeUser(newUser) });
+  });
+
+  socket.on('auth_login', ({ username, password }, callback) => {
+    if (!username || !password) {
+      return callback && callback({ success: false, msg: 'Please provide both username and password.' });
+    }
+    const cleanUsername = username.trim();
+    const users = loadUsers();
+    const lookupKey = cleanUsername.toLowerCase();
+    const user = users[lookupKey];
+
+    if (!user) {
+      return callback && callback({ success: false, msg: 'Call-sign not found. Please register first.' });
+    }
+
+    const testHash = hashPassword(password, user.salt);
+    if (testHash !== user.passwordHash) {
+      return callback && callback({ success: false, msg: 'Invalid password for this call-sign.' });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    activeSessions.set(token, lookupKey);
+
+    console.log(`[AUTH] Operative logged in: ${user.username}`);
+    return callback && callback({ success: true, token, user: sanitizeUser(user) });
+  });
+
+  socket.on('auth_token_login', ({ token }, callback) => {
+    if (!token || !activeSessions.has(token)) {
+      return callback && callback({ success: false, msg: 'Session expired or invalid.' });
+    }
+    const lookupKey = activeSessions.get(token);
+    const users = loadUsers();
+    const user = users[lookupKey];
+    if (!user) {
+      activeSessions.delete(token);
+      return callback && callback({ success: false, msg: 'User profile not found.' });
+    }
+    return callback && callback({ success: true, token, user: sanitizeUser(user) });
+  });
+
+  socket.on('auth_logout', ({ token }, callback) => {
+    if (token) activeSessions.delete(token);
+    return callback && callback({ success: true });
+  });
+
+  socket.on('account_update_vip', ({ token, isVip }, callback) => {
+    if (!token || !activeSessions.has(token)) {
+      return callback && callback({ success: false, msg: 'Unauthorized.' });
+    }
+    const lookupKey = activeSessions.get(token);
+    const users = loadUsers();
+    if (users[lookupKey]) {
+      users[lookupKey].isVip = !!isVip;
+      if (isVip) {
+        users[lookupKey].credits = (users[lookupKey].credits || 0) + 500;
+      }
+      saveUsers(users);
+      return callback && callback({ success: true, user: sanitizeUser(users[lookupKey]) });
+    }
+  });
+
+  socket.on('account_update_credits', ({ token, credits }, callback) => {
+    if (!token || !activeSessions.has(token)) return;
+    const lookupKey = activeSessions.get(token);
+    const users = loadUsers();
+    if (users[lookupKey]) {
+      users[lookupKey].credits = Math.max(0, parseInt(credits) || 0);
+      saveUsers(users);
+      return callback && callback({ success: true, credits: users[lookupKey].credits });
+    }
+  });
+
+  socket.on('account_update_skin', ({ token, unlockedSkins, equippedSkin }, callback) => {
+    if (!token || !activeSessions.has(token)) return;
+    const lookupKey = activeSessions.get(token);
+    const users = loadUsers();
+    if (users[lookupKey]) {
+      if (Array.isArray(unlockedSkins)) users[lookupKey].unlockedSkins = unlockedSkins;
+      if (equippedSkin) users[lookupKey].equippedSkin = equippedSkin;
+      saveUsers(users);
+      return callback && callback({ success: true, user: sanitizeUser(users[lookupKey]) });
+    }
+  });
 
   socket.on('join_public_matchmaking', ({ username, skinId }) => {
     // Find an open public lobby

@@ -28,6 +28,33 @@ const hudOverlay = document.getElementById('hud-overlay');
 
 const usernameInput = document.getElementById('username-input');
 
+// Account Status Bar Elements
+const accountGuestView = document.getElementById('account-guest-view');
+const accountLoggedView = document.getElementById('account-logged-view');
+const accountUsernameDisplay = document.getElementById('account-username-display');
+const accountVipBadge = document.getElementById('account-vip-badge');
+const accountCreditsDisplay = document.getElementById('account-credits-display');
+const openAuthModalBtn = document.getElementById('open-auth-modal-btn');
+const accountLogoutBtn = document.getElementById('account-logout-btn');
+
+// Account Auth Modal Elements
+const accountAuthModal = document.getElementById('account-auth-modal');
+const closeAuthModalBtn = document.getElementById('close-auth-modal-btn');
+const tabLoginBtn = document.getElementById('tab-login-btn');
+const tabRegisterBtn = document.getElementById('tab-register-btn');
+const loginForm = document.getElementById('login-form');
+const registerForm = document.getElementById('register-form');
+const loginUsernameInput = document.getElementById('login-username');
+const loginPasswordInput = document.getElementById('login-password');
+const registerUsernameInput = document.getElementById('register-username');
+const registerPasswordInput = document.getElementById('register-password');
+const registerPasswordConfirmInput = document.getElementById('register-password-confirm');
+const authStatusMsg = document.getElementById('auth-status-msg');
+
+// Persistent Account State
+let currentUser = null;
+let authToken = localStorage.getItem('manifestation_auth_token') || null;
+
 // Main Menu Action Buttons
 const soloBtn = document.getElementById('solo-btn');
 const joinPublicBtn = document.getElementById('join-public-btn');
@@ -171,6 +198,194 @@ chooseGhostBtn.addEventListener('click', () => {
   updatePlayerSettings();
 });
 
+// ==========================================
+// Account Authentication & Persistence UI
+// ==========================================
+function updateAccountUI() {
+  if (currentUser) {
+    if (accountGuestView) accountGuestView.style.display = 'none';
+    if (accountLoggedView) accountLoggedView.style.display = 'flex';
+    if (accountUsernameDisplay) accountUsernameDisplay.textContent = currentUser.username;
+    if (usernameInput) {
+      usernameInput.value = currentUser.username;
+      usernameInput.disabled = true;
+    }
+
+    if (currentUser.isVip) {
+      if (accountVipBadge) accountVipBadge.style.display = 'inline-block';
+      if (vipStoreBtn) vipStoreBtn.style.display = 'none';
+    } else {
+      if (accountVipBadge) accountVipBadge.style.display = 'none';
+      if (vipStoreBtn) vipStoreBtn.style.display = 'block';
+    }
+
+    playerCredits = currentUser.credits || 0;
+    if (accountCreditsDisplay) accountCreditsDisplay.textContent = `💰 ${playerCredits}`;
+    if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
+    localStorage.setItem('manifestation_credits', playerCredits.toString());
+
+    // Restore unlocked skins
+    if (Array.isArray(currentUser.unlockedSkins)) {
+      currentUser.unlockedSkins.forEach(sid => localStorage.setItem(`unlocked_${sid}`, 'true'));
+    }
+    if (currentUser.equippedSkin) {
+      localStorage.setItem('manifestation_equipped_skin', currentUser.equippedSkin);
+    }
+    updateSkinButtons();
+  } else {
+    if (accountGuestView) accountGuestView.style.display = 'flex';
+    if (accountLoggedView) accountLoggedView.style.display = 'none';
+    if (usernameInput) {
+      usernameInput.disabled = false;
+      const saved = localStorage.getItem('manifestation_username');
+      if (saved) usernameInput.value = saved;
+    }
+    if (vipStoreBtn) vipStoreBtn.style.display = 'block';
+  }
+}
+
+// Open / Close Auth Modal
+if (openAuthModalBtn) {
+  openAuthModalBtn.addEventListener('click', () => {
+    if (authStatusMsg) authStatusMsg.textContent = '';
+    if (accountAuthModal) accountAuthModal.style.display = 'block';
+  });
+}
+
+if (closeAuthModalBtn) {
+  closeAuthModalBtn.addEventListener('click', () => {
+    if (accountAuthModal) accountAuthModal.style.display = 'none';
+  });
+}
+
+// Tab Switching
+if (tabLoginBtn && tabRegisterBtn) {
+  tabLoginBtn.addEventListener('click', () => {
+    tabLoginBtn.classList.add('active');
+    tabRegisterBtn.classList.remove('active');
+    if (loginForm) loginForm.style.display = 'flex';
+    if (registerForm) registerForm.style.display = 'none';
+    if (authStatusMsg) authStatusMsg.textContent = '';
+  });
+
+  tabRegisterBtn.addEventListener('click', () => {
+    tabRegisterBtn.classList.add('active');
+    tabLoginBtn.classList.remove('active');
+    if (loginForm) loginForm.style.display = 'none';
+    if (registerForm) registerForm.style.display = 'flex';
+    if (authStatusMsg) authStatusMsg.textContent = '';
+  });
+}
+
+// Login Form Submit
+if (loginForm) {
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const sock = initializeSocketConnection();
+    const username = loginUsernameInput.value.trim();
+    const password = loginPasswordInput.value;
+
+    if (authStatusMsg) {
+      authStatusMsg.className = 'auth-status-text';
+      authStatusMsg.textContent = 'Verifying security passcode...';
+    }
+
+    sock.emit('auth_login', { username, password }, (res) => {
+      if (res && res.success) {
+        currentUser = res.user;
+        authToken = res.token;
+        localStorage.setItem('manifestation_auth_token', authToken);
+        localStorage.setItem('manifestation_username', currentUser.username);
+        
+        // Link to RevenueCat user ID on mobile platforms
+        if (Capacitor.isNativePlatform()) {
+          try { Purchases.logIn({ appUserID: currentUser.username }); } catch (err) {}
+        }
+
+        if (authStatusMsg) {
+          authStatusMsg.className = 'auth-status-text success';
+          authStatusMsg.textContent = `Welcome back, Operative ${currentUser.username}!`;
+        }
+        setTimeout(() => {
+          if (accountAuthModal) accountAuthModal.style.display = 'none';
+          updateAccountUI();
+        }, 600);
+      } else {
+        if (authStatusMsg) {
+          authStatusMsg.className = 'auth-status-text error';
+          authStatusMsg.textContent = res ? res.msg : 'Login failed.';
+        }
+      }
+    });
+  });
+}
+
+// Register Form Submit
+if (registerForm) {
+  registerForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const sock = initializeSocketConnection();
+    const username = registerUsernameInput.value.trim();
+    const password = registerPasswordInput.value;
+    const confirm = registerPasswordConfirmInput.value;
+
+    if (password !== confirm) {
+      if (authStatusMsg) {
+        authStatusMsg.className = 'auth-status-text error';
+        authStatusMsg.textContent = 'Passcodes do not match.';
+      }
+      return;
+    }
+
+    if (authStatusMsg) {
+      authStatusMsg.className = 'auth-status-text';
+      authStatusMsg.textContent = 'Registering new operative profile...';
+    }
+
+    sock.emit('auth_register', { username, password }, (res) => {
+      if (res && res.success) {
+        currentUser = res.user;
+        authToken = res.token;
+        localStorage.setItem('manifestation_auth_token', authToken);
+        localStorage.setItem('manifestation_username', currentUser.username);
+
+        // Link to RevenueCat user ID on mobile platforms
+        if (Capacitor.isNativePlatform()) {
+          try { Purchases.logIn({ appUserID: currentUser.username }); } catch (err) {}
+        }
+
+        if (authStatusMsg) {
+          authStatusMsg.className = 'auth-status-text success';
+          authStatusMsg.textContent = `Account created! Logged in as ${currentUser.username}.`;
+        }
+        setTimeout(() => {
+          if (accountAuthModal) accountAuthModal.style.display = 'none';
+          updateAccountUI();
+        }, 600);
+      } else {
+        if (authStatusMsg) {
+          authStatusMsg.className = 'auth-status-text error';
+          authStatusMsg.textContent = res ? res.msg : 'Registration failed.';
+        }
+      }
+    });
+  });
+}
+
+// Logout Handler
+if (accountLogoutBtn) {
+  accountLogoutBtn.addEventListener('click', () => {
+    if (socket && authToken) {
+      socket.emit('auth_logout', { token: authToken });
+    }
+    authToken = null;
+    currentUser = null;
+    localStorage.removeItem('manifestation_auth_token');
+    updateAccountUI();
+    alert("Logged out. You are now playing as Guest.");
+  });
+}
+
 // VIP Paywall Logic
 vipStoreBtn.addEventListener('click', () => {
   vipPaywallModal.style.display = 'block';
@@ -184,18 +399,31 @@ buyVipBtn.addEventListener('click', async () => {
   buyVipBtn.textContent = 'Processing...';
   buyVipBtn.disabled = true;
   
+  const grantVipAccess = () => {
+    vipPaywallModal.style.display = 'none';
+    if (vipStoreBtn) vipStoreBtn.style.display = 'none';
+    playerCredits += 500;
+    localStorage.setItem('manifestation_credits', playerCredits.toString());
+    if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
+    
+    if (currentUser) {
+      currentUser.isVip = true;
+      currentUser.credits = (currentUser.credits || 0) + 500;
+      if (socket && authToken) {
+        socket.emit('account_update_vip', { token: authToken, isVip: true });
+      }
+      updateAccountUI();
+    }
+  };
+
   try {
     const offerings = await Purchases.getOfferings();
     if (offerings.current && offerings.current.availablePackages.length !== 0) {
       const { customerInfo } = await Purchases.purchasePackage({ aPackage: offerings.current.availablePackages[0] });
       
       if (customerInfo.entitlements.active['vip_access']) {
-        alert("VIP Access Granted! Ads removed and credits added.");
-        vipPaywallModal.style.display = 'none';
-        vipStoreBtn.style.display = 'none'; // Hide the store button since they are VIP
-        playerCredits += 500;
-        localStorage.setItem('manifestation_credits', playerCredits);
-        playerCreditsDisplay.textContent = playerCredits;
+        alert("VIP Access Granted! Ads removed, credits added, and VIP saved to your account.");
+        grantVipAccess();
       }
     } else {
       throw new Error("No offerings configured");
@@ -204,13 +432,9 @@ buyVipBtn.addEventListener('click', async () => {
     if (error && error.userCancelled) {
       // User manually cancelled the native payment sheet, do nothing
     } else {
-      // Fallback for hackathon testing (Web / No Google Play products configured)
-      alert("Test Mode: RevenueCat not fully configured yet. Granting VIP for Hackathon Demo!");
-      vipPaywallModal.style.display = 'none';
-      vipStoreBtn.style.display = 'none';
-      playerCredits += 500;
-      localStorage.setItem('manifestation_credits', playerCredits);
-      playerCreditsDisplay.textContent = playerCredits;
+      // Fallback for hackathon testing (Web / Demo Mode)
+      alert("Test Mode: RevenueCat not fully configured yet. Granting VIP & saving to account!");
+      grantVipAccess();
     }
   } finally {
     buyVipBtn.textContent = 'Unlock VIP - $4.99';
@@ -227,7 +451,7 @@ const playerCreditsDisplay = document.getElementById('player-credits-display');
 const buySkinBtns = document.querySelectorAll('.buy-skin-btn');
 
 let playerCredits = parseInt(localStorage.getItem('manifestation_credits') || '0');
-playerCreditsDisplay.textContent = playerCredits;
+if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
 
 openSkinsBtn.addEventListener('click', () => {
   skinsStoreModal.style.display = 'block';
@@ -245,8 +469,13 @@ watchAdBtn.addEventListener('click', () => {
   setTimeout(() => {
     alert("Watching Ad... (This is a mock rewarded video ad)");
     playerCredits += 50;
-    localStorage.setItem('manifestation_credits', playerCredits);
-    playerCreditsDisplay.textContent = playerCredits;
+    localStorage.setItem('manifestation_credits', playerCredits.toString());
+    if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
+    if (accountCreditsDisplay) accountCreditsDisplay.textContent = `💰 ${playerCredits}`;
+    if (currentUser && socket && authToken) {
+      currentUser.credits = playerCredits;
+      socket.emit('account_update_credits', { token: authToken, credits: playerCredits });
+    }
     watchAdBtn.textContent = '📺 Watch Ad (+50 💰)';
     watchAdBtn.disabled = false;
   }, 1500);
@@ -283,16 +512,32 @@ buySkinBtns.forEach(btn => {
       // Already owned, just equip
       localStorage.setItem('manifestation_equipped_skin', skinId);
       updateSkinButtons();
+      if (currentUser && socket && authToken) {
+        currentUser.equippedSkin = skinId;
+        socket.emit('account_update_skin', { token: authToken, equippedSkin: skinId });
+      }
       return;
     }
     
     if (playerCredits >= price) {
       playerCredits -= price;
-      localStorage.setItem('manifestation_credits', playerCredits);
+      localStorage.setItem('manifestation_credits', playerCredits.toString());
       localStorage.setItem(`unlocked_${skinId}`, 'true');
       localStorage.setItem('manifestation_equipped_skin', skinId);
-      playerCreditsDisplay.textContent = playerCredits;
+      if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
+      if (accountCreditsDisplay) accountCreditsDisplay.textContent = `💰 ${playerCredits}`;
       updateSkinButtons();
+      
+      if (currentUser && socket && authToken) {
+        currentUser.credits = playerCredits;
+        currentUser.equippedSkin = skinId;
+        if (!currentUser.unlockedSkins.includes(skinId)) currentUser.unlockedSkins.push(skinId);
+        socket.emit('account_update_skin', { 
+          token: authToken, 
+          unlockedSkins: currentUser.unlockedSkins, 
+          equippedSkin: skinId 
+        });
+      }
       alert("Skin successfully purchased and equipped!");
     } else {
       alert(`Not enough credits! You need ${price} 💰. Watch ads or buy VIP.`);
@@ -309,6 +554,26 @@ function initializeSocketConnection() {
 
   socket.on('connect', () => {
     myId = socket.id;
+    // Auto login if session token exists
+    if (authToken) {
+      socket.emit('auth_token_login', { token: authToken }, (res) => {
+        if (res && res.success) {
+          currentUser = res.user;
+          updateAccountUI();
+          if (Capacitor.isNativePlatform()) {
+            try { Purchases.logIn({ appUserID: currentUser.username }); } catch (err) {}
+          }
+        } else {
+          // Token expired
+          authToken = null;
+          currentUser = null;
+          localStorage.removeItem('manifestation_auth_token');
+          updateAccountUI();
+        }
+      });
+    } else {
+      updateAccountUI();
+    }
   });
 
   socket.on('joined_room_success', ({ roomId, isPublic }) => {
@@ -710,6 +975,9 @@ window.addEventListener('DOMContentLoaded', () => {
       skinId: getSkinId(),
       isPublic: rejoinPublicStr === 'true'
     });
+  } else {
+    // Connect to server on startup to verify authentication token / load account state
+    initializeSocketConnection();
   }
 
   // Settings UI Integration
