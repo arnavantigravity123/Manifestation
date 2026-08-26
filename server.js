@@ -634,8 +634,12 @@ io.on('connection', (socket) => {
   });
 
   socket.on('panic_hide', () => {
-    console.log(`[Lobby ${socket.roomId}] Player ${socket.id} engaged Panic Hide.`);
-    socket.to(socket.roomId).emit('player_panicked', { id: socket.id });
+    console.log(`[Lobby ${socket.roomId}] Player ${socket.id} activated Invisibility.`);
+    socket.to(socket.roomId).emit('player_panicked', { id: socket.id, isPanicked: true });
+  });
+
+  socket.on('invisibility_ended', () => {
+    socket.to(socket.roomId).emit('player_panicked', { id: socket.id, isPanicked: false });
   });
 
   socket.on('capture_human', (payload) => {

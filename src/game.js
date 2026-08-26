@@ -3258,24 +3258,28 @@ function dropKey() {
 
 // Trigger risk/reward: Panic Hide
 function triggerPanicHide() {
-  if (isPanicked || currentHP <= 5 || myTeam !== 'Human') return;
+  if (isPanicked || myTeam !== 'Human' || isCaptured || window.isSpectating) return;
 
   isPanicked = true;
   panicTimer = 20; // 20 seconds duration
 
-  // Deduct 5 HP
-  currentHP = Math.max(0, currentHP - 5);
-  document.getElementById('hp-value').textContent = `${Math.ceil(currentHP)} HP`;
-  document.getElementById('hp-bar').style.width = `${currentHP}%`;
+  // Immediately break sight & aggro for all AI ghost bots
+  ghosts3D.forEach(g => {
+    g.userData.aiState = 'WANDER';
+    g.userData.targetGrid = null;
+    g.userData.loseSightTimer = 999;
+  });
 
-  // Make invisible (Panic Hide)
-  if (flashLight) flashLight.intensity = 30; // Dim, but not pitch black
-  camera.fog = new THREE.FogExp2(0x7c3aed, 0.03); // Lighter purple haze so you can still see walls
+  // Stealth visual aura
+  if (flashLight) flashLight.intensity = 40;
+  camera.fog = new THREE.FogExp2(0x38bdf8, 0.025); // Subtle stealth cyan haze
 
-  triggerNotification("Panic Hide active: Invisibility engaged (20s)");
+  triggerNotification("Invisibility Activated");
 
   // Emit event to network
-  socketClient.emit('panic_hide');
+  if (socketClient) {
+    socketClient.emit('panic_hide');
+  }
 }
 
 // Procedural EMF Loop pings
@@ -3666,6 +3670,20 @@ function setupSocketListeners() {
         if (mobileCtrl) mobileCtrl.style.display = 'flex';
       }
       triggerNotification("⚡ REVIVED BY MEDIC! BACK IN THE ACTION!");
+    }
+  });
+
+  socketClient.on('player_panicked', ({ id, isPanicked: panickedState }) => {
+    if (players3D[id]) {
+      players3D[id].userData = players3D[id].userData || {};
+      const isInv = (panickedState !== undefined ? panickedState : true);
+      players3D[id].userData.isPanicked = isInv;
+      players3D[id].traverse(c => {
+        if ((c.isMesh || c.isSprite) && c.material) {
+          c.material.transparent = true;
+          c.material.opacity = isInv ? 0.25 : 1.0;
+        }
+      });
     }
   });
 
@@ -5210,7 +5228,10 @@ function animate() {
           scene.fog.density = fogDensity;
         }
         if (flashLight) flashLight.intensity = 200;
-        triggerNotification("invisibility ended. sensors active.");
+        triggerNotification("Invisibility Deactivated");
+        if (socketClient) {
+          socketClient.emit('invisibility_ended');
+        }
       }
     } 
     
