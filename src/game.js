@@ -1341,28 +1341,24 @@ function generateMaze(keysCount = 8) {
     if (possibleExits.length > 0) {
       window.vaultC = possibleExits[Math.floor(seededRandom() * possibleExits.length)];
       window.vaultR = 0;
-      layout[0][window.vaultC] = 0;
     }
   } else if (window.vaultEdge === 'S') {
     for (let c = 1; c < mazeSize - 1; c++) if (layout[mazeSize - 2][c] === 0) possibleExits.push(c);
     if (possibleExits.length > 0) {
       window.vaultC = possibleExits[Math.floor(seededRandom() * possibleExits.length)];
       window.vaultR = mazeSize - 1;
-      layout[mazeSize - 1][window.vaultC] = 0;
     }
   } else if (window.vaultEdge === 'E') {
     for (let r = 1; r < mazeSize - 1; r++) if (layout[r][mazeSize - 2] === 0) possibleExits.push(r);
     if (possibleExits.length > 0) {
       window.vaultR = possibleExits[Math.floor(seededRandom() * possibleExits.length)];
       window.vaultC = mazeSize - 1;
-      layout[window.vaultR][mazeSize - 1] = 0;
     }
   } else if (window.vaultEdge === 'W') {
     for (let r = 1; r < mazeSize - 1; r++) if (layout[r][1] === 0) possibleExits.push(r);
     if (possibleExits.length > 0) {
       window.vaultR = possibleExits[Math.floor(seededRandom() * possibleExits.length)];
       window.vaultC = 0;
-      layout[window.vaultR][0] = 0;
     }
   }
 
