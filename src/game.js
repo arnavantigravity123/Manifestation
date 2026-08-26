@@ -3879,6 +3879,13 @@ function setupSocketListeners() {
       });
       summaryHTML += `</div>`;
       details.innerHTML += summaryHTML;
+
+      // Trigger post-match interstitial ad for free players (VIPs automatically bypass)
+      if (window.showInterstitialAd) {
+        setTimeout(() => {
+          window.showInterstitialAd();
+        }, 1200);
+      }
     }
   };
 

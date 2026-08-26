@@ -160,38 +160,103 @@
         </div>
       </div>
 
-      <!-- Skins Store Modal -->
-      <div id="skins-store-modal" class="glass-panel" style="display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; text-align: center; border: 1px solid #3b82f6; background: #0f172a;">
-        <h2 style="color: #60a5fa; text-transform: uppercase; margin-bottom: 0.5rem;">Operative Arsenal</h2>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-          <span style="font-size: 0.9rem; color: #cbd5e1;">Your Credits: <b id="player-credits-display" style="color: #fde047;">0</b> 💰</span>
-          <button id="watch-ad-btn" class="action-btn" style="width: auto; padding: 0.4rem 0.8rem; font-size: 0.8rem; background: linear-gradient(135deg, #10b981, #047857); border: 1px solid #34d399;">📺 Watch Ad (+50 💰)</button>
+      <!-- Skins & Credit Store Modal -->
+      <div id="skins-store-modal" class="glass-panel store-modal" style="display: none;">
+        <h2 style="color: #60a5fa; text-transform: uppercase; margin-bottom: 0.4rem; font-family: 'Orbitron', sans-serif; font-size: clamp(1.2rem, 2.5vw, 1.6rem);">Operative Arsenal</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 0.5rem;">
+          <span style="font-size: clamp(0.9rem, 1.8vw, 1.1rem); color: #cbd5e1; font-family: 'Orbitron', sans-serif;">Your Balance: <b id="player-credits-display" style="color: #fde047;">0</b> 💰</span>
+          <button id="watch-ad-btn" class="action-btn" style="width: auto; padding: 0.45rem 0.9rem; font-size: clamp(0.75rem, 1.5vw, 0.9rem); background: linear-gradient(135deg, #10b981, #047857); border: 1px solid #34d399; font-weight: 700;">📺 Watch Rewarded Ad (+50 💰)</button>
+        </div>
+
+        <!-- Section 1: Buy Credit Packs (In-App Purchases) -->
+        <div style="margin-bottom: 1.5rem; text-align: left;">
+          <h3 style="color: #fde047; font-family: 'Orbitron', sans-serif; font-size: clamp(0.95rem, 1.8vw, 1.15rem); margin: 0 0 0.8rem 0; letter-spacing: 1px; display: flex; align-items: center; gap: 0.4rem;">
+            <span>💰</span> BUY CREDITS (IN-APP STORE)
+          </h3>
+          <div class="credit-packs-grid">
+            <!-- Pack 1 -->
+            <div class="credit-pack-card">
+              <div class="pack-badge">STARTER</div>
+              <div class="pack-amount">250 💰</div>
+              <div class="pack-name">Recruit Stash</div>
+              <button class="action-btn buy-credits-btn" data-credits="250" data-price="$1.99" data-package-id="credits_250">$1.99 USD</button>
+            </div>
+
+            <!-- Pack 2 -->
+            <div class="credit-pack-card featured-pack">
+              <div class="pack-badge featured">POPULAR</div>
+              <div class="pack-amount">750 💰</div>
+              <div class="pack-name">Operative Vault</div>
+              <button class="action-btn buy-credits-btn featured-btn" data-credits="750" data-price="$4.99" data-package-id="credits_750">$4.99 USD</button>
+            </div>
+
+            <!-- Pack 3 -->
+            <div class="credit-pack-card">
+              <div class="pack-badge">BEST VALUE</div>
+              <div class="pack-amount">2,000 💰</div>
+              <div class="pack-name">Black Market Cache</div>
+              <button class="action-btn buy-credits-btn" data-credits="2000" data-price="$9.99" data-package-id="credits_2000">$9.99 USD</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Operative & Entity Skins -->
+        <div style="margin-bottom: 1.5rem; text-align: left;">
+          <h3 style="color: #60a5fa; font-family: 'Orbitron', sans-serif; font-size: clamp(0.95rem, 1.8vw, 1.15rem); margin: 0 0 0.8rem 0; letter-spacing: 1px; display: flex; align-items: center; gap: 0.4rem;">
+            <span>🥋</span> OPERATIVE & ENTITY SKINS
+          </h3>
+          <div class="skins-grid">
+            <!-- Default Skin -->
+            <div class="skin-card">
+              <img src="/assets/human_sprite.png" alt="Standard Issue" class="skin-img" style="background: #1a1a2e;" />
+              <h4 class="skin-title">Standard Issue</h4>
+              <button class="action-btn buy-skin-btn" data-skin-id="skin_default" data-price="0">EQUIP</button>
+            </div>
+
+            <!-- Neon Cyborg Skin -->
+            <div class="skin-card">
+              <img src="/assets/skin_neon_cyborg.jpg" alt="Neon Cyborg" class="skin-img" />
+              <h4 class="skin-title">Neon Cyborg</h4>
+              <button class="action-btn buy-skin-btn" data-skin-id="skin_cyborg" data-price="200">Buy - 200 💰</button>
+            </div>
+            
+            <!-- Shadow Ghost Skin -->
+            <div class="skin-card">
+              <img src="/assets/skin_shadow_ghost.jpg" alt="Shadow Ghost" class="skin-img" />
+              <h4 class="skin-title">Shadow Entity</h4>
+              <button class="action-btn buy-skin-btn" data-skin-id="skin_shadow" data-price="350">Buy - 350 💰</button>
+            </div>
+          </div>
+        </div>
+
+        <button id="close-skins-btn" class="action-btn" style="background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.3); font-family: 'Orbitron', sans-serif; padding: 0.6rem 1.2rem;">Close Store</button>
+      </div>
+
+      <!-- Rewarded & Interstitial Ad Modal -->
+      <div id="game-ad-modal" class="glass-panel ad-modal" style="display: none;">
+        <div class="ad-header">
+          <span class="ad-tag">SPONSORED BROADCAST</span>
+          <span id="ad-timer-countdown" class="ad-timer">Closing in 5s...</span>
         </div>
         
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-          <!-- Default Skin -->
-          <div style="background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.5rem;">
-            <img src="/assets/human_sprite.png" alt="Standard Issue" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 0.5rem; background: #1a1a2e;" />
-            <h4 style="color: white; margin: 0 0 0.5rem 0; font-size: 0.9rem;">Standard Issue</h4>
-            <button class="action-btn buy-skin-btn" data-skin-id="skin_default" data-price="0" style="padding: 0.4rem; font-size: 0.8rem;">EQUIP</button>
+        <div class="ad-video-container">
+          <div class="ad-fake-video">
+            <div class="ad-brand-logo">🛰️ CYBERNETICS LABS</div>
+            <p class="ad-brand-slogan">"Next-Gen Quantum Armor & Neural Sync"</p>
+            <div class="ad-pulse-circle"></div>
           </div>
-
-          <!-- Neon Cyborg Skin -->
-          <div style="background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.5rem;">
-            <img src="/assets/skin_neon_cyborg.jpg" alt="Neon Cyborg" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 0.5rem;" />
-            <h4 style="color: white; margin: 0 0 0.5rem 0; font-size: 0.9rem;">Neon Cyborg</h4>
-            <button class="action-btn buy-skin-btn" data-skin-id="skin_cyborg" data-price="200" style="padding: 0.4rem; font-size: 0.8rem;">Buy - 200 💰</button>
-          </div>
-          
-          <!-- Shadow Ghost Skin -->
-          <div style="background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 0.5rem;">
-            <img src="/assets/skin_shadow_ghost.jpg" alt="Shadow Ghost" style="width: 100%; height: 120px; object-fit: cover; border-radius: 4px; margin-bottom: 0.5rem;" />
-            <h4 style="color: white; margin: 0 0 0.5rem 0; font-size: 0.9rem;">Shadow Entity</h4>
-            <button class="action-btn buy-skin-btn" data-skin-id="skin_shadow" data-price="350" style="padding: 0.4rem; font-size: 0.8rem;">Buy - 350 💰</button>
+          <div class="ad-progress-bar-wrap">
+            <div id="ad-progress-bar" class="ad-progress-bar"></div>
           </div>
         </div>
 
-        <button id="close-skins-btn" class="action-btn" style="background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);">Close Store</button>
+        <div class="ad-footer">
+          <p id="ad-reward-label" style="margin: 0 0 0.6rem 0; font-family: 'Orbitron', sans-serif; font-size: 0.85rem; color: #34d399;">Watch full ad to earn +50 Credits 💰</p>
+          <div style="display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap;">
+            <button id="ad-skip-btn" class="action-btn" style="display: none; background: rgba(100, 116, 139, 0.4); border: 1px solid rgba(255,255,255,0.3); font-size: 0.8rem; padding: 0.45rem 1rem;">Skip Ad ⏩</button>
+            <button id="ad-vip-promo-btn" class="action-btn" style="background: linear-gradient(135deg, #d4af37, #996515); border: 1px solid #fde047; font-size: 0.8rem; padding: 0.45rem 1rem; font-weight: bold;">👑 Remove All Ads with VIP</button>
+          </div>
+        </div>
       </div>
 
       <!-- 2. Interactive Lobby Deck -->

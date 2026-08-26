@@ -442,13 +442,106 @@ buyVipBtn.addEventListener('click', async () => {
   }
 });
 
-// Skins Store and Ads Logic
+// ==========================================
+// Ad Monetization Engine (Rewarded & Interstitial)
+// ==========================================
+const gameAdModal = document.getElementById('game-ad-modal');
+const adTimerCountdown = document.getElementById('ad-timer-countdown');
+const adProgressBar = document.getElementById('ad-progress-bar');
+const adRewardLabel = document.getElementById('ad-reward-label');
+const adSkipBtn = document.getElementById('ad-skip-btn');
+const adVipPromoBtn = document.getElementById('ad-vip-promo-btn');
+
+let activeAdInterval = null;
+
+function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, onReward = null }) {
+  if (!gameAdModal) {
+    if (isRewarded && onReward) onReward();
+    if (onComplete) onComplete();
+    return;
+  }
+
+  // Check if player is VIP (VIPs completely skip all interstitial ads!)
+  const isVip = (currentUser && currentUser.isVip) || (localStorage.getItem('manifestation_is_vip') === 'true');
+  if (!isRewarded && isVip) {
+    if (onComplete) onComplete();
+    return;
+  }
+
+  if (activeAdInterval) clearInterval(activeAdInterval);
+
+  gameAdModal.style.display = 'block';
+  if (adRewardLabel) {
+    adRewardLabel.textContent = isRewarded 
+      ? "🎁 Watch full broadcast to earn +50 Credits 💰"
+      : "📢 Sponsored Interstitial (Free Operative Tier)";
+  }
+  if (adSkipBtn) adSkipBtn.style.display = 'none';
+
+  let remaining = duration;
+  if (adTimerCountdown) adTimerCountdown.textContent = `Closing in ${remaining}s...`;
+  if (adProgressBar) adProgressBar.style.width = '0%';
+
+  const startTime = Date.now();
+  const totalMs = duration * 1000;
+
+  activeAdInterval = setInterval(() => {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(100, (elapsed / totalMs) * 100);
+    if (adProgressBar) adProgressBar.style.width = `${progress}%`;
+
+    const secondsLeft = Math.max(0, Math.ceil((totalMs - elapsed) / 1000));
+    if (adTimerCountdown) adTimerCountdown.textContent = `Closing in ${secondsLeft}s...`;
+
+    // Allow skipping interstitial ads after 3 seconds
+    if (!isRewarded && elapsed >= 3000 && adSkipBtn) {
+      adSkipBtn.style.display = 'inline-block';
+    }
+
+    if (elapsed >= totalMs) {
+      clearInterval(activeAdInterval);
+      activeAdInterval = null;
+      gameAdModal.style.display = 'none';
+      if (isRewarded && onReward) onReward();
+      if (onComplete) onComplete();
+    }
+  }, 100);
+
+  if (adSkipBtn) {
+    adSkipBtn.onclick = () => {
+      if (activeAdInterval) clearInterval(activeAdInterval);
+      activeAdInterval = null;
+      gameAdModal.style.display = 'none';
+      if (onComplete) onComplete();
+    };
+  }
+
+  if (adVipPromoBtn) {
+    adVipPromoBtn.onclick = () => {
+      if (activeAdInterval) clearInterval(activeAdInterval);
+      activeAdInterval = null;
+      gameAdModal.style.display = 'none';
+      if (vipPaywallModal) vipPaywallModal.style.display = 'block';
+    };
+  }
+}
+
+window.showInterstitialAd = (onComplete) => {
+  playAdSequence({ duration: 5, isRewarded: false, onComplete });
+};
+
+window.showRewardedAd = (onReward) => {
+  playAdSequence({ duration: 6, isRewarded: true, onReward });
+};
+
+// Skins Store and In-App Credit Packs Logic
 const openSkinsBtn = document.getElementById('open-skins-btn');
 const skinsStoreModal = document.getElementById('skins-store-modal');
 const closeSkinsBtn = document.getElementById('close-skins-btn');
 const watchAdBtn = document.getElementById('watch-ad-btn');
 const playerCreditsDisplay = document.getElementById('player-credits-display');
 const buySkinBtns = document.querySelectorAll('.buy-skin-btn');
+const buyCreditsBtns = document.querySelectorAll('.buy-credits-btn');
 
 let playerCredits = parseInt(localStorage.getItem('manifestation_credits') || '0');
 if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
@@ -461,13 +554,9 @@ closeSkinsBtn.addEventListener('click', () => {
   skinsStoreModal.style.display = 'none';
 });
 
+// Rewarded Video Ad Button (+50 Credits)
 watchAdBtn.addEventListener('click', () => {
-  watchAdBtn.textContent = 'Loading Ad...';
-  watchAdBtn.disabled = true;
-  
-  // Mock Ad Network delay
-  setTimeout(() => {
-    alert("Watching Ad... (This is a mock rewarded video ad)");
+  window.showRewardedAd(() => {
     playerCredits += 50;
     localStorage.setItem('manifestation_credits', playerCredits.toString());
     if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
@@ -476,9 +565,60 @@ watchAdBtn.addEventListener('click', () => {
       currentUser.credits = playerCredits;
       socket.emit('account_update_credits', { token: authToken, credits: playerCredits });
     }
-    watchAdBtn.textContent = '📺 Watch Ad (+50 💰)';
-    watchAdBtn.disabled = false;
-  }, 1500);
+    alert("Reward granted! +50 Credits added to your account.");
+  });
+});
+
+// Credit Packs Purchase (In-App Purchases)
+buyCreditsBtns.forEach(btn => {
+  btn.addEventListener('click', async (e) => {
+    const pkgId = btn.getAttribute('data-package-id');
+    const creditsToAdd = parseInt(btn.getAttribute('data-credits'));
+    const priceStr = btn.getAttribute('data-price');
+
+    btn.textContent = 'Processing...';
+    btn.disabled = true;
+
+    const awardCredits = () => {
+      playerCredits += creditsToAdd;
+      localStorage.setItem('manifestation_credits', playerCredits.toString());
+      if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
+      if (accountCreditsDisplay) accountCreditsDisplay.textContent = `💰 ${playerCredits}`;
+      if (currentUser) {
+        currentUser.credits = playerCredits;
+        if (socket && authToken) {
+          socket.emit('account_update_credits', { token: authToken, credits: playerCredits });
+        }
+      }
+      alert(`Success! +${creditsToAdd} Credits added to your account.`);
+    };
+
+    try {
+      const offerings = await Purchases.getOfferings();
+      if (offerings.current && offerings.current.availablePackages && offerings.current.availablePackages.length > 0) {
+        const targetPkg = offerings.current.availablePackages.find(p => p.identifier === pkgId || (p.product && p.product.identifier === pkgId));
+        if (targetPkg) {
+          await Purchases.purchasePackage({ aPackage: targetPkg });
+          awardCredits();
+        } else {
+          throw new Error("Package not found in offerings");
+        }
+      } else {
+        throw new Error("No offerings configured");
+      }
+    } catch (error) {
+      if (error && error.userCancelled) {
+        // User cancelled native payment sheet
+      } else {
+        // Fallback for hackathon testing & Web Demo
+        alert(`Test Mode: RevenueCat pack "${pkgId}" purchased for ${priceStr}! Granting +${creditsToAdd} Credits.`);
+        awardCredits();
+      }
+    } finally {
+      btn.textContent = `${priceStr} USD`;
+      btn.disabled = false;
+    }
+  });
 });
 
 function updateSkinButtons() {
