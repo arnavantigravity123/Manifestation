@@ -1289,7 +1289,7 @@ function generateMaze(keysCount = 8) {
   const layout = Array(mazeSize).fill(0).map(() => Array(mazeSize).fill(1));
   const centerCoord = Math.floor(mazeSize / 2) | 1; // Always an odd index
 
-  // 1. Stack-Based Iterative DFS Maze Carving (Zero stack overflow, guarantees 100% full coverage)
+  // 1. Pure Stack-Based Iterative DFS Maze Carving (Guarantees strict 1-tile tight corridors everywhere)
   const stack = [[centerCoord, centerCoord]];
   layout[centerCoord][centerCoord] = 0;
 
@@ -1309,7 +1309,7 @@ function generateMaze(keysCount = 8) {
     if (neighbors.length > 0) {
       const chosenIdx = Math.floor(seededRandom() * neighbors.length);
       const [nx, nz, wallX, wallZ] = neighbors[chosenIdx];
-      layout[wallZ][wallX] = 0; // Carve path between cells
+      layout[wallZ][wallX] = 0; // Carve exactly 1-tile path between cells
       layout[nz][nx] = 0;       // Carve target cell
       stack.push([nx, nz]);
     } else {
@@ -1317,36 +1317,21 @@ function generateMaze(keysCount = 8) {
     }
   }
 
-  // 2. Guaranteed Wide Central Spawn Hub (3x3 open junction with 4 cardinal arteries)
-  for (let r = centerCoord - 1; r <= centerCoord + 1; r++) {
-    for (let c = centerCoord - 1; c <= centerCoord + 1; c++) {
-      if (r > 0 && r < mazeSize - 1 && c > 0 && c < mazeSize - 1) {
-        layout[r][c] = 0;
-      }
-    }
-  }
-  // Guarantee open arterial pathways leading North, South, East, West from center spawn
-  for (let step = 2; step <= 4; step++) {
-    if (centerCoord - step > 0) layout[centerCoord - step][centerCoord] = 0;
-    if (centerCoord + step < mazeSize - 1) layout[centerCoord + step][centerCoord] = 0;
-    if (centerCoord - step > 0) layout[centerCoord][centerCoord - step] = 0;
-    if (centerCoord + step < mazeSize - 1) layout[centerCoord][centerCoord + step] = 0;
-  }
-
-  // 3. Anti-Trap Braiding: Open 15% of interior dead-end walls to create looping pathways and avoid dead-ends
+  // 2. Controlled Loop Openings (Only open isolated 1-tile doorways without creating 2x2 or 3x3 open spaces)
   for (let r = 2; r < mazeSize - 2; r += 2) {
     for (let c = 2; c < mazeSize - 2; c += 2) {
-      if (layout[r][c] === 1 && seededRandom() < 0.20) {
-        const horizontalOpen = (layout[r][c - 1] === 0 && layout[r][c + 1] === 0);
-        const verticalOpen = (layout[r - 1][c] === 0 && layout[r + 1][c] === 0);
-        if (horizontalOpen || verticalOpen) {
+      if (layout[r][c] === 1 && seededRandom() < 0.05) {
+        // Strict single-wall doorway check: must have walls on perpendicular axis to prevent wide open rooms
+        const horizontalDoor = (layout[r][c - 1] === 0 && layout[r][c + 1] === 0 && layout[r - 1][c] === 1 && layout[r + 1][c] === 1);
+        const verticalDoor = (layout[r - 1][c] === 0 && layout[r + 1][c] === 0 && layout[r][c - 1] === 1 && layout[r][c + 1] === 1);
+        if (horizontalDoor || verticalDoor) {
           layout[r][c] = 0;
         }
       }
     }
   }
 
-  // 4. Randomly select one of the 4 cardinal boundaries for the Master Gate (Vault)
+  // 3. Randomly select one of the 4 cardinal boundaries for the Master Gate (Vault)
   window.vaultEdge = ['N', 'S', 'E', 'W'][Math.floor(seededRandom() * 4)];
   
   // Find all possible exit points along the chosen edge that are adjacent to the maze paths
@@ -1390,7 +1375,7 @@ function generateMaze(keysCount = 8) {
     else if (window.vaultEdge === 'W') { window.vaultR = centerCoord; window.vaultC = 0; for (let i = 1; i <= centerCoord; i++) layout[centerCoord][i] = 0; }
   }
 
-  // 5. BFS Reachability Flood-Fill: Mathematically verify 100% of open maze cells are reachable from spawn
+  // 4. BFS Reachability Flood-Fill: Mathematically verify 100% of open maze cells are reachable from spawn
   const reachable = Array(mazeSize).fill(0).map(() => Array(mazeSize).fill(false));
   const bfsQueue = [[centerCoord, centerCoord]];
   reachable[centerCoord][centerCoord] = true;
@@ -1410,7 +1395,7 @@ function generateMaze(keysCount = 8) {
     }
   }
 
-  // Connect any unreachable open pocket by carving direct doorways to reachable neighbors
+  // Connect any unreachable open pocket by carving direct 1-tile doorways to reachable neighbors
   for (let r = 1; r < mazeSize - 1; r++) {
     for (let c = 1; c < mazeSize - 1; c++) {
       if (layout[r][c] === 0 && !reachable[r][c]) {
@@ -1428,8 +1413,8 @@ function generateMaze(keysCount = 8) {
     }
   }
 
-  // 6. Safe Sliding Doors Placement (Only on internal walls with open passages on both sides, NEVER on central spawn hub)
-  const slidingDoorCount = Math.round(mazeSize * 0.85);
+  // 5. Safe Sliding Doors Placement (Only on single internal walls with open passages on both sides)
+  const slidingDoorCount = Math.round(mazeSize * 0.7);
   let placedDoors = 0;
   let attempts = 0;
   while (placedDoors < slidingDoorCount && attempts < 200) {
@@ -1437,12 +1422,11 @@ function generateMaze(keysCount = 8) {
     const rx = 2 + Math.floor(seededRandom() * (mazeSize - 4));
     const rz = 2 + Math.floor(seededRandom() * (mazeSize - 4));
     
-    // Never block the central spawn hub
-    if (Math.abs(rx - centerCoord) <= 3 && Math.abs(rz - centerCoord) <= 3) continue;
+    if (Math.abs(rx - centerCoord) <= 2 && Math.abs(rz - centerCoord) <= 2) continue;
 
     if (layout[rz][rx] === 1) {
-      const horizontalValid = (layout[rz][rx - 1] === 0 && layout[rz][rx + 1] === 0);
-      const verticalValid = (layout[rz - 1][rx] === 0 && layout[rz + 1][rx] === 0);
+      const horizontalValid = (layout[rz][rx - 1] === 0 && layout[rz][rx + 1] === 0 && layout[rz - 1][rx] === 1 && layout[rz + 1][rx] === 1);
+      const verticalValid = (layout[rz - 1][rx] === 0 && layout[rz + 1][rx] === 0 && layout[rz][rx - 1] === 1 && layout[rz][rx + 1] === 1);
       if (horizontalValid || verticalValid) {
         layout[rz][rx] = 2; // Sliding door
         placedDoors++;
