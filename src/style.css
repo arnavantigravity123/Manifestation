@@ -1823,17 +1823,18 @@ body.is-mobile .lobby-chat {
 }
 
 /* ==========================================================================
-   ACCOUNT STATUS BAR & AUTHENTICATION MODAL
+   ACCOUNT STATUS BAR & AUTHENTICATION MODAL (RESPONSIVE SCALING)
    ========================================================================== */
 .account-bar {
-  background: rgba(15, 23, 42, 0.75);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  border-radius: 8px;
-  padding: 0.5rem 0.8rem;
-  margin-bottom: 0.8rem;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1.5px solid rgba(56, 189, 248, 0.35);
+  border-radius: 10px;
+  padding: clamp(0.6rem, 1.5vw, 0.9rem) clamp(0.8rem, 2vw, 1.2rem);
+  margin-bottom: 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
 }
 
 .account-info {
@@ -1841,18 +1842,19 @@ body.is-mobile .lobby-chat {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .account-user-details {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: clamp(0.5rem, 1.5vw, 0.9rem);
+  flex-wrap: wrap;
 }
 
 .account-username {
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.9rem;
+  font-size: clamp(0.95rem, 1.8vw, 1.2rem);
   font-weight: 700;
   color: #f8fafc;
   letter-spacing: 0.5px;
@@ -1860,172 +1862,253 @@ body.is-mobile .lobby-chat {
 
 .account-badge {
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.7rem;
+  font-size: clamp(0.75rem, 1.4vw, 0.9rem);
   font-weight: 800;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
+  padding: clamp(0.25rem, 0.8vw, 0.4rem) clamp(0.55rem, 1.2vw, 0.85rem);
+  border-radius: 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .guest-badge {
-  background: rgba(100, 116, 139, 0.3);
+  background: rgba(100, 116, 139, 0.35);
   color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.3);
+  border: 1px solid rgba(148, 163, 184, 0.4);
 }
 
 .vip-badge {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.3), rgba(217, 119, 6, 0.4));
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.4), rgba(217, 119, 6, 0.5));
   color: #fde047;
-  border: 1px solid #fde047;
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+  border: 1.5px solid #fde047;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
   animation: vip-glow 2s infinite ease-in-out;
 }
 
 @keyframes vip-glow {
   0%, 100% { box-shadow: 0 0 6px rgba(245, 158, 11, 0.4); }
-  50% { box-shadow: 0 0 14px rgba(245, 158, 11, 0.8); }
+  50% { box-shadow: 0 0 16px rgba(245, 158, 11, 0.85); }
 }
 
 .account-credits {
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.8rem;
+  font-size: clamp(0.85rem, 1.6vw, 1.05rem);
   font-weight: 700;
   color: #fde047;
 }
 
 .account-action-btn {
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(14, 165, 233, 0.3));
-  border: 1px solid #38bdf8;
-  border-radius: 4px;
-  color: #38bdf8;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(14, 165, 233, 0.4));
+  border: 1.5px solid #38bdf8;
+  border-radius: 6px;
+  color: #ffffff;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.75rem;
+  font-size: clamp(0.8rem, 1.5vw, 1rem);
   font-weight: 700;
-  padding: 0.35rem 0.7rem;
+  padding: clamp(0.45rem, 1vw, 0.65rem) clamp(0.8rem, 1.8vw, 1.2rem);
   cursor: pointer;
+  letter-spacing: 0.5px;
   transition: all 0.2s ease;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
 }
 
 .account-action-btn:hover {
-  background: rgba(56, 189, 248, 0.4);
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.6);
+  transform: translateY(-1px);
 }
 
 .account-logout-btn {
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  border-radius: 4px;
+  background: rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 6px;
   color: #fca5a5;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.7rem;
+  font-size: clamp(0.75rem, 1.4vw, 0.9rem);
   font-weight: 700;
-  padding: 0.3rem 0.6rem;
+  padding: clamp(0.4rem, 0.8vw, 0.55rem) clamp(0.7rem, 1.5vw, 1rem);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .account-logout-btn:hover {
-  background: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.6);
   color: #ffffff;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
 }
 
-/* Auth Modal */
+/* Responsive High-Tech Auth Modal */
 .auth-modal {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 10000;
-  max-width: 440px;
-  width: 92%;
-  background: rgba(10, 15, 26, 0.97);
-  border: 2px solid rgba(56, 189, 248, 0.6);
-  border-radius: 12px;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.9), 0 0 20px rgba(56, 189, 248, 0.3);
-  padding: 1.5rem;
+  width: min(540px, 94vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  background: rgba(10, 15, 26, 0.98);
+  border: 2px solid rgba(56, 189, 248, 0.7);
+  border-radius: 14px;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.95), 0 0 25px rgba(56, 189, 248, 0.35);
+  padding: clamp(1.4rem, 3.5vw, 2.4rem);
 }
 
 .auth-modal-header {
   text-align: center;
-  margin-bottom: 1.2rem;
+  margin-bottom: clamp(1rem, 2.5vw, 1.6rem);
 }
 
 .auth-modal-header h2 {
   font-family: 'Orbitron', sans-serif;
-  font-size: 1.3rem;
+  font-size: clamp(1.3rem, 2.8vw, 1.85rem);
   color: #38bdf8;
   letter-spacing: 2px;
-  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
-  margin: 0 0 0.4rem 0;
+  text-shadow: 0 0 12px rgba(56, 189, 248, 0.7);
+  margin: 0 0 0.5rem 0;
 }
 
 .auth-modal-header p {
-  font-size: 0.8rem;
-  color: #94a3b8;
+  font-size: clamp(0.85rem, 1.8vw, 1.05rem);
+  color: #cbd5e1;
+  line-height: 1.4;
   margin: 0;
 }
 
 .auth-tabs {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1.2rem;
+  gap: clamp(0.5rem, 1.5vw, 1rem);
+  margin-bottom: clamp(1.2rem, 2.5vw, 1.6rem);
 }
 
 .auth-tab {
   flex: 1;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(100, 116, 139, 0.4);
-  border-radius: 6px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1.5px solid rgba(100, 116, 139, 0.45);
+  border-radius: 8px;
   color: #94a3b8;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.8rem;
+  font-size: clamp(0.9rem, 1.9vw, 1.15rem);
   font-weight: 700;
-  padding: 0.5rem;
+  letter-spacing: 1px;
+  padding: clamp(0.65rem, 1.5vw, 0.95rem);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .auth-tab.active {
-  background: rgba(56, 189, 248, 0.25);
+  background: rgba(56, 189, 248, 0.3);
   border-color: #38bdf8;
-  color: #38bdf8;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+  color: #ffffff;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
 }
 
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
+  gap: clamp(1rem, 2.2vw, 1.4rem);
+}
+
+.auth-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  text-align: left;
+}
+
+.auth-form .form-group label {
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(0.85rem, 1.7vw, 1.05rem);
+  font-weight: 700;
+  color: #93c5fd;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.auth-form input[type="text"],
+.auth-form input[type="password"] {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(15, 23, 42, 0.9) !important;
+  border: 1.5px solid rgba(56, 189, 248, 0.5) !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: clamp(0.95rem, 1.9vw, 1.2rem) !important;
+  padding: clamp(0.7rem, 1.8vw, 1rem) clamp(0.85rem, 2vw, 1.2rem) !important;
+  outline: none !important;
+  transition: all 0.2s ease !important;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5) !important;
+}
+
+.auth-form input[type="text"]::placeholder,
+.auth-form input[type="password"]::placeholder {
+  color: #64748b !important;
+  font-family: 'Orbitron', sans-serif !important;
+  font-size: clamp(0.85rem, 1.7vw, 1.05rem) !important;
+}
+
+.auth-form input[type="text"]:focus,
+.auth-form input[type="password"]:focus {
+  border-color: #38bdf8 !important;
+  background: rgba(15, 23, 42, 1) !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.6), inset 0 2px 5px rgba(0, 0, 0, 0.6) !important;
 }
 
 .auth-submit-btn {
-  margin-top: 0.4rem;
+  margin-top: clamp(0.4rem, 1vw, 0.8rem);
   font-family: 'Orbitron', sans-serif;
-  font-weight: 700;
-  letter-spacing: 1px;
+  font-size: clamp(0.95rem, 2.1vw, 1.25rem);
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  padding: clamp(0.8rem, 2vw, 1.15rem);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+}
+
+.auth-submit-btn:hover {
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.7);
+  transform: translateY(-2px);
 }
 
 .auth-status-text {
-  font-size: 0.8rem;
+  font-size: clamp(0.85rem, 1.7vw, 1.05rem);
   font-family: 'Orbitron', sans-serif;
   text-align: center;
-  min-height: 1.2rem;
+  min-height: 1.4rem;
   margin-top: 0.6rem;
+  font-weight: 700;
 }
 
 .auth-status-text.error {
   color: #ef4444;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
 }
 
 .auth-status-text.success {
   color: #10b981;
+  text-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
 }
 
 .auth-close-btn {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  margin-top: 0.6rem;
-  font-size: 0.8rem;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  margin-top: clamp(0.6rem, 1.5vw, 1rem);
+  font-family: 'Orbitron', sans-serif;
+  font-size: clamp(0.85rem, 1.7vw, 1.05rem);
+  font-weight: 700;
+  padding: clamp(0.65rem, 1.6vw, 0.95rem);
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.auth-close-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #ffffff;
 }
 
