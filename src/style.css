@@ -1688,27 +1688,26 @@ body.is-mobile .lobby-chat {
    INTERACTIVE KEYPAD CIPHER TERMINAL MODAL
    ========================================================================== */
 .keypad-modal {
-  position: absolute !important;
-  top: 50% !important;
-  left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  z-index: 10050 !important;
-  width: 320px !important;
-  max-width: 92vw !important;
-  background: rgba(8, 14, 26, 0.96) !important;
-  border: 2px solid rgba(56, 189, 248, 0.7) !important;
-  border-radius: 14px !important;
-  box-shadow: 0 0 45px rgba(0, 0, 0, 0.95), 0 0 25px rgba(56, 189, 248, 0.4), inset 0 0 20px rgba(56, 189, 248, 0.1) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  padding: 1.5rem 1.25rem !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  gap: 1.1rem !important;
-  font-family: 'Orbitron', 'Inter', sans-serif !important;
-  color: #f8fafc !important;
-  pointer-events: auto !important;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10050;
+  width: 320px;
+  max-width: 92vw;
+  background: rgba(8, 14, 26, 0.96);
+  border: 2px solid rgba(56, 189, 248, 0.7);
+  border-radius: 14px;
+  box-shadow: 0 0 45px rgba(0, 0, 0, 0.95), 0 0 25px rgba(56, 189, 248, 0.4), inset 0 0 20px rgba(56, 189, 248, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 1.5rem 1.25rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.1rem;
+  font-family: 'Orbitron', 'Inter', sans-serif;
+  color: #f8fafc;
+  pointer-events: auto;
 }
 
 .keypad-title {
