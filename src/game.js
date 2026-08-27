@@ -686,22 +686,29 @@ export function initGame(socket, socketId, matchConfig) {
   // Create Labyrinth
   generateMaze(matchConfig.puzzleState.keysCount);
 
-  // Set spawn positions
+  // Set spawn positions (All Humans spawn together at center (0, 1.6, 0))
   if (myTeam === 'Ghost') {
-    // Pick a random open corridor far from the center (where humans spawn)
+    // Pick a deterministic open corridor far from the center
     const minFarDist = Math.max(10, mazeSizeGlobal * 4.5 * 0.25);
     const farCorridors = openCorridors.filter(c => Math.abs(c.x) > minFarDist || Math.abs(c.z) > minFarDist);
     if (farCorridors.length > 0) {
-      const spawnIdx = Math.floor(Math.random() * farCorridors.length);
+      const spawnIdx = Math.floor(seededRandom() * farCorridors.length);
       const spawnNode = farCorridors[spawnIdx];
       camera.position.set(spawnNode.x, 1.6, spawnNode.z);
     } else {
       camera.position.set(minFarDist, 1.6, minFarDist);
     }
   } else {
-    // Humans spawn grouped together at the center
+    // All humans spawn together at the exact same labyrinth entrance
     camera.position.set(0, 1.6, 0);
   }
+
+  // In live multiplayer lobbies, disable and hide pause button (cannot pause live games)
+  const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
+  const mobilePauseBtn = document.getElementById('btn-mobile-pause');
+  const globalPauseBtn = document.getElementById('global-pause-btn');
+  if (mobilePauseBtn) mobilePauseBtn.style.display = isMultiplayer ? 'none' : '';
+  if (globalPauseBtn) globalPauseBtn.style.display = isMultiplayer ? 'none' : '';
 
   // Easter Egg: Ariadne's Thread to the Vault (Straight direct beacon beam to the vault for Ariadne_999)
   const myPlayer = currentLobby.players[myId];
@@ -2404,6 +2411,11 @@ function setupControls() {
     const handlePause = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
+      if (isMultiplayer) {
+        triggerNotification("⚡ Live Multiplayer Match — Cannot Pause!");
+        return;
+      }
       window.mobileGameActive = false;
       if (ptrOverlay) ptrOverlay.style.display = 'flex';
       if (document.exitPointerLock && document.pointerLockElement) {
@@ -4656,15 +4668,16 @@ function spawnGhostAIs(count) {
       }
     });
 
-    // Spawn in random open corridor cells away from the player
+    // Spawn in deterministic open corridor cells away from Human Spawn (0, 0)
     let spawnPos = { x: 10, z: 10 };
     const candidates = openCorridors.filter(c => {
-      const dx = c.x - camera.position.x;
-      const dz = c.z - camera.position.z;
-      const d = Math.sqrt(dx*dx + dz*dz);
-      return d > 15 && d < 50;
+      // Deterministic distance relative to human spawn point (0, 0)
+      const d = Math.sqrt(c.x * c.x + c.z * c.z);
+      return d > 15 && d < 55;
     });
-    if (candidates.length > 0) spawnPos = candidates[Math.floor(seededRandom() * candidates.length)];
+    if (candidates.length > 0) {
+      spawnPos = candidates[Math.floor(seededRandom() * candidates.length)];
+    }
     ghostGroup.position.set(spawnPos.x, 0, spawnPos.z);
     scene.add(ghostGroup);
 
@@ -5222,8 +5235,10 @@ function animate() {
         velocity.set(0, 0, 0);
       }
     }
+  }
 
-    // 2. Active sensors & sanity ticks
+  if (window.gameReady) {
+    // 2. Active sensors & sanity ticks (runs continuously even when minimap is open)
     processEMFSensors(delta);
     processSanity(delta);
     processFlashlightBattery(delta);
@@ -5730,13 +5745,15 @@ function animate() {
     }
 
     // Update on-screen interaction cues
-    updateInteractionPrompt();
+    if (isActive) {
+      updateInteractionPrompt();
+    } else {
+      const promptEl = document.getElementById('interaction-prompt');
+      if (promptEl) promptEl.style.display = 'none';
+    }
 
     // Check key win triggers
     checkWinCondition();
-  } else {
-    const promptEl = document.getElementById('interaction-prompt');
-    if (promptEl) promptEl.style.display = 'none';
   }
 
   // --- Active bobbing and walk cycle limb animations ---
