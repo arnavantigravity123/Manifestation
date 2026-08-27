@@ -6,6 +6,13 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
+import dns from 'dns';
+import mongoose from 'mongoose';
+import 'dotenv/config';
+
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,7 +32,7 @@ const io = new Server(server, {
 });
 
 // ==========================================
-// Persistent User Account & VIP Store
+// Cloud MongoDB Atlas & Local JSON Hybrid Database
 // ==========================================
 const DATA_DIR = join(__dirname, 'data');
 const USERS_FILE = join(DATA_DIR, 'users.json');
@@ -38,7 +45,44 @@ if (!fs.existsSync(DATA_DIR)) {
   }
 }
 
-function loadUsers() {
+// Mongoose User Schema
+const userSchema = new mongoose.Schema({
+  lookupKey: { type: String, required: true, unique: true, index: true },
+  username: { type: String, required: true },
+  passwordHash: { type: String, required: true },
+  salt: { type: String, required: true },
+  isVip: { type: Boolean, default: false },
+  credits: { type: Number, default: 100 },
+  unlockedSkins: { type: [String], default: ['skin_default'] },
+  equippedSkin: { type: String, default: 'skin_default' },
+  preferredClass: { type: String, default: 'Random' },
+  stats: {
+    matchesPlayed: { type: Number, default: 0 },
+    escapes: { type: Number, default: 0 },
+    captures: { type: Number, default: 0 }
+  },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const UserModel = mongoose.models.User || mongoose.model('User', userSchema);
+
+let isMongoConnected = false;
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (MONGODB_URI) {
+  mongoose.connect(MONGODB_URI)
+    .then(() => {
+      isMongoConnected = true;
+      console.log("🚀 [MongoDB Atlas] Connected successfully to cloud database!");
+    })
+    .catch((err) => {
+      console.error("⚠️ [MongoDB Atlas] Connection warning:", err.message);
+    });
+} else {
+  console.log("ℹ️ [Database] MONGODB_URI not provided; operating in local JSON mode.");
+}
+
+function loadUsersLocal() {
   try {
     if (fs.existsSync(USERS_FILE)) {
       return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
@@ -49,12 +93,57 @@ function loadUsers() {
   return {};
 }
 
-function saveUsers(users) {
+function saveUsersLocal(users) {
   try {
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
   } catch (e) {
     console.error("Error saving users database:", e);
   }
+}
+
+async function findUser(lookupKey) {
+  if (isMongoConnected) {
+    try {
+      const doc = await UserModel.findOne({ lookupKey });
+      if (doc) return doc.toObject();
+    } catch (e) {
+      console.error("MongoDB lookup error:", e);
+    }
+  }
+  const local = loadUsersLocal();
+  return local[lookupKey] || null;
+}
+
+async function createUser(userData) {
+  if (isMongoConnected) {
+    try {
+      const doc = new UserModel(userData);
+      await doc.save();
+    } catch (e) {
+      console.error("MongoDB create error:", e);
+    }
+  }
+  const local = loadUsersLocal();
+  local[userData.lookupKey] = userData;
+  saveUsersLocal(local);
+  return userData;
+}
+
+async function updateUser(lookupKey, updates) {
+  if (isMongoConnected) {
+    try {
+      await UserModel.updateOne({ lookupKey }, { $set: updates });
+    } catch (e) {
+      console.error("MongoDB update error:", e);
+    }
+  }
+  const local = loadUsersLocal();
+  if (local[lookupKey]) {
+    Object.assign(local[lookupKey], updates);
+    saveUsersLocal(local);
+    return local[lookupKey];
+  }
+  return null;
 }
 
 function hashPassword(password, salt) {
@@ -65,7 +154,7 @@ function sanitizeUser(u) {
   return {
     username: u.username,
     isVip: !!u.isVip,
-    credits: u.credits || 0,
+    credits: u.credits !== undefined ? u.credits : 100,
     unlockedSkins: u.unlockedSkins || ['skin_default'],
     equippedSkin: u.equippedSkin || 'skin_default',
     preferredClass: u.preferredClass || 'Random',
@@ -199,21 +288,22 @@ io.on('connection', (socket) => {
   // ==========================================
   // Authentication & Persistent User Handlers
   // ==========================================
-  socket.on('auth_register', ({ username, password }, callback) => {
+  socket.on('auth_register', async ({ username, password }, callback) => {
     if (!username || !password || username.trim().length < 3 || password.length < 4) {
       return callback && callback({ success: false, msg: 'Call-sign must be at least 3 chars & password at least 4 chars.' });
     }
     const cleanUsername = username.trim();
-    const users = loadUsers();
     const lookupKey = cleanUsername.toLowerCase();
+    const existing = await findUser(lookupKey);
 
-    if (users[lookupKey]) {
+    if (existing) {
       return callback && callback({ success: false, msg: 'Call-sign is already registered. Please login.' });
     }
 
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = hashPassword(password, salt);
     const newUser = {
+      lookupKey,
       username: cleanUsername,
       passwordHash,
       salt,
@@ -226,24 +316,22 @@ io.on('connection', (socket) => {
       createdAt: new Date().toISOString()
     };
 
-    users[lookupKey] = newUser;
-    saveUsers(users);
+    await createUser(newUser);
 
     const token = crypto.randomBytes(32).toString('hex');
     activeSessions.set(token, lookupKey);
 
-    console.log(`[AUTH] New Operative registered: ${cleanUsername}`);
+    console.log(`[AUTH] New Operative registered (Saved to Database): ${cleanUsername}`);
     return callback && callback({ success: true, token, user: sanitizeUser(newUser) });
   });
 
-  socket.on('auth_login', ({ username, password }, callback) => {
+  socket.on('auth_login', async ({ username, password }, callback) => {
     if (!username || !password) {
       return callback && callback({ success: false, msg: 'Please provide both username and password.' });
     }
     const cleanUsername = username.trim();
-    const users = loadUsers();
     const lookupKey = cleanUsername.toLowerCase();
-    const user = users[lookupKey];
+    const user = await findUser(lookupKey);
 
     if (!user) {
       return callback && callback({ success: false, msg: 'Call-sign not found. Please register first.' });
@@ -261,13 +349,12 @@ io.on('connection', (socket) => {
     return callback && callback({ success: true, token, user: sanitizeUser(user) });
   });
 
-  socket.on('auth_token_login', ({ token }, callback) => {
+  socket.on('auth_token_login', async ({ token }, callback) => {
     if (!token || !activeSessions.has(token)) {
       return callback && callback({ success: false, msg: 'Session expired or invalid.' });
     }
     const lookupKey = activeSessions.get(token);
-    const users = loadUsers();
-    const user = users[lookupKey];
+    const user = await findUser(lookupKey);
     if (!user) {
       activeSessions.delete(token);
       return callback && callback({ success: false, msg: 'User profile not found.' });
@@ -280,43 +367,38 @@ io.on('connection', (socket) => {
     return callback && callback({ success: true });
   });
 
-  socket.on('account_update_vip', ({ token, isVip }, callback) => {
+  socket.on('account_update_vip', async ({ token, isVip }, callback) => {
     if (!token || !activeSessions.has(token)) {
       return callback && callback({ success: false, msg: 'Unauthorized.' });
     }
     const lookupKey = activeSessions.get(token);
-    const users = loadUsers();
-    if (users[lookupKey]) {
-      users[lookupKey].isVip = !!isVip;
+    const user = await findUser(lookupKey);
+    if (user) {
+      const updates = { isVip: !!isVip };
       if (isVip) {
-        users[lookupKey].credits = (users[lookupKey].credits || 0) + 500;
+        updates.credits = (user.credits || 0) + 500;
       }
-      saveUsers(users);
-      return callback && callback({ success: true, user: sanitizeUser(users[lookupKey]) });
+      const updated = await updateUser(lookupKey, updates);
+      return callback && callback({ success: true, user: sanitizeUser(updated || user) });
     }
   });
 
-  socket.on('account_update_credits', ({ token, credits }, callback) => {
+  socket.on('account_update_credits', async ({ token, credits }, callback) => {
     if (!token || !activeSessions.has(token)) return;
     const lookupKey = activeSessions.get(token);
-    const users = loadUsers();
-    if (users[lookupKey]) {
-      users[lookupKey].credits = Math.max(0, parseInt(credits) || 0);
-      saveUsers(users);
-      return callback && callback({ success: true, credits: users[lookupKey].credits });
-    }
+    const newAmount = Math.max(0, parseInt(credits) || 0);
+    await updateUser(lookupKey, { credits: newAmount });
+    return callback && callback({ success: true, credits: newAmount });
   });
 
-  socket.on('account_update_skin', ({ token, unlockedSkins, equippedSkin }, callback) => {
+  socket.on('account_update_skin', async ({ token, unlockedSkins, equippedSkin }, callback) => {
     if (!token || !activeSessions.has(token)) return;
     const lookupKey = activeSessions.get(token);
-    const users = loadUsers();
-    if (users[lookupKey]) {
-      if (Array.isArray(unlockedSkins)) users[lookupKey].unlockedSkins = unlockedSkins;
-      if (equippedSkin) users[lookupKey].equippedSkin = equippedSkin;
-      saveUsers(users);
-      return callback && callback({ success: true, user: sanitizeUser(users[lookupKey]) });
-    }
+    const updates = {};
+    if (Array.isArray(unlockedSkins)) updates.unlockedSkins = unlockedSkins;
+    if (equippedSkin) updates.equippedSkin = equippedSkin;
+    const updated = await updateUser(lookupKey, updates);
+    return callback && callback({ success: true, user: sanitizeUser(updated) });
   });
 
   socket.on('join_public_matchmaking', ({ username, skinId }) => {
