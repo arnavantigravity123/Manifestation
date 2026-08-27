@@ -2180,24 +2180,19 @@ function setupControls() {
     document.addEventListener('touchstart', (e) => {
       if ((isCaptured && !window.isSpectating) || !window.gameReady) return;
       
-      // Ignore touch starts on ANY interactive UI, buttons, joystick, or action panels
+      // Ignore touch starts ONLY on specific interactive buttons, inputs, joystick base, or modal panels
       if (
+        e.target.closest('button') ||
+        e.target.closest('input') ||
+        e.target.closest('select') ||
+        e.target.closest('a') ||
         e.target.closest('#mobile-joystick') || 
         e.target.closest('#mobile-actions') || 
-        e.target.closest('.mobile-action-btn') ||
-        e.target.closest('.mobile-sprint-btn') ||
-        e.target.closest('#btn-mobile-pause') ||
-        e.target.closest('#btn-camera-toggle') ||
-        e.target.closest('.unified-pause-btn') ||
-        e.target.closest('.unified-cam-btn') ||
-        e.target.closest('.top-controls-group') ||
-        e.target.closest('.top-center-hud') ||
-        e.target.closest('.interactive-hud') ||
-        e.target.closest('#hud-inventory') ||
+        e.target.closest('#minimap-container') ||
+        e.target.closest('#keypad-modal-ui') ||
         e.target.closest('.inventory-slot') ||
         e.target.closest('.key-slot') ||
-        e.target.closest('#minimap-wrapper') ||
-        e.target.closest('button')
+        e.target.closest('.glass-panel')
       ) {
         return;
       }
@@ -2222,13 +2217,14 @@ function setupControls() {
           const dy = t.clientY - lastLookY;
 
           const sensitivity = window.lookSensitivity !== undefined ? window.lookSensitivity : 1.0;
-          camera.rotation.y -= dx * 0.004 * sensitivity;
-          camera.rotation.x -= dy * 0.004 * sensitivity;
+          // Responsive mobile swipe look speed
+          camera.rotation.y -= dx * 0.0055 * sensitivity;
+          camera.rotation.x -= dy * 0.0055 * sensitivity;
           camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
 
           lastLookX = t.clientX;
           lastLookY = t.clientY;
-          e.preventDefault();
+          if (e.cancelable) e.preventDefault();
           break;
         }
       }
@@ -2386,7 +2382,7 @@ function setupControls() {
       dropItemBtn.addEventListener('click', handleDropItem);
     }
 
-    // Sprint button — toggle: tap to start, tap again to stop
+    // Sprint button — click/tap to toggle ON/OFF
     const sprintBtn = document.getElementById('btn-mobile-sprint');
     if (sprintBtn) {
       const handleSprintToggle = (e) => {
@@ -2395,9 +2391,11 @@ function setupControls() {
         if (isSprinting) {
           isSprinting = false;
           sprintBtn.classList.remove('sprinting');
+          sprintBtn.textContent = '🏃 SPRINT';
         } else if (myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA && !isCaptured && window.gameReady) {
           isSprinting = true;
           sprintBtn.classList.add('sprinting');
+          sprintBtn.textContent = '🏃 SPRINT [ON]';
         }
       };
       sprintBtn.addEventListener('touchstart', handleSprintToggle, { passive: false });
@@ -2423,13 +2421,9 @@ function setupControls() {
       globalPauseBtn.addEventListener('click', handlePause);
     }
 
-    // Camera view toggle buttons (top header & mobile action pad)
-    const cameraToggleBtns = [
-      document.getElementById('btn-camera-toggle'),
-      document.getElementById('btn-mobile-camera')
-    ].filter(Boolean);
-
-    cameraToggleBtns.forEach(cBtn => {
+    // Camera view toggle button (Top header HUD)
+    const cameraToggleBtn = document.getElementById('btn-camera-toggle');
+    if (cameraToggleBtn) {
       const handleCam = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -2437,9 +2431,9 @@ function setupControls() {
           toggleCameraView();
         }
       };
-      cBtn.addEventListener('touchstart', handleCam, { passive: false });
-      cBtn.addEventListener('click', handleCam);
-    });
+      cameraToggleBtn.addEventListener('touchstart', handleCam, { passive: false });
+      cameraToggleBtn.addEventListener('click', handleCam);
+    }
 
     // Mouse scroll wheel for cycling active slot
     document.addEventListener('wheel', (e) => {
@@ -5078,22 +5072,24 @@ function animate() {
     // --- Sprint logic (humans only) ---
     if (myTeam === 'Human') {
       const moving = moveForward || moveBackward || moveLeft || moveRight;
-      if (isSprinting && moving && stamina > 0) {
-        speed *= 1.55; // sprint multiplier (up to 13.95 m/s)
-        stamina = Math.max(0, stamina - STAMINA_DRAIN_RATE * delta);
-        if (stamina <= 0) {
-          isSprinting = false;
-          const sb = document.getElementById('btn-mobile-sprint');
-          if (sb) sb.classList.remove('sprinting');
+      if (isSprinting) {
+        if (moving && stamina > 0) {
+          speed *= 1.55; // sprint multiplier (up to 13.95 m/s)
+          stamina = Math.max(0, stamina - STAMINA_DRAIN_RATE * delta);
+          if (stamina <= 0) {
+            isSprinting = false;
+            const sb = document.getElementById('btn-mobile-sprint');
+            if (sb) {
+              sb.classList.remove('sprinting');
+              sb.textContent = '🏃 SPRINT';
+            }
+          }
+        } else if (!moving) {
+          // Stationary while sprint is toggled: slowly regenerate stamina without cancelling sprint mode
+          stamina = Math.min(100, stamina + STAMINA_REGEN_RATE * 0.5 * delta);
         }
       } else {
-        if (isSprinting) {
-          isSprinting = false;
-          const sb = document.getElementById('btn-mobile-sprint');
-          if (sb) sb.classList.remove('sprinting');
-        }
         stamina = Math.min(100, stamina + STAMINA_REGEN_RATE * delta);
-        if (stamina <= SPRINT_MIN_STAMINA) isSprinting = false;
       }
       // Update stamina bar
       const stBar = document.getElementById('stamina-bar');
