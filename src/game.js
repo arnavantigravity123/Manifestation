@@ -864,10 +864,9 @@ function renderHUDInventory() {
     slot.appendChild(idxSpan);
 
     const nameSpan = document.createElement('span');
+    nameSpan.className = 'item-label';
     nameSpan.textContent = getIconOrShortName(item);
-    nameSpan.style.fontSize = '0.7rem';
-    nameSpan.style.textAlign = 'center';
-    nameSpan.style.color = index === activeSlot ? 'white' : 'var(--text-muted)';
+    nameSpan.style.color = index === activeSlot ? '#ffffff' : '#94a3b8';
     slot.appendChild(nameSpan);
 
     // Cooldown timer overlay
