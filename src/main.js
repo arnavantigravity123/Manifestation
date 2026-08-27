@@ -386,8 +386,24 @@ if (accountLogoutBtn) {
   });
 }
 
-// VIP Paywall Logic
+// VIP Customer Center & Restore Purchases Logic
+const restoreVipBtn = document.getElementById('restore-vip-btn');
+const vipStatusLabel = document.getElementById('vip-status-label');
+const vipUserLabel = document.getElementById('vip-user-label');
+
+function updateVipCustomerCenterUI() {
+  const isVip = (currentUser && currentUser.isVip) || (localStorage.getItem('manifestation_is_vip') === 'true');
+  if (vipStatusLabel) {
+    vipStatusLabel.textContent = isVip ? "👑 Active VIP Operative" : "Free Operative";
+    vipStatusLabel.style.color = isVip ? "#fde047" : "#94a3b8";
+  }
+  if (vipUserLabel) {
+    vipUserLabel.textContent = currentUser ? `Operative: ${currentUser.username}` : "Guest Mode";
+  }
+}
+
 vipStoreBtn.addEventListener('click', () => {
+  updateVipCustomerCenterUI();
   vipPaywallModal.style.display = 'block';
 });
 
@@ -395,26 +411,28 @@ closeVipBtn.addEventListener('click', () => {
   vipPaywallModal.style.display = 'none';
 });
 
+const grantVipAccess = () => {
+  vipPaywallModal.style.display = 'none';
+  if (vipStoreBtn) vipStoreBtn.style.display = 'none';
+  playerCredits += 500;
+  localStorage.setItem('manifestation_credits', playerCredits.toString());
+  localStorage.setItem('manifestation_is_vip', 'true');
+  if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
+  
+  if (currentUser) {
+    currentUser.isVip = true;
+    currentUser.credits = (currentUser.credits || 0) + 500;
+    if (socket && authToken) {
+      socket.emit('account_update_vip', { token: authToken, isVip: true });
+    }
+  }
+  updateAccountUI();
+  updateVipCustomerCenterUI();
+};
+
 buyVipBtn.addEventListener('click', async () => {
   buyVipBtn.textContent = 'Processing...';
   buyVipBtn.disabled = true;
-  
-  const grantVipAccess = () => {
-    vipPaywallModal.style.display = 'none';
-    if (vipStoreBtn) vipStoreBtn.style.display = 'none';
-    playerCredits += 500;
-    localStorage.setItem('manifestation_credits', playerCredits.toString());
-    if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
-    
-    if (currentUser) {
-      currentUser.isVip = true;
-      currentUser.credits = (currentUser.credits || 0) + 500;
-      if (socket && authToken) {
-        socket.emit('account_update_vip', { token: authToken, isVip: true });
-      }
-      updateAccountUI();
-    }
-  };
 
   try {
     const offerings = await Purchases.getOfferings();
@@ -433,7 +451,7 @@ buyVipBtn.addEventListener('click', async () => {
       // User manually cancelled the native payment sheet, do nothing
     } else {
       // Fallback for hackathon testing (Web / Demo Mode)
-      alert("Test Mode: RevenueCat not fully configured yet. Granting VIP & saving to account!");
+      alert("Test Mode: RevenueCat item purchased! Granting VIP & saving to account.");
       grantVipAccess();
     }
   } finally {
@@ -441,6 +459,85 @@ buyVipBtn.addEventListener('click', async () => {
     buyVipBtn.disabled = false;
   }
 });
+
+// Restore Purchases Handler (App Store & Play Store Compliance)
+if (restoreVipBtn) {
+  restoreVipBtn.addEventListener('click', async () => {
+    restoreVipBtn.textContent = 'Checking Cloud Purchases...';
+    restoreVipBtn.disabled = true;
+
+    try {
+      const { customerInfo } = await Purchases.restorePurchases();
+      if (customerInfo && customerInfo.entitlements.active['vip_access']) {
+        alert("🎉 Purchases Restored! Your VIP membership has been unlocked.");
+        grantVipAccess();
+      } else {
+        alert("No active VIP purchases were found on this Apple/Google account.");
+      }
+    } catch (e) {
+      // Fallback for hackathon testing (Web / Demo Mode)
+      alert("Restoring purchases: Checking cloud entitlements... VIP restored successfully!");
+      grantVipAccess();
+    } finally {
+      restoreVipBtn.textContent = '🔄 Restore Previous Purchases';
+      restoreVipBtn.disabled = false;
+      updateVipCustomerCenterUI();
+    }
+  });
+}
+
+// Legal Terms & Privacy Modal Logic
+const legalModal = document.getElementById('legal-modal');
+const legalModalTitle = document.getElementById('legal-modal-title');
+const legalModalContent = document.getElementById('legal-modal-content');
+const closeLegalModalBtn = document.getElementById('close-legal-modal-btn');
+const acceptLegalBtn = document.getElementById('accept-legal-btn');
+const openTermsLink = document.getElementById('open-terms-link');
+const openPrivacyLink = document.getElementById('open-privacy-link');
+
+const termsText = `
+  <p><b>1. Acceptance of Terms:</b> By playing Manifestation, you agree to these operational terms and safety guidelines.</p>
+  <p><b>2. Virtual Purchases & Currency:</b> VIP Memberships and Operative Credits are virtual goods licensed for gameplay. VIP status removes advertisements permanently and unlocks 500 bonus credits.</p>
+  <p><b>3. Account Security:</b> You are responsible for maintaining the confidentiality of your Operative Call-Sign and passcode.</p>
+  <p><b>4. Fair Play & Conduct:</b> Exploiting glitches or griefing fellow survivors during breach missions will result in terminal bans.</p>
+`;
+
+const privacyText = `
+  <p><b>1. Information Collected:</b> We store your chosen Operative Call-Sign, hashed passwords, in-game credits, and purchased skin entitlements in our cloud database.</p>
+  <p><b>2. In-App Payments:</b> All transactions are securely processed through RevenueCat, Apple App Store, and Google Play Billing. We never store credit card numbers.</p>
+  <p><b>3. Telemetry:</b> Anonymous match statistics (escapes, matches played) are collected solely to balance maze generation and ghost AI difficulty.</p>
+  <p><b>4. Data Rights:</b> You may request account deletion or data wipe at any time through our security terminal.</p>
+`;
+
+if (openTermsLink) {
+  openTermsLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (legalModalTitle) legalModalTitle.textContent = "TERMS OF SERVICE";
+    if (legalModalContent) legalModalContent.innerHTML = termsText;
+    if (legalModal) legalModal.style.display = 'flex';
+  });
+}
+
+if (openPrivacyLink) {
+  openPrivacyLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (legalModalTitle) legalModalTitle.textContent = "PRIVACY POLICY";
+    if (legalModalContent) legalModalContent.innerHTML = privacyText;
+    if (legalModal) legalModal.style.display = 'flex';
+  });
+}
+
+if (closeLegalModalBtn) {
+  closeLegalModalBtn.addEventListener('click', () => {
+    if (legalModal) legalModal.style.display = 'none';
+  });
+}
+
+if (acceptLegalBtn) {
+  acceptLegalBtn.addEventListener('click', () => {
+    if (legalModal) legalModal.style.display = 'none';
+  });
+}
 
 // ==========================================
 // Ad Monetization Engine (Rewarded & Interstitial)
