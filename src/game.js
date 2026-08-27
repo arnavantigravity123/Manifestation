@@ -4719,42 +4719,52 @@ function setupMinimap() {
     drawMinimap();
   };
 
-  // Toggle map expansion
+  const handleMapMark = (clientX, clientY) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    const px = (clientX - rect.left) * scaleX;
+    const py = (clientY - rect.top) * scaleY;
+    
+    // Map canvas coordinates to maze grid
+    const mazeSize = mazeSizeGlobal;
+    const cellSize = canvas.width / mazeSize;
+    const c = Math.floor(px / cellSize);
+    const r = Math.floor(py / cellSize);
+    
+    if (c >= 0 && c < mazeSize && r >= 0 && r < mazeSize) {
+      // Toggle mark: if already exists, remove it; else add it
+      const existingIdx = mapMarks.findIndex(m => m.r === r && m.c === c);
+      if (existingIdx !== -1) {
+        mapMarks.splice(existingIdx, 1);
+      } else {
+        mapMarks.push({r, c});
+      }
+      drawMinimap();
+    }
+  };
+
+  // Toggle map expansion & drop markers on touch/click
   wrapper.addEventListener('click', (e) => {
-    // Ignore clicks on buttons inside the wrapper
     if (e.target.tagName === 'BUTTON' || e.target.closest('button')) return;
     
     if (!isMinimapExpanded) {
       openMinimap();
-    } else {
-      // If clicking directly on the canvas while expanded, drop a mark
-      if (e.target.id === 'minimap-canvas') {
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        
-        const px = (e.clientX - rect.left) * scaleX;
-        const py = (e.clientY - rect.top) * scaleY;
-        
-        // Map canvas coordinates to grid
-        const mazeSize = mazeSizeGlobal;
-        const cellSize = canvas.width / mazeSize;
-        const c = Math.floor(px / cellSize);
-        const r = Math.floor(py / cellSize);
-        
-        if (c >= 0 && c < mazeSize && r >= 0 && r < mazeSize) {
-          // Toggle mark: if already exists, remove it; else add it
-          const existingIdx = mapMarks.findIndex(m => m.r === r && m.c === c);
-          if (existingIdx !== -1) {
-            mapMarks.splice(existingIdx, 1);
-          } else {
-            mapMarks.push({r, c});
-          }
-          drawMinimap();
-        }
-      }
+    } else if (e.target.id === 'minimap-canvas') {
+      handleMapMark(e.clientX, e.clientY);
     }
   });
+
+  canvas.addEventListener('touchstart', (e) => {
+    if (!isMinimapExpanded) {
+      openMinimap();
+    } else if (e.touches && e.touches[0]) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleMapMark(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, { passive: false });
 
   if (btnClose) {
     btnClose.addEventListener('click', closeMinimap);
