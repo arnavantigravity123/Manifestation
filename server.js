@@ -66,21 +66,39 @@ const userSchema = new mongoose.Schema({
 
 const UserModel = mongoose.models.User || mongoose.model('User', userSchema);
 
-let isMongoConnected = false;
-const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arnavantigravity_db_user:Gcnemt5r4WAahQkb@manifestation.bwyipxp.mongodb.net/manifestation?retryWrites=true&w=majority&appName=Manifestation';
 
-if (MONGODB_URI) {
-  mongoose.connect(MONGODB_URI)
-    .then(() => {
+let isMongoConnected = false;
+let isConnecting = false;
+
+async function ensureDbConnected() {
+  if (isMongoConnected) return true;
+  if (isConnecting) {
+    let waited = 0;
+    while (isConnecting && waited < 50) {
+      await new Promise(r => setTimeout(r, 100));
+      waited++;
+      if (isMongoConnected) return true;
+    }
+  }
+  if (MONGODB_URI) {
+    try {
+      isConnecting = true;
+      await mongoose.connect(MONGODB_URI);
       isMongoConnected = true;
+      isConnecting = false;
       console.log("🚀 [MongoDB Atlas] Connected successfully to cloud database!");
-    })
-    .catch((err) => {
+      return true;
+    } catch (err) {
+      isConnecting = false;
       console.error("⚠️ [MongoDB Atlas] Connection warning:", err.message);
-    });
-} else {
-  console.log("ℹ️ [Database] MONGODB_URI not provided; operating in local JSON mode.");
+    }
+  }
+  return isMongoConnected;
 }
+
+// Connect immediately on boot
+ensureDbConnected();
 
 function loadUsersLocal() {
   try {
@@ -102,6 +120,7 @@ function saveUsersLocal(users) {
 }
 
 async function findUser(lookupKey) {
+  await ensureDbConnected();
   if (isMongoConnected) {
     try {
       const doc = await UserModel.findOne({ lookupKey });
@@ -115,10 +134,12 @@ async function findUser(lookupKey) {
 }
 
 async function createUser(userData) {
+  await ensureDbConnected();
   if (isMongoConnected) {
     try {
       const doc = new UserModel(userData);
       await doc.save();
+      console.log(`[MongoDB Atlas] Operative '${userData.username}' successfully saved to cloud database.`);
     } catch (e) {
       console.error("MongoDB create error:", e);
     }
@@ -130,9 +151,11 @@ async function createUser(userData) {
 }
 
 async function updateUser(lookupKey, updates) {
+  await ensureDbConnected();
   if (isMongoConnected) {
     try {
       await UserModel.updateOne({ lookupKey }, { $set: updates });
+      console.log(`[MongoDB Atlas] Operative '${lookupKey}' cloud profile updated.`);
     } catch (e) {
       console.error("MongoDB update error:", e);
     }
