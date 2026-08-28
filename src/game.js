@@ -2728,6 +2728,20 @@ function updateInteractionPrompt() {
 function checkInteractions() {
   if (myTeam === 'Ghost' || window.isSpectating) return;
 
+  // 0. Check Mirage Loot FIRST (Prevents picking up real items / overriding)
+  if (typeof mirageItems !== 'undefined' && mirageItems.length > 0) {
+    for (let i = 0; i < mirageItems.length; i++) {
+      const mItem = mirageItems[i];
+      if (!mItem || !mItem.mesh || mItem.dissolving) continue;
+      const { looking: lookingAtMirage } = isLookingAtTarget(mItem.mesh.position, 4.8);
+      const playerDist = camera.position.distanceTo(mItem.mesh.position);
+      if (lookingAtMirage || playerDist < 2.5) {
+        dissolveMirageItem(mItem);
+        return; // Intercepted mirage! Do NOT proceed to pick up real items
+      }
+    }
+  }
+
   // 1. Check proximity to Keypad Terminal (Master Gate)
   const gateVec = new THREE.Vector3(gateCoordinates.x, 2, gateCoordinates.z);
   const { looking: lookingAtGate, dist: distToGate } = isLookingAtTarget(gateVec, 6.0);
@@ -2896,19 +2910,6 @@ function checkInteractions() {
         triggerNotification("Inventory full! Drop an item first.");
       }
       break;
-    }
-  }
-
-  // 6. Check Mirage Loot interaction (Feature 2)
-  if (typeof mirageItems !== 'undefined') {
-    for (let i = 0; i < mirageItems.length; i++) {
-      const mItem = mirageItems[i];
-      if (!mItem || !mItem.mesh || mItem.dissolving) continue;
-      const { looking: lookingAtMirage } = isLookingAtTarget(mItem.mesh.position, 4.5);
-      if (lookingAtMirage) {
-        dissolveMirageItem(mItem);
-        return;
-      }
     }
   }
 }
@@ -3547,17 +3548,21 @@ function spawnMirageLoot() {
   if (openCorridors.length === 0) return;
   const candidates = openCorridors.filter(c => {
     const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
-    return d > 7 && d < 16;
+    // Guarantee mirage does NOT spawn close to any real item or real key
+    const nearRealItem = itemsInMaze.some(item => item.mesh && Math.hypot(item.mesh.position.x - c.x, item.mesh.position.z - c.z) < 5.0);
+    const nearKey = keysInMaze.some(k => k.mesh && Math.hypot(k.mesh.position.x - c.x, k.mesh.position.z - c.z) < 5.0);
+    const nearClue = codeClueNotes.some(n => n.mesh && Math.hypot(n.mesh.position.x - c.x, n.mesh.position.z - c.z) < 5.0);
+    return d > 8 && d < 18 && !nearRealItem && !nearKey && !nearClue;
   });
   if (candidates.length === 0) return;
   const pos = candidates[Math.floor(Math.random() * candidates.length)];
 
   const isKey = Math.random() > 0.5;
-  const name = isKey ? 'Amber Key' : 'Battery Pack';
+  const name = isKey ? 'Amber Key (Mirage)' : 'Battery Pack (Mirage)';
 
   const mirageMat = new THREE.SpriteMaterial({
     map: getLoadedTexture('/assets/battery_item.png'),
-    color: 0xff4488,
+    color: 0xff3b82,
     transparent: true,
     opacity: 0.85,
     blending: THREE.AdditiveBlending,
@@ -3598,6 +3603,8 @@ function updateMirageLoot(delta) {
       m.mesh.scale.multiplyScalar(0.92);
       if (m.material.opacity <= 0.04) {
         scene.remove(m.mesh);
+        if (m.mesh.geometry) m.mesh.geometry.dispose();
+        if (m.material) m.material.dispose();
         mirageItems.splice(i, 1);
       }
     }
@@ -3607,7 +3614,18 @@ function updateMirageLoot(delta) {
 function dissolveMirageItem(mirage) {
   if (!mirage || mirage.dissolving) return;
   mirage.dissolving = true;
+  
+  // Instantly remove mesh and clean up
+  if (mirage.mesh) {
+    scene.remove(mirage.mesh);
+    if (mirage.mesh.geometry) mirage.mesh.geometry.dispose();
+    if (mirage.material) mirage.material.dispose();
+  }
+  const idx = mirageItems.indexOf(mirage);
+  if (idx > -1) mirageItems.splice(idx, 1);
+
   triggerNotification("🌫️ Mirage crumbled into ash! It was a hallucination.");
+
   if (audioCtx) {
     try {
       const osc = audioCtx.createOscillator();
@@ -5424,6 +5442,18 @@ function animate() {
   prevTime = time;
 
   const isActive = isMobileDevice ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) : (Boolean(document.pointerLockElement) && (!isCaptured || window.isSpectating));
+
+  // Solo Offline Matches: Truly PAUSE game simulation when menu/pause is open.
+  // Multiplayer Lobbies: Never freeze match, simulation keeps running live in the background!
+  const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
+  const isSoloPaused = !isMultiplayer && !isActive && !window.isSpectating && window.gameReady;
+
+  if (isSoloPaused) {
+    if (activeViewCamera) renderer.render(scene, activeViewCamera);
+    else renderer.render(scene, camera);
+    return;
+  }
+
   if (isActive) {
     // 1. Process movement physics with friction
     velocity.x -= velocity.x * 10.0 * delta;
