@@ -3522,6 +3522,7 @@ function spawnFakeGhost() {
     x: chosenPos.x,
     z: chosenPos.z,
     spawnTime: performance.now(),
+    focusTimer: 0,
     dissolving: false
   });
 }
@@ -3532,18 +3533,36 @@ function updateShadowDecoys(delta) {
     const decoy = shadowDecoys[i];
     if (!decoy || !decoy.group) continue;
 
+    const age = (time - decoy.spawnTime) / 1000;
+
     // Bobbing & floating ghost animation + face toward player
-    decoy.group.position.y = Math.sin(time * 0.003 + decoy.x) * 0.15;
+    decoy.group.position.y = 0.2 + Math.sin(time * 0.003 + decoy.x) * 0.2;
     decoy.group.lookAt(camera.position.x, decoy.group.position.y, camera.position.z);
 
-    const d = Math.hypot(camera.position.x - decoy.x, camera.position.z - decoy.z);
-    const { looking } = isLookingAtTarget(decoy.group.position, 16.0);
+    // Slowly glide / stalk down the hallway toward the player while active
+    const d = Math.hypot(camera.position.x - decoy.group.position.x, camera.position.z - decoy.group.position.z);
+    if (!decoy.dissolving && d > 3.0) {
+      const dirX = (camera.position.x - decoy.group.position.x) / d;
+      const dirZ = (camera.position.z - decoy.group.position.z) / d;
+      decoy.group.position.x += dirX * delta * 1.2;
+      decoy.group.position.z += dirZ * delta * 1.2;
+    }
+
+    const { looking } = isLookingAtTarget(decoy.group.position, 18.0);
     const flashlightOn = flashLight && flashLight.intensity > 15;
     
-    // Dissolve when flashlight shines on it or player gets close (< 4.5m)
-    const playerSpotted = (looking && flashlightOn && d < 14.0) || (d < 4.5);
+    // Accumulate flashlight focus time
+    if (looking && flashlightOn) {
+      decoy.focusTimer = (decoy.focusTimer || 0) + delta;
+    }
 
-    if (playerSpotted && !decoy.dissolving) {
+    // Dissolve ONLY IF:
+    // 1. Has lingered for at least 2.5s AND flashlight shined steadily for 1.2s
+    // 2. OR player walked very close (d < 2.5m)
+    // 3. OR stalked for > 6.5s
+    const shouldDissolve = (age >= 2.5 && decoy.focusTimer >= 1.2) || (d < 2.5) || (age >= 6.5);
+
+    if (shouldDissolve && !decoy.dissolving) {
       decoy.dissolving = true;
       triggerNotification("👁️ A hallucinated ghost dissolved into thin air!");
       if (audioCtx) {
@@ -3552,36 +3571,29 @@ function updateShadowDecoys(delta) {
           const gain = audioCtx.createGain();
           osc.type = 'sawtooth';
           osc.frequency.setValueAtTime(260, audioCtx.currentTime);
-          osc.frequency.exponentialRampToValueAtTime(35, audioCtx.currentTime + 0.45);
+          osc.frequency.exponentialRampToValueAtTime(35, audioCtx.currentTime + 0.6);
           gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-          gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+          gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
           osc.connect(gain);
           gain.connect(audioCtx.destination);
           osc.start();
-          osc.stop(audioCtx.currentTime + 0.45);
+          osc.stop(audioCtx.currentTime + 0.6);
         } catch(e) {}
       }
     }
 
-    // Silent timeout without notification if player never saw it after 40s
-    if (time - decoy.spawnTime > 40000 && !decoy.dissolving) {
-      scene.remove(decoy.group);
-      shadowDecoys.splice(i, 1);
-      continue;
-    }
-
     if (decoy.dissolving) {
-      decoy.group.position.y += delta * 1.5;
-      decoy.group.scale.multiplyScalar(0.92);
-      if (decoy.light) decoy.light.intensity *= 0.85;
+      decoy.group.position.y += delta * 0.8;
+      decoy.group.scale.multiplyScalar(0.96);
+      if (decoy.light) decoy.light.intensity *= 0.92;
       
       decoy.group.traverse(child => {
         if (child.material && child.material.opacity !== undefined) {
-          child.material.opacity = Math.max(0, child.material.opacity - delta * 3.0);
+          child.material.opacity = Math.max(0, child.material.opacity - delta * 1.2);
         }
       });
 
-      if (decoy.group.scale.x < 0.05) {
+      if (decoy.group.scale.x < 0.08) {
         scene.remove(decoy.group);
         shadowDecoys.splice(i, 1);
       }
