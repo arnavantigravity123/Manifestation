@@ -569,13 +569,28 @@
         <button id="keypad-close" class="keypad-close-btn">DISENGAGE DEVICE</button>
       </div>
 
-      <!-- 5. Pointer Lock & Intro Splash -->
-      <div id="pointer-lock-overlay" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.8); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; color: white;">
-        <h2 id="resume-click-target" style="font-family: 'Orbitron', sans-serif; font-size: 2rem; color: var(--primary-accent); text-shadow: 0 0 10px var(--primary-accent); cursor: pointer; padding: 20px;">CLICK TO RESUME LABYRINTH</h2>
-        <p style="color: var(--text-muted); margin-top: 10px;">(Press ESC to Pause | WASD to Move | Mouse to Look)</p>
-        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
-          <button id="pause-settings-btn" class="action-btn" style="width: auto; background: rgba(59, 130, 246, 0.6); padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto; border: 1px solid var(--human-accent);">SETTINGS</button>
-          <button onclick="window.location.reload()" class="action-btn" style="width: auto; background: rgba(139,0,0,0.8); padding: 1rem 2rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto;">ABORT MATCH</button>
+      <!-- 5. Pointer Lock & Pause / In-Game Menu Overlay -->
+      <div id="pointer-lock-overlay" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; color: white; padding: 20px; box-sizing: border-box; backdrop-filter: blur(8px);">
+        <h2 id="resume-click-target" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: var(--primary-accent); text-shadow: 0 0 12px var(--primary-accent); cursor: pointer; padding: 10px 24px; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; background: rgba(239, 68, 68, 0.1); transition: all 0.2s ease;">
+          ▶ CLICK TO RESUME LABYRINTH
+        </h2>
+
+        <!-- Multiplayer Live Game Warning Note -->
+        <div id="multiplayer-pause-warning" style="display: none; margin: 16px 0; padding: 12px 20px; background: rgba(239, 68, 68, 0.18); border: 1.5px solid #ef4444; border-radius: 8px; max-width: 540px; text-align: center; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);">
+          <div style="font-family: 'Orbitron', sans-serif; font-size: 0.92rem; font-weight: 900; color: #ef4444; letter-spacing: 1px; margin-bottom: 4px;">
+            ⚠️ LIVE MULTIPLAYER MATCH IN PROGRESS
+          </div>
+          <div style="font-size: 0.85rem; color: #fecaca; line-height: 1.35;">
+            The game world does <strong>NOT</strong> freeze. Everything is still moving in real-time, and ghosts & other players <strong>can still attack you</strong> while this menu is open!
+          </div>
+        </div>
+
+        <p id="pause-subtext" style="color: var(--text-muted); margin-top: 10px; font-size: 0.85rem;">(Press ESC / Tap to Pause | WASD / Joystick to Move | Look to Aim)</p>
+
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap; justify-content: center;">
+          <button id="pause-resume-btn" class="action-btn" style="width: auto; background: var(--primary-gradient); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; font-weight: 800;">▶ RESUME</button>
+          <button id="pause-settings-btn" class="action-btn" style="width: auto; background: rgba(59, 130, 246, 0.6); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; border: 1px solid var(--human-accent); font-weight: 800;">⚙️ SETTINGS</button>
+          <button id="pause-abort-btn" onclick="window.location.reload()" class="action-btn" style="width: auto; background: rgba(139,0,0,0.85); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; border: 1px solid #ef4444; font-weight: 800;">🚨 ABORT MATCH</button>
         </div>
       </div>
 

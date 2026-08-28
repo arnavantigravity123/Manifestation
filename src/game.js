@@ -582,6 +582,11 @@ export function initGame(socket, socketId, matchConfig) {
     resumeBtn.addEventListener('click', handleEnterGame);
     resumeBtn.addEventListener('touchstart', handleEnterGame, { passive: false });
   }
+  const pauseResumeBtn = document.getElementById('pause-resume-btn');
+  if (pauseResumeBtn) {
+    pauseResumeBtn.addEventListener('click', handleEnterGame);
+    pauseResumeBtn.addEventListener('touchstart', handleEnterGame, { passive: false });
+  }
 
   document.addEventListener('pointerlockchange', () => {
     if (isMobileDevice) return;
@@ -594,9 +599,13 @@ export function initGame(socket, socketId, matchConfig) {
       } else if (document.getElementById('captured-overlay').style.display === 'flex' || document.getElementById('end-game-overlay').style.display === 'flex') {
         ptrOverlay.style.display = 'none';
       } else {
+        const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
+        const warnEl = document.getElementById('multiplayer-pause-warning');
+        if (warnEl) warnEl.style.display = isMultiplayer ? 'block' : 'none';
+
         const resumeTarget = document.getElementById('resume-click-target');
         if (resumeTarget) {
-          resumeTarget.textContent = window.isSpectating ? 'CLICK TO RESUME SPECTATING' : 'CLICK TO RESUME LABYRINTH';
+          resumeTarget.textContent = window.isSpectating ? '▶ CLICK TO RESUME SPECTATING' : '▶ CLICK TO RESUME LABYRINTH';
         }
         ptrOverlay.style.display = 'flex';
       }
@@ -703,12 +712,11 @@ export function initGame(socket, socketId, matchConfig) {
     camera.position.set(0, 1.6, 0);
   }
 
-  // In live multiplayer lobbies, disable and hide pause button (cannot pause live games)
-  const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
+  // Pause buttons remain active in all modes to access In-Game Menu & Settings
   const mobilePauseBtn = document.getElementById('btn-mobile-pause');
   const globalPauseBtn = document.getElementById('global-pause-btn');
-  if (mobilePauseBtn) mobilePauseBtn.style.display = isMultiplayer ? 'none' : '';
-  if (globalPauseBtn) globalPauseBtn.style.display = isMultiplayer ? 'none' : '';
+  if (mobilePauseBtn) mobilePauseBtn.style.display = '';
+  if (globalPauseBtn) globalPauseBtn.style.display = '';
 
   // Easter Egg: Ariadne's Thread to the Vault (Straight direct beacon beam to the vault for Ariadne_999)
   const myPlayer = currentLobby.players[myId];
@@ -2411,12 +2419,17 @@ function setupControls() {
     const handlePause = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
-      if (isMultiplayer) {
-        triggerNotification("⚡ Live Multiplayer Match — Cannot Pause!");
-        return;
-      }
       window.mobileGameActive = false;
+
+      const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
+      const warnEl = document.getElementById('multiplayer-pause-warning');
+      if (warnEl) warnEl.style.display = isMultiplayer ? 'block' : 'none';
+
+      const resumeTarget = document.getElementById('resume-click-target');
+      if (resumeTarget) {
+        resumeTarget.textContent = isMobileDevice ? '▶ TAP TO RESUME LABYRINTH' : '▶ CLICK TO RESUME LABYRINTH';
+      }
+
       if (ptrOverlay) ptrOverlay.style.display = 'flex';
       if (document.exitPointerLock && document.pointerLockElement) {
         document.exitPointerLock();
