@@ -1191,6 +1191,12 @@ body.is-mobile #mobile-actions,
   position: relative;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+#joystick-base.sprinting {
+  border-color: rgba(234, 179, 8, 0.95);
+  box-shadow: 0 0 16px rgba(234, 179, 8, 0.7), inset 0 0 10px rgba(234, 179, 8, 0.35);
 }
 
 #joystick-knob {
@@ -1202,35 +1208,12 @@ body.is-mobile #mobile-actions,
   top: 25px;
   left: 25px;
   box-shadow: 0 0 10px var(--primary-accent);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.mobile-sprint-btn {
-  position: absolute;
-  bottom: 92px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 78px;
-  padding: 0.3rem 0;
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.58rem;
-  font-weight: 800;
-  color: white;
-  background: linear-gradient(135deg, #0ea5e9, #0369a1);
-  border: 1px solid rgba(14, 165, 233, 0.5);
-  border-radius: 5px;
-  cursor: pointer;
-  box-shadow: 0 3px 8px rgba(14, 165, 233, 0.3);
-  text-align: center;
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: manipulation;
-}
-
-.mobile-sprint-btn:active,
-.mobile-sprint-btn.sprinting {
-  transform: translateX(-50%) scale(0.93);
-  background: linear-gradient(135deg, #38bdf8, #0284c7);
-  box-shadow: 0 0 14px rgba(56, 189, 248, 0.6);
+#joystick-knob.sprinting {
+  background: linear-gradient(135deg, #fbbf24, #d97706);
+  box-shadow: 0 0 16px #fbbf24, 0 0 26px rgba(245, 158, 11, 0.8);
 }
 
 /* Right side action buttons pad */

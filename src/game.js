@@ -2357,7 +2357,10 @@ function setupControls() {
       moveBackward = false;
       moveLeft = false;
       moveRight = false;
+      isSprinting = false;
       joystickKnob.style.transform = `translate(0px, 0px)`;
+      joystickBase.classList.remove('sprinting');
+      joystickKnob.classList.remove('sprinting');
       joystickTouchId = null;
     };
 
@@ -2407,7 +2410,8 @@ function setupControls() {
       const dx = clientX - joyCenterX;
       const dy = clientY - joyCenterY;
       const dist = Math.hypot(dx, dy);
-      const maxRadius = 38;
+      const maxRadius = 45;
+      const sprintThreshold = 34; // Extended past 34px activates AUTO-SPRINT!
       
       const angle = Math.atan2(dy, dx);
       const clampDist = Math.min(dist, maxRadius);
@@ -2424,6 +2428,18 @@ function setupControls() {
       moveBackward = joyY > 0.2;
       moveLeft = joyX < -0.2;
       moveRight = joyX > 0.2;
+
+      // Auto-sprint when extending joystick extra far into the outer sprint zone
+      const isMoving = moveForward || moveBackward || moveLeft || moveRight;
+      if (isMoving && dist >= sprintThreshold && myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA) {
+        isSprinting = true;
+        joystickBase.classList.add('sprinting');
+        joystickKnob.classList.add('sprinting');
+      } else {
+        isSprinting = false;
+        joystickBase.classList.remove('sprinting');
+        joystickKnob.classList.remove('sprinting');
+      }
     }
 
     // Action button bindings using touchstart & click for instant response
@@ -2483,26 +2499,6 @@ function setupControls() {
       };
       dropItemBtn.addEventListener('touchstart', handleDropItem, { passive: false });
       dropItemBtn.addEventListener('click', handleDropItem);
-    }
-
-    // Sprint button — click/tap to toggle ON/OFF
-    const sprintBtn = document.getElementById('btn-mobile-sprint');
-    if (sprintBtn) {
-      const handleSprintToggle = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (isSprinting) {
-          isSprinting = false;
-          sprintBtn.classList.remove('sprinting');
-          sprintBtn.textContent = '🏃 SPRINT';
-        } else if (myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA && !isCaptured && window.gameReady) {
-          isSprinting = true;
-          sprintBtn.classList.add('sprinting');
-          sprintBtn.textContent = '🏃 SPRINT [ON]';
-        }
-      };
-      sprintBtn.addEventListener('touchstart', handleSprintToggle, { passive: false });
-      sprintBtn.addEventListener('click', handleSprintToggle);
     }
 
     const handlePause = (e) => {
@@ -5477,11 +5473,10 @@ function animate() {
           stamina = Math.max(0, stamina - STAMINA_DRAIN_RATE * delta);
           if (stamina <= 0) {
             isSprinting = false;
-            const sb = document.getElementById('btn-mobile-sprint');
-            if (sb) {
-              sb.classList.remove('sprinting');
-              sb.textContent = '🏃 SPRINT';
-            }
+            const jb = document.getElementById('joystick-base');
+            const jk = document.getElementById('joystick-knob');
+            if (jb) jb.classList.remove('sprinting');
+            if (jk) jk.classList.remove('sprinting');
           }
         } else if (!moving) {
           // Stationary while sprint is toggled: slowly regenerate stamina without cancelling sprint mode
