@@ -3463,43 +3463,64 @@ function processEMFSensors(delta) {
   }
 }
 
-// --- Feature 3: Shadow Decoys (Phantom Figures) ---
-function spawnShadowDecoy() {
+// --- Feature 3: Fake Ghosts (Hallucination Phantoms — Client-Side Only) ---
+function spawnFakeGhost() {
   if (openCorridors.length === 0) return;
+
+  const pDir = new THREE.Vector3();
+  camera.getWorldDirection(pDir);
+  pDir.y = 0;
+  pDir.normalize();
+
+  // Try to find open corridor cell 7 to 16 meters directly in front of the player's view
   const candidates = openCorridors.filter(c => {
-    const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
-    return d > 10 && d < 22;
-  });
-  if (candidates.length === 0) return;
-  const pos = candidates[Math.floor(Math.random() * candidates.length)];
+    const dx = c.x - camera.position.x;
+    const dz = c.z - camera.position.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 7 || d > 17) return false;
 
-  const group = new THREE.Group();
-  group.position.set(pos.x, 0, pos.z);
-
-  const bodyGeo = new THREE.CylinderGeometry(0.32, 0.42, 1.7, 8);
-  const headGeo = new THREE.SphereGeometry(0.24, 8, 8);
-  headGeo.translate(0, 1.05, 0);
-
-  const shadowMat = new THREE.MeshBasicMaterial({
-    color: 0x050508,
-    transparent: true,
-    opacity: 0.85,
-    depthWrite: false
+    const dot = (dx * pDir.x + dz * pDir.z) / d;
+    return dot > 0.35 && hasGridLineOfSight(camera.position.x, camera.position.z, c.x, c.z);
   });
 
-  const bodyMesh = new THREE.Mesh(bodyGeo, shadowMat);
-  bodyMesh.position.y = 0.85;
-  const headMesh = new THREE.Mesh(headGeo, shadowMat);
-  headMesh.position.y = 0.85;
-  group.add(bodyMesh);
-  group.add(headMesh);
+  let chosenPos = null;
+  if (candidates.length > 0) {
+    chosenPos = candidates[Math.floor(Math.random() * candidates.length)];
+  } else {
+    // Fallback: any nearby corridor with line of sight
+    const nearby = openCorridors.filter(c => {
+      const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
+      return d > 6 && d < 15 && hasGridLineOfSight(camera.position.x, camera.position.z, c.x, c.z);
+    });
+    if (nearby.length > 0) chosenPos = nearby[Math.floor(Math.random() * nearby.length)];
+  }
 
-  scene.add(group);
+  if (!chosenPos) return;
+
+  const ghostGroup = createGhostMeshGroup();
+  ghostGroup.position.set(chosenPos.x, 0, chosenPos.z);
+  
+  // Add glowing crimson phantom eyes
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff1144 });
+  const eyeGeo = new THREE.SphereGeometry(0.06, 6, 6);
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.2, 2.2, 0.4);
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.2, 2.2, 0.4);
+  ghostGroup.add(leftEye);
+  ghostGroup.add(rightEye);
+
+  // Eerie phantom light aura
+  const phantomLight = new THREE.PointLight(0xd946ef, 3.5, 9.0);
+  phantomLight.position.y = 2.0;
+  ghostGroup.add(phantomLight);
+
+  scene.add(ghostGroup);
   shadowDecoys.push({
-    group: group,
-    material: shadowMat,
-    x: pos.x,
-    z: pos.z,
+    group: ghostGroup,
+    light: phantomLight,
+    x: chosenPos.x,
+    z: chosenPos.z,
     spawnTime: performance.now(),
     dissolving: false
   });
@@ -3511,27 +3532,56 @@ function updateShadowDecoys(delta) {
     const decoy = shadowDecoys[i];
     if (!decoy || !decoy.group) continue;
 
-    // Subtle twitch & breathing motion
-    decoy.group.position.y = Math.sin(time * 0.008 + decoy.x) * 0.06;
-    decoy.group.rotation.y += Math.sin(time * 0.004) * 0.01;
+    // Bobbing & floating ghost animation + face toward player
+    decoy.group.position.y = Math.sin(time * 0.003 + decoy.x) * 0.15;
+    decoy.group.lookAt(camera.position.x, decoy.group.position.y, camera.position.z);
 
     const d = Math.hypot(camera.position.x - decoy.x, camera.position.z - decoy.z);
-    const { looking } = isLookingAtTarget(decoy.group.position, 15.0);
+    const { looking } = isLookingAtTarget(decoy.group.position, 16.0);
     const flashlightOn = flashLight && flashLight.intensity > 15;
     
-    // Dissolve when flashlight shines on it or player gets close
-    const shouldDissolve = (looking && flashlightOn && d < 14.0) || (d < 4.5) || (time - decoy.spawnTime > 28000);
+    // Dissolve when flashlight shines on it or player gets close (< 4.5m)
+    const playerSpotted = (looking && flashlightOn && d < 14.0) || (d < 4.5);
 
-    if (shouldDissolve && !decoy.dissolving) {
+    if (playerSpotted && !decoy.dissolving) {
       decoy.dissolving = true;
-      triggerNotification("👁️ A shadow figure dissolved into the dark...");
+      triggerNotification("👁️ A hallucinated ghost dissolved into thin air!");
+      if (audioCtx) {
+        try {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(260, audioCtx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(35, audioCtx.currentTime + 0.45);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.45);
+        } catch(e) {}
+      }
+    }
+
+    // Silent timeout without notification if player never saw it after 40s
+    if (time - decoy.spawnTime > 40000 && !decoy.dissolving) {
+      scene.remove(decoy.group);
+      shadowDecoys.splice(i, 1);
+      continue;
     }
 
     if (decoy.dissolving) {
-      decoy.material.opacity -= delta * 2.5;
-      decoy.group.position.y += delta * 0.6;
-      decoy.group.scale.multiplyScalar(0.95);
-      if (decoy.material.opacity <= 0.04) {
+      decoy.group.position.y += delta * 1.5;
+      decoy.group.scale.multiplyScalar(0.92);
+      if (decoy.light) decoy.light.intensity *= 0.85;
+      
+      decoy.group.traverse(child => {
+        if (child.material && child.material.opacity !== undefined) {
+          child.material.opacity = Math.max(0, child.material.opacity - delta * 3.0);
+        }
+      });
+
+      if (decoy.group.scale.x < 0.05) {
         scene.remove(decoy.group);
         shadowDecoys.splice(i, 1);
       }
@@ -3539,34 +3589,59 @@ function updateShadowDecoys(delta) {
   }
 }
 
-// --- Feature 2: Fake Objective Items (Mirage Loot) ---
+// --- Feature 2: Fake Objective Items (Mirage Loot — Client-Side Only) ---
 function spawnMirageLoot() {
   if (openCorridors.length === 0) return;
+
+  const pDir = new THREE.Vector3();
+  camera.getWorldDirection(pDir);
+  pDir.y = 0;
+  pDir.normalize();
+
+  // Try to find open corridor cell 6 to 14 meters in front of the player's view
   const candidates = openCorridors.filter(c => {
-    const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
-    // Guarantee mirage does NOT spawn close to any real item or real key
+    const dx = c.x - camera.position.x;
+    const dz = c.z - camera.position.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 6 || d > 15) return false;
+
     const nearRealItem = itemsInMaze.some(item => item.mesh && Math.hypot(item.mesh.position.x - c.x, item.mesh.position.z - c.z) < 5.0);
     const nearKey = keysInMaze.some(k => k.mesh && Math.hypot(k.mesh.position.x - c.x, k.mesh.position.z - c.z) < 5.0);
     const nearClue = codeClueNotes.some(n => n.mesh && Math.hypot(n.mesh.position.x - c.x, n.mesh.position.z - c.z) < 5.0);
-    return d > 8 && d < 18 && !nearRealItem && !nearKey && !nearClue;
+    if (nearRealItem || nearKey || nearClue) return false;
+
+    const dot = (dx * pDir.x + dz * pDir.z) / d;
+    return dot > 0.25 && hasGridLineOfSight(camera.position.x, camera.position.z, c.x, c.z);
   });
-  if (candidates.length === 0) return;
-  const pos = candidates[Math.floor(Math.random() * candidates.length)];
+
+  let chosenPos = null;
+  if (candidates.length > 0) {
+    chosenPos = candidates[Math.floor(Math.random() * candidates.length)];
+  } else {
+    const nearby = openCorridors.filter(c => {
+      const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
+      const nearReal = itemsInMaze.some(item => item.mesh && Math.hypot(item.mesh.position.x - c.x, item.mesh.position.z - c.z) < 5.0);
+      return d > 6 && d < 14 && !nearReal && hasGridLineOfSight(camera.position.x, camera.position.z, c.x, c.z);
+    });
+    if (nearby.length > 0) chosenPos = nearby[Math.floor(Math.random() * nearby.length)];
+  }
+
+  if (!chosenPos) return;
 
   const isKey = Math.random() > 0.5;
   const name = isKey ? 'Amber Key (Mirage)' : 'Battery Pack (Mirage)';
 
   const mirageMat = new THREE.SpriteMaterial({
-    map: getLoadedTexture('/assets/battery_item.png'),
+    map: getLoadedTexture(isKey ? '/assets/key_item.png' : '/assets/battery_item.png'),
     color: 0xff3b82,
     transparent: true,
-    opacity: 0.85,
+    opacity: 0.9,
     blending: THREE.AdditiveBlending,
     depthWrite: false
   });
   const sprite = new THREE.Sprite(mirageMat);
-  sprite.scale.set(0.6, 0.6, 1);
-  sprite.position.set(pos.x, 0.35, pos.z);
+  sprite.scale.set(0.7, 0.7, 1);
+  sprite.position.set(chosenPos.x, 0.35, chosenPos.z);
   scene.add(sprite);
 
   mirageItems.push({
@@ -3574,8 +3649,8 @@ function spawnMirageLoot() {
     mesh: sprite,
     material: mirageMat,
     name: name,
-    x: pos.x,
-    z: pos.z,
+    x: chosenPos.x,
+    z: chosenPos.z,
     spawnTime: performance.now(),
     dissolving: false
   });
@@ -3588,9 +3663,9 @@ function updateMirageLoot(delta) {
     if (!m || !m.mesh) continue;
 
     m.mesh.position.y = 0.35 + Math.sin(time * 0.005) * 0.05;
-    m.mesh.material.opacity = 0.6 + Math.sin(time * 0.01) * 0.25;
+    m.mesh.material.opacity = 0.65 + Math.sin(time * 0.01) * 0.3;
 
-    if (time - m.spawnTime > 35000 && !m.dissolving) {
+    if (time - m.spawnTime > 40000 && !m.dissolving) {
       m.dissolving = true;
     }
 
@@ -3676,21 +3751,21 @@ function processSanity(delta) {
     currentSanity = Math.max(0, currentSanity - delta * 0.2); // Idle slow decay in labyrinth
   }
 
-  // Feature 3: Trigger Shadow Decoys when Sanity is low (<40%)
+  // Feature 3: Trigger Fake Ghosts when Sanity is low (<40%) — strictly local hallucination
   if (currentSanity < 40) {
     nextDecoyTimer -= delta;
     if (nextDecoyTimer <= 0 && shadowDecoys.length < 2) {
-      spawnShadowDecoy();
-      nextDecoyTimer = 18 + Math.random() * 12;
+      spawnFakeGhost();
+      nextDecoyTimer = currentSanity === 0 ? 8 + Math.random() * 6 : 15 + Math.random() * 10;
     }
   }
 
-  // Feature 2: Trigger Fake Mirage Loot when Sanity is low (<45%)
+  // Feature 2: Trigger Fake Mirage Loot when Sanity is low (<45%) — strictly local hallucination
   if (currentSanity < 45) {
     nextMirageTimer -= delta;
     if (nextMirageTimer <= 0 && mirageItems.length < 1) {
       spawnMirageLoot();
-      nextMirageTimer = 22 + Math.random() * 14;
+      nextMirageTimer = currentSanity === 0 ? 10 + Math.random() * 6 : 18 + Math.random() * 10;
     }
   }
 
