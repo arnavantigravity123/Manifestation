@@ -382,6 +382,13 @@ let isMinimapExpanded = false;
 // Persistent Dead Bodies tracking
 let deadBodies = [];
 
+// Sanity Features: Sanctuaries, Shadow Decoys, and Mirage Loot
+let sanctuaryZones = [];
+let shadowDecoys = [];
+let nextDecoyTimer = 15;
+let mirageItems = [];
+let nextMirageTimer = 20;
+
 let seededRandom = Math.random;
 // --- Map Generator ---
 function mulberry32(a) {
@@ -478,6 +485,11 @@ export function initGame(socket, socketId, matchConfig) {
   visitedCells.clear();
   mapMarks = [];
   isMinimapExpanded = false;
+  sanctuaryZones = [];
+  shadowDecoys = [];
+  mirageItems = [];
+  nextDecoyTimer = 15;
+  nextMirageTimer = 20;
 
   const spectateBtn = document.getElementById('spectate-btn');
   if (spectateBtn) {
@@ -1839,6 +1851,83 @@ function generateConsumableItems() {
       name: type.name
     });
   });
+
+  // --- Feature 4: Light Sanctuaries (UV Lantern Zones) ---
+  sanctuaryZones.forEach(s => {
+    if (s.group) scene.remove(s.group);
+  });
+  sanctuaryZones = [];
+
+  const sanctuaryCount = mazeSizeGlobal >= 41 ? 3 : 2;
+  const sanctuaryCandidates = openCorridors.filter(c => {
+    const d = Math.sqrt(c.x * c.x + c.z * c.z);
+    return d > 12 && d < (mazeSizeGlobal * 2.0);
+  });
+
+  const chosenSanctuaries = [];
+  for (let sIdx = 0; sIdx < sanctuaryCount && sanctuaryCandidates.length > 0; sIdx++) {
+    const rIdx = Math.floor(seededRandom() * sanctuaryCandidates.length);
+    const pos = sanctuaryCandidates.splice(rIdx, 1)[0];
+    const tooClose = chosenSanctuaries.some(cs => Math.hypot(cs.x - pos.x, cs.z - pos.z) < 16);
+    if (!tooClose || chosenSanctuaries.length === 0) {
+      chosenSanctuaries.push(pos);
+    }
+  }
+
+  chosenSanctuaries.forEach((pos, idx) => {
+    const group = new THREE.Group();
+    group.position.set(pos.x, 0, pos.z);
+
+    // Warm Brass Lantern Frame
+    const lanternGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.45, 8);
+    const lanternMat = new THREE.MeshStandardMaterial({
+      color: 0xd97706, // Amber gold brass
+      roughness: 0.3,
+      metalness: 0.8,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.8
+    });
+    const lantern = new THREE.Mesh(lanternGeo, lanternMat);
+    lantern.position.y = 2.4;
+    group.add(lantern);
+
+    // Lantern glowing core
+    const coreGeo = new THREE.SphereGeometry(0.12, 8, 8);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.position.y = 2.4;
+    group.add(core);
+
+    // Warm Sanctuary Point Light
+    const sanctuaryLight = new THREE.PointLight(0xf59e0b, 3.8, 10.0);
+    sanctuaryLight.position.y = 2.3;
+    group.add(sanctuaryLight);
+
+    // Glowing floor sanctuary ring
+    const circleGeo = new THREE.RingGeometry(0.3, 3.8, 24);
+    const circleMat = new THREE.MeshBasicMaterial({
+      color: 0xf59e0b,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.35,
+      blending: THREE.AdditiveBlending
+    });
+    const circle = new THREE.Mesh(circleGeo, circleMat);
+    circle.rotation.x = -Math.PI / 2;
+    circle.position.y = 0.03;
+    group.add(circle);
+
+    scene.add(group);
+
+    sanctuaryZones.push({
+      id: `sanctuary_${idx}`,
+      x: pos.x,
+      z: pos.z,
+      radius: 4.2,
+      group: group,
+      light: sanctuaryLight
+    });
+  });
 }
 
 // Corridor shifting alignment
@@ -2613,6 +2702,21 @@ function updateInteractionPrompt() {
     }
   }
 
+  // 6. Check Mirage Loot (Feature 2)
+  if (typeof mirageItems !== 'undefined') {
+    for (let i = 0; i < mirageItems.length; i++) {
+      const mItem = mirageItems[i];
+      if (!mItem || !mItem.mesh || mItem.dissolving) continue;
+      const { looking: lookingAtMirage, dist: distToMirage } = isLookingAtTarget(mItem.mesh.position, 4.2);
+      if (lookingAtMirage) {
+        if (distToMirage < minDistance) {
+          minDistance = distToMirage;
+          promptText = isMobileDevice ? `Tap INTERACT to pick up ${mItem.name}` : `Press <kbd>E</kbd> to pick up ${mItem.name}`;
+        }
+      }
+    }
+  }
+
   if (promptText) {
     promptEl.innerHTML = promptText;
     promptEl.style.display = 'block';
@@ -2794,6 +2898,19 @@ function checkInteractions() {
       break;
     }
   }
+
+  // 6. Check Mirage Loot interaction (Feature 2)
+  if (typeof mirageItems !== 'undefined') {
+    for (let i = 0; i < mirageItems.length; i++) {
+      const mItem = mirageItems[i];
+      if (!mItem || !mItem.mesh || mItem.dissolving) continue;
+      const { looking: lookingAtMirage } = isLookingAtTarget(mItem.mesh.position, 4.5);
+      if (lookingAtMirage) {
+        dissolveMirageItem(mItem);
+        return;
+      }
+    }
+  }
 }
 
 function collectClueLocal(digitIndex) {
@@ -2801,6 +2918,16 @@ function collectClueLocal(digitIndex) {
   if (note && !note.collected) {
     note.collected = true;
     note.mesh.material.emissiveIntensity = 0.1;
+
+    // Feature 1: Lore Journal & Cipher Clarity (+15% Sanity boost)
+    if (myTeam === 'Human') {
+      currentSanity = Math.min(100, currentSanity + 15);
+      const sVal = document.getElementById('sanity-value');
+      const sBar = document.getElementById('sanity-bar');
+      if (sVal) sVal.textContent = `${Math.floor(currentSanity)}%`;
+      if (sBar) sBar.style.width = `${currentSanity}%`;
+      triggerNotification(`📖 Lore Note Deciphered! (+15% Sanity — Cipher Clarity)`);
+    }
   }
 
   const digitNames = ['1ST', '2ND', '3RD', '4TH'];
@@ -2809,7 +2936,7 @@ function collectClueLocal(digitIndex) {
   const cipherHUD = document.getElementById('hud-cipher-info');
 
   if (window.gameDifficulty === 'impossible') {
-    triggerNotification(`cipher clue discovered! [ ${revealedDigit} ] (Position Unknown)`);
+    triggerNotification(`Cipher clue discovered! [ ${revealedDigit} ] (Position Unknown)`);
     if (cipherHUD) {
       const foundDigits = codeClueNotes
         .filter(n => n.collected)
@@ -2818,7 +2945,7 @@ function collectClueLocal(digitIndex) {
       cipherHUD.style.color = '#f59e0b';
     }
   } else {
-    triggerNotification(`cipher clue found! ${digitNames[digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
+    triggerNotification(`Cipher clue found! ${digitNames[digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
     if (cipherHUD) {
       const display = digits.map((d, idx) => {
         const collected = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
@@ -3339,11 +3466,179 @@ function processEMFSensors(delta) {
   }
 }
 
+// --- Feature 3: Shadow Decoys (Phantom Figures) ---
+function spawnShadowDecoy() {
+  if (openCorridors.length === 0) return;
+  const candidates = openCorridors.filter(c => {
+    const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
+    return d > 10 && d < 22;
+  });
+  if (candidates.length === 0) return;
+  const pos = candidates[Math.floor(Math.random() * candidates.length)];
+
+  const group = new THREE.Group();
+  group.position.set(pos.x, 0, pos.z);
+
+  const bodyGeo = new THREE.CylinderGeometry(0.32, 0.42, 1.7, 8);
+  const headGeo = new THREE.SphereGeometry(0.24, 8, 8);
+  headGeo.translate(0, 1.05, 0);
+
+  const shadowMat = new THREE.MeshBasicMaterial({
+    color: 0x050508,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false
+  });
+
+  const bodyMesh = new THREE.Mesh(bodyGeo, shadowMat);
+  bodyMesh.position.y = 0.85;
+  const headMesh = new THREE.Mesh(headGeo, shadowMat);
+  headMesh.position.y = 0.85;
+  group.add(bodyMesh);
+  group.add(headMesh);
+
+  scene.add(group);
+  shadowDecoys.push({
+    group: group,
+    material: shadowMat,
+    x: pos.x,
+    z: pos.z,
+    spawnTime: performance.now(),
+    dissolving: false
+  });
+}
+
+function updateShadowDecoys(delta) {
+  const time = performance.now();
+  for (let i = shadowDecoys.length - 1; i >= 0; i--) {
+    const decoy = shadowDecoys[i];
+    if (!decoy || !decoy.group) continue;
+
+    // Subtle twitch & breathing motion
+    decoy.group.position.y = Math.sin(time * 0.008 + decoy.x) * 0.06;
+    decoy.group.rotation.y += Math.sin(time * 0.004) * 0.01;
+
+    const d = Math.hypot(camera.position.x - decoy.x, camera.position.z - decoy.z);
+    const { looking } = isLookingAtTarget(decoy.group.position, 15.0);
+    const flashlightOn = flashLight && flashLight.intensity > 15;
+    
+    // Dissolve when flashlight shines on it or player gets close
+    const shouldDissolve = (looking && flashlightOn && d < 14.0) || (d < 4.5) || (time - decoy.spawnTime > 28000);
+
+    if (shouldDissolve && !decoy.dissolving) {
+      decoy.dissolving = true;
+      triggerNotification("👁️ A shadow figure dissolved into the dark...");
+    }
+
+    if (decoy.dissolving) {
+      decoy.material.opacity -= delta * 2.5;
+      decoy.group.position.y += delta * 0.6;
+      decoy.group.scale.multiplyScalar(0.95);
+      if (decoy.material.opacity <= 0.04) {
+        scene.remove(decoy.group);
+        shadowDecoys.splice(i, 1);
+      }
+    }
+  }
+}
+
+// --- Feature 2: Fake Objective Items (Mirage Loot) ---
+function spawnMirageLoot() {
+  if (openCorridors.length === 0) return;
+  const candidates = openCorridors.filter(c => {
+    const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
+    return d > 7 && d < 16;
+  });
+  if (candidates.length === 0) return;
+  const pos = candidates[Math.floor(Math.random() * candidates.length)];
+
+  const isKey = Math.random() > 0.5;
+  const name = isKey ? 'Amber Key' : 'Battery Pack';
+
+  const mirageMat = new THREE.SpriteMaterial({
+    map: getLoadedTexture('/assets/battery_item.png'),
+    color: 0xff4488,
+    transparent: true,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const sprite = new THREE.Sprite(mirageMat);
+  sprite.scale.set(0.6, 0.6, 1);
+  sprite.position.set(pos.x, 0.35, pos.z);
+  scene.add(sprite);
+
+  mirageItems.push({
+    id: 'mirage_' + Math.random().toString(36).substr(2, 9),
+    mesh: sprite,
+    material: mirageMat,
+    name: name,
+    x: pos.x,
+    z: pos.z,
+    spawnTime: performance.now(),
+    dissolving: false
+  });
+}
+
+function updateMirageLoot(delta) {
+  const time = performance.now();
+  for (let i = mirageItems.length - 1; i >= 0; i--) {
+    const m = mirageItems[i];
+    if (!m || !m.mesh) continue;
+
+    m.mesh.position.y = 0.35 + Math.sin(time * 0.005) * 0.05;
+    m.mesh.material.opacity = 0.6 + Math.sin(time * 0.01) * 0.25;
+
+    if (time - m.spawnTime > 35000 && !m.dissolving) {
+      m.dissolving = true;
+    }
+
+    if (m.dissolving) {
+      m.material.opacity -= delta * 3.0;
+      m.mesh.scale.multiplyScalar(0.92);
+      if (m.material.opacity <= 0.04) {
+        scene.remove(m.mesh);
+        mirageItems.splice(i, 1);
+      }
+    }
+  }
+}
+
+function dissolveMirageItem(mirage) {
+  if (!mirage || mirage.dissolving) return;
+  mirage.dissolving = true;
+  triggerNotification("🌫️ Mirage crumbled into ash! It was a hallucination.");
+  if (audioCtx) {
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(140, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.4);
+    } catch(e) {}
+  }
+}
+
 // Proximity micro-vibrations and sanity regression
 function processSanity(delta) {
   if (myTeam !== 'Human' || window.isSpectating) {
     if (window.isSpectating) document.body.style.filter = 'none';
     return;
+  }
+
+  // Feature 4: Check if inside Light Sanctuary (UV Lantern Zones)
+  let inSanctuary = false;
+  if (typeof sanctuaryZones !== 'undefined') {
+    sanctuaryZones.forEach(s => {
+      const d = Math.hypot(camera.position.x - s.x, camera.position.z - s.z);
+      if (d < s.radius) inSanctuary = true;
+    });
   }
 
   // If near any active ghost (AI or player ghost), sanity decays!
@@ -3358,10 +3653,31 @@ function processSanity(delta) {
     }
   });
 
-  if (nearGhost) {
+  if (inSanctuary) {
+    // Steadily restore sanity inside warm Light Sanctuaries (+8.5%/s)
+    currentSanity = Math.min(100, currentSanity + delta * 8.5);
+  } else if (nearGhost) {
     currentSanity = Math.max(0, currentSanity - delta * gParams.sanityDrainRate); // Difficulty scaled fast decay
   } else {
     currentSanity = Math.max(0, currentSanity - delta * 0.2); // Idle slow decay in labyrinth
+  }
+
+  // Feature 3: Trigger Shadow Decoys when Sanity is low (<40%)
+  if (currentSanity < 40) {
+    nextDecoyTimer -= delta;
+    if (nextDecoyTimer <= 0 && shadowDecoys.length < 2) {
+      spawnShadowDecoy();
+      nextDecoyTimer = 18 + Math.random() * 12;
+    }
+  }
+
+  // Feature 2: Trigger Fake Mirage Loot when Sanity is low (<45%)
+  if (currentSanity < 45) {
+    nextMirageTimer -= delta;
+    if (nextMirageTimer <= 0 && mirageItems.length < 1) {
+      spawnMirageLoot();
+      nextMirageTimer = 22 + Math.random() * 14;
+    }
   }
 
   // Update HUD
@@ -4991,6 +5307,24 @@ function drawMinimap() {
 
   const blockSize = 4.5;
 
+  // Draw Light Sanctuaries (Feature 4: Warm Gold Lantern markers)
+  if (typeof sanctuaryZones !== 'undefined') {
+    sanctuaryZones.forEach(s => {
+      const sc = (s.x / blockSize) + (mazeSize / 2);
+      const sr = (s.z / blockSize) + (mazeSize / 2);
+      ctx.save();
+      ctx.translate(sc * cellSize, sr * cellSize);
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.arc(0, 0, cellSize * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fef08a';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
   // Draw AI Ghosts on minimap if player is Ghost
   if (myTeam === 'Ghost' && typeof ghosts3D !== 'undefined') {
     ghosts3D.forEach(g => {
@@ -5756,6 +6090,10 @@ function animate() {
         }
       }
     }
+
+    // Update Shadow Decoys (Feature 3) & Mirage Loot (Feature 2)
+    if (typeof updateShadowDecoys === 'function') updateShadowDecoys(delta);
+    if (typeof updateMirageLoot === 'function') updateMirageLoot(delta);
 
     // Update on-screen interaction cues
     if (isActive) {
