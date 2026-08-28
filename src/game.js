@@ -3497,21 +3497,26 @@ function spawnFakeGhost() {
 
   if (!chosenPos) return;
 
-  const ghostGroup = createGhostMeshGroup();
+  // Build Doppelganger Ghost (looks like the operative's 3D model with glowing red eyes!)
+  const ghostGroup = new THREE.Group();
   ghostGroup.position.set(chosenPos.x, 0, chosenPos.z);
-  
-  // Add glowing crimson phantom eyes
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff1144 });
-  const eyeGeo = new THREE.SphereGeometry(0.06, 6, 6);
+
+  // Humanoid operative model matching player
+  const humanVisual = createHumanMeshGroup(null, '');
+  ghostGroup.add(humanVisual);
+
+  // Glowing Crimson/Magenta Phantom Eyes on the face
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
+  const eyeGeo = new THREE.SphereGeometry(0.08, 8, 8);
   const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-  leftEye.position.set(-0.2, 2.2, 0.4);
+  leftEye.position.set(-0.16, 2.3, 0.35);
   const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-  rightEye.position.set(0.2, 2.2, 0.4);
+  rightEye.position.set(0.16, 2.3, 0.35);
   ghostGroup.add(leftEye);
   ghostGroup.add(rightEye);
 
-  // Eerie phantom light aura
-  const phantomLight = new THREE.PointLight(0xd946ef, 3.5, 9.0);
+  // Eerie purple/red phantom light aura
+  const phantomLight = new THREE.PointLight(0xd946ef, 3.8, 10.0);
   phantomLight.position.y = 2.0;
   ghostGroup.add(phantomLight);
 
@@ -3610,20 +3615,20 @@ function spawnMirageLoot() {
   pDir.y = 0;
   pDir.normalize();
 
-  // Try to find open corridor cell 6 to 14 meters in front of the player's view
+  // Try to find open corridor cell 5 to 14 meters in front of the player's view
   const candidates = openCorridors.filter(c => {
     const dx = c.x - camera.position.x;
     const dz = c.z - camera.position.z;
     const d = Math.hypot(dx, dz);
-    if (d < 6 || d > 15) return false;
+    if (d < 5 || d > 14) return false;
 
-    const nearRealItem = itemsInMaze.some(item => item.mesh && Math.hypot(item.mesh.position.x - c.x, item.mesh.position.z - c.z) < 5.0);
-    const nearKey = keysInMaze.some(k => k.mesh && Math.hypot(k.mesh.position.x - c.x, k.mesh.position.z - c.z) < 5.0);
-    const nearClue = codeClueNotes.some(n => n.mesh && Math.hypot(n.mesh.position.x - c.x, n.mesh.position.z - c.z) < 5.0);
+    const nearRealItem = itemsInMaze.some(item => item.mesh && Math.hypot(item.mesh.position.x - c.x, item.mesh.position.z - c.z) < 4.0);
+    const nearKey = keysInMaze.some(k => k.mesh && Math.hypot(k.mesh.position.x - c.x, k.mesh.position.z - c.z) < 4.0);
+    const nearClue = codeClueNotes.some(n => n.mesh && Math.hypot(n.mesh.position.x - c.x, n.mesh.position.z - c.z) < 4.0);
     if (nearRealItem || nearKey || nearClue) return false;
 
     const dot = (dx * pDir.x + dz * pDir.z) / d;
-    return dot > 0.25 && hasGridLineOfSight(camera.position.x, camera.position.z, c.x, c.z);
+    return dot > 0.2 && hasGridLineOfSight(camera.position.x, camera.position.z, c.x, c.z);
   });
 
   let chosenPos = null;
@@ -3632,20 +3637,24 @@ function spawnMirageLoot() {
   } else {
     const nearby = openCorridors.filter(c => {
       const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
-      const nearReal = itemsInMaze.some(item => item.mesh && Math.hypot(item.mesh.position.x - c.x, item.mesh.position.z - c.z) < 5.0);
-      return d > 6 && d < 14 && !nearReal && hasGridLineOfSight(camera.position.x, camera.position.z, c.x, c.z);
+      const nearReal = itemsInMaze.some(item => item.mesh && Math.hypot(item.mesh.position.x - c.x, item.mesh.position.z - c.z) < 4.0);
+      return d > 4 && d < 14 && !nearReal && hasGridLineOfSight(camera.position.x, camera.position.z, c.x, c.z);
     });
     if (nearby.length > 0) chosenPos = nearby[Math.floor(Math.random() * nearby.length)];
   }
 
   if (!chosenPos) return;
 
-  const isKey = Math.random() > 0.5;
-  const name = isKey ? 'Amber Key' : 'Battery Pack';
+  const lootTypes = [
+    { name: 'Battery Pack', tex: '/assets/battery_sprite.png' },
+    { name: 'Sanity Pills', tex: '/assets/pills_sprite.png' },
+    { name: 'Med Kit', tex: '/assets/medkit_sprite.png' }
+  ];
+  const selected = lootTypes[Math.floor(Math.random() * lootTypes.length)];
 
   const mirageMat = new THREE.SpriteMaterial({
-    map: getLoadedTexture(isKey ? '/assets/key_item.png' : '/assets/battery_item.png'),
-    color: 0xffffff, // Authentic real item appearance
+    map: getLoadedTexture(selected.tex),
+    color: 0xffffff,
     fog: true,
     transparent: true,
     opacity: 0.95,
@@ -3653,7 +3662,7 @@ function spawnMirageLoot() {
     depthWrite: false
   });
   const sprite = new THREE.Sprite(mirageMat);
-  sprite.scale.set(0.6, 0.6, 1);
+  sprite.scale.set(0.65, 0.65, 1);
   sprite.position.set(chosenPos.x, 0.35, chosenPos.z);
   scene.add(sprite);
 
@@ -3661,7 +3670,7 @@ function spawnMirageLoot() {
     id: 'mirage_' + Math.random().toString(36).substr(2, 9),
     mesh: sprite,
     material: mirageMat,
-    name: name,
+    name: selected.name,
     x: chosenPos.x,
     z: chosenPos.z,
     spawnTime: performance.now(),
