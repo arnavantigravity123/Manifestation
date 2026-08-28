@@ -3629,18 +3629,19 @@ function spawnMirageLoot() {
   if (!chosenPos) return;
 
   const isKey = Math.random() > 0.5;
-  const name = isKey ? 'Amber Key (Mirage)' : 'Battery Pack (Mirage)';
+  const name = isKey ? 'Amber Key' : 'Battery Pack';
 
   const mirageMat = new THREE.SpriteMaterial({
     map: getLoadedTexture(isKey ? '/assets/key_item.png' : '/assets/battery_item.png'),
-    color: 0xff3b82,
+    color: 0xffffff, // Authentic real item appearance
+    fog: true,
     transparent: true,
-    opacity: 0.9,
+    opacity: 0.95,
     blending: THREE.AdditiveBlending,
     depthWrite: false
   });
   const sprite = new THREE.Sprite(mirageMat);
-  sprite.scale.set(0.7, 0.7, 1);
+  sprite.scale.set(0.6, 0.6, 1);
   sprite.position.set(chosenPos.x, 0.35, chosenPos.z);
   scene.add(sprite);
 
