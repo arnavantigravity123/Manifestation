@@ -46,8 +46,8 @@ textureLoader.load('/assets/hazmat_texture.png', (tex) => {
 
 function upgradeMeshGroupToFBX(group) {
   if (!group || !preloadedHumanFBX) return;
-  if (group.userData && (group.userData.skinId === 'skin_cyborg' || group.userData.skinId === 'skin_shadow')) {
-    return; // Preserve sprite skins
+  if (group.userData && group.userData.skinId && group.userData.skinId !== 'skin_hazmat') {
+    return; // Preserve custom skins (Standard Issue .glb, Cyborg sprite, Shadow sprite)
   }
   // Remove non-username children
   const toRemove = [];
@@ -5134,26 +5134,12 @@ function createHumanMeshGroup(skinId, username) {
     sprite.scale.set(1.2, 1.2, 1);
     sprite.position.y = 0.8;
     group.add(sprite);
+  } else if (skinId === 'skin_default' && preloadedHumanModel) {
+    const clone = SkeletonUtils.clone(preloadedHumanModel);
+    clone.rotation.y = Math.PI; // Face forward direction
+    group.add(clone);
   } else if (preloadedHumanFBX) {
     const clone = SkeletonUtils.clone(preloadedHumanFBX);
-    
-    // Distinct visual tone for Standard Issue vs Biohazard Hazmat
-    if (skinId === 'skin_default') {
-      clone.traverse(child => {
-        if (child.isMesh && child.material) {
-          child.material = child.material.clone();
-          child.material.color.setHex(0x60a5fa); // Tactical Steel Blue Operative uniform
-        }
-      });
-    } else {
-      clone.traverse(child => {
-        if (child.isMesh && child.material) {
-          child.material = child.material.clone();
-          child.material.color.setHex(0xffffff); // Classic Biohazard Yellow
-        }
-      });
-    }
-
     group.add(clone);
 
     // Setup full 8-directional locomotion animation mixer & actions
