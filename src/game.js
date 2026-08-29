@@ -29,9 +29,9 @@ const humanAnimClips = {
   strafeRight: null
 };
 
-// Load Hazmat Suit authentic diffuse texture
+// Load Hazmat Suit authentic diffuse texture (FBX uses standard UV flipY = false)
 textureLoader.load('/assets/hazmat_texture.png', (tex) => {
-  tex.flipY = true;
+  tex.flipY = false;
   tex.colorSpace = THREE.SRGBColorSpace;
   hazmatSuitTexture = tex;
   if (preloadedHumanFBX) {
@@ -44,11 +44,34 @@ textureLoader.load('/assets/hazmat_texture.png', (tex) => {
   }
 });
 
+function registerAnimationToActiveMixers(animName, clip) {
+  if (!clip) return;
+  humanAnimClips[animName] = clip;
+  clip.name = animName;
+
+  // Dynamically bind to localPlayerVisual if already spawned
+  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
+    const mixer = localPlayerVisual.userData.animMixer;
+    if (!localPlayerVisual.userData.animActions[animName]) {
+      localPlayerVisual.userData.animActions[animName] = mixer.clipAction(clip);
+    }
+  }
+
+  // Dynamically bind to all remote players in lobby
+  Object.values(players3D).forEach(p => {
+    if (p && p.userData && p.userData.animMixer) {
+      const mixer = p.userData.animMixer;
+      if (!p.userData.animActions[animName]) {
+        p.userData.animActions[animName] = mixer.clipAction(clip);
+      }
+    }
+  });
+}
+
 // 1. Load Base Hazmat Suit 3D Model with Breathing Idle animation
 fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
   if (fbx.animations && fbx.animations.length > 0) {
-    humanAnimClips.idle = fbx.animations[0];
-    humanAnimClips.idle.name = 'idle';
+    registerAnimationToActiveMixers('idle', fbx.animations[0]);
   }
 
   // Compute true bounding box and scale to standard player height (1.85 meters)
@@ -89,40 +112,35 @@ fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
 // 2. Load Walk Forward animation
 fbxLoader.load('/assets/Walking.fbx', (anim) => {
   if (anim.animations && anim.animations.length > 0) {
-    humanAnimClips.walk = anim.animations[0];
-    humanAnimClips.walk.name = 'walk';
+    registerAnimationToActiveMixers('walk', anim.animations[0]);
   }
 });
 
 // 3. Load Sprint Forward animation
 fbxLoader.load('/assets/Standing Sprint Forward.fbx', (anim) => {
   if (anim.animations && anim.animations.length > 0) {
-    humanAnimClips.sprint = anim.animations[0];
-    humanAnimClips.sprint.name = 'sprint';
+    registerAnimationToActiveMixers('sprint', anim.animations[0]);
   }
 });
 
 // 4. Load Walk Backwards animation
 fbxLoader.load('/assets/Walking Backwards.fbx', (anim) => {
   if (anim.animations && anim.animations.length > 0) {
-    humanAnimClips.walkBack = anim.animations[0];
-    humanAnimClips.walkBack.name = 'walkBack';
+    registerAnimationToActiveMixers('walkBack', anim.animations[0]);
   }
 });
 
 // 5. Load Left Strafe Walk animation
 fbxLoader.load('/assets/Left Strafe Walk.fbx', (anim) => {
   if (anim.animations && anim.animations.length > 0) {
-    humanAnimClips.strafeLeft = anim.animations[0];
-    humanAnimClips.strafeLeft.name = 'strafeLeft';
+    registerAnimationToActiveMixers('strafeLeft', anim.animations[0]);
   }
 });
 
 // 6. Load Right Strafe Walk animation
 fbxLoader.load('/assets/Right Strafe Walking.fbx', (anim) => {
   if (anim.animations && anim.animations.length > 0) {
-    humanAnimClips.strafeRight = anim.animations[0];
-    humanAnimClips.strafeRight.name = 'strafeRight';
+    registerAnimationToActiveMixers('strafeRight', anim.animations[0]);
   }
 });
 
@@ -4954,13 +4972,15 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   const currentAction = actions[currentActionName];
   const nextAction = actions[targetActionName] || actions.idle;
 
-  if (currentAction && nextAction && currentAction !== nextAction) {
+  if (nextAction) {
+    if (currentAction && currentAction !== nextAction) {
+      currentAction.fadeOut(crossfadeDuration);
+    }
     nextAction.reset();
+    nextAction.enabled = true;
     nextAction.setEffectiveTimeScale(1.0);
     nextAction.setEffectiveWeight(1.0);
-    nextAction.crossFadeFrom(currentAction, crossfadeDuration, true);
-    nextAction.play();
-  } else if (nextAction) {
+    nextAction.fadeIn(crossfadeDuration);
     nextAction.play();
   }
 
@@ -4996,10 +5016,16 @@ function createHumanMeshGroup(skinId, username) {
       const clip = humanAnimClips[key];
       if (clip) {
         actions[key] = mixer.clipAction(clip);
-        actions[key].setEffectiveWeight(key === 'idle' ? 1.0 : 0.0);
-        actions[key].play();
       }
     });
+
+    if (actions.idle) {
+      actions.idle.play();
+    } else if (preloadedHumanFBX.animations && preloadedHumanFBX.animations.length > 0) {
+      const act = mixer.clipAction(preloadedHumanFBX.animations[0]);
+      act.play();
+      actions.idle = act;
+    }
 
     activeAnimationMixers.push(mixer);
     group.userData.animMixer = mixer;
