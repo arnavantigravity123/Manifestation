@@ -5039,9 +5039,9 @@ function playGhostCaptureAnimation(callback) {
 }
 
 function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuration = 0.2) {
-  if (!humanGroup || !humanGroup.userData) return;
+  if (!humanGroup || !humanGroup.userData) { console.log('[LOCO] No humanGroup or userData'); return; }
   const mixer = humanGroup.userData.animMixer;
-  if (!mixer) return;
+  if (!mixer) { console.log('[LOCO] No mixer on humanGroup'); return; }
 
   if (!humanGroup.userData.animActions) {
     humanGroup.userData.animActions = {};
@@ -5050,6 +5050,7 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
 
   // On-demand action instantiation if clip finished loading after mesh creation
   if (!actions[targetActionName] && humanAnimClips[targetActionName]) {
+    console.log('[LOCO] Late-binding clip:', targetActionName);
     actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
   }
   if (!actions.idle && humanAnimClips.idle) {
@@ -5058,9 +5059,10 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
 
   const currentActionName = humanGroup.userData.currentAction || 'idle';
   const targetAction = actions[targetActionName] || actions.idle;
-  if (!targetAction) return;
+  if (!targetAction) { console.log('[LOCO] No targetAction for:', targetActionName, 'available clips:', Object.keys(humanAnimClips).filter(k => humanAnimClips[k])); return; }
 
   if (currentActionName !== targetActionName || !targetAction.isRunning()) {
+    console.log('[LOCO] Transitioning:', currentActionName, '->', targetActionName, 'action exists:', !!targetAction);
     // Fade out any other playing actions
     Object.keys(actions).forEach(key => {
       const act = actions[key];
@@ -5972,7 +5974,18 @@ function animate() {
         } else if (Math.hypot(velocity.x, velocity.z) > 0.4) {
           desired = isSprinting ? 'sprint' : 'walk';
         }
+        if (desired !== 'idle' || !window._locoDebugOnce) {
+          if (desired !== 'idle') {
+            console.log('[ANIMATE] moveF:', moveForward, 'moveB:', moveBackward, 'moveL:', moveLeft, 'moveR:', moveRight, 'desired:', desired, 'vel:', velocity.x.toFixed(2), velocity.z.toFixed(2));
+            window._locoDebugOnce = true;
+          }
+        }
         setHumanLocomotionAction(localPlayerVisual, desired, 0.15);
+      } else if (localPlayerVisual) {
+        if (!window._locoMissingDebug) {
+          console.log('[ANIMATE] localPlayerVisual exists but NO animMixer! userData:', JSON.stringify(Object.keys(localPlayerVisual.userData || {})));
+          window._locoMissingDebug = true;
+        }
       }
     }
 
