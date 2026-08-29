@@ -1,15 +1,61 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import * as BufferGeometryUtils from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 let preloadedGhostModel = null;
 let preloadedHumanModel = null;
+let preloadedHumanFBX = null;
+let hazmatSuitTexture = null;
+const activeAnimationMixers = [];
+
 const gltfLoader = new GLTFLoader();
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
 gltfLoader.setDRACOLoader(dracoLoader);
+
+const fbxLoader = new FBXLoader();
+const textureLoader = new THREE.TextureLoader();
+
+// Load Hazmat Suit authentic diffuse texture
+textureLoader.load('/assets/hazmat_texture.png', (tex) => {
+  tex.flipY = true;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  hazmatSuitTexture = tex;
+  if (preloadedHumanFBX) {
+    preloadedHumanFBX.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.material.map = hazmatSuitTexture;
+        child.material.needsUpdate = true;
+      }
+    });
+  }
+});
+
+// Load Hazmat Suit 3D Model with Mixamo Breathing Idle animation
+fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
+  // Normalize scale: Mixamo FBX models are in centimeters (~180cm -> 1.8m height)
+  fbx.scale.set(0.013, 0.013, 0.013);
+  fbx.rotation.y = Math.PI; // Face forward
+
+  fbx.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      if (hazmatSuitTexture) {
+        child.material = new THREE.MeshStandardMaterial({
+          map: hazmatSuitTexture,
+          roughness: 0.45,
+          metalness: 0.15
+        });
+      }
+    }
+  });
+
+  preloadedHumanFBX = fbx;
+});
 
 gltfLoader.load('/assets/human_model.glb', (gltf) => {
   preloadedHumanModel = gltf.scene;
@@ -35,7 +81,6 @@ gltfLoader.load('/assets/human_model.glb', (gltf) => {
 });
 gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
   preloadedGhostModel = gltf.scene;
-  // Meshy AI scale adjustments - reduced scale based on feedback
   preloadedGhostModel.scale.set(2.0, 2.0, 2.0);
   
   // Center the model's pivot point so it rotates in place instead of sweeping
@@ -4848,6 +4893,18 @@ function createHumanMeshGroup(skinId, username) {
     sprite.scale.set(1.2, 1.2, 1);
     sprite.position.y = 0.8;
     group.add(sprite);
+  } else if (preloadedHumanFBX) {
+    const clone = SkeletonUtils.clone(preloadedHumanFBX);
+    group.add(clone);
+
+    // Apply animation mixer with Breathing Idle motion
+    if (preloadedHumanFBX.animations && preloadedHumanFBX.animations.length > 0) {
+      const mixer = new THREE.AnimationMixer(clone);
+      const action = mixer.clipAction(preloadedHumanFBX.animations[0]);
+      action.play();
+      activeAnimationMixers.push(mixer);
+      group.userData.mixer = mixer;
+    }
   } else if (preloadedHumanModel) {
     const clone = SkeletonUtils.clone(preloadedHumanModel);
     clone.rotation.y = Math.PI; // Fix reversed facing
@@ -5570,6 +5627,14 @@ function animate() {
   const time = performance.now();
   const delta = (time - prevTime) / 1000;
   prevTime = time;
+
+  // Update active 3D character animation mixers (e.g. Breathing Idle)
+  if (activeAnimationMixers.length > 0) {
+    for (let mIdx = activeAnimationMixers.length - 1; mIdx >= 0; mIdx--) {
+      const mixer = activeAnimationMixers[mIdx];
+      if (mixer) mixer.update(delta);
+    }
+  }
 
   const isActive = isMobileDevice ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) : (Boolean(document.pointerLockElement) && (!isCaptured || window.isSpectating));
 
