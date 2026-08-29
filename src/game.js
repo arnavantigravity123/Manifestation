@@ -272,14 +272,21 @@ export function loadHumanGLBAsset() {
 
   gltfLoader.load('/assets/human_model.glb', (gltf) => {
     preloadedHumanModel = gltf.scene;
-    preloadedHumanModel.scale.set(1.5, 1.5, 1.5);
     
-    const box = new THREE.Box3().setFromObject(preloadedHumanModel);
-    const center = box.getCenter(new THREE.Vector3());
+    // Scale accurately to canonical player height (1.85 meters) matching the Hazmat suit
+    const initialBox = new THREE.Box3().setFromObject(preloadedHumanModel);
+    const rawSize = initialBox.getSize(new THREE.Vector3());
+    const rawHeight = rawSize.y || 2.0;
+    const targetHeight = 1.85;
+    const scale = targetHeight / rawHeight;
+    preloadedHumanModel.scale.set(scale, scale, scale);
     
-    preloadedHumanModel.position.x = -center.x;
-    preloadedHumanModel.position.z = -center.z;
-    preloadedHumanModel.position.y = -box.min.y; 
+    const scaledBox = new THREE.Box3().setFromObject(preloadedHumanModel);
+    const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+    
+    preloadedHumanModel.position.x = -scaledCenter.x;
+    preloadedHumanModel.position.z = -scaledCenter.z;
+    preloadedHumanModel.position.y = -scaledBox.min.y; 
     
     preloadedHumanModel.traverse((child) => {
       if (child.isMesh) {
@@ -6146,9 +6153,18 @@ function animate() {
         }
         setHumanLocomotionAction(localPlayerVisual, desired, 0.15);
       } else if (localPlayerVisual) {
-        if (!window._locoMissingDebug) {
-          console.log('[ANIMATE] localPlayerVisual exists but NO animMixer! userData:', JSON.stringify(Object.keys(localPlayerVisual.userData || {})));
-          window._locoMissingDebug = true;
+        // Procedural stride bob and sway for static 3D meshes (Standard Issue GLB)
+        const isMoving = moveForward || moveBackward || moveLeft || moveRight || (Math.hypot(velocity.x, velocity.z) > 0.4);
+        if (isMoving) {
+          const moveSpeed = isSprinting ? 12 : 7;
+          localPlayerVisual.userData.walkCycle = (localPlayerVisual.userData.walkCycle || 0) + delta * moveSpeed;
+          // Natural walking bob
+          localPlayerVisual.position.y = (myTeam === 'Ghost' ? -1.25 : -1.6) + Math.abs(Math.sin(localPlayerVisual.userData.walkCycle)) * 0.06;
+          // Subtle lateral sway
+          localPlayerVisual.rotation.z = Math.sin(localPlayerVisual.userData.walkCycle * 0.5) * 0.03;
+        } else {
+          localPlayerVisual.position.y = myTeam === 'Ghost' ? -1.25 : -1.6;
+          localPlayerVisual.rotation.z = 0;
         }
       }
     }
