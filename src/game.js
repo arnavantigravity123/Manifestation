@@ -554,10 +554,12 @@ let chalkDecals = [];
 
 // Sprint / Stamina
 let isSprinting = false;
+let isSprintExhausted = false; // When stamina drops to 0%, locked until 20% recovered
 let stamina = 100; // 0-100
 const STAMINA_DRAIN_RATE = 20;  // per second while sprinting
 const STAMINA_REGEN_RATE  = 12; // per second while not sprinting
-const SPRINT_MIN_STAMINA  = 5;  // can't start sprint below this
+const SPRINT_MIN_STAMINA  = 5;   // normal min stamina to continue sprinting
+const SPRINT_RECOVERY_THRESHOLD = 20; // must reach 20% to re-engage sprint after exhaustion
 
 // Player Config
 let myTeam = 'Human';
@@ -691,6 +693,9 @@ export function initGame(socket, socketId, matchConfig) {
   isCaptured = false;
   window.isSpectating = false;
   hasEscaped = false;
+  stamina = 100;
+  isSprinting = false;
+  isSprintExhausted = false;
   panicTimer = 0;
   speedBoostTimer = 0;
   latestSoundBeacon = null;
@@ -2314,7 +2319,9 @@ function setupControls() {
         break;
       case 'ShiftLeft':
       case 'ShiftRight':
-        if (myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA) isSprinting = true;
+        if (myTeam === 'Human' && !isSprintExhausted && stamina >= SPRINT_RECOVERY_THRESHOLD) {
+          isSprinting = true;
+        }
         break;
       case 'KeyQ':
       case 'KeyF':
@@ -2689,7 +2696,7 @@ function setupControls() {
 
       // Auto-sprint when extending joystick extra far into the outer sprint zone
       const isMoving = moveForward || moveBackward || moveLeft || moveRight;
-      if (isMoving && dist >= sprintThreshold && myTeam === 'Human' && stamina > SPRINT_MIN_STAMINA) {
+      if (isMoving && dist >= sprintThreshold && myTeam === 'Human' && !isSprintExhausted && stamina >= SPRINT_RECOVERY_THRESHOLD) {
         isSprinting = true;
         joystickBase.classList.add('sprinting');
         joystickKnob.classList.add('sprinting');
@@ -5910,24 +5917,49 @@ function animate() {
           speed *= 1.55; // sprint multiplier (up to 13.95 m/s)
           stamina = Math.max(0, stamina - STAMINA_DRAIN_RATE * delta);
           if (stamina <= 0) {
+            stamina = 0;
             isSprinting = false;
+            isSprintExhausted = true; // Lock sprint until 20% recovered
             const jb = document.getElementById('joystick-base');
             const jk = document.getElementById('joystick-knob');
             if (jb) jb.classList.remove('sprinting');
             if (jk) jk.classList.remove('sprinting');
+            const sb = document.getElementById('btn-mobile-sprint');
+            if (sb) sb.classList.remove('sprinting');
           }
         } else if (!moving) {
           // Stationary while sprint is toggled: slowly regenerate stamina without cancelling sprint mode
           stamina = Math.min(100, stamina + STAMINA_REGEN_RATE * 0.5 * delta);
+          if (isSprintExhausted && stamina >= SPRINT_RECOVERY_THRESHOLD) {
+            isSprintExhausted = false;
+          }
         }
       } else {
         stamina = Math.min(100, stamina + STAMINA_REGEN_RATE * delta);
+        if (isSprintExhausted && stamina >= SPRINT_RECOVERY_THRESHOLD) {
+          isSprintExhausted = false;
+        }
       }
       // Update stamina bar
       const stBar = document.getElementById('stamina-bar');
       const stVal = document.getElementById('stamina-value');
-      if (stBar) stBar.style.width = `${stamina}%`;
-      if (stVal) stVal.textContent = `${Math.ceil(stamina)}%`;
+      if (stBar) {
+        stBar.style.width = `${stamina}%`;
+        if (isSprintExhausted) {
+          stBar.style.background = 'linear-gradient(90deg, #ef4444, #dc2626)';
+        } else {
+          stBar.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+        }
+      }
+      if (stVal) {
+        if (isSprintExhausted) {
+          stVal.textContent = `${Math.ceil(stamina)}% (EXHAUSTED)`;
+          stVal.style.color = '#ef4444';
+        } else {
+          stVal.textContent = `${Math.ceil(stamina)}%`;
+          stVal.style.color = '';
+        }
+      }
     }
 
     if (speedBoostTimer > 0) {
