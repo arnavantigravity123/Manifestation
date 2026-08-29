@@ -5027,23 +5027,25 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   }
 
   const currentActionName = humanGroup.userData.currentAction || 'idle';
-  if (currentActionName === targetActionName && actions[targetActionName] && actions[targetActionName].isRunning()) {
-    return;
-  }
+  const targetAction = actions[targetActionName] || actions.idle;
+  if (!targetAction) return;
 
-  const currentAction = actions[currentActionName];
-  const nextAction = actions[targetActionName] || actions.idle;
+  if (currentActionName !== targetActionName || !targetAction.isRunning()) {
+    // Fade out any other playing actions
+    Object.keys(actions).forEach(key => {
+      const act = actions[key];
+      if (act && act !== targetAction && act.isRunning()) {
+        act.fadeOut(crossfadeDuration);
+      }
+    });
 
-  if (nextAction) {
-    if (currentAction && currentAction !== nextAction) {
-      currentAction.fadeOut(crossfadeDuration);
-    }
-    nextAction.reset();
-    nextAction.enabled = true;
-    nextAction.setEffectiveTimeScale(1.0);
-    nextAction.setEffectiveWeight(1.0);
-    nextAction.fadeIn(crossfadeDuration);
-    nextAction.play();
+    targetAction.reset();
+    targetAction.enabled = true;
+    targetAction.setEffectiveTimeScale(1.0);
+    targetAction.setEffectiveWeight(1.0);
+    targetAction.fadeIn(crossfadeDuration);
+    targetAction.play();
+
     humanGroup.userData.currentAction = targetActionName;
   }
 }
