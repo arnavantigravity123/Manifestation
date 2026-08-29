@@ -236,6 +236,21 @@ fbxLoader.load('/assets/Right Strafe Walking (1).fbx', (anim) => {
   });
 });
 
+function upgradeMeshGroupToGLB(group) {
+  if (!group || !preloadedHumanModel) return;
+  // Remove non-username children
+  const toRemove = [];
+  group.children.forEach(c => {
+    if (c.userData && c.userData.isUsernameTag) return;
+    toRemove.push(c);
+  });
+  toRemove.forEach(c => group.remove(c));
+
+  const clone = SkeletonUtils.clone(preloadedHumanModel);
+  clone.rotation.y = Math.PI; // Face forward direction
+  group.add(clone);
+}
+
 gltfLoader.load('/assets/human_model.glb', (gltf) => {
   preloadedHumanModel = gltf.scene;
   preloadedHumanModel.scale.set(1.5, 1.5, 1.5);
@@ -255,6 +270,18 @@ gltfLoader.load('/assets/human_model.glb', (gltf) => {
         child.material.depthWrite = true;
       }
       child.castShadow = true;
+    }
+  });
+
+  // Upgrade localPlayerVisual if skin_default was waiting for GLB to load
+  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_default') {
+    upgradeMeshGroupToGLB(localPlayerVisual);
+  }
+
+  // Upgrade any remote players equipped with skin_default
+  Object.values(players3D).forEach(p => {
+    if (p && p.userData && p.userData.skinId === 'skin_default') {
+      upgradeMeshGroupToGLB(p);
     }
   });
 });
@@ -5114,14 +5141,15 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
 
 function createHumanMeshGroup(skinId, username) {
   const group = new THREE.Group();
+  const effectiveSkin = skinId || 'skin_default';
   group.userData = group.userData || {};
   group.userData.type = 'Human';
-  group.userData.skinId = skinId;
+  group.userData.skinId = effectiveSkin;
   group.userData.walkCycle = 0;
   group.userData.lastPosition = new THREE.Vector3();
   
-  if (skinId && (skinId === 'skin_cyborg' || skinId === 'skin_shadow')) {
-    const texPath = skinId === 'skin_cyborg' ? '/assets/skin_neon_cyborg.jpg' : '/assets/skin_shadow_ghost.jpg';
+  if (effectiveSkin === 'skin_cyborg' || effectiveSkin === 'skin_shadow') {
+    const texPath = effectiveSkin === 'skin_cyborg' ? '/assets/skin_neon_cyborg.jpg' : '/assets/skin_shadow_ghost.jpg';
     const spriteMat = new THREE.SpriteMaterial({ 
       map: getLoadedTexture(texPath), 
       color: 0xffffff,
@@ -5134,41 +5162,68 @@ function createHumanMeshGroup(skinId, username) {
     sprite.scale.set(1.2, 1.2, 1);
     sprite.position.y = 0.8;
     group.add(sprite);
-  } else if (skinId === 'skin_default' && preloadedHumanModel) {
-    const clone = SkeletonUtils.clone(preloadedHumanModel);
-    clone.rotation.y = Math.PI; // Face forward direction
-    group.add(clone);
-  } else if (preloadedHumanFBX) {
-    const clone = SkeletonUtils.clone(preloadedHumanFBX);
-    group.add(clone);
-
-    // Setup full 8-directional locomotion animation mixer & actions
-    const mixer = new THREE.AnimationMixer(clone);
-    const actions = {};
-
-    Object.keys(humanAnimClips).forEach(key => {
-      const clip = humanAnimClips[key];
-      if (clip) {
-        actions[key] = mixer.clipAction(clip);
-      }
-    });
-
-    if (actions.idle) {
-      actions.idle.play();
-    } else if (preloadedHumanFBX.animations && preloadedHumanFBX.animations.length > 0) {
-      const act = mixer.clipAction(preloadedHumanFBX.animations[0]);
-      act.play();
-      actions.idle = act;
+  } else if (effectiveSkin === 'skin_default') {
+    if (preloadedHumanModel) {
+      const clone = SkeletonUtils.clone(preloadedHumanModel);
+      clone.rotation.y = Math.PI; // Face forward direction
+      group.add(clone);
+    } else {
+      // Fallback sprite until 9.5MB human_model.glb loads
+      const spriteMat = new THREE.SpriteMaterial({ 
+        map: getLoadedTexture('/assets/human_sprite.png'), 
+        color: 0xffffff,
+        fog: true,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.scale.set(1.2, 1.2, 1);
+      sprite.position.y = 0.8;
+      group.add(sprite);
     }
+  } else if (effectiveSkin === 'skin_hazmat') {
+    if (preloadedHumanFBX) {
+      const clone = SkeletonUtils.clone(preloadedHumanFBX);
+      group.add(clone);
 
-    activeAnimationMixers.push(mixer);
-    group.userData.animMixer = mixer;
-    group.userData.animActions = actions;
-    group.userData.currentAction = 'idle';
-  } else if (preloadedHumanModel) {
-    const clone = SkeletonUtils.clone(preloadedHumanModel);
-    clone.rotation.y = Math.PI; // Fix reversed facing
-    group.add(clone);
+      // Setup full 8-directional locomotion animation mixer & actions
+      const mixer = new THREE.AnimationMixer(clone);
+      const actions = {};
+
+      Object.keys(humanAnimClips).forEach(key => {
+        const clip = humanAnimClips[key];
+        if (clip) {
+          actions[key] = mixer.clipAction(clip);
+        }
+      });
+
+      if (actions.idle) {
+        actions.idle.play();
+      } else if (preloadedHumanFBX.animations && preloadedHumanFBX.animations.length > 0) {
+        const act = mixer.clipAction(preloadedHumanFBX.animations[0]);
+        act.play();
+        actions.idle = act;
+      }
+
+      activeAnimationMixers.push(mixer);
+      group.userData.animMixer = mixer;
+      group.userData.animActions = actions;
+      group.userData.currentAction = 'idle';
+    } else {
+      const spriteMat = new THREE.SpriteMaterial({ 
+        map: getLoadedTexture('/assets/human_sprite.png'), 
+        color: 0xf59e0b,
+        fog: true,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.scale.set(1.2, 1.2, 1);
+      sprite.position.y = 0.8;
+      group.add(sprite);
+    }
   } else {
     const spriteMat = new THREE.SpriteMaterial({ 
       map: getLoadedTexture('/assets/human_sprite.png'), 
