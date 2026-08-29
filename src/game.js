@@ -1600,10 +1600,45 @@ function generateMaze(keysCount = 8) {
   padMeshRef = padMesh;
   scene.add(padMesh);
 
-  // Spawn key collectibles in chests/lockers represented by boxes
-  generateCollectibles(keysCount);
+  // Initialize dedicated spawn placement tracker with entrance & exit gate protection
+  resetSpawnLocations();
+
+  // Spawn circuit breakers on walls
   generateCircuitBreakers();
+  // Spawn key collectibles & cipher clue notes
+  generateCollectibles(keysCount);
+  // Spawn consumable items
   generateConsumableItems();
+  // Spawn Light Sanctuaries
+  generateLightSanctuaries();
+}
+
+// Spatial isolation tracker ensuring ZERO overlap across all spawn entities
+let occupiedSpawnLocations = [];
+
+function resetSpawnLocations() {
+  occupiedSpawnLocations = [];
+  // 1. Reserve Player Spawn center (0, 0)
+  occupiedSpawnLocations.push({ x: 0, z: 0, radius: 5.5, type: 'Spawn' });
+  // 2. Reserve Master Gate / Keypad area
+  if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
+    occupiedSpawnLocations.push({ x: gateCoordinates.x, z: gateCoordinates.z, radius: 5.5, type: 'Gate' });
+  }
+}
+
+function isLocationOccupied(x, z, minDist = 4.0) {
+  return occupiedSpawnLocations.some(loc => {
+    const required = Math.max(minDist, loc.radius || 4.0);
+    return Math.hypot(loc.x - x, loc.z - z) < required;
+  });
+}
+
+function claimSpawnLocation(x, z, radius = 4.0, type = 'Object') {
+  occupiedSpawnLocations.push({ x, z, radius, type });
+}
+
+function getAvailableCorridors(minDist = 4.0) {
+  return openCorridors.filter(c => !isLocationOccupied(c.x, c.z, minDist));
 }
 
 // Create a detailed 3D key using Torus, Cylinder, and Box components
@@ -1636,7 +1671,6 @@ function createKeyMeshGroup(colorHex, emissiveHex) {
   bit.position.set(0.08, -0.2, 0);
   group.add(bit);
 
-  // Rotate group slightly to lie flatter/more interesting on the floor
   group.rotation.x = Math.PI / 4;
   group.rotation.y = Math.PI / 6;
 
@@ -1672,37 +1706,41 @@ function generateCollectibles(keysCount) {
   });
   codeClueNotes = [];
 
-  // Guarantee unique separated corridor positions for each key
-  const availableCorridors = shuffleArray([...openCorridors]);
-
+  // Guarantee isolated unique corridor positions for each key (no overlapping with other items or clues)
   for (let i = 0; i < keysCount; i++) {
     const kt = KEY_TYPES[i % KEY_TYPES.length];
     const mesh = createKeyMeshGroup(kt.color, kt.emissive);
 
-    const corr = availableCorridors.length > 0 ? availableCorridors[i % availableCorridors.length] : { x: 0, z: 0 };
+    const available = shuffleArray(getAvailableCorridors(4.5));
+    const corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
+    
     mesh.position.set(corr.x, 0.45, corr.z);
-    // Store key type label in userData for HUD hints
     mesh.userData.keyTypeLabel = kt.label;
     scene.add(mesh);
 
+    claimSpawnLocation(corr.x, corr.z, 4.5, `Key_${kt.label}`);
     keysInMaze.push({ id: 'key_' + i, mesh, symbol: kt.label, index: i, typeName: kt.label });
   }
 
-  // Spawn code clue notes — small glowing plates hinting at the cipher code digits
+  // Spawn code clue notes — small glowing plates hinting at the cipher code digits in unique rooms
   generateCodeClues();
 }
 
 function generateCodeClues() {
-  // Scatter 4 glowing clue slabs around the maze, each hinting at one digit of the code
   const noteGeo = new THREE.BoxGeometry(0.6, 0.8, 0.08);
   const noteMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xfde047, emissiveIntensity: 0.9, roughness: 0.5 });
 
   for (let i = 0; i < 4; i++) {
     const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
-    const corr = openCorridors.length > 0 ? openCorridors[Math.floor(seededRandom() * openCorridors.length)] : { x: 0, z: 0 };
+    
+    const available = shuffleArray(getAvailableCorridors(4.5));
+    const corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
+
     noteMesh.position.set(corr.x, 1.0, corr.z);
     noteMesh.rotation.y = seededRandom() * Math.PI;
     scene.add(noteMesh);
+
+    claimSpawnLocation(corr.x, corr.z, 4.5, `Clue_${i}`);
     codeClueNotes.push({ mesh: noteMesh, digitIndex: i, collected: false });
   }
 }
@@ -1716,17 +1754,15 @@ function generateCircuitBreakers() {
   circuitBreakers = [];
   fixedBreakersCount = 0;
 
-  // A flat 3D box that mounts flush against a wall
   const breakerGeo = new THREE.BoxGeometry(0.8, 1.2, 0.15);
   const breakerTex = getLoadedTexture('/assets/breaker_texture.png');
-  // Initial color slightly red tinted to show it is broken/needs fixing
   const breakerMat = new THREE.MeshStandardMaterial({ map: breakerTex, color: 0xffaaaa, roughness: 0.4, metalness: 0.8 });
   
   for (let i = 0; i < totalBreakersRequired; i++) {
     const mesh = new THREE.Mesh(breakerGeo, breakerMat.clone());
     
     let mounted = false;
-    const shuffledCorridors = shuffleArray([...openCorridors]);
+    const shuffledCorridors = shuffleArray(getAvailableCorridors(4.5));
     
     for (const corr of shuffledCorridors) {
       const col = Math.floor(corr.x / mazeBlockSize + mazeSizeGlobal / 2);
@@ -1743,19 +1779,19 @@ function generateCircuitBreakers() {
         const nr = row + d.dr;
         const nc = col + d.dc;
         if (nr >= 0 && nr < mazeSizeGlobal && nc >= 0 && nc < mazeSizeGlobal && mazeLayout[nr][nc] === 1) {
-          // Calculate exact placement on the expanded wall surface (+0.5 overlap)
           const expandedWallWidth = mazeBlockSize + 0.5;
-          const distToWallFace = mazeBlockSize - (expandedWallWidth / 2); // e.g. 4.5 - 2.5 = 2.0
+          const distToWallFace = mazeBlockSize - (expandedWallWidth / 2);
           const breakerThickness = 0.15;
-          const offset = distToWallFace - (breakerThickness / 2) - 0.01; // Subtract half-thickness so it rests perfectly on wall
+          const offset = distToWallFace - (breakerThickness / 2) - 0.01;
 
-          const dirX = Math.sign(d.rx); // 1, -1, or 0
+          const dirX = Math.sign(d.rx);
           const dirZ = Math.sign(d.rz);
 
-          // Mount the breaker perfectly flush against the wall surface
           mesh.position.set(corr.x + dirX * offset, 1.5, corr.z + dirZ * offset);
           mesh.rotation.y = d.rotY;
           mounted = true;
+
+          claimSpawnLocation(corr.x, corr.z, 4.5, `Breaker_${i}`);
           break;
         }
       }
@@ -1763,7 +1799,10 @@ function generateCircuitBreakers() {
     }
     
     if (!mounted) {
-      mesh.position.set((seededRandom() - 0.5) * 40, 1.5, (seededRandom() - 0.5) * 40);
+      const available = shuffleArray(getAvailableCorridors(4.5));
+      const fallback = available.length > 0 ? available[0] : { x: (seededRandom() - 0.5) * 40, z: (seededRandom() - 0.5) * 40 };
+      mesh.position.set(fallback.x, 1.5, fallback.z);
+      claimSpawnLocation(fallback.x, fallback.z, 4.5, `Breaker_${i}`);
     }
     
     scene.add(mesh);
@@ -1795,7 +1834,7 @@ function generateConsumableItems() {
     { name: 'Breaker Remote', map: getLoadedTexture('/assets/remote_sprite.png') }
   ];
 
-  // Generate 1 EMF, 1 Thermal, 1 Breaker Remote, 6 guaranteed Battery Packs, then randomly pick remaining items
+  // Guaranteed essential items + random utility loot
   const itemsToSpawn = [
     itemTypes[1], // EMF
     itemTypes[2], // Thermal
@@ -1810,7 +1849,7 @@ function generateConsumableItems() {
   for (let i = 0; i < 10; i++) {
     const rand = seededRandom();
     if (rand > 0.7) {
-      itemsToSpawn.push(itemTypes[0]); // Extra Battery (avg ~3 more)
+      itemsToSpawn.push(itemTypes[0]); // Extra Battery
     } else if (rand > 0.4) {
       itemsToSpawn.push(itemTypes[3]); // Sanity Pills
     } else if (rand > 0.2) {
@@ -1820,39 +1859,36 @@ function generateConsumableItems() {
     }
   }
 
-  itemsToSpawn.forEach(type => {
+  itemsToSpawn.forEach((type, idx) => {
     const spriteMat = new THREE.SpriteMaterial({ 
       map: type.map, 
       color: 0xffffff,
       fog: true,
       transparent: true,
-      blending: THREE.AdditiveBlending, // Hides black background
+      blending: THREE.AdditiveBlending,
       depthWrite: false
     });
     const mesh = new THREE.Sprite(spriteMat);
     mesh.scale.set(0.6, 0.6, 1);
 
-    let x = 0, z = 0;
-    if (openCorridors.length > 0) {
-      const randIdx = Math.floor(seededRandom() * openCorridors.length);
-      x = openCorridors[randIdx].x;
-      z = openCorridors[randIdx].z;
-    } else {
-      x = (seededRandom() - 0.5) * 40;
-      z = (seededRandom() - 0.5) * 40;
-    }
+    // Pick unique un-occupied corridor cell
+    const available = shuffleArray(getAvailableCorridors(4.0));
+    const corr = available.length > 0 ? available[0] : (openCorridors[idx % openCorridors.length] || { x: 0, z: 0 });
 
-    mesh.position.set(x, 0.35, z);
+    mesh.position.set(corr.x, 0.35, corr.z);
     scene.add(mesh);
 
+    claimSpawnLocation(corr.x, corr.z, 4.0, `Item_${type.name}`);
     itemsInMaze.push({
       id: 'item_' + seededRandom().toString(36).substr(2, 9),
       mesh: mesh,
       name: type.name
     });
   });
+}
 
-  // --- Feature 4: Light Sanctuaries (UV Lantern Zones) ---
+// --- Feature 4: Light Sanctuaries (UV Lantern Zones) ---
+function generateLightSanctuaries() {
   sanctuaryZones.forEach(s => {
     if (s.group) scene.remove(s.group);
   });
@@ -1861,7 +1897,7 @@ function generateConsumableItems() {
   const sanctuaryCount = mazeSizeGlobal >= 41 ? 3 : 2;
   const sanctuaryCandidates = openCorridors.filter(c => {
     const d = Math.sqrt(c.x * c.x + c.z * c.z);
-    return d > 12 && d < (mazeSizeGlobal * 2.0);
+    return d > 12 && d < (mazeSizeGlobal * 2.0) && !isLocationOccupied(c.x, c.z, 6.5);
   });
 
   const chosenSanctuaries = [];
@@ -1871,6 +1907,7 @@ function generateConsumableItems() {
     const tooClose = chosenSanctuaries.some(cs => Math.hypot(cs.x - pos.x, cs.z - pos.z) < 16);
     if (!tooClose || chosenSanctuaries.length === 0) {
       chosenSanctuaries.push(pos);
+      claimSpawnLocation(pos.x, pos.z, 7.0, `Sanctuary_${sIdx}`);
     }
   }
 
@@ -1881,7 +1918,7 @@ function generateConsumableItems() {
     // Warm Brass Lantern Frame
     const lanternGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.45, 8);
     const lanternMat = new THREE.MeshStandardMaterial({
-      color: 0xd97706, // Amber gold brass
+      color: 0xd97706,
       roughness: 0.3,
       metalness: 0.8,
       emissive: 0xf59e0b,
