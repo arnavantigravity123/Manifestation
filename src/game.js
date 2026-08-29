@@ -5009,10 +5009,27 @@ function playGhostCaptureAnimation(callback) {
 }
 
 function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuration = 0.2) {
-  if (!humanGroup || !humanGroup.userData || !humanGroup.userData.animActions) return;
+  if (!humanGroup || !humanGroup.userData) return;
+  const mixer = humanGroup.userData.animMixer;
+  if (!mixer) return;
+
+  if (!humanGroup.userData.animActions) {
+    humanGroup.userData.animActions = {};
+  }
   const actions = humanGroup.userData.animActions;
+
+  // On-demand action instantiation if clip finished loading after mesh creation
+  if (!actions[targetActionName] && humanAnimClips[targetActionName]) {
+    actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
+  }
+  if (!actions.idle && humanAnimClips.idle) {
+    actions.idle = mixer.clipAction(humanAnimClips.idle);
+  }
+
   const currentActionName = humanGroup.userData.currentAction || 'idle';
-  if (currentActionName === targetActionName) return;
+  if (currentActionName === targetActionName && actions[targetActionName] && actions[targetActionName].isRunning()) {
+    return;
+  }
 
   const currentAction = actions[currentActionName];
   const nextAction = actions[targetActionName] || actions.idle;
@@ -5027,9 +5044,8 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
     nextAction.setEffectiveWeight(1.0);
     nextAction.fadeIn(crossfadeDuration);
     nextAction.play();
+    humanGroup.userData.currentAction = targetActionName;
   }
-
-  humanGroup.userData.currentAction = targetActionName;
 }
 
 function createHumanMeshGroup(skinId, username) {
@@ -5907,7 +5923,7 @@ function animate() {
       camera.position.y = 1.6; // Lock height if not spectating
 
       // Update local player 3D Hazmat/Default locomotion animation state
-      if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.animActions) {
+      if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
         let desired = 'idle';
         if (moveForward) {
           desired = isSprinting ? 'sprint' : 'walk';
@@ -5917,8 +5933,10 @@ function animate() {
           desired = 'strafeLeft';
         } else if (moveRight) {
           desired = 'strafeRight';
+        } else if (Math.hypot(velocity.x, velocity.z) > 0.4) {
+          desired = isSprinting ? 'sprint' : 'walk';
         }
-        setHumanLocomotionAction(localPlayerVisual, desired, 0.18);
+        setHumanLocomotionAction(localPlayerVisual, desired, 0.15);
       }
     }
 
