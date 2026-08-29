@@ -5202,21 +5202,7 @@ function createHumanMeshGroup(skinId, username) {
   group.userData.walkCycle = 0;
   group.userData.lastPosition = new THREE.Vector3();
   
-  if (effectiveSkin === 'skin_cyborg' || effectiveSkin === 'skin_shadow') {
-    const texPath = effectiveSkin === 'skin_cyborg' ? '/assets/skin_neon_cyborg.jpg' : '/assets/skin_shadow_ghost.jpg';
-    const spriteMat = new THREE.SpriteMaterial({ 
-      map: getLoadedTexture(texPath), 
-      color: 0xffffff,
-      fog: true,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(1.2, 1.2, 1);
-    sprite.position.y = 0.8;
-    group.add(sprite);
-  } else if (effectiveSkin === 'skin_default') {
+  if (effectiveSkin === 'skin_default') {
     loadHumanGLBAsset();
     if (preloadedHumanModel) {
       const clone = SkeletonUtils.clone(preloadedHumanModel);
@@ -5488,22 +5474,9 @@ function addProceduralCorpse(group, rotationY) {
 
 function createGhostMeshGroup(skinId) {
   const group = new THREE.Group();
+  loadGhostGLBAsset();
   
-  if (skinId) {
-    const texPath = skinId === 'skin_cyborg' ? '/assets/skin_neon_cyborg.jpg' : '/assets/skin_shadow_ghost.jpg';
-    const spriteMat = new THREE.SpriteMaterial({ 
-      map: getLoadedTexture(texPath), 
-      color: 0xffffff,
-      fog: true,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    const sprite = new THREE.Sprite(spriteMat);
-    sprite.scale.set(1.2, 1.2, 1);
-    sprite.position.y = 0.8;
-    group.add(sprite);
-  } else if (preloadedGhostModel) {
+  if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
     anchorGroup.add(clone);
