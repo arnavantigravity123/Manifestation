@@ -77,8 +77,21 @@ function upgradeMeshGroupToFBX(group) {
   group.userData.currentAction = 'idle';
 }
 
+// Strip root motion (Hips position tracks) from animation clips so the game controls position
+function stripRootMotion(clip) {
+  if (!clip || !clip.tracks) return clip;
+  clip.tracks = clip.tracks.filter(track => {
+    // Remove position tracks on the root bone (Hips) — keeps rotation for natural hip sway
+    // Mixamo root bone is usually 'mixamorigHips'
+    const isRootPosition = track.name.match(/Hips\.position/) || track.name.match(/^position/);
+    return !isRootPosition;
+  });
+  return clip;
+}
+
 function registerAnimationToActiveMixers(animName, clip) {
   if (!clip) return;
+  stripRootMotion(clip);
   humanAnimClips[animName] = clip;
   clip.name = animName;
 
