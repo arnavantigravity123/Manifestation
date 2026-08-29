@@ -154,39 +154,69 @@ fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
   });
 });
 
-// 2. Load Walk Forward animation
-fbxLoader.load('/assets/Walking.fbx', (anim) => {
+// 2. Load Walk Forward animation (With-Skin FBX)
+fbxLoader.load('/assets/Walking (1).fbx', (anim) => {
   if (anim.animations && anim.animations.length > 0) {
     registerAnimationToActiveMixers('walk', anim.animations[0]);
   }
+}, undefined, () => {
+  fbxLoader.load('/assets/Walking.fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('walk', anim.animations[0]);
+    }
+  });
 });
 
-// 3. Load Sprint Forward animation
-fbxLoader.load('/assets/Standing Sprint Forward.fbx', (anim) => {
+// 3. Load Sprint Forward animation (With-Skin FBX)
+fbxLoader.load('/assets/Sprint.fbx', (anim) => {
   if (anim.animations && anim.animations.length > 0) {
     registerAnimationToActiveMixers('sprint', anim.animations[0]);
   }
+}, undefined, () => {
+  fbxLoader.load('/assets/Standing Sprint Forward.fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('sprint', anim.animations[0]);
+    }
+  });
 });
 
-// 4. Load Walk Backwards animation
-fbxLoader.load('/assets/Walking Backwards.fbx', (anim) => {
+// 4. Load Walk Backwards animation (With-Skin FBX)
+fbxLoader.load('/assets/Walking Backwards (1).fbx', (anim) => {
   if (anim.animations && anim.animations.length > 0) {
     registerAnimationToActiveMixers('walkBack', anim.animations[0]);
   }
+}, undefined, () => {
+  fbxLoader.load('/assets/Walking Backwards.fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('walkBack', anim.animations[0]);
+    }
+  });
 });
 
-// 5. Load Left Strafe Walk animation
-fbxLoader.load('/assets/Left Strafe Walk.fbx', (anim) => {
+// 5. Load Left Strafe Walk animation (With-Skin FBX)
+fbxLoader.load('/assets/Left Strafe Walking.fbx', (anim) => {
   if (anim.animations && anim.animations.length > 0) {
     registerAnimationToActiveMixers('strafeLeft', anim.animations[0]);
   }
+}, undefined, () => {
+  fbxLoader.load('/assets/Left Strafe Walk.fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('strafeLeft', anim.animations[0]);
+    }
+  });
 });
 
-// 6. Load Right Strafe Walk animation
-fbxLoader.load('/assets/Right Strafe Walking.fbx', (anim) => {
+// 6. Load Right Strafe Walk animation (With-Skin FBX)
+fbxLoader.load('/assets/Right Strafe Walking (1).fbx', (anim) => {
   if (anim.animations && anim.animations.length > 0) {
     registerAnimationToActiveMixers('strafeRight', anim.animations[0]);
   }
+}, undefined, () => {
+  fbxLoader.load('/assets/Right Strafe Walking.fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('strafeRight', anim.animations[0]);
+    }
+  });
 });
 
 gltfLoader.load('/assets/human_model.glb', (gltf) => {
