@@ -2236,10 +2236,16 @@ function toggleCameraView() {
     scene.add(activeViewCamera);
   }
   
-  // Make sure we have a local player visual if we enter TPS
+  // Make sure we have a local player visual if we enter TPS, and recreate if equipped skin changed
+  const pSkinId = localStorage.getItem('manifestation_equipped_skin') || null;
+  const pUsername = localStorage.getItem('manifestation_username') || 'Operative';
+  
+  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId !== pSkinId) {
+    camera.remove(localPlayerVisual);
+    localPlayerVisual = null;
+  }
+  
   if (mode !== 'fps' && !localPlayerVisual) {
-    const pSkinId = localStorage.getItem('manifestation_equipped_skin') || null;
-    const pUsername = localStorage.getItem('manifestation_username') || 'Operative';
     localPlayerVisual = myTeam === 'Ghost' ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername);
     // Align visual downwards slightly since camera is at eye level (1.6)
     localPlayerVisual.position.set(0, myTeam === 'Ghost' ? -1.25 : -1.6, 0);
@@ -5130,6 +5136,24 @@ function createHumanMeshGroup(skinId, username) {
     group.add(sprite);
   } else if (preloadedHumanFBX) {
     const clone = SkeletonUtils.clone(preloadedHumanFBX);
+    
+    // Distinct visual tone for Standard Issue vs Biohazard Hazmat
+    if (skinId === 'skin_default') {
+      clone.traverse(child => {
+        if (child.isMesh && child.material) {
+          child.material = child.material.clone();
+          child.material.color.setHex(0x60a5fa); // Tactical Steel Blue Operative uniform
+        }
+      });
+    } else {
+      clone.traverse(child => {
+        if (child.isMesh && child.material) {
+          child.material = child.material.clone();
+          child.material.color.setHex(0xffffff); // Classic Biohazard Yellow
+        }
+      });
+    }
+
     group.add(clone);
 
     // Setup full 8-directional locomotion animation mixer & actions
