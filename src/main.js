@@ -719,12 +719,13 @@ buyCreditsBtns.forEach(btn => {
 });
 
 function updateSkinButtons() {
-  const equipped = localStorage.getItem('manifestation_equipped_skin');
-  buySkinBtns.forEach(btn => {
+  const equipped = localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
+  const allSkinBtns = document.querySelectorAll('.buy-skin-btn');
+  allSkinBtns.forEach(btn => {
     const skinId = btn.getAttribute('data-skin-id');
     const price = btn.getAttribute('data-price');
     
-    if (skinId === equipped || (skinId === 'skin_default' && !equipped)) {
+    if (skinId === equipped) {
       btn.textContent = 'EQUIPPED';
       btn.style.background = '#059669';
     } else if (localStorage.getItem(`unlocked_${skinId}`) || price === '0') {

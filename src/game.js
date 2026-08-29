@@ -4879,7 +4879,7 @@ function playGhostCaptureAnimation(callback) {
 function createHumanMeshGroup(skinId, username) {
   const group = new THREE.Group();
   
-  if (skinId) {
+  if (skinId && (skinId === 'skin_cyborg' || skinId === 'skin_shadow')) {
     const texPath = skinId === 'skin_cyborg' ? '/assets/skin_neon_cyborg.jpg' : '/assets/skin_shadow_ghost.jpg';
     const spriteMat = new THREE.SpriteMaterial({ 
       map: getLoadedTexture(texPath), 
