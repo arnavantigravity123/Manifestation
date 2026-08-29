@@ -5177,14 +5177,14 @@ function createHumanMeshGroup(skinId, username) {
   }
 
 
-  // Keep userData compatible with the animation loop
-  group.userData = {
-    type: 'Human',
-    walkCycle: 0,
-    leftLeg: { rotation: {x:0} }, rightLeg: { rotation: {x:0} }, 
-    leftArm: { rotation: {x:0} }, rightArm: { rotation: {x:0} },
-    lastPosition: new THREE.Vector3()
-  };
+  // Keep userData compatible with the animation loop – MERGE, don't overwrite (preserve animMixer/animActions)
+  group.userData.type = 'Human';
+  group.userData.walkCycle = group.userData.walkCycle || 0;
+  if (!group.userData.leftLeg) group.userData.leftLeg = { rotation: {x:0} };
+  if (!group.userData.rightLeg) group.userData.rightLeg = { rotation: {x:0} };
+  if (!group.userData.leftArm) group.userData.leftArm = { rotation: {x:0} };
+  if (!group.userData.rightArm) group.userData.rightArm = { rotation: {x:0} };
+  if (!group.userData.lastPosition) group.userData.lastPosition = new THREE.Vector3();
   
   return group;
 }
