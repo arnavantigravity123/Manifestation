@@ -36,19 +36,34 @@ textureLoader.load('/assets/hazmat_texture.png', (tex) => {
 
 // Load Hazmat Suit 3D Model with Mixamo Breathing Idle animation
 fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
-  // Normalize scale: Mixamo FBX models are in centimeters (~180cm -> 1.8m height)
-  fbx.scale.set(0.013, 0.013, 0.013);
-  fbx.rotation.y = Math.PI; // Face forward
+  // Compute true bounding box and scale to standard player height (1.85 meters)
+  const initialBox = new THREE.Box3().setFromObject(fbx);
+  const rawSize = initialBox.getSize(new THREE.Vector3());
+  const rawHeight = rawSize.y || 180;
+  
+  // Normalization factor: if raw height is in cm (~180), scale is ~0.0102; if in m (1.8), scale is ~1.02
+  const targetHeight = 1.85;
+  const scale = targetHeight / rawHeight;
+  fbx.scale.set(scale, scale, scale);
+
+  // Recenter pivot so feet rest perfectly on the floor (y = 0) and centered on X/Z
+  const scaledBox = new THREE.Box3().setFromObject(fbx);
+  const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+  fbx.position.x = -scaledCenter.x;
+  fbx.position.z = -scaledCenter.z;
+  fbx.position.y = -scaledBox.min.y;
 
   fbx.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
+      child.frustumCulled = false;
       if (hazmatSuitTexture) {
         child.material = new THREE.MeshStandardMaterial({
           map: hazmatSuitTexture,
           roughness: 0.45,
-          metalness: 0.15
+          metalness: 0.15,
+          side: THREE.DoubleSide
         });
       }
     }
