@@ -5082,6 +5082,10 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
 
 function createHumanMeshGroup(skinId, username) {
   const group = new THREE.Group();
+  group.userData = group.userData || {};
+  group.userData.type = 'Human';
+  group.userData.walkCycle = 0;
+  group.userData.lastPosition = new THREE.Vector3();
   
   if (skinId && (skinId === 'skin_cyborg' || skinId === 'skin_shadow')) {
     const texPath = skinId === 'skin_cyborg' ? '/assets/skin_neon_cyborg.jpg' : '/assets/skin_shadow_ghost.jpg';
@@ -6611,22 +6615,22 @@ function animate() {
           c.material.opacity = Math.min(targetOpacity, c.material.opacity + 0.4);
         }
       });
-    } else if (p.userData.type === 'Human') {
+    } else if (p.userData && (p.userData.type === 'Human' || !p.userData.type)) {
       // Calculate delta movement to drive the locomotion state & walk cycle
       const currentPos = p.position.clone();
       const lastPos = p.userData.lastPosition || p.position.clone();
       const distMoved = currentPos.distanceTo(lastPos);
       p.userData.lastPosition = currentPos;
 
-      if (p.userData.animActions) {
+      if (p.userData.animMixer || p.userData.animActions) {
         const speed = distMoved / Math.max(0.001, delta);
         let targetAnim = 'idle';
         if (speed > 5.2) {
           targetAnim = 'sprint';
-        } else if (speed > 0.12) {
+        } else if (speed > 0.05) {
           targetAnim = 'walk';
         }
-        setHumanLocomotionAction(p, targetAnim, 0.2);
+        setHumanLocomotionAction(p, targetAnim, 0.18);
       } else {
         if (distMoved > 0.01) {
           p.userData.walkCycle += distMoved * 5.5;
