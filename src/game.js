@@ -19,6 +19,16 @@ gltfLoader.setDRACOLoader(dracoLoader);
 const fbxLoader = new FBXLoader();
 const textureLoader = new THREE.TextureLoader();
 
+// Complete 8-directional Locomotion Animation Clips Dictionary
+const humanAnimClips = {
+  idle: null,
+  walk: null,
+  sprint: null,
+  walkBack: null,
+  strafeLeft: null,
+  strafeRight: null
+};
+
 // Load Hazmat Suit authentic diffuse texture
 textureLoader.load('/assets/hazmat_texture.png', (tex) => {
   tex.flipY = true;
@@ -34,14 +44,18 @@ textureLoader.load('/assets/hazmat_texture.png', (tex) => {
   }
 });
 
-// Load Hazmat Suit 3D Model with Mixamo Breathing Idle animation
+// 1. Load Base Hazmat Suit 3D Model with Breathing Idle animation
 fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
+  if (fbx.animations && fbx.animations.length > 0) {
+    humanAnimClips.idle = fbx.animations[0];
+    humanAnimClips.idle.name = 'idle';
+  }
+
   // Compute true bounding box and scale to standard player height (1.85 meters)
   const initialBox = new THREE.Box3().setFromObject(fbx);
   const rawSize = initialBox.getSize(new THREE.Vector3());
   const rawHeight = rawSize.y || 180;
   
-  // Normalization factor: if raw height is in cm (~180), scale is ~0.0102; if in m (1.8), scale is ~1.02
   const targetHeight = 1.85;
   const scale = targetHeight / rawHeight;
   fbx.scale.set(scale, scale, scale);
@@ -70,6 +84,46 @@ fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
   });
 
   preloadedHumanFBX = fbx;
+});
+
+// 2. Load Walk Forward animation
+fbxLoader.load('/assets/Walking.fbx', (anim) => {
+  if (anim.animations && anim.animations.length > 0) {
+    humanAnimClips.walk = anim.animations[0];
+    humanAnimClips.walk.name = 'walk';
+  }
+});
+
+// 3. Load Sprint Forward animation
+fbxLoader.load('/assets/Standing Sprint Forward.fbx', (anim) => {
+  if (anim.animations && anim.animations.length > 0) {
+    humanAnimClips.sprint = anim.animations[0];
+    humanAnimClips.sprint.name = 'sprint';
+  }
+});
+
+// 4. Load Walk Backwards animation
+fbxLoader.load('/assets/Walking Backwards.fbx', (anim) => {
+  if (anim.animations && anim.animations.length > 0) {
+    humanAnimClips.walkBack = anim.animations[0];
+    humanAnimClips.walkBack.name = 'walkBack';
+  }
+});
+
+// 5. Load Left Strafe Walk animation
+fbxLoader.load('/assets/Left Strafe Walk.fbx', (anim) => {
+  if (anim.animations && anim.animations.length > 0) {
+    humanAnimClips.strafeLeft = anim.animations[0];
+    humanAnimClips.strafeLeft.name = 'strafeLeft';
+  }
+});
+
+// 6. Load Right Strafe Walk animation
+fbxLoader.load('/assets/Right Strafe Walking.fbx', (anim) => {
+  if (anim.animations && anim.animations.length > 0) {
+    humanAnimClips.strafeRight = anim.animations[0];
+    humanAnimClips.strafeRight.name = 'strafeRight';
+  }
 });
 
 gltfLoader.load('/assets/human_model.glb', (gltf) => {
@@ -4891,6 +4945,28 @@ function playGhostCaptureAnimation(callback) {
   }, 3000);
 }
 
+function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuration = 0.2) {
+  if (!humanGroup || !humanGroup.userData || !humanGroup.userData.animActions) return;
+  const actions = humanGroup.userData.animActions;
+  const currentActionName = humanGroup.userData.currentAction || 'idle';
+  if (currentActionName === targetActionName) return;
+
+  const currentAction = actions[currentActionName];
+  const nextAction = actions[targetActionName] || actions.idle;
+
+  if (currentAction && nextAction && currentAction !== nextAction) {
+    nextAction.reset();
+    nextAction.setEffectiveTimeScale(1.0);
+    nextAction.setEffectiveWeight(1.0);
+    nextAction.crossFadeFrom(currentAction, crossfadeDuration, true);
+    nextAction.play();
+  } else if (nextAction) {
+    nextAction.play();
+  }
+
+  humanGroup.userData.currentAction = targetActionName;
+}
+
 function createHumanMeshGroup(skinId, username) {
   const group = new THREE.Group();
   
@@ -4912,14 +4988,23 @@ function createHumanMeshGroup(skinId, username) {
     const clone = SkeletonUtils.clone(preloadedHumanFBX);
     group.add(clone);
 
-    // Apply animation mixer with Breathing Idle motion
-    if (preloadedHumanFBX.animations && preloadedHumanFBX.animations.length > 0) {
-      const mixer = new THREE.AnimationMixer(clone);
-      const action = mixer.clipAction(preloadedHumanFBX.animations[0]);
-      action.play();
-      activeAnimationMixers.push(mixer);
-      group.userData.mixer = mixer;
-    }
+    // Setup full 8-directional locomotion animation mixer & actions
+    const mixer = new THREE.AnimationMixer(clone);
+    const actions = {};
+
+    Object.keys(humanAnimClips).forEach(key => {
+      const clip = humanAnimClips[key];
+      if (clip) {
+        actions[key] = mixer.clipAction(clip);
+        actions[key].setEffectiveWeight(key === 'idle' ? 1.0 : 0.0);
+        actions[key].play();
+      }
+    });
+
+    activeAnimationMixers.push(mixer);
+    group.userData.animMixer = mixer;
+    group.userData.animActions = actions;
+    group.userData.currentAction = 'idle';
   } else if (preloadedHumanModel) {
     const clone = SkeletonUtils.clone(preloadedHumanModel);
     clone.rotation.y = Math.PI; // Fix reversed facing
@@ -5749,6 +5834,21 @@ function animate() {
       camera.translateX(-velocity.x * delta);
       camera.translateZ(velocity.z * delta);
       camera.position.y = 1.6; // Lock height if not spectating
+
+      // Update local player 3D Hazmat/Default locomotion animation state
+      if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.animActions) {
+        let desired = 'idle';
+        if (moveForward) {
+          desired = isSprinting ? 'sprint' : 'walk';
+        } else if (moveBackward) {
+          desired = 'walkBack';
+        } else if (moveLeft) {
+          desired = 'strafeLeft';
+        } else if (moveRight) {
+          desired = 'strafeRight';
+        }
+        setHumanLocomotionAction(localPlayerVisual, desired, 0.18);
+      }
     }
 
     // High-Performance O(1) Spatial Grid AABB Wall Collision Checking
@@ -6391,26 +6491,35 @@ function animate() {
         }
       });
     } else if (p.userData.type === 'Human') {
-      // Calculate delta movement to drive the walk cycle
+      // Calculate delta movement to drive the locomotion state & walk cycle
       const currentPos = p.position.clone();
       const lastPos = p.userData.lastPosition || p.position.clone();
       const distMoved = currentPos.distanceTo(lastPos);
       p.userData.lastPosition = currentPos;
 
-      if (distMoved > 0.01) {
-        // Human player is moving, advance walk cycle
-        p.userData.walkCycle += distMoved * 5.5;
+      if (p.userData.animActions) {
+        const speed = distMoved / Math.max(0.001, delta);
+        let targetAnim = 'idle';
+        if (speed > 5.2) {
+          targetAnim = 'sprint';
+        } else if (speed > 0.12) {
+          targetAnim = 'walk';
+        }
+        setHumanLocomotionAction(p, targetAnim, 0.2);
       } else {
-        // Human player is standing still, ease limbs back to center/rest position
-        p.userData.walkCycle *= 0.85;
-      }
+        if (distMoved > 0.01) {
+          p.userData.walkCycle += distMoved * 5.5;
+        } else {
+          p.userData.walkCycle *= 0.85;
+        }
 
-      // Swing legs and arms back and forth in opposition
-      const swing = Math.sin(p.userData.walkCycle) * 0.6;
-      if (p.userData.leftLeg) p.userData.leftLeg.rotation.x = swing;
-      if (p.userData.rightLeg) p.userData.rightLeg.rotation.x = -swing;
-      if (p.userData.leftArm) p.userData.leftArm.rotation.x = -swing;
-      if (p.userData.rightArm) p.userData.rightArm.rotation.x = swing;
+        // Swing legs and arms back and forth in opposition
+        const swing = Math.sin(p.userData.walkCycle) * 0.6;
+        if (p.userData.leftLeg) p.userData.leftLeg.rotation.x = swing;
+        if (p.userData.rightLeg) p.userData.rightLeg.rotation.x = -swing;
+        if (p.userData.leftArm) p.userData.leftArm.rotation.x = -swing;
+        if (p.userData.rightArm) p.userData.rightArm.rotation.x = swing;
+      }
     }
   });
   // Handle ghost initial spawning — only after splash screen and pointer lock / active game
