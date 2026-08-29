@@ -381,6 +381,9 @@ export function loadGhostGLBAsset() {
   });
 }
 
+// Preload 3D Ghost Model immediately for all matches
+loadGhostGLBAsset();
+
 let scene, camera, renderer;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
 let velocity = new THREE.Vector3();
