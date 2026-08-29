@@ -128,6 +128,7 @@ fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
   const targetHeight = 1.85;
   const scale = targetHeight / rawHeight;
   fbx.scale.set(scale, scale, scale);
+  fbx.rotation.y = Math.PI; // Face away from camera (match game forward direction)
 
   // Recenter pivot so feet rest perfectly on the floor (y = 0) and centered on X/Z
   const scaledBox = new THREE.Box3().setFromObject(fbx);
