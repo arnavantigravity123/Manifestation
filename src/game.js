@@ -116,125 +116,9 @@ function registerAnimationToActiveMixers(animName, clip) {
     }
   });
 }
-
-// 1. Load Base Hazmat Suit 3D Model with Breathing Idle animation
-fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
-  if (fbx.animations && fbx.animations.length > 0) {
-    registerAnimationToActiveMixers('idle', fbx.animations[0]);
-  }
-
-  // Compute true bounding box and scale to standard player height (1.85 meters)
-  const initialBox = new THREE.Box3().setFromObject(fbx);
-  const rawSize = initialBox.getSize(new THREE.Vector3());
-  const rawHeight = rawSize.y || 180;
-  
-  const targetHeight = 1.85;
-  const scale = targetHeight / rawHeight;
-  fbx.scale.set(scale, scale, scale);
-  fbx.rotation.y = Math.PI; // Face away from camera (match game forward direction)
-
-  // Recenter pivot so feet rest perfectly on the floor (y = 0) and centered on X/Z
-  const scaledBox = new THREE.Box3().setFromObject(fbx);
-  const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-  fbx.position.x = -scaledCenter.x;
-  fbx.position.z = -scaledCenter.z;
-  fbx.position.y = -scaledBox.min.y;
-
-  fbx.traverse((child) => {
-    if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
-      child.frustumCulled = false;
-      if (hazmatSuitTexture) {
-        child.material = new THREE.MeshStandardMaterial({
-          map: hazmatSuitTexture,
-          roughness: 0.45,
-          metalness: 0.15,
-          side: THREE.DoubleSide
-        });
-      }
-    }
-  });
-
-  preloadedHumanFBX = fbx;
-
-  // Upgrade localPlayerVisual if it was spawned before FBX finished loading
-  if (localPlayerVisual && (!localPlayerVisual.userData || !localPlayerVisual.userData.animMixer)) {
-    upgradeMeshGroupToFBX(localPlayerVisual);
-  }
-
-  // Upgrade all remote human players in lobby
-  Object.values(players3D).forEach(p => {
-    if (p && p.userData && p.userData.type === 'Human' && !p.userData.animMixer) {
-      upgradeMeshGroupToFBX(p);
-    }
-  });
-});
-
-// 2. Load Walk Forward animation (With-Skin FBX)
-fbxLoader.load('/assets/Walking (1).fbx', (anim) => {
-  if (anim.animations && anim.animations.length > 0) {
-    registerAnimationToActiveMixers('walk', anim.animations[0]);
-  }
-}, undefined, () => {
-  fbxLoader.load('/assets/Walking.fbx', (anim) => {
-    if (anim.animations && anim.animations.length > 0) {
-      registerAnimationToActiveMixers('walk', anim.animations[0]);
-    }
-  });
-});
-
-// 3. Load Sprint Forward animation (With-Skin FBX)
-fbxLoader.load('/assets/Sprint.fbx', (anim) => {
-  if (anim.animations && anim.animations.length > 0) {
-    registerAnimationToActiveMixers('sprint', anim.animations[0]);
-  }
-}, undefined, () => {
-  fbxLoader.load('/assets/Standing Sprint Forward.fbx', (anim) => {
-    if (anim.animations && anim.animations.length > 0) {
-      registerAnimationToActiveMixers('sprint', anim.animations[0]);
-    }
-  });
-});
-
-// 4. Load Walk Backwards animation (With-Skin FBX)
-fbxLoader.load('/assets/Walking Backwards (1).fbx', (anim) => {
-  if (anim.animations && anim.animations.length > 0) {
-    registerAnimationToActiveMixers('walkBack', anim.animations[0]);
-  }
-}, undefined, () => {
-  fbxLoader.load('/assets/Walking Backwards.fbx', (anim) => {
-    if (anim.animations && anim.animations.length > 0) {
-      registerAnimationToActiveMixers('walkBack', anim.animations[0]);
-    }
-  });
-});
-
-// 5. Load Left Strafe Walk animation (With-Skin FBX)
-fbxLoader.load('/assets/Left Strafe Walking.fbx', (anim) => {
-  if (anim.animations && anim.animations.length > 0) {
-    registerAnimationToActiveMixers('strafeLeft', anim.animations[0]);
-  }
-}, undefined, () => {
-  fbxLoader.load('/assets/Left Strafe Walk.fbx', (anim) => {
-    if (anim.animations && anim.animations.length > 0) {
-      registerAnimationToActiveMixers('strafeLeft', anim.animations[0]);
-    }
-  });
-});
-
-// 6. Load Right Strafe Walk animation (With-Skin FBX)
-fbxLoader.load('/assets/Right Strafe Walking (1).fbx', (anim) => {
-  if (anim.animations && anim.animations.length > 0) {
-    registerAnimationToActiveMixers('strafeRight', anim.animations[0]);
-  }
-}, undefined, () => {
-  fbxLoader.load('/assets/Right Strafe Walking.fbx', (anim) => {
-    if (anim.animations && anim.animations.length > 0) {
-      registerAnimationToActiveMixers('strafeRight', anim.animations[0]);
-    }
-  });
-});
+let isHazmatLoading = false;
+let isHumanGLBLoading = false;
+let isGhostGLBLoading = false;
 
 function upgradeMeshGroupToGLB(group) {
   if (!group || !preloadedHumanModel) return;
@@ -251,101 +135,244 @@ function upgradeMeshGroupToGLB(group) {
   group.add(clone);
 }
 
-gltfLoader.load('/assets/human_model.glb', (gltf) => {
-  preloadedHumanModel = gltf.scene;
-  preloadedHumanModel.scale.set(1.5, 1.5, 1.5);
-  
-  const box = new THREE.Box3().setFromObject(preloadedHumanModel);
-  const center = box.getCenter(new THREE.Vector3());
-  
-  preloadedHumanModel.position.x = -center.x;
-  preloadedHumanModel.position.z = -center.z;
-  preloadedHumanModel.position.y = -box.min.y; 
-  
-  preloadedHumanModel.traverse((child) => {
-    if (child.isMesh) {
-      if (child.material) {
-        child.material.transparent = true;
-        child.material.opacity = 1.0;
-        child.material.depthWrite = true;
-      }
-      child.castShadow = true;
-    }
-  });
+export function loadHazmatFBXAssets() {
+  if (preloadedHumanFBX || isHazmatLoading) return;
+  isHazmatLoading = true;
 
-  // Upgrade localPlayerVisual if skin_default was waiting for GLB to load
-  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_default') {
-    upgradeMeshGroupToGLB(localPlayerVisual);
+  if (!hazmatSuitTexture) {
+    hazmatSuitTexture = textureLoader.load('/assets/hazmat_texture.png');
+    hazmatSuitTexture.colorSpace = THREE.SRGBColorSpace;
+    hazmatSuitTexture.flipY = false;
   }
 
-  // Upgrade any remote players equipped with skin_default
-  Object.values(players3D).forEach(p => {
-    if (p && p.userData && p.userData.skinId === 'skin_default') {
-      upgradeMeshGroupToGLB(p);
+  // 1. Load Base Hazmat Suit 3D Model with Breathing Idle animation
+  fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
+    if (fbx.animations && fbx.animations.length > 0) {
+      registerAnimationToActiveMixers('idle', fbx.animations[0]);
     }
-  });
-});
-gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
-  preloadedGhostModel = gltf.scene;
-  preloadedGhostModel.scale.set(2.0, 2.0, 2.0);
-  
-  // Center the model's pivot point so it rotates in place instead of sweeping
-  const box = new THREE.Box3().setFromObject(preloadedGhostModel);
-  const center = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3());
-  
-  // Offset the children so the pivot is at the exact center bottom
-  preloadedGhostModel.position.x = -center.x;
-  preloadedGhostModel.position.z = -center.z;
-  preloadedGhostModel.position.y = -box.min.y + 0.2; // Hover slightly above ground
-  
-  preloadedGhostModel.traverse((child) => {
-    if (child.isMesh) {
-      // Ensure the AI textures render brightly and correctly
-      if (child.material) {
-        child.material.transparent = true;
-        child.material.opacity = 0.95;
-      }
-    }
-  });
 
-  // Retroactively replace any fallback sprites that spawned while we were loading
-  const replaceSpriteWithModel = (group) => {
-    const spriteChild = group.children.find(c => c.isSprite);
-    if (spriteChild) {
-      group.remove(spriteChild);
-      
-      // Wrap the centered model in an anchor group so the centering isn't lost during rotation
-      const clone = SkeletonUtils.clone(preloadedGhostModel);
-      const anchorGroup = new THREE.Group();
-      anchorGroup.add(clone);
-      
-      group.add(anchorGroup);
-      
-      // Re-apply thermal materials
-      const thermalMat = new THREE.MeshBasicMaterial({ 
-        color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
-      });
-      group.traverse(c => {
-        if (c.isMesh) {
-          c.userData.normalMat = c.material;
-          c.userData.thermalMat = thermalMat;
+    // Compute true bounding box and scale to standard player height (1.85 meters)
+    const initialBox = new THREE.Box3().setFromObject(fbx);
+    const rawSize = initialBox.getSize(new THREE.Vector3());
+    const rawHeight = rawSize.y || 180;
+    
+    const targetHeight = 1.85;
+    const scale = targetHeight / rawHeight;
+    fbx.scale.set(scale, scale, scale);
+    fbx.rotation.y = Math.PI; // Face away from camera (match game forward direction)
+
+    // Recenter pivot so feet rest perfectly on the floor (y = 0) and centered on X/Z
+    const scaledBox = new THREE.Box3().setFromObject(fbx);
+    const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+    fbx.position.x = -scaledCenter.x;
+    fbx.position.z = -scaledCenter.z;
+    fbx.position.y = -scaledBox.min.y;
+
+    fbx.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.frustumCulled = false;
+        if (hazmatSuitTexture) {
+          child.material = new THREE.MeshStandardMaterial({
+            map: hazmatSuitTexture,
+            roughness: 0.45,
+            metalness: 0.15,
+            side: THREE.DoubleSide
+          });
         }
+      }
+    });
+
+    preloadedHumanFBX = fbx;
+    isHazmatLoading = false;
+
+    // Upgrade localPlayerVisual if skin_hazmat was waiting for FBX
+    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_hazmat' && !localPlayerVisual.userData.animMixer) {
+      upgradeMeshGroupToFBX(localPlayerVisual);
+    }
+
+    // Upgrade all remote human players with skin_hazmat
+    Object.values(players3D).forEach(p => {
+      if (p && p.userData && p.userData.skinId === 'skin_hazmat' && !p.userData.animMixer) {
+        upgradeMeshGroupToFBX(p);
+      }
+    });
+  });
+
+  // 2. Load Walk Forward animation (With-Skin FBX)
+  fbxLoader.load('/assets/Walking (1).fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('walk', anim.animations[0]);
+    }
+  }, undefined, () => {
+    fbxLoader.load('/assets/Walking.fbx', (anim) => {
+      if (anim.animations && anim.animations.length > 0) {
+        registerAnimationToActiveMixers('walk', anim.animations[0]);
+      }
+    });
+  });
+
+  // 3. Load Sprint Forward animation (With-Skin FBX)
+  fbxLoader.load('/assets/Sprint.fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('sprint', anim.animations[0]);
+    }
+  }, undefined, () => {
+    fbxLoader.load('/assets/Standing Sprint Forward.fbx', (anim) => {
+      if (anim.animations && anim.animations.length > 0) {
+        registerAnimationToActiveMixers('sprint', anim.animations[0]);
+      }
+    });
+  });
+
+  // 4. Load Walk Backwards animation (With-Skin FBX)
+  fbxLoader.load('/assets/Walking Backwards (1).fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('walkBack', anim.animations[0]);
+    }
+  }, undefined, () => {
+    fbxLoader.load('/assets/Walking Backwards.fbx', (anim) => {
+      if (anim.animations && anim.animations.length > 0) {
+        registerAnimationToActiveMixers('walkBack', anim.animations[0]);
+      }
+    });
+  });
+
+  // 5. Load Left Strafe Walk animation (With-Skin FBX)
+  fbxLoader.load('/assets/Left Strafe Walking.fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('strafeLeft', anim.animations[0]);
+    }
+  }, undefined, () => {
+    fbxLoader.load('/assets/Left Strafe Walk.fbx', (anim) => {
+      if (anim.animations && anim.animations.length > 0) {
+        registerAnimationToActiveMixers('strafeLeft', anim.animations[0]);
+      }
+    });
+  });
+
+  // 6. Load Right Strafe Walk animation (With-Skin FBX)
+  fbxLoader.load('/assets/Right Strafe Walking (1).fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('strafeRight', anim.animations[0]);
+    }
+  }, undefined, () => {
+    fbxLoader.load('/assets/Right Strafe Walking.fbx', (anim) => {
+      if (anim.animations && anim.animations.length > 0) {
+        registerAnimationToActiveMixers('strafeRight', anim.animations[0]);
+      }
+    });
+  });
+}
+
+export function loadHumanGLBAsset() {
+  if (preloadedHumanModel || isHumanGLBLoading) return;
+  isHumanGLBLoading = true;
+
+  gltfLoader.load('/assets/human_model.glb', (gltf) => {
+    preloadedHumanModel = gltf.scene;
+    preloadedHumanModel.scale.set(1.5, 1.5, 1.5);
+    
+    const box = new THREE.Box3().setFromObject(preloadedHumanModel);
+    const center = box.getCenter(new THREE.Vector3());
+    
+    preloadedHumanModel.position.x = -center.x;
+    preloadedHumanModel.position.z = -center.z;
+    preloadedHumanModel.position.y = -box.min.y; 
+    
+    preloadedHumanModel.traverse((child) => {
+      if (child.isMesh) {
+        if (child.material) {
+          child.material.transparent = true;
+          child.material.opacity = 1.0;
+          child.material.depthWrite = true;
+        }
+        child.castShadow = true;
+      }
+    });
+
+    isHumanGLBLoading = false;
+
+    // Upgrade localPlayerVisual if skin_default was waiting for GLB to load
+    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_default') {
+      upgradeMeshGroupToGLB(localPlayerVisual);
+    }
+
+    // Upgrade any remote players equipped with skin_default
+    Object.values(players3D).forEach(p => {
+      if (p && p.userData && p.userData.skinId === 'skin_default') {
+        upgradeMeshGroupToGLB(p);
+      }
+    });
+  });
+}
+
+export function loadGhostGLBAsset() {
+  if (preloadedGhostModel || isGhostGLBLoading) return;
+  isGhostGLBLoading = true;
+
+  gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
+    preloadedGhostModel = gltf.scene;
+    preloadedGhostModel.scale.set(2.0, 2.0, 2.0);
+    
+    // Center the model's pivot point so it rotates in place instead of sweeping
+    const box = new THREE.Box3().setFromObject(preloadedGhostModel);
+    const center = box.getCenter(new THREE.Vector3());
+    
+    preloadedGhostModel.position.x = -center.x;
+    preloadedGhostModel.position.z = -center.z;
+    preloadedGhostModel.position.y = -box.min.y + 0.2; // Hover slightly above ground
+    
+    preloadedGhostModel.traverse((child) => {
+      if (child.isMesh) {
+        if (child.material) {
+          child.material.transparent = true;
+          child.material.opacity = 0.95;
+        }
+      }
+    });
+
+    // Retroactively replace any fallback sprites that spawned while we were loading
+    const replaceSpriteWithModel = (group) => {
+      const spriteChild = group.children.find(c => c.isSprite);
+      if (spriteChild) {
+        group.remove(spriteChild);
+        
+        // Wrap the centered model in an anchor group so the centering isn't lost during rotation
+        const clone = SkeletonUtils.clone(preloadedGhostModel);
+        const anchorGroup = new THREE.Group();
+        anchorGroup.add(clone);
+        
+        group.add(anchorGroup);
+        
+        // Re-apply thermal materials
+        const thermalMat = new THREE.MeshBasicMaterial({ 
+          color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
+        });
+        group.traverse(c => {
+          if (c.isMesh) {
+            c.userData.normalMat = c.material;
+            c.userData.thermalMat = thermalMat;
+          }
+        });
+      }
+    };
+
+    if (typeof ghosts3D !== 'undefined') ghosts3D.forEach(replaceSpriteWithModel);
+    if (typeof players3D !== 'undefined') {
+      Object.values(players3D).forEach(p => {
+        if (p.userData && p.userData.type === 'Ghost') replaceSpriteWithModel(p);
       });
     }
-  };
 
-  if (typeof ghosts3D !== 'undefined') ghosts3D.forEach(replaceSpriteWithModel);
-  if (typeof players3D !== 'undefined') {
-    Object.values(players3D).forEach(p => {
-      if (p.userData && p.userData.type === 'Ghost') replaceSpriteWithModel(p);
-    });
-  }
-
-  console.log("Ghost 3D model loaded successfully!");
-}, undefined, (error) => {
-  console.error("Failed to load ghost model:", error);
-});
+    console.log("Ghost 3D model loaded successfully!");
+    isGhostGLBLoading = false;
+  }, undefined, (error) => {
+    console.error("Failed to load ghost model:", error);
+    isGhostGLBLoading = false;
+  });
+}
 
 let scene, camera, renderer;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -798,6 +825,26 @@ export function initGame(socket, socketId, matchConfig) {
   const me = matchConfig.players[myId];
   myTeam = me.team;
   myClass = me.characterClass;
+
+  // Trigger On-Demand Asset Loading ONLY for models/skins present in this match
+  if (myTeam === 'Ghost') {
+    loadGhostGLBAsset();
+  }
+  const myEquippedSkin = (me && me.skinId) || localStorage.getItem('manifestation_equipped_skin') || 'skin_default';
+  if (myEquippedSkin === 'skin_hazmat') {
+    loadHazmatFBXAssets();
+  } else if (myEquippedSkin === 'skin_default') {
+    loadHumanGLBAsset();
+  }
+
+  if (matchConfig.players) {
+    Object.values(matchConfig.players).forEach(p => {
+      if (p.team === 'Ghost') loadGhostGLBAsset();
+      const pSkin = p.skinId || 'skin_default';
+      if (pSkin === 'skin_hazmat') loadHazmatFBXAssets();
+      if (pSkin === 'skin_default') loadHumanGLBAsset();
+    });
+  }
 
   // Show/Hide flashlight gauge row based on team
   const flRow = document.getElementById('flashlight-gauge-row');
@@ -5163,6 +5210,7 @@ function createHumanMeshGroup(skinId, username) {
     sprite.position.y = 0.8;
     group.add(sprite);
   } else if (effectiveSkin === 'skin_default') {
+    loadHumanGLBAsset();
     if (preloadedHumanModel) {
       const clone = SkeletonUtils.clone(preloadedHumanModel);
       clone.rotation.y = Math.PI; // Face forward direction
@@ -5183,6 +5231,7 @@ function createHumanMeshGroup(skinId, username) {
       group.add(sprite);
     }
   } else if (effectiveSkin === 'skin_hazmat') {
+    loadHazmatFBXAssets();
     if (preloadedHumanFBX) {
       const clone = SkeletonUtils.clone(preloadedHumanFBX);
       group.add(clone);
