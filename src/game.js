@@ -46,6 +46,9 @@ textureLoader.load('/assets/hazmat_texture.png', (tex) => {
 
 function upgradeMeshGroupToFBX(group) {
   if (!group || !preloadedHumanFBX) return;
+  if (group.userData && (group.userData.skinId === 'skin_cyborg' || group.userData.skinId === 'skin_shadow')) {
+    return; // Preserve sprite skins
+  }
   // Remove non-username children
   const toRemove = [];
   group.children.forEach(c => {
@@ -5107,6 +5110,7 @@ function createHumanMeshGroup(skinId, username) {
   const group = new THREE.Group();
   group.userData = group.userData || {};
   group.userData.type = 'Human';
+  group.userData.skinId = skinId;
   group.userData.walkCycle = 0;
   group.userData.lastPosition = new THREE.Vector3();
   
