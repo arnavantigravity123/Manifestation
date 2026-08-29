@@ -44,6 +44,39 @@ textureLoader.load('/assets/hazmat_texture.png', (tex) => {
   }
 });
 
+function upgradeMeshGroupToFBX(group) {
+  if (!group || !preloadedHumanFBX) return;
+  // Remove non-username children
+  const toRemove = [];
+  group.children.forEach(c => {
+    if (c.userData && c.userData.isUsernameTag) return;
+    toRemove.push(c);
+  });
+  toRemove.forEach(c => group.remove(c));
+
+  const clone = SkeletonUtils.clone(preloadedHumanFBX);
+  group.add(clone);
+
+  const mixer = new THREE.AnimationMixer(clone);
+  const actions = {};
+
+  Object.keys(humanAnimClips).forEach(key => {
+    const clip = humanAnimClips[key];
+    if (clip) {
+      actions[key] = mixer.clipAction(clip);
+    }
+  });
+
+  if (actions.idle) {
+    actions.idle.play();
+  }
+
+  activeAnimationMixers.push(mixer);
+  group.userData.animMixer = mixer;
+  group.userData.animActions = actions;
+  group.userData.currentAction = 'idle';
+}
+
 function registerAnimationToActiveMixers(animName, clip) {
   if (!clip) return;
   humanAnimClips[animName] = clip;
@@ -107,6 +140,18 @@ fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
   });
 
   preloadedHumanFBX = fbx;
+
+  // Upgrade localPlayerVisual if it was spawned before FBX finished loading
+  if (localPlayerVisual && (!localPlayerVisual.userData || !localPlayerVisual.userData.animMixer)) {
+    upgradeMeshGroupToFBX(localPlayerVisual);
+  }
+
+  // Upgrade all remote human players in lobby
+  Object.values(players3D).forEach(p => {
+    if (p && p.userData && p.userData.type === 'Human' && !p.userData.animMixer) {
+      upgradeMeshGroupToFBX(p);
+    }
+  });
 });
 
 // 2. Load Walk Forward animation
