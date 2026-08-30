@@ -3756,25 +3756,40 @@ function dropKey() {
   triggerNotification(`Dropped [${poppedKey.typeName}]`);
 }
 
-// Trigger risk/reward: Panic Hide
+// Trigger risk/reward: Panic Hide / Ghost Shadow Cloak
 function triggerPanicHide() {
-  if (isPanicked || myTeam !== 'Human' || isCaptured || window.isSpectating) return;
+  if (isPanicked || isCaptured || window.isSpectating) return;
 
   isPanicked = true;
   panicTimer = 20; // 20 seconds duration
 
-  // Immediately break sight & aggro for all AI ghost bots
-  ghosts3D.forEach(g => {
-    g.userData.aiState = 'WANDER';
-    g.userData.targetGrid = null;
-    g.userData.loseSightTimer = 999;
-  });
+  if (myTeam === 'Human') {
+    // Immediately break sight & aggro for all AI ghost bots
+    ghosts3D.forEach(g => {
+      g.userData.aiState = 'WANDER';
+      g.userData.targetGrid = null;
+      g.userData.loseSightTimer = 999;
+    });
 
-  // Stealth visual aura
-  if (flashLight) flashLight.intensity = 40;
-  camera.fog = new THREE.FogExp2(0x38bdf8, 0.025); // Subtle stealth cyan haze
+    // Stealth visual aura
+    if (flashLight) flashLight.intensity = 40;
+    camera.fog = new THREE.FogExp2(0x38bdf8, 0.025); // Subtle stealth cyan haze
+    triggerNotification("Invisibility Activated (20s)");
+  } else if (myTeam === 'Ghost') {
+    triggerNotification("Shadow Cloak Invisibility Activated (20s)");
+  }
 
-  triggerNotification("Invisibility Activated");
+  // Make local player visual semi-transparent in 3rd-person view
+  if (localPlayerVisual) {
+    localPlayerVisual.traverse(c => {
+      if ((c.isMesh || c.isSprite) && c.material) {
+        c.material.transparent = true;
+        c.material.opacity = 0.2;
+        c.material.depthWrite = false;
+        c.material.needsUpdate = true;
+      }
+    });
+  }
 
   // Emit event to network
   if (socketClient) {
@@ -4484,7 +4499,9 @@ function setupSocketListeners() {
       players3D[id].traverse(c => {
         if ((c.isMesh || c.isSprite) && c.material) {
           c.material.transparent = true;
-          c.material.opacity = isInv ? 0.25 : 1.0;
+          c.material.opacity = isInv ? 0.15 : 1.0;
+          c.material.depthWrite = !isInv;
+          c.material.needsUpdate = true;
         }
       });
     }
@@ -6235,7 +6252,19 @@ function animate() {
           scene.fog.density = fogDensity;
         }
         if (flashLight) flashLight.intensity = 200;
-        triggerNotification("Invisibility Deactivated");
+        triggerNotification(myTeam === 'Ghost' ? "Shadow Cloak Ended" : "Invisibility Deactivated");
+        
+        // Restore local player visual opacity
+        if (localPlayerVisual) {
+          localPlayerVisual.traverse(c => {
+            if ((c.isMesh || c.isSprite) && c.material) {
+              c.material.opacity = 1.0;
+              c.material.depthWrite = true;
+              c.material.needsUpdate = true;
+            }
+          });
+        }
+
         if (socketClient) {
           socketClient.emit('invisibility_ended');
         }
