@@ -886,7 +886,9 @@ export function initGame(socket, socketId, matchConfig) {
     if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
     if (isMinimapExpanded) return;
     window.mobileGameActive = true;
+    window.gameReady = true;
     ptrOverlay.style.display = 'none';
+    if (roleSplash) roleSplash.style.display = 'none';
     if (!isMobileDevice) {
       // Lock on the canvas element (renderer.domElement) — browsers require pointer lock on canvas, not a div
       const lockTarget = (renderer && renderer.domElement) || container;
@@ -937,16 +939,26 @@ export function initGame(socket, socketId, matchConfig) {
     }
   });
 
-  // Display Role Splash
+  // Display Role Splash (Tap to dismiss immediately)
   const roleSplash = document.getElementById('role-splash-screen');
   document.getElementById('splash-role-title').textContent = `${myTeam.toUpperCase()}: ${myClass.toUpperCase()}`;
   document.getElementById('splash-role-desc').textContent = "Survive the labyrinth. Find the twin keys. Enter the Master Gate code.";
   roleSplash.style.display = 'flex';
   window.gameReady = false;
-  setTimeout(() => { 
-    roleSplash.style.display = 'none'; 
+  
+  const dismissSplash = () => {
+    roleSplash.style.display = 'none';
     window.gameReady = true;
-  }, 4500);
+  };
+  roleSplash.addEventListener('click', dismissSplash);
+  roleSplash.addEventListener('touchstart', (e) => {
+    if (e.cancelable) e.preventDefault();
+    dismissSplash();
+  }, { passive: false });
+
+  setTimeout(() => { 
+    dismissSplash();
+  }, 3500);
 
   // Setup ThreeJS scene
   scene = new THREE.Scene();
@@ -1189,11 +1201,13 @@ function renderHUDInventory() {
     slot.className = index === activeSlot ? 'inventory-slot active' : 'inventory-slot';
     if (isCd) slot.classList.add('on-cooldown');
     slot.style.pointerEvents = 'auto';
-    slot.addEventListener('click', (e) => {
+    const selectSlot = (e) => {
       e.stopPropagation();
       activeSlot = index;
       renderHUDInventory();
-    });
+    };
+    slot.addEventListener('click', selectSlot);
+    slot.addEventListener('touchstart', selectSlot, { passive: true });
     
     const idxSpan = document.createElement('span');
     idxSpan.className = 'inventory-slot-index';
@@ -2800,68 +2814,77 @@ function setupControls() {
       }
     }
 
-    // Action button bindings using touchstart & click for instant response
+    // Helper for robust, instant tap response without double-fires or missed touches
+    function addTapListener(el, callback) {
+      if (!el) return;
+      let lastTrigger = 0;
+      const trigger = (e) => {
+        const now = performance.now();
+        if (now - lastTrigger < 250) return; // Prevent double-trigger from touchstart + click
+        lastTrigger = now;
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        callback(e);
+      };
+      el.addEventListener('touchstart', trigger, { passive: false });
+      el.addEventListener('click', trigger);
+    }
+
+    // Action button bindings using addTapListener for 100% reliable mobile response
     const useBtn = document.getElementById('btn-mobile-use');
     const interactBtn = document.getElementById('btn-mobile-interact');
+    const sprintBtn = document.getElementById('btn-mobile-sprint');
     const specialBtn = document.getElementById('btn-mobile-special');
+    const dropBtn = document.getElementById('btn-mobile-drop');
+    const dropItemBtn = document.getElementById('btn-mobile-drop-item');
     const pauseBtn = document.getElementById('btn-mobile-pause');
+    const globalPauseBtn = document.getElementById('global-pause-btn');
+    const cameraToggleBtn = document.getElementById('btn-camera-toggle');
     const ptrOverlay = document.getElementById('pointer-lock-overlay');
 
-    const handleUse = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!isCaptured && window.gameReady) useActiveItem();
-    };
     if (useBtn) {
-      useBtn.addEventListener('touchstart', handleUse, { passive: false });
-      useBtn.addEventListener('click', handleUse);
+      addTapListener(useBtn, () => {
+        if (!isCaptured) useActiveItem();
+      });
     }
 
-    const handleInteract = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!isCaptured && window.gameReady) checkInteractions();
-    };
     if (interactBtn) {
-      interactBtn.addEventListener('touchstart', handleInteract, { passive: false });
-      interactBtn.addEventListener('click', handleInteract);
+      addTapListener(interactBtn, () => {
+        if (!isCaptured) checkInteractions();
+      });
     }
 
-    const handleSpecial = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!isCaptured && window.gameReady) triggerPanicHide();
-    };
+    if (sprintBtn) {
+      addTapListener(sprintBtn, () => {
+        if (myTeam !== 'Human' || isCaptured) return;
+        if (isSprintExhausted) {
+          triggerNotification("Stamina exhausted! Recovering (need 20%)...");
+          return;
+        }
+        isSprinting = !isSprinting;
+        sprintBtn.classList.toggle('sprinting', isSprinting);
+      });
+    }
+
     if (specialBtn) {
-      specialBtn.addEventListener('touchstart', handleSpecial, { passive: false });
-      specialBtn.addEventListener('click', handleSpecial);
+      addTapListener(specialBtn, () => {
+        if (!isCaptured) triggerPanicHide();
+      });
     }
 
-    const dropBtn = document.getElementById('btn-mobile-drop');
     if (dropBtn) {
-      const handleDrop = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!isCaptured && window.gameReady) dropKey();
-      };
-      dropBtn.addEventListener('touchstart', handleDrop, { passive: false });
-      dropBtn.addEventListener('click', handleDrop);
+      addTapListener(dropBtn, () => {
+        if (!isCaptured) dropKey();
+      });
     }
 
-    const dropItemBtn = document.getElementById('btn-mobile-drop-item');
     if (dropItemBtn) {
-      const handleDropItem = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!isCaptured && window.gameReady) dropActiveItem();
-      };
-      dropItemBtn.addEventListener('touchstart', handleDropItem, { passive: false });
-      dropItemBtn.addEventListener('click', handleDropItem);
+      addTapListener(dropItemBtn, () => {
+        if (!isCaptured) dropActiveItem();
+      });
     }
 
-    const handlePause = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    const handlePause = () => {
       window.mobileGameActive = false;
 
       const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
@@ -2878,28 +2901,14 @@ function setupControls() {
         document.exitPointerLock();
       }
     };
-    if (pauseBtn) {
-      pauseBtn.addEventListener('touchstart', handlePause, { passive: false });
-      pauseBtn.addEventListener('click', handlePause);
-    }
-    const globalPauseBtn = document.getElementById('global-pause-btn');
-    if (globalPauseBtn) {
-      globalPauseBtn.addEventListener('touchstart', handlePause, { passive: false });
-      globalPauseBtn.addEventListener('click', handlePause);
-    }
 
-    // Camera view toggle button (Top header HUD)
-    const cameraToggleBtn = document.getElementById('btn-camera-toggle');
+    if (pauseBtn) addTapListener(pauseBtn, handlePause);
+    if (globalPauseBtn) addTapListener(globalPauseBtn, handlePause);
+
     if (cameraToggleBtn) {
-      const handleCam = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!isCaptured && window.gameReady) {
-          toggleCameraView();
-        }
-      };
-      cameraToggleBtn.addEventListener('touchstart', handleCam, { passive: false });
-      cameraToggleBtn.addEventListener('click', handleCam);
+      addTapListener(cameraToggleBtn, () => {
+        if (!isCaptured) toggleCameraView();
+      });
     }
 
     // Mouse scroll wheel for cycling active slot
