@@ -36,6 +36,7 @@ const io = new Server(server, {
 // ==========================================
 const DATA_DIR = join(__dirname, 'data');
 const USERS_FILE = join(DATA_DIR, 'users.json');
+const SESSIONS_FILE = join(DATA_DIR, 'sessions.json');
 
 if (!fs.existsSync(DATA_DIR)) {
   try {
@@ -45,7 +46,31 @@ if (!fs.existsSync(DATA_DIR)) {
   }
 }
 
-// Mongoose User Schema
+// Persistent Session Store (Survives Server Restarts)
+function loadSessionsLocal() {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
+      return new Map(Object.entries(data));
+    }
+  } catch (e) {
+    console.error("Error loading sessions database:", e);
+  }
+  return new Map();
+}
+
+function saveSessionsLocal(sessionsMap) {
+  try {
+    const obj = Object.fromEntries(sessionsMap);
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2), 'utf8');
+  } catch (e) {
+    console.error("Error saving sessions database:", e);
+  }
+}
+
+const activeSessions = loadSessionsLocal();
+
+// Mongoose User Schema with bufferCommands: false to prevent buffering hangs
 const userSchema = new mongoose.Schema({
   lookupKey: { type: String, required: true, unique: true, index: true },
   username: { type: String, required: true },
@@ -62,43 +87,37 @@ const userSchema = new mongoose.Schema({
     captures: { type: Number, default: 0 }
   },
   createdAt: { type: Date, default: Date.now }
-});
+}, { bufferCommands: false });
 
 const UserModel = mongoose.models.User || mongoose.model('User', userSchema);
-
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arnavantigravity_db_user:Gcnemt5r4WAahQkb@manifestation.bwyipxp.mongodb.net/manifestation?retryWrites=true&w=majority&appName=Manifestation';
 
 let isMongoConnected = false;
 let isConnecting = false;
 
-async function ensureDbConnected() {
-  if (isMongoConnected) return true;
-  if (isConnecting) {
-    let waited = 0;
-    while (isConnecting && waited < 50) {
-      await new Promise(r => setTimeout(r, 100));
-      waited++;
-      if (isMongoConnected) return true;
-    }
+async function tryMongoConnect() {
+  if (isMongoConnected || isConnecting) return;
+  const uri = process.env.MONGODB_URI;
+  if (!uri) return; // If no custom URI set, use persistent local storage
+  try {
+    isConnecting = true;
+    await mongoose.connect(uri, { 
+      serverSelectionTimeoutMS: 2500,
+      connectTimeoutMS: 2500
+    });
+    isMongoConnected = true;
+    isConnecting = false;
+    console.log("🚀 [MongoDB Atlas] Connected successfully to cloud database!");
+  } catch (err) {
+    isMongoConnected = false;
+    isConnecting = false;
+    console.warn("⚠️ [MongoDB Atlas] Cloud database offline, running on persistent local storage:", err.message);
   }
-  if (MONGODB_URI) {
-    try {
-      isConnecting = true;
-      await mongoose.connect(MONGODB_URI);
-      isMongoConnected = true;
-      isConnecting = false;
-      console.log("🚀 [MongoDB Atlas] Connected successfully to cloud database!");
-      return true;
-    } catch (err) {
-      isConnecting = false;
-      console.error("⚠️ [MongoDB Atlas] Connection warning:", err.message);
-    }
-  }
-  return isMongoConnected;
 }
 
-// Connect immediately on boot
-ensureDbConnected();
+// Background connect check without blocking server startup
+if (process.env.MONGODB_URI) {
+  tryMongoConnect();
+}
 
 function loadUsersLocal() {
   try {
@@ -120,13 +139,12 @@ function saveUsersLocal(users) {
 }
 
 async function findUser(lookupKey) {
-  await ensureDbConnected();
   if (isMongoConnected) {
     try {
-      const doc = await UserModel.findOne({ lookupKey });
+      const doc = await UserModel.findOne({ lookupKey }).exec();
       if (doc) return doc.toObject();
     } catch (e) {
-      console.error("MongoDB lookup error:", e);
+      console.warn("MongoDB lookup error, falling back to local:", e.message);
     }
   }
   const local = loadUsersLocal();
@@ -134,14 +152,12 @@ async function findUser(lookupKey) {
 }
 
 async function createUser(userData) {
-  await ensureDbConnected();
   if (isMongoConnected) {
     try {
       const doc = new UserModel(userData);
       await doc.save();
-      console.log(`[MongoDB Atlas] Operative '${userData.username}' successfully saved to cloud database.`);
     } catch (e) {
-      console.error("MongoDB create error:", e);
+      console.warn("MongoDB create error, saving locally:", e.message);
     }
   }
   const local = loadUsersLocal();
@@ -151,13 +167,11 @@ async function createUser(userData) {
 }
 
 async function updateUser(lookupKey, updates) {
-  await ensureDbConnected();
   if (isMongoConnected) {
     try {
-      await UserModel.updateOne({ lookupKey }, { $set: updates });
-      console.log(`[MongoDB Atlas] Operative '${lookupKey}' cloud profile updated.`);
+      await UserModel.updateOne({ lookupKey }, { $set: updates }).exec();
     } catch (e) {
-      console.error("MongoDB update error:", e);
+      console.warn("MongoDB update error, updating locally:", e.message);
     }
   }
   const local = loadUsersLocal();
@@ -178,7 +192,7 @@ function sanitizeUser(u) {
     username: u.username,
     isVip: !!u.isVip,
     credits: u.credits !== undefined ? u.credits : 100,
-    unlockedSkins: u.unlockedSkins || ['skin_default'],
+    unlockedSkins: Array.isArray(u.unlockedSkins) ? u.unlockedSkins : ['skin_default'],
     equippedSkin: u.equippedSkin || 'skin_default',
     preferredClass: u.preferredClass || 'Random',
     stats: u.stats || { matchesPlayed: 0, escapes: 0, captures: 0 },
@@ -186,7 +200,6 @@ function sanitizeUser(u) {
   };
 }
 
-const activeSessions = new Map(); // token -> username
 
 // Lobby/Game State
 // roomId -> roomState
@@ -343,6 +356,7 @@ io.on('connection', (socket) => {
 
     const token = crypto.randomBytes(32).toString('hex');
     activeSessions.set(token, lookupKey);
+    saveSessionsLocal(activeSessions);
 
     console.log(`[AUTH] New Operative registered (Saved to Database): ${cleanUsername}`);
     return callback && callback({ success: true, token, user: sanitizeUser(newUser) });
@@ -367,6 +381,7 @@ io.on('connection', (socket) => {
 
     const token = crypto.randomBytes(32).toString('hex');
     activeSessions.set(token, lookupKey);
+    saveSessionsLocal(activeSessions);
 
     console.log(`[AUTH] Operative logged in: ${user.username}`);
     return callback && callback({ success: true, token, user: sanitizeUser(user) });
@@ -380,13 +395,17 @@ io.on('connection', (socket) => {
     const user = await findUser(lookupKey);
     if (!user) {
       activeSessions.delete(token);
+      saveSessionsLocal(activeSessions);
       return callback && callback({ success: false, msg: 'User profile not found.' });
     }
     return callback && callback({ success: true, token, user: sanitizeUser(user) });
   });
 
   socket.on('auth_logout', ({ token }, callback) => {
-    if (token) activeSessions.delete(token);
+    if (token) {
+      activeSessions.delete(token);
+      saveSessionsLocal(activeSessions);
+    }
     return callback && callback({ success: true });
   });
 

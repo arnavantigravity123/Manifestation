@@ -290,12 +290,20 @@ if (loginForm) {
       authStatusMsg.textContent = 'Verifying security passcode...';
     }
 
+    const wakeTimer = setTimeout(() => {
+      if (authStatusMsg && authStatusMsg.textContent.includes('Verifying')) {
+        authStatusMsg.textContent = 'Connecting to cloud server (waking up)...';
+      }
+    }, 3500);
+
     sock.emit('auth_login', { username, password }, (res) => {
+      clearTimeout(wakeTimer);
       if (res && res.success) {
         currentUser = res.user;
         authToken = res.token;
         localStorage.setItem('manifestation_auth_token', authToken);
         localStorage.setItem('manifestation_username', currentUser.username);
+        localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
         
         // Link to RevenueCat user ID on mobile platforms
         if (Capacitor.isNativePlatform()) {
@@ -309,11 +317,11 @@ if (loginForm) {
         setTimeout(() => {
           if (accountAuthModal) accountAuthModal.style.display = 'none';
           updateAccountUI();
-        }, 600);
+        }, 500);
       } else {
         if (authStatusMsg) {
           authStatusMsg.className = 'auth-status-text error';
-          authStatusMsg.textContent = res ? res.msg : 'Login failed.';
+          authStatusMsg.textContent = res ? res.msg : 'Login failed. Please check credentials.';
         }
       }
     });
@@ -342,12 +350,20 @@ if (registerForm) {
       authStatusMsg.textContent = 'Registering new operative profile...';
     }
 
+    const wakeTimer = setTimeout(() => {
+      if (authStatusMsg && authStatusMsg.textContent.includes('Registering')) {
+        authStatusMsg.textContent = 'Connecting to cloud server (waking up)...';
+      }
+    }, 3500);
+
     sock.emit('auth_register', { username, password }, (res) => {
+      clearTimeout(wakeTimer);
       if (res && res.success) {
         currentUser = res.user;
         authToken = res.token;
         localStorage.setItem('manifestation_auth_token', authToken);
         localStorage.setItem('manifestation_username', currentUser.username);
+        localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
 
         // Link to RevenueCat user ID on mobile platforms
         if (Capacitor.isNativePlatform()) {
@@ -361,7 +377,7 @@ if (registerForm) {
         setTimeout(() => {
           if (accountAuthModal) accountAuthModal.style.display = 'none';
           updateAccountUI();
-        }, 600);
+        }, 500);
       } else {
         if (authStatusMsg) {
           authStatusMsg.className = 'auth-status-text error';
@@ -381,6 +397,7 @@ if (accountLogoutBtn) {
     authToken = null;
     currentUser = null;
     localStorage.removeItem('manifestation_auth_token');
+    localStorage.removeItem('manifestation_user_profile');
     updateAccountUI();
     alert("Logged out. You are now playing as Guest.");
   });
@@ -792,26 +809,20 @@ function initializeSocketConnection() {
 
   socket.on('connect', () => {
     myId = socket.id;
-    // Auto login if session token exists
+    // Auto login & sync latest profile if session token exists
     if (authToken) {
       socket.emit('auth_token_login', { token: authToken }, (res) => {
         if (res && res.success) {
           currentUser = res.user;
+          localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
           updateAccountUI();
           if (Capacitor.isNativePlatform()) {
             try { Purchases.logIn({ appUserID: currentUser.username }); } catch (err) {}
           }
-        } else {
-          // Token expired
-          authToken = null;
-          currentUser = null;
-          localStorage.removeItem('manifestation_auth_token');
-          updateAccountUI();
         }
       });
-    } else {
-      updateAccountUI();
     }
+    updateAccountUI();
   });
 
   socket.on('joined_room_success', ({ roomId, isPublic }) => {
@@ -1184,6 +1195,17 @@ function logSystemMessage(text) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  // 1. Immediately restore cached user profile for zero-latency login experience
+  try {
+    const savedToken = localStorage.getItem('manifestation_auth_token');
+    const savedProfile = localStorage.getItem('manifestation_user_profile');
+    if (savedToken && savedProfile) {
+      authToken = savedToken;
+      currentUser = JSON.parse(savedProfile);
+      updateAccountUI();
+    }
+  } catch (e) {}
+
   const rejoinId = sessionStorage.getItem('rejoinLobbyId');
   const rejoinUser = sessionStorage.getItem('rejoinUsername');
   const rejoinPublicStr = sessionStorage.getItem('rejoinIsPublic');
