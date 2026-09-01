@@ -753,6 +753,22 @@ export function initGame(socket, socketId, matchConfig) {
     });
     players3D = {};
   }
+
+  // Remove any stale ghost bots from previous matches
+  if (typeof ghosts3D !== 'undefined' && ghosts3D.length > 0) {
+    ghosts3D.forEach(g => {
+      if (scene) scene.remove(g);
+      g.traverse(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      });
+    });
+    ghosts3D = [];
+  }
+  window.ghostsSpawned = false;
   
   currentHP = 100;
   currentSanity = 100;
@@ -6856,8 +6872,25 @@ function animate() {
   });
   // Handle ghost initial spawning — only after splash screen and pointer lock / active game
   const readyToSpawn = isMobileDevice ? (window.gameReady && window.mobileGameActive) : (window.gameReady && Boolean(document.pointerLockElement));
-  if (ghosts3D.length === 0 && currentLobby && currentLobby.settings.ghostsCount > 0 && readyToSpawn) {
-    spawnGhostAIs(currentLobby.settings.ghostsCount);
+  if (!window.ghostsSpawned && currentLobby && readyToSpawn) {
+    window.ghostsSpawned = true;
+    
+    // Count real players on Ghost team
+    const playerGhostCount = Object.values(currentLobby.players || {}).filter(p => p.team === 'Ghost').length;
+    const totalTargetGhosts = (currentLobby.settings && currentLobby.settings.ghostsCount !== undefined) 
+      ? currentLobby.settings.ghostsCount 
+      : 3;
+    
+    // Calculate how many AI bot ghosts are needed so Total Ghosts == totalTargetGhosts exactly
+    const botGhostsToSpawn = (currentLobby.settings && currentLobby.settings.botGhostsCount !== undefined)
+      ? currentLobby.settings.botGhostsCount
+      : Math.max(0, totalTargetGhosts - playerGhostCount);
+
+    console.log(`[GHOST SPAWNER] Target Total Ghosts: ${totalTargetGhosts} | Real Player Ghosts: ${playerGhostCount} | AI Bots Spawning: ${botGhostsToSpawn}`);
+
+    if (botGhostsToSpawn > 0) {
+      spawnGhostAIs(botGhostsToSpawn);
+    }
   }
 
   // Update and draw Minimap & Cooldown Timers
