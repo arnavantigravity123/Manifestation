@@ -988,9 +988,49 @@ export function initGame(socket, socketId, matchConfig) {
   camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
   camera.position.set(0, 1.6, 0); // Eye level
 
-  // EXPOSE FOR DEBUGGING
+  // EXPOSE FOR DEBUGGING & DEV CONSOLE
   window.scene = scene;
   window.camera = camera;
+  window.keysInMaze = keysInMaze;
+  window.tpToLastKey = () => {
+    const keys = window.keysInMaze || [];
+    let targetPos = null;
+    let label = 'Key';
+    if (keys.length > 0) {
+      const last = keys[keys.length - 1];
+      if (last && last.mesh) {
+        targetPos = last.mesh.position;
+        label = last.typeName || last.symbol || 'Key';
+      }
+    }
+    if (!targetPos && window.scene) {
+      const sceneKeys = [];
+      window.scene.traverse(o => {
+        if (o.userData && o.userData.keyTypeLabel && o.parent === window.scene) sceneKeys.push(o);
+      });
+      if (sceneKeys.length > 0) {
+        const last = sceneKeys[sceneKeys.length - 1];
+        targetPos = last.position;
+        label = last.userData.keyTypeLabel;
+      }
+    }
+    if (targetPos && window.camera) {
+      window.camera.position.set(targetPos.x, 1.6, targetPos.z);
+      console.log(`%c[TELEPORT] Teleported to ${label} at x: ${targetPos.x.toFixed(1)}, z: ${targetPos.z.toFixed(1)}`, 'color: #10b981; font-weight: bold;');
+    } else {
+      console.warn("No keys found in the maze!");
+    }
+  };
+  window.teleportToLastKey = window.tpToLastKey;
+  window.tpToKey = (idx = 0) => {
+    const keys = window.keysInMaze || [];
+    if (keys[idx] && keys[idx].mesh) {
+      window.camera.position.set(keys[idx].mesh.position.x, 1.6, keys[idx].mesh.position.z);
+      console.log(`%c[TELEPORT] Teleported to key ${idx} (${keys[idx].typeName})`, 'color: #10b981;');
+    } else {
+      window.tpToLastKey();
+    }
+  };
 
   // 3. Renderer setup
   renderer = new THREE.WebGLRenderer({ 

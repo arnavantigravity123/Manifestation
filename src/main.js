@@ -447,6 +447,17 @@ const grantVipAccess = () => {
   updateVipCustomerCenterUI();
 };
 
+function isVipActiveInCustomerInfo(customerInfo) {
+  if (!customerInfo || !customerInfo.entitlements || !customerInfo.entitlements.active) return false;
+  const active = customerInfo.entitlements.active;
+  return Boolean(
+    active['Manifestation Pro'] ||
+    active['manifestation_pro'] ||
+    active['vip_access'] ||
+    Object.keys(active).length > 0
+  );
+}
+
 buyVipBtn.addEventListener('click', async () => {
   buyVipBtn.textContent = 'Processing...';
   buyVipBtn.disabled = true;
@@ -456,7 +467,7 @@ buyVipBtn.addEventListener('click', async () => {
     if (offerings.current && offerings.current.availablePackages.length !== 0) {
       const { customerInfo } = await Purchases.purchasePackage({ aPackage: offerings.current.availablePackages[0] });
       
-      if (customerInfo.entitlements.active['vip_access']) {
+      if (isVipActiveInCustomerInfo(customerInfo)) {
         alert("VIP Access Granted! Ads removed, credits added, and VIP saved to your account.");
         grantVipAccess();
       }
@@ -485,7 +496,7 @@ if (restoreVipBtn) {
 
     try {
       const { customerInfo } = await Purchases.restorePurchases();
-      if (customerInfo && customerInfo.entitlements.active['vip_access']) {
+      if (isVipActiveInCustomerInfo(customerInfo)) {
         alert("🎉 Purchases Restored! Your VIP membership has been unlocked.");
         grantVipAccess();
       } else {
