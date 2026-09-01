@@ -303,6 +303,11 @@ if (loginForm) {
         authToken = res.token;
         localStorage.setItem('manifestation_auth_token', authToken);
         localStorage.setItem('manifestation_username', currentUser.username);
+        // Auto-transfer existing device VIP to logged-in account
+        if (localStorage.getItem('manifestation_is_vip') === 'true' && !currentUser.isVip) {
+          currentUser.isVip = true;
+          sock.emit('account_update_vip', { token: authToken, isVip: true });
+        }
         localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
         
         // Link to RevenueCat user ID on mobile platforms
@@ -363,6 +368,17 @@ if (registerForm) {
         authToken = res.token;
         localStorage.setItem('manifestation_auth_token', authToken);
         localStorage.setItem('manifestation_username', currentUser.username);
+
+        // Auto-transfer existing device VIP to newly registered account
+        if (localStorage.getItem('manifestation_is_vip') === 'true') {
+          currentUser.isVip = true;
+          sock.emit('account_update_vip', { token: authToken, isVip: true });
+        }
+        // Auto-transfer existing device credits if higher than default
+        if (playerCredits > (currentUser.credits || 0)) {
+          currentUser.credits = playerCredits;
+          sock.emit('account_update_credits', { token: authToken, credits: playerCredits });
+        }
         localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
 
         // Link to RevenueCat user ID on mobile platforms
@@ -372,7 +388,7 @@ if (registerForm) {
 
         if (authStatusMsg) {
           authStatusMsg.className = 'auth-status-text success';
-          authStatusMsg.textContent = `Account created! Logged in as ${currentUser.username}.`;
+          authStatusMsg.textContent = `Account created! VIP & perks saved to ${currentUser.username}.`;
         }
         setTimeout(() => {
           if (accountAuthModal) accountAuthModal.style.display = 'none';
@@ -407,6 +423,20 @@ if (accountLogoutBtn) {
 const restoreVipBtn = document.getElementById('restore-vip-btn');
 const vipStatusLabel = document.getElementById('vip-status-label');
 const vipUserLabel = document.getElementById('vip-user-label');
+const guestVipWarning = document.getElementById('guest-vip-warning');
+
+function promptGuestToCreateAccount(featureName = 'VIP Pass') {
+  if (vipPaywallModal) vipPaywallModal.style.display = 'none';
+  if (skinsStoreModal) skinsStoreModal.style.display = 'none';
+  if (accountAuthModal) {
+    accountAuthModal.style.display = 'block';
+    if (tabRegisterBtn) tabRegisterBtn.click();
+    if (authStatusMsg) {
+      authStatusMsg.className = 'auth-status-text';
+      authStatusMsg.textContent = `⚠️ Guest Mode: Please create an account to permanently save your ${featureName}!`;
+    }
+  }
+}
 
 function updateVipCustomerCenterUI() {
   const isVip = (currentUser && currentUser.isVip) || (localStorage.getItem('manifestation_is_vip') === 'true');
@@ -416,6 +446,9 @@ function updateVipCustomerCenterUI() {
   }
   if (vipUserLabel) {
     vipUserLabel.textContent = currentUser ? `Operative: ${currentUser.username}` : "Guest Mode";
+  }
+  if (guestVipWarning) {
+    guestVipWarning.style.display = currentUser ? 'none' : 'block';
   }
 }
 
@@ -459,6 +492,11 @@ function isVipActiveInCustomerInfo(customerInfo) {
 }
 
 buyVipBtn.addEventListener('click', async () => {
+  if (!currentUser) {
+    promptGuestToCreateAccount('VIP Membership & 500 Credits');
+    return;
+  }
+
   buyVipBtn.textContent = 'Processing...';
   buyVipBtn.disabled = true;
 
@@ -491,6 +529,11 @@ buyVipBtn.addEventListener('click', async () => {
 // Restore Purchases Handler (App Store & Play Store Compliance)
 if (restoreVipBtn) {
   restoreVipBtn.addEventListener('click', async () => {
+    if (!currentUser) {
+      promptGuestToCreateAccount('Restored VIP Membership');
+      return;
+    }
+
     restoreVipBtn.textContent = 'Checking Cloud Purchases...';
     restoreVipBtn.disabled = true;
 
@@ -697,6 +740,11 @@ watchAdBtn.addEventListener('click', () => {
 // Credit Packs Purchase (In-App Purchases)
 buyCreditsBtns.forEach(btn => {
   btn.addEventListener('click', async (e) => {
+    if (!currentUser) {
+      promptGuestToCreateAccount('Credit Packs');
+      return;
+    }
+
     const pkgId = btn.getAttribute('data-package-id');
     const creditsToAdd = parseInt(btn.getAttribute('data-credits'));
     const priceStr = btn.getAttribute('data-price');
@@ -782,6 +830,11 @@ buySkinBtns.forEach(btn => {
         currentUser.equippedSkin = skinId;
         socket.emit('account_update_skin', { token: authToken, equippedSkin: skinId });
       }
+      return;
+    }
+
+    if (!currentUser) {
+      promptGuestToCreateAccount('Unlocked Skins');
       return;
     }
     
