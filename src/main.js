@@ -689,7 +689,14 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
       if (activeAdInterval) clearInterval(activeAdInterval);
       activeAdInterval = null;
       gameAdModal.style.display = 'none';
-      if (vipPaywallModal) vipPaywallModal.style.display = 'block';
+      if (!currentUser) {
+        promptGuestToCreateAccount('VIP Pass via RevenueCat');
+      } else {
+        if (vipPaywallModal) {
+          updateVipCustomerCenterUI();
+          vipPaywallModal.style.display = 'block';
+        }
+      }
     };
   }
 }
