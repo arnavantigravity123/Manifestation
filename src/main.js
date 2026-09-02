@@ -698,6 +698,19 @@ window.showInterstitialAd = (onComplete) => {
   playAdSequence({ duration: 5, isRewarded: false, onComplete });
 };
 
+window.leaveGameWithAd = (callback) => {
+  const isVip = (currentUser && currentUser.isVip) || (localStorage.getItem('manifestation_is_vip') === 'true');
+  if (isVip) {
+    if (callback) callback();
+    else window.location.reload();
+    return;
+  }
+  window.showInterstitialAd(() => {
+    if (callback) callback();
+    else window.location.reload();
+  });
+};
+
 window.showRewardedAd = (onReward) => {
   playAdSequence({ duration: 6, isRewarded: true, onReward });
 };
@@ -934,8 +947,12 @@ function initializeSocketConnection() {
     logSystemMessage("Breach sequence authorized. Entering Labyrinth...");
     authView.style.display = 'none';
     lobbyView.style.display = 'none';
-    hudOverlay.style.display = 'flex';
-    initGame(socket, myId, matchConfig);
+
+    // Show interstitial ad before entering match (VIP automatically bypasses)
+    window.showInterstitialAd(() => {
+      hudOverlay.style.display = 'flex';
+      initGame(socket, myId, matchConfig);
+    });
   });
 
   socket.on('chat_broadcast', ({ username, msg, team }) => {
@@ -1014,8 +1031,11 @@ function quitToMenu() {
   sessionStorage.removeItem('rejoinUsername');
   sessionStorage.removeItem('rejoinIsPublic');
   sessionStorage.removeItem('rejoinIsSolo');
-  // Reload window completely resets socket connection and game state. Best for browser games.
-  window.location.reload();
+  if (window.leaveGameWithAd) {
+    window.leaveGameWithAd(() => window.location.reload());
+  } else {
+    window.location.reload();
+  }
 }
 
 quitLobbyBtn.addEventListener('click', quitToMenu);

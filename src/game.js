@@ -2961,6 +2961,28 @@ function setupControls() {
     if (pauseBtn) addTapListener(pauseBtn, handlePause);
     if (globalPauseBtn) addTapListener(globalPauseBtn, handlePause);
 
+    const pauseAbortBtn = document.getElementById('pause-abort-btn');
+    if (pauseAbortBtn) {
+      addTapListener(pauseAbortBtn, () => {
+        if (window.leaveGameWithAd) {
+          window.leaveGameWithAd(() => window.location.reload());
+        } else {
+          window.location.reload();
+        }
+      });
+    }
+
+    const quitGameBtn = document.getElementById('quit-game-btn');
+    if (quitGameBtn) {
+      addTapListener(quitGameBtn, () => {
+        if (window.leaveGameWithAd) {
+          window.leaveGameWithAd(() => window.location.reload());
+        } else {
+          window.location.reload();
+        }
+      });
+    }
+
     if (cameraToggleBtn) {
       addTapListener(cameraToggleBtn, () => {
         if (!isCaptured) toggleCameraView();
@@ -4789,13 +4811,29 @@ function setupSocketListeners() {
             sessionStorage.removeItem('rejoinIsPublic');
             sessionStorage.removeItem('rejoinIsSolo');
           }
-          window.location.reload();
+          if (window.leaveGameWithAd) {
+            window.leaveGameWithAd(() => window.location.reload());
+          } else {
+            window.location.reload();
+          }
         };
       }
     };
 
     bindRejoinBtn('end-game-lobby-btn');
     bindRejoinBtn('captured-lobby-btn');
+
+    const capturedQuitBtn = document.getElementById('captured-quit-btn');
+    if (capturedQuitBtn) {
+      capturedQuitBtn.onclick = () => {
+        sessionStorage.clear();
+        if (window.leaveGameWithAd) {
+          window.leaveGameWithAd(() => window.location.reload());
+        } else {
+          window.location.reload();
+        }
+      };
+    }
 
     if (window.isEscaping) {
       setTimeout(renderOverlay, 6500);
