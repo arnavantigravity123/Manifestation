@@ -565,6 +565,7 @@ const closeLegalModalBtn = document.getElementById('close-legal-modal-btn');
 const acceptLegalBtn = document.getElementById('accept-legal-btn');
 const openTermsLink = document.getElementById('open-terms-link');
 const openPrivacyLink = document.getElementById('open-privacy-link');
+const openCreditsLink = document.getElementById('open-credits-link');
 
 const termsText = `
   <p><b>1. Acceptance of Terms:</b> By playing Manifestation, you agree to these operational terms and safety guidelines.</p>
@@ -578,6 +579,16 @@ const privacyText = `
   <p><b>2. In-App Payments:</b> All transactions are securely processed through RevenueCat, Apple App Store, and Google Play Billing. We never store credit card numbers.</p>
   <p><b>3. Telemetry:</b> Anonymous match statistics (escapes, matches played) are collected solely to balance maze generation and ghost AI difficulty.</p>
   <p><b>4. Data Rights:</b> You may request account deletion or data wipe at any time through our security terminal.</p>
+`;
+
+const creditsText = `
+  <p><b>🎮 3D Models & Assets Attribution:</b></p>
+  <p>• <b>Character & Ghost 3D Models:</b> Sourced via Sketchfab under Creative Commons Attribution (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" style="color: #38bdf8;">CC-BY 4.0</a> / <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" style="color: #38bdf8;">CC-BY-SA</a>). All respective model artists and 3D creators retain full credit and ownership of their original works.</p>
+  <p>• <b>Character Skeletal Rigging & Animations:</b> Powered by Mixamo / Adobe Systems.</p>
+  <p>• <b>3D Graphics & Rendering Engine:</b> Three.js (WebGL, MIT License).</p>
+  <p>• <b>Cross-Platform Native Runtime:</b> Capacitor.js (Ionic Framework, MIT License).</p>
+  <p>• <b>In-App Subscriptions & Monetization:</b> RevenueCat SDK (<a href="https://www.revenuecat.com" target="_blank" style="color: #fde047;">RevenueCat Inc.</a>).</p>
+  <p>• <b>Sound & Spatial Audio:</b> Procedural Web Audio API sound synthesis.</p>
 `;
 
 if (openTermsLink) {
@@ -594,6 +605,15 @@ if (openPrivacyLink) {
     e.preventDefault();
     if (legalModalTitle) legalModalTitle.textContent = "PRIVACY POLICY";
     if (legalModalContent) legalModalContent.innerHTML = privacyText;
+    if (legalModal) legalModal.style.display = 'flex';
+  });
+}
+
+if (openCreditsLink) {
+  openCreditsLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (legalModalTitle) legalModalTitle.textContent = "CREDITS & 3D ASSETS";
+    if (legalModalContent) legalModalContent.innerHTML = creditsText;
     if (legalModal) legalModal.style.display = 'flex';
   });
 }
