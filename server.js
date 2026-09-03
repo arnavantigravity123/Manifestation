@@ -91,18 +91,24 @@ const userSchema = new mongoose.Schema({
 
 const UserModel = mongoose.models.User || mongoose.model('User', userSchema);
 
+const DEFAULT_MONGODB_URI = 'mongodb+srv://arnavantigravity_db_user:Gcnemt5r4WAahQkb@manifestation.bwyipxp.mongodb.net/manifestation?retryWrites=true&w=majority&appName=Manifestation';
+
 let isMongoConnected = false;
 let isConnecting = false;
 
 async function tryMongoConnect() {
   if (isMongoConnected || isConnecting) return;
-  const uri = process.env.MONGODB_URI;
-  if (!uri) return; // If no custom URI set, use persistent local storage
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
+  } catch (e) {}
+
+  const uri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
+  if (!uri) return;
   try {
     isConnecting = true;
     await mongoose.connect(uri, { 
-      serverSelectionTimeoutMS: 2500,
-      connectTimeoutMS: 2500
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000
     });
     isMongoConnected = true;
     isConnecting = false;
@@ -110,15 +116,25 @@ async function tryMongoConnect() {
   } catch (err) {
     isMongoConnected = false;
     isConnecting = false;
-    console.warn("⚠️ [MongoDB Atlas] Cloud database offline, running on persistent local storage:", err.message);
+    console.warn("⚠️ [MongoDB Atlas] Cloud database connection attempt:", err.message);
   }
 }
 
-// Background connect check without blocking server startup
-if (process.env.MONGODB_URI) {
-  tryMongoConnect();
-}
+mongoose.connection.on('connected', () => {
+  isMongoConnected = true;
+  console.log("🚀 [MongoDB Atlas] Connection established.");
+});
 
+mongoose.connection.on('disconnected', () => {
+  isMongoConnected = false;
+  console.warn("⚠️ [MongoDB Atlas] Disconnected, attempting reconnect in 3s...");
+  setTimeout(tryMongoConnect, 3000);
+});
+
+// Auto-connect to cloud MongoDB Atlas on server launch
+tryMongoConnect();
+
+// Local JSON fallback helpers
 function loadUsersLocal() {
   try {
     if (fs.existsSync(USERS_FILE)) {
@@ -139,26 +155,38 @@ function saveUsersLocal(users) {
 }
 
 async function findUser(lookupKey) {
-  if (isMongoConnected) {
+  if (mongoose.connection.readyState === 1) {
     try {
       const doc = await UserModel.findOne({ lookupKey }).exec();
       if (doc) return doc.toObject();
     } catch (e) {
       console.warn("MongoDB lookup error, falling back to local:", e.message);
     }
+  } else {
+    tryMongoConnect();
   }
   const local = loadUsersLocal();
-  return local[lookupKey] || null;
+  const user = local[lookupKey] || null;
+  // If found in local cache and MongoDB is online, automatically migrate to cloud
+  if (user && mongoose.connection.readyState === 1) {
+    try {
+      const doc = new UserModel(user);
+      await doc.save();
+    } catch (e) {}
+  }
+  return user;
 }
 
 async function createUser(userData) {
-  if (isMongoConnected) {
+  if (mongoose.connection.readyState === 1) {
     try {
       const doc = new UserModel(userData);
       await doc.save();
     } catch (e) {
       console.warn("MongoDB create error, saving locally:", e.message);
     }
+  } else {
+    tryMongoConnect();
   }
   const local = loadUsersLocal();
   local[userData.lookupKey] = userData;
@@ -167,12 +195,14 @@ async function createUser(userData) {
 }
 
 async function updateUser(lookupKey, updates) {
-  if (isMongoConnected) {
+  if (mongoose.connection.readyState === 1) {
     try {
       await UserModel.updateOne({ lookupKey }, { $set: updates }).exec();
     } catch (e) {
       console.warn("MongoDB update error, updating locally:", e.message);
     }
+  } else {
+    tryMongoConnect();
   }
   const local = loadUsersLocal();
   if (local[lookupKey]) {
