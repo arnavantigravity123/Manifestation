@@ -119,6 +119,8 @@ function registerAnimationToActiveMixers(animName, clip) {
 let isHazmatLoading = false;
 let isHumanGLBLoading = false;
 let isGhostGLBLoading = false;
+let preloadedCyberpunkModel = null;
+let isCyberpunkGLBLoading = false;
 
 function upgradeMeshGroupToGLB(group) {
   if (!group || !preloadedHumanModel) return;
@@ -133,6 +135,22 @@ function upgradeMeshGroupToGLB(group) {
   const clone = SkeletonUtils.clone(preloadedHumanModel);
   clone.rotation.y = Math.PI; // Face forward direction
   group.add(clone);
+}
+
+function upgradeMeshGroupToCyberpunk(group) {
+  if (!group || !preloadedCyberpunkModel) return;
+  // Remove non-username children
+  const toRemove = [];
+  group.children.forEach(c => {
+    if (c.userData && c.userData.isUsernameTag) return;
+    toRemove.push(c);
+  });
+  toRemove.forEach(c => group.remove(c));
+
+  const clone = SkeletonUtils.clone(preloadedCyberpunkModel);
+  clone.rotation.y = Math.PI; // Face forward direction
+  group.add(clone);
+  group.userData.cyberpunkMesh = clone;
 }
 
 export function loadHazmatFBXAssets() {
@@ -310,6 +328,55 @@ export function loadHumanGLBAsset() {
     Object.values(players3D).forEach(p => {
       if (p && p.userData && p.userData.skinId === 'skin_default') {
         upgradeMeshGroupToGLB(p);
+      }
+    });
+  });
+}
+
+export function loadCyberpunkGLBAsset() {
+  if (preloadedCyberpunkModel || isCyberpunkGLBLoading) return;
+  isCyberpunkGLBLoading = true;
+
+  gltfLoader.load('/assets/cyberpunk_survivor.glb', (gltf) => {
+    preloadedCyberpunkModel = gltf.scene;
+    
+    // Scale accurately to canonical player height (1.85 meters)
+    const initialBox = new THREE.Box3().setFromObject(preloadedCyberpunkModel);
+    const rawSize = initialBox.getSize(new THREE.Vector3());
+    const rawHeight = rawSize.y || 2.0;
+    const targetHeight = 1.85;
+    const scale = targetHeight / rawHeight;
+    preloadedCyberpunkModel.scale.set(scale, scale, scale);
+    
+    const scaledBox = new THREE.Box3().setFromObject(preloadedCyberpunkModel);
+    const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+    
+    preloadedCyberpunkModel.position.x = -scaledCenter.x;
+    preloadedCyberpunkModel.position.z = -scaledCenter.z;
+    preloadedCyberpunkModel.position.y = -scaledBox.min.y; 
+    
+    preloadedCyberpunkModel.traverse((child) => {
+      if (child.isMesh) {
+        if (child.material) {
+          child.material.transparent = true;
+          child.material.opacity = 1.0;
+          child.material.depthWrite = true;
+        }
+        child.castShadow = true;
+      }
+    });
+
+    isCyberpunkGLBLoading = false;
+
+    // Upgrade localPlayerVisual if skin_cyberpunk was waiting for GLB to load
+    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_cyberpunk') {
+      upgradeMeshGroupToCyberpunk(localPlayerVisual);
+    }
+
+    // Upgrade any remote players equipped with skin_cyberpunk
+    Object.values(players3D).forEach(p => {
+      if (p && p.userData && p.userData.skinId === 'skin_cyberpunk') {
+        upgradeMeshGroupToCyberpunk(p);
       }
     });
   });
@@ -859,6 +926,8 @@ export function initGame(socket, socketId, matchConfig) {
   const myEquippedSkin = (me && me.skinId) || localStorage.getItem('manifestation_equipped_skin') || 'skin_default';
   if (myEquippedSkin === 'skin_hazmat') {
     loadHazmatFBXAssets();
+  } else if (myEquippedSkin === 'skin_cyberpunk') {
+    loadCyberpunkGLBAsset();
   } else if (myEquippedSkin === 'skin_default') {
     loadHumanGLBAsset();
   }
@@ -868,6 +937,7 @@ export function initGame(socket, socketId, matchConfig) {
       if (p.team === 'Ghost') loadGhostGLBAsset();
       const pSkin = p.skinId || 'skin_default';
       if (pSkin === 'skin_hazmat') loadHazmatFBXAssets();
+      if (pSkin === 'skin_cyberpunk') loadCyberpunkGLBAsset();
       if (pSkin === 'skin_default') loadHumanGLBAsset();
     });
   }
@@ -5336,6 +5406,27 @@ function createHumanMeshGroup(skinId, username) {
       const spriteMat = new THREE.SpriteMaterial({ 
         map: getLoadedTexture('/assets/human_sprite.png'), 
         color: 0xffffff,
+        fog: true,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.scale.set(1.2, 1.2, 1);
+      sprite.position.y = 0.8;
+      group.add(sprite);
+    }
+  } else if (effectiveSkin === 'skin_cyberpunk') {
+    loadCyberpunkGLBAsset();
+    if (preloadedCyberpunkModel) {
+      const clone = SkeletonUtils.clone(preloadedCyberpunkModel);
+      clone.rotation.y = Math.PI; // Face forward direction
+      group.add(clone);
+      group.userData.cyberpunkMesh = clone;
+    } else {
+      const spriteMat = new THREE.SpriteMaterial({ 
+        map: getLoadedTexture('/assets/human_sprite.png'), 
+        color: 0x38bdf8,
         fog: true,
         transparent: true,
         blending: THREE.AdditiveBlending,
