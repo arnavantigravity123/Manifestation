@@ -3117,16 +3117,51 @@ function setupControls() {
   }
 }
 
-// Helper to check if player is looking roughly towards a target
-function isLookingAtTarget(targetPos, maxDist, maxAngle = 0.6) {
+// Universal Interaction Helper: Works seamlessly across FPS, Third-Person (TPS), and Top-Down cameras!
+function isLookingAtTarget(targetPos, maxDist = 4.5, maxAngle = 0.7) {
+  if (!targetPos) return { looking: false, dist: Infinity };
+
+  // 1. Player character location in the maze (camera.position is player body center)
+  const playerX = camera.position.x;
+  const playerY = camera.position.y;
+  const playerZ = camera.position.z;
+
   const dist = camera.position.distanceTo(targetPos);
+  const horizDist = Math.hypot(playerX - targetPos.x, playerZ - targetPos.z);
+  const vertDist = Math.abs(playerY - targetPos.y);
+
+  // Proximity pickup: If the player character is standing right next to the item (within 2.6m horizontally and 2.5m vertically),
+  // they can ALWAYS grab or interact with it in ANY camera mode (especially Top-Down and Third-Person)!
+  if (horizDist <= 2.6 && vertDist <= 2.6) {
+    return { looking: true, dist };
+  }
+
+  // If outside maximum interaction radius from player body, cannot interact
   if (dist > maxDist) return { looking: false, dist };
-  
-  const dir = new THREE.Vector3();
-  camera.getWorldDirection(dir);
-  const toTarget = targetPos.clone().sub(camera.position).normalize();
-  const angle = dir.angleTo(toTarget);
-  return { looking: angle < maxAngle, dist };
+
+  // 2. Camera View Vector Check (check the camera the player is actually viewing through)
+  const renderCam = activeViewCamera || camera;
+  const camDir = new THREE.Vector3();
+  renderCam.getWorldDirection(camDir);
+  const toTargetFromCam = targetPos.clone().sub(renderCam.position).normalize();
+  const camAngle = camDir.angleTo(toTargetFromCam);
+
+  // 3. Horizontal Facing Check (direction player body is facing)
+  const playerFaceDir = new THREE.Vector3();
+  camera.getWorldDirection(playerFaceDir);
+  playerFaceDir.y = 0;
+  playerFaceDir.normalize();
+
+  const toTargetHoriz = new THREE.Vector3(targetPos.x - playerX, 0, targetPos.z - playerZ).normalize();
+  const bodyAngle = playerFaceDir.angleTo(toTargetHoriz);
+
+  // In top-down mode (activeViewCamera looking down from above), horizontal proximity is king
+  const isTopDown = (typeof viewModes !== 'undefined' && viewModes[currentViewIndex] === 'top_down');
+  const looking = (camAngle < maxAngle) || 
+                  (bodyAngle < 1.05 && dist <= maxDist) || 
+                  (isTopDown && horizDist <= 3.8);
+
+  return { looking, dist };
 }
 
 function isKeyFunctional(k) {
