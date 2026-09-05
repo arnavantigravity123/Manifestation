@@ -372,17 +372,20 @@ if (loginForm) {
 
     if (authStatusMsg) {
       authStatusMsg.className = 'auth-status-text';
-      authStatusMsg.textContent = 'Verifying security passcode...';
+      authStatusMsg.textContent = 'Verifying passcode...';
     }
 
-    const wakeTimer = setTimeout(() => {
-      if (authStatusMsg && authStatusMsg.textContent.includes('Verifying')) {
-        authStatusMsg.textContent = 'Connecting to cloud server (waking up)...';
+    let finished = false;
+    const timeoutTimer = setTimeout(() => {
+      if (!finished && authStatusMsg) {
+        authStatusMsg.className = 'auth-status-text error';
+        authStatusMsg.textContent = 'Server response timed out (10s). Please try again.';
       }
-    }, 3500);
+    }, 10000);
 
     sock.emit('auth_login', { username, password }, (res) => {
-      clearTimeout(wakeTimer);
+      finished = true;
+      clearTimeout(timeoutTimer);
       if (res && res.success) {
         currentUser = res.user;
         authToken = res.token;
@@ -403,7 +406,7 @@ if (loginForm) {
         setTimeout(() => {
           if (accountAuthModal) accountAuthModal.style.display = 'none';
           updateAccountUI();
-        }, 500);
+        }, 400);
       } else {
         if (authStatusMsg) {
           authStatusMsg.className = 'auth-status-text error';
@@ -433,17 +436,20 @@ if (registerForm) {
 
     if (authStatusMsg) {
       authStatusMsg.className = 'auth-status-text';
-      authStatusMsg.textContent = 'Registering new operative profile...';
+      authStatusMsg.textContent = 'Creating operative account...';
     }
 
-    const wakeTimer = setTimeout(() => {
-      if (authStatusMsg && authStatusMsg.textContent.includes('Registering')) {
-        authStatusMsg.textContent = 'Connecting to cloud server (waking up)...';
+    let finished = false;
+    const timeoutTimer = setTimeout(() => {
+      if (!finished && authStatusMsg) {
+        authStatusMsg.className = 'auth-status-text error';
+        authStatusMsg.textContent = 'Server response timed out (10s). Please try again.';
       }
-    }, 3500);
+    }, 10000);
 
     sock.emit('auth_register', { username, password }, (res) => {
-      clearTimeout(wakeTimer);
+      finished = true;
+      clearTimeout(timeoutTimer);
       if (res && res.success) {
         currentUser = res.user;
         authToken = res.token;
@@ -462,12 +468,12 @@ if (registerForm) {
 
         if (authStatusMsg) {
           authStatusMsg.className = 'auth-status-text success';
-          authStatusMsg.textContent = `Account created! VIP & perks saved to ${currentUser.username}.`;
+          authStatusMsg.textContent = `Account created! Logged in as ${currentUser.username}.`;
         }
         setTimeout(() => {
           if (accountAuthModal) accountAuthModal.style.display = 'none';
           updateAccountUI();
-        }, 500);
+        }, 400);
       } else {
         if (authStatusMsg) {
           authStatusMsg.className = 'auth-status-text error';
@@ -1008,11 +1014,14 @@ buySkinBtns.forEach(btn => {
 // Socket Initialization Wrapper
 function initializeSocketConnection() {
   if (socket) return socket;
-  // Connect to Cloudflare production domain (manifestationgame.com) or current origin
-  const socketUrl = (typeof window !== 'undefined' && window.location && window.location.origin && !window.location.origin.includes('localhost') && !window.location.origin.startsWith('capacitor://') && !window.location.origin.startsWith('http://localhost'))
-    ? window.location.origin
-    : 'https://manifestationgame.com';
-  socket = io(socketUrl);
+  // Dedicated multiplayer & accounts backend server
+  const socketUrl = 'https://manifestation-e53w.onrender.com/';
+  socket = io(socketUrl, {
+    transports: ['websocket', 'polling'],
+    timeout: 10000,
+    reconnection: true,
+    reconnectionAttempts: 5
+  });
 
   socket.on('connect', () => {
     myId = socket.id;
