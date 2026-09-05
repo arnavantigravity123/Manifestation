@@ -174,17 +174,27 @@ usernameInput.addEventListener('change', () => {
 const editCallsignBtn = document.getElementById('edit-callsign-btn');
 if (editCallsignBtn) {
   editCallsignBtn.addEventListener('click', () => {
-    if (usernameInput) {
-      usernameInput.focus();
-      usernameInput.select();
+    if (!currentUser) {
+      if (usernameInput) usernameInput.focus();
+      return;
     }
-  });
-}
-if (accountUsernameDisplay) {
-  accountUsernameDisplay.addEventListener('click', () => {
-    if (usernameInput) {
-      usernameInput.focus();
-      usernameInput.select();
+    const newName = prompt("Change Account Call-Sign & Username:", currentUser.username);
+    if (newName && newName.trim() && newName.trim() !== currentUser.username) {
+      const cleanName = newName.trim();
+      const sock = socket || initializeSocketConnection();
+      if (sock && authToken) {
+        sock.emit('account_update_username', { token: authToken, newUsername: cleanName }, (res) => {
+          if (res && res.success && res.user) {
+            currentUser = res.user;
+            localStorage.setItem('manifestation_username', cleanName);
+            localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
+            updateAccountUI();
+            alert(`Account username and Call-Sign updated to: ${cleanName}`);
+          } else {
+            alert(res ? res.msg : 'Failed to update username.');
+          }
+        });
+      }
     }
   });
 }
@@ -260,10 +270,14 @@ function updateAccountUI() {
     if (accountLoggedView) accountLoggedView.style.display = 'flex';
     if (accountUsernameDisplay) accountUsernameDisplay.textContent = currentUser.username;
     if (usernameInput) {
-      usernameInput.disabled = false;
-      if (document.activeElement !== usernameInput && currentUser.username) {
-        usernameInput.value = currentUser.username;
-      }
+      usernameInput.value = currentUser.username;
+      usernameInput.disabled = true;
+      usernameInput.title = "Call-Sign is locked to your registered account. Click ✏️ in account header to change username.";
+    }
+    const callsignHint = document.getElementById('callsign-hint');
+    if (callsignHint) {
+      callsignHint.textContent = "🔒 (Locked to Account)";
+      callsignHint.style.color = "#94a3b8";
     }
 
     if (currentUser.isVip) {
@@ -303,6 +317,12 @@ function updateAccountUI() {
       if (document.activeElement !== usernameInput && saved) {
         usernameInput.value = saved;
       }
+      usernameInput.title = "Guest Call-Sign";
+    }
+    const callsignHint = document.getElementById('callsign-hint');
+    if (callsignHint) {
+      callsignHint.textContent = "(Guest Mode - Tap to edit)";
+      callsignHint.style.color = "#38bdf8";
     }
     if (vipStoreBtn) vipStoreBtn.style.display = 'block';
     updateSkinButtons();
