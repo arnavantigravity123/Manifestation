@@ -98,17 +98,17 @@ function registerAnimationToActiveMixers(animName, clip) {
   humanAnimClips[animName] = clip;
   clip.name = animName;
 
-  // Dynamically bind to localPlayerVisual if already spawned
-  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
+  // Dynamically bind to localPlayerVisual if already spawned with skin_hazmat
+  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_hazmat' && localPlayerVisual.userData.animMixer) {
     const mixer = localPlayerVisual.userData.animMixer;
     if (!localPlayerVisual.userData.animActions[animName]) {
       localPlayerVisual.userData.animActions[animName] = mixer.clipAction(clip);
     }
   }
 
-  // Dynamically bind to all remote players in lobby
+  // Dynamically bind to remote hazmat players in lobby
   Object.values(players3D).forEach(p => {
-    if (p && p.userData && p.userData.animMixer) {
+    if (p && p.userData && p.userData.skinId === 'skin_hazmat' && p.userData.animMixer) {
       const mixer = p.userData.animMixer;
       if (!p.userData.animActions[animName]) {
         p.userData.animActions[animName] = mixer.clipAction(clip);
@@ -5539,49 +5539,67 @@ function playGhostCaptureAnimation(callback) {
   }, 3000);
 }
 
-function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuration = 0.2) {
-  if (!humanGroup || !humanGroup.userData) { console.log('[LOCO] No humanGroup or userData'); return; }
+function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuration = 0.15) {
+  if (!humanGroup || !humanGroup.userData) return;
   const mixer = humanGroup.userData.animMixer;
-  if (!mixer) { console.log('[LOCO] No mixer on humanGroup'); return; }
+  if (!mixer) return;
 
   if (!humanGroup.userData.animActions) {
     humanGroup.userData.animActions = {};
   }
   const actions = humanGroup.userData.animActions;
 
-  // On-demand action instantiation if clip finished loading after mesh creation
-  if (!actions[targetActionName] && humanAnimClips[targetActionName]) {
-    console.log('[LOCO] Late-binding clip:', targetActionName);
-    actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
-  }
-  if (!actions.idle && humanAnimClips.idle) {
-    actions.idle = mixer.clipAction(humanAnimClips.idle);
+  // On-demand action instantiation for FBX skins (Hazmat only)
+  if (humanGroup.userData.skinId === 'skin_hazmat') {
+    if (!actions[targetActionName] && humanAnimClips[targetActionName]) {
+      actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
+    }
+    if (!actions.idle && humanAnimClips.idle) {
+      actions.idle = mixer.clipAction(humanAnimClips.idle);
+    }
   }
 
   const currentActionName = humanGroup.userData.currentAction || 'idle';
   const targetAction = actions[targetActionName] || actions.idle;
-  if (!targetAction) { console.log('[LOCO] No targetAction for:', targetActionName, 'available clips:', Object.keys(humanAnimClips).filter(k => humanAnimClips[k])); return; }
+  if (!targetAction) return;
+
+  const currentAction = actions[currentActionName] || actions.idle;
+
+  // Direction timeScale (e.g. walkBack reverses walk clip on soldier)
+  const desiredTimeScale = (targetActionName === 'walkBack' && humanGroup.userData.skinId === 'skin_soldier') ? -1.0 : 1.0;
+
+  // If already playing the EXACT same AnimationAction instance (e.g. strafeLeft <-> walk), do not reset or crossfade
+  if (currentAction === targetAction) {
+    if (targetAction.getEffectiveTimeScale() !== desiredTimeScale) {
+      targetAction.setEffectiveTimeScale(desiredTimeScale);
+    }
+    if (!targetAction.isRunning()) {
+      targetAction.play();
+    }
+    humanGroup.userData.currentAction = targetActionName;
+    return;
+  }
 
   if (currentActionName !== targetActionName || !targetAction.isRunning()) {
-    console.log('[LOCO] Transitioning:', currentActionName, '->', targetActionName, 'action exists:', !!targetAction);
-    // Fade out any other playing actions
-    Object.keys(actions).forEach(key => {
-      const act = actions[key];
-      if (act && act !== targetAction && act.isRunning()) {
+    targetAction.enabled = true;
+    targetAction.setEffectiveTimeScale(desiredTimeScale);
+    targetAction.setEffectiveWeight(1.0);
+
+    if (currentAction && currentAction.isRunning()) {
+      currentAction.crossFadeTo(targetAction, crossfadeDuration, false);
+    } else {
+      targetAction.fadeIn(crossfadeDuration);
+    }
+    targetAction.play();
+
+    // Safely fade out any other running actions (avoiding duplicate action references)
+    const keepActions = new Set([targetAction, currentAction]);
+    Object.values(actions).forEach(act => {
+      if (act && !keepActions.has(act) && act.isRunning()) {
         act.fadeOut(crossfadeDuration);
+        keepActions.add(act);
       }
     });
-
-    targetAction.reset();
-    targetAction.enabled = true;
-    if (targetActionName === 'walkBack' && humanGroup.userData.skinId === 'skin_soldier') {
-      targetAction.setEffectiveTimeScale(-1.0);
-    } else {
-      targetAction.setEffectiveTimeScale(1.0);
-    }
-    targetAction.setEffectiveWeight(1.0);
-    targetAction.fadeIn(crossfadeDuration);
-    targetAction.play();
 
     humanGroup.userData.currentAction = targetActionName;
   }
