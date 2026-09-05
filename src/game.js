@@ -119,14 +119,12 @@ function registerAnimationToActiveMixers(animName, clip) {
 let isHazmatLoading = false;
 let isHumanGLBLoading = false;
 let isGhostGLBLoading = false;
-let preloadedSoldierFBX = null;
-let isSoldierFBXLoading = false;
-let soldierDiffuseTexture = null;
-let soldierNormalTexture = null;
-let soldierSpecularTexture = null;
+let preloadedSoldierModel = null;
+let isSoldierLoading = false;
+const soldierAnimClips = {};
 
-function upgradeMeshGroupToSoldierFBX(group) {
-  if (!group || !preloadedSoldierFBX) return;
+function upgradeMeshGroupToSoldier(group) {
+  if (!group || !preloadedSoldierModel) return;
   if (group.userData && group.userData.skinId && group.userData.skinId !== 'skin_soldier') {
     return; // Preserve other skins
   }
@@ -138,18 +136,20 @@ function upgradeMeshGroupToSoldierFBX(group) {
   });
   toRemove.forEach(c => group.remove(c));
 
-  const clone = SkeletonUtils.clone(preloadedSoldierFBX);
+  const clone = SkeletonUtils.clone(preloadedSoldierModel);
   group.add(clone);
 
   const mixer = new THREE.AnimationMixer(clone);
   const actions = {};
 
-  Object.keys(humanAnimClips).forEach(key => {
-    const clip = humanAnimClips[key];
-    if (clip) {
-      actions[key] = mixer.clipAction(clip);
-    }
-  });
+  if (soldierAnimClips.idle) actions.idle = mixer.clipAction(soldierAnimClips.idle);
+  if (soldierAnimClips.walk) {
+    actions.walk = mixer.clipAction(soldierAnimClips.walk);
+    actions.walkBack = mixer.clipAction(soldierAnimClips.walk);
+    actions.strafeLeft = mixer.clipAction(soldierAnimClips.walk);
+    actions.strafeRight = mixer.clipAction(soldierAnimClips.walk);
+  }
+  if (soldierAnimClips.sprint) actions.sprint = mixer.clipAction(soldierAnimClips.sprint);
 
   if (actions.idle) {
     actions.idle.play();
@@ -357,50 +357,33 @@ export function loadHumanGLBAsset() {
   });
 }
 
-export function loadSoldierFBXAssets() {
-  // Ensure the locomotion animations (idle, walk, sprint, strafe) are also loading
-  loadHazmatFBXAssets();
+export function loadSoldierAsset() {
+  if (preloadedSoldierModel || isSoldierLoading) return;
+  isSoldierLoading = true;
 
-  if (preloadedSoldierFBX || isSoldierFBXLoading) return;
-  isSoldierFBXLoading = true;
+  gltfLoader.load('/assets/soldier_animated.glb', (gltf) => {
+    preloadedSoldierModel = gltf.scene;
 
-  if (!soldierDiffuseTexture) {
-    soldierDiffuseTexture = textureLoader.load('/assets/futuristic_soldier_diffuse.png');
-    soldierDiffuseTexture.colorSpace = THREE.SRGBColorSpace;
-    soldierDiffuseTexture.flipY = false;
-  }
-  if (!soldierNormalTexture) {
-    soldierNormalTexture = textureLoader.load('/assets/futuristic_soldier_normal.png');
-    soldierNormalTexture.flipY = false;
-  }
-  if (!soldierSpecularTexture) {
-    soldierSpecularTexture = textureLoader.load('/assets/futuristic_soldier_specular.png');
-    soldierSpecularTexture.flipY = false;
-  }
-
-  fbxLoader.load('/assets/futuristic_soldier.fbx', (fbx) => {
-    // Compute true bounding box and scale to standard player height (1.85 meters)
-    const initialBox = new THREE.Box3().setFromObject(fbx);
+    // Scale to standard player height (1.85 meters)
+    const initialBox = new THREE.Box3().setFromObject(preloadedSoldierModel);
     const rawSize = initialBox.getSize(new THREE.Vector3());
-    const rawHeight = rawSize.y || 183.2;
-    
+    const rawHeight = rawSize.y || 1.8;
     const targetHeight = 1.85;
     const scale = targetHeight / rawHeight;
-    fbx.scale.set(scale, scale, scale);
-    fbx.rotation.y = Math.PI; // Face forward direction
+    preloadedSoldierModel.scale.set(scale, scale, scale);
+    preloadedSoldierModel.rotation.y = Math.PI; // Face forward direction
 
-    // Recenter pivot so feet rest perfectly on the floor (y = 0) and centered on X/Z
-    const scaledBox = new THREE.Box3().setFromObject(fbx);
+    // Center pivot so feet rest cleanly at y = 0
+    const scaledBox = new THREE.Box3().setFromObject(preloadedSoldierModel);
     const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-    fbx.position.x = -scaledCenter.x;
-    fbx.position.z = -scaledCenter.z;
-    fbx.position.y = -scaledBox.min.y;
+    preloadedSoldierModel.position.x = -scaledCenter.x;
+    preloadedSoldierModel.position.z = -scaledCenter.z;
+    preloadedSoldierModel.position.y = -scaledBox.min.y;
 
-    fbx.traverse((child) => {
+    preloadedSoldierModel.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
-        child.frustumCulled = false;
         if (child.name === 'vanguard_visor') {
           // Cyberpunk glowing visor faceplate
           child.material = new THREE.MeshStandardMaterial({
@@ -411,38 +394,37 @@ export function loadSoldierFBXAssets() {
             roughness: 0.1,
             side: THREE.DoubleSide
           });
-        } else {
-          child.material = new THREE.MeshStandardMaterial({
-            map: soldierDiffuseTexture,
-            normalMap: soldierNormalTexture,
-            roughnessMap: soldierSpecularTexture,
-            roughness: 0.4,
-            metalness: 0.45,
-            side: THREE.DoubleSide
-          });
         }
       }
     });
 
-    preloadedSoldierFBX = fbx;
-    isSoldierFBXLoading = false;
+    if (gltf.animations) {
+      gltf.animations.forEach(clip => {
+        if (clip.name === 'Idle') soldierAnimClips.idle = clip;
+        if (clip.name === 'Walk') soldierAnimClips.walk = clip;
+        if (clip.name === 'Run') soldierAnimClips.sprint = clip;
+      });
+    }
 
-    // Upgrade localPlayerVisual if skin_soldier was waiting for FBX
+    isSoldierLoading = false;
+
+    // Upgrade localPlayerVisual if skin_soldier was waiting for model to load
     if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_soldier' && !localPlayerVisual.userData.animMixer) {
-      upgradeMeshGroupToSoldierFBX(localPlayerVisual);
+      upgradeMeshGroupToSoldier(localPlayerVisual);
     }
 
     // Upgrade all remote human players with skin_soldier
     Object.values(players3D).forEach(p => {
       if (p && p.userData && p.userData.skinId === 'skin_soldier' && !p.userData.animMixer) {
-        upgradeMeshGroupToSoldierFBX(p);
+        upgradeMeshGroupToSoldier(p);
       }
     });
   }, undefined, (err) => {
-    console.error('[SOLDIER] Failed to load futuristic_soldier.fbx:', err);
-    isSoldierFBXLoading = false;
+    console.error('[SOLDIER] Failed to load soldier_animated.glb:', err);
+    isSoldierLoading = false;
   });
 }
+export const loadSoldierFBXAssets = loadSoldierAsset;
 
 export function loadGhostGLBAsset() {
   if (preloadedGhostModel || isGhostGLBLoading) return;
@@ -5439,7 +5421,11 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
 
     targetAction.reset();
     targetAction.enabled = true;
-    targetAction.setEffectiveTimeScale(1.0);
+    if (targetActionName === 'walkBack' && humanGroup.userData.skinId === 'skin_soldier') {
+      targetAction.setEffectiveTimeScale(-1.0);
+    } else {
+      targetAction.setEffectiveTimeScale(1.0);
+    }
     targetAction.setEffectiveWeight(1.0);
     targetAction.fadeIn(crossfadeDuration);
     targetAction.play();
@@ -5522,21 +5508,22 @@ function createHumanMeshGroup(skinId, username) {
       group.add(sprite);
     }
   } else if (effectiveSkin === 'skin_soldier') {
-    loadSoldierFBXAssets();
-    if (preloadedSoldierFBX) {
-      const clone = SkeletonUtils.clone(preloadedSoldierFBX);
+    loadSoldierAsset();
+    if (preloadedSoldierModel) {
+      const clone = SkeletonUtils.clone(preloadedSoldierModel);
       group.add(clone);
 
-      // Setup full 8-directional locomotion animation mixer & actions
       const mixer = new THREE.AnimationMixer(clone);
       const actions = {};
 
-      Object.keys(humanAnimClips).forEach(key => {
-        const clip = humanAnimClips[key];
-        if (clip) {
-          actions[key] = mixer.clipAction(clip);
-        }
-      });
+      if (soldierAnimClips.idle) actions.idle = mixer.clipAction(soldierAnimClips.idle);
+      if (soldierAnimClips.walk) {
+        actions.walk = mixer.clipAction(soldierAnimClips.walk);
+        actions.walkBack = mixer.clipAction(soldierAnimClips.walk);
+        actions.strafeLeft = mixer.clipAction(soldierAnimClips.walk);
+        actions.strafeRight = mixer.clipAction(soldierAnimClips.walk);
+      }
+      if (soldierAnimClips.sprint) actions.sprint = mixer.clipAction(soldierAnimClips.sprint);
 
       if (actions.idle) {
         actions.idle.play();
