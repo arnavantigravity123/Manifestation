@@ -473,6 +473,58 @@ io.on('connection', (socket) => {
     return callback && callback({ success: true, user: sanitizeUser(updated) });
   });
 
+  socket.on('account_update_username', async ({ token, newUsername }, callback) => {
+    if (!token || !activeSessions.has(token)) {
+      return callback && callback({ success: false, msg: 'Unauthorized.' });
+    }
+    if (!newUsername || newUsername.trim().length < 2) {
+      return callback && callback({ success: false, msg: 'Call-sign must be at least 2 characters.' });
+    }
+    const cleanUsername = newUsername.trim();
+    const newLookupKey = cleanUsername.toLowerCase();
+    const oldLookupKey = activeSessions.get(token);
+
+    if (newLookupKey !== oldLookupKey) {
+      const existing = await findUser(newLookupKey);
+      if (existing) {
+        return callback && callback({ success: false, msg: 'Call-sign is already registered by another operative.' });
+      }
+    }
+
+    const user = await findUser(oldLookupKey);
+    if (!user) {
+      return callback && callback({ success: false, msg: 'User profile not found.' });
+    }
+
+    // Update in MongoDB
+    if (mongoose.connection.readyState === 1) {
+      try {
+        await UserModel.updateOne({ lookupKey: oldLookupKey }, { $set: { username: cleanUsername, lookupKey: newLookupKey } }).exec();
+      } catch (e) {
+        console.warn("MongoDB callsign update error:", e.message);
+      }
+    }
+
+    // Update in local JSON database
+    const local = loadUsersLocal();
+    if (local[oldLookupKey]) {
+      const existingData = local[oldLookupKey];
+      delete local[oldLookupKey];
+      existingData.username = cleanUsername;
+      existingData.lookupKey = newLookupKey;
+      local[newLookupKey] = existingData;
+      saveUsersLocal(local);
+    }
+
+    activeSessions.set(token, newLookupKey);
+    saveSessionsLocal(activeSessions);
+
+    user.username = cleanUsername;
+    user.lookupKey = newLookupKey;
+    console.log(`[AUTH] Operative call-sign updated: ${cleanUsername}`);
+    return callback && callback({ success: true, user: sanitizeUser(user) });
+  });
+
   socket.on('join_public_matchmaking', ({ username, skinId }) => {
     // Find an open public lobby
     let targetRoomId = null;

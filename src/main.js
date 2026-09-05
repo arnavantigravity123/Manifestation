@@ -133,8 +133,55 @@ usernameInput.addEventListener('input', () => {
   const val = usernameInput.value.trim();
   if (val) {
     localStorage.setItem('manifestation_username', val);
+    if (currentUser) {
+      currentUser.username = val;
+      localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
+      if (accountUsernameDisplay) accountUsernameDisplay.textContent = val;
+    }
   }
 });
+
+usernameInput.addEventListener('change', () => {
+  const val = usernameInput.value.trim();
+  if (val) {
+    localStorage.setItem('manifestation_username', val);
+    if (currentUser) {
+      currentUser.username = val;
+      localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
+      if (accountUsernameDisplay) accountUsernameDisplay.textContent = val;
+      if (authToken) {
+        const sock = socket || initializeSocketConnection();
+        if (sock) {
+          sock.emit('account_update_username', { token: authToken, newUsername: val }, (res) => {
+            if (res && res.success && res.user) {
+              currentUser = res.user;
+              localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
+              if (accountUsernameDisplay) accountUsernameDisplay.textContent = currentUser.username;
+            }
+          });
+        }
+      }
+    }
+  }
+});
+
+const editCallsignBtn = document.getElementById('edit-callsign-btn');
+if (editCallsignBtn) {
+  editCallsignBtn.addEventListener('click', () => {
+    if (usernameInput) {
+      usernameInput.focus();
+      usernameInput.select();
+    }
+  });
+}
+if (accountUsernameDisplay) {
+  accountUsernameDisplay.addEventListener('click', () => {
+    if (usernameInput) {
+      usernameInput.focus();
+      usernameInput.select();
+    }
+  });
+}
 
 function populateSubclasses(team, savedClass = null) {
   subclassSelect.innerHTML = '';
@@ -207,8 +254,10 @@ function updateAccountUI() {
     if (accountLoggedView) accountLoggedView.style.display = 'flex';
     if (accountUsernameDisplay) accountUsernameDisplay.textContent = currentUser.username;
     if (usernameInput) {
-      usernameInput.value = currentUser.username;
-      usernameInput.disabled = true;
+      usernameInput.disabled = false;
+      if (document.activeElement !== usernameInput && currentUser.username) {
+        usernameInput.value = currentUser.username;
+      }
     }
 
     if (currentUser.isVip) {
@@ -245,7 +294,9 @@ function updateAccountUI() {
     if (usernameInput) {
       usernameInput.disabled = false;
       const saved = localStorage.getItem('manifestation_username');
-      if (saved) usernameInput.value = saved;
+      if (document.activeElement !== usernameInput && saved) {
+        usernameInput.value = saved;
+      }
     }
     if (vipStoreBtn) vipStoreBtn.style.display = 'block';
     updateSkinButtons();

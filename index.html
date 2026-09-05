@@ -33,7 +33,8 @@
           </div>
           <div id="account-logged-view" class="account-info" style="display: none;">
             <div class="account-user-details">
-              <span id="account-username-display" class="account-username">Operative</span>
+              <span id="account-username-display" class="account-username" style="cursor: pointer;" title="Tap to change Call-Sign">Operative</span>
+              <button id="edit-callsign-btn" style="background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 0 4px; color: #38bdf8;" title="Change Call-Sign">✏️</button>
               <span id="account-vip-badge" class="account-badge vip-badge" style="display: none;">👑 VIP</span>
               <span id="account-credits-display" class="account-credits">💰 0</span>
             </div>
@@ -42,7 +43,7 @@
         </div>
         
         <div class="form-group">
-          <label for="username-input">Operative Call-Sign</label>
+          <label for="username-input">Operative Call-Sign <span style="font-size: 0.75rem; color: #38bdf8; font-weight: normal; margin-left: 6px;">(Tap to edit)</span></label>
           <input type="text" id="username-input" placeholder="e.g., Locksmith_01" value="" />
         </div>
 
