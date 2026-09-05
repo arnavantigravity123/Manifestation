@@ -371,7 +371,7 @@ export function loadSoldierAsset() {
     const targetHeight = 1.85;
     const scale = targetHeight / rawHeight;
     preloadedSoldierModel.scale.set(scale, scale, scale);
-    preloadedSoldierModel.rotation.y = Math.PI; // Face forward direction
+    preloadedSoldierModel.rotation.y = 0; // Face forward direction (away from camera)
 
     // Center pivot so feet rest cleanly at y = 0
     const scaledBox = new THREE.Box3().setFromObject(preloadedSoldierModel);
@@ -384,17 +384,6 @@ export function loadSoldierAsset() {
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
-        if (child.name === 'vanguard_visor') {
-          // Cyberpunk glowing visor faceplate
-          child.material = new THREE.MeshStandardMaterial({
-            color: 0x00f0ff,
-            emissive: 0x00bfff,
-            emissiveIntensity: 0.95,
-            metalness: 0.9,
-            roughness: 0.1,
-            side: THREE.DoubleSide
-          });
-        }
       }
     });
 
