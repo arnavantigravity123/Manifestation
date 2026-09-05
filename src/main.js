@@ -591,32 +591,32 @@ const creditsText = `
   <p>• <b>Sound & Spatial Audio:</b> Procedural Web Audio API sound synthesis.</p>
 `;
 
-if (openTermsLink) {
-  openTermsLink.addEventListener('click', (e) => {
+document.querySelectorAll('.open-terms-trigger, #open-terms-link').forEach(el => {
+  el.addEventListener('click', (e) => {
     e.preventDefault();
     if (legalModalTitle) legalModalTitle.textContent = "TERMS OF SERVICE";
     if (legalModalContent) legalModalContent.innerHTML = termsText;
     if (legalModal) legalModal.style.display = 'flex';
   });
-}
+});
 
-if (openPrivacyLink) {
-  openPrivacyLink.addEventListener('click', (e) => {
+document.querySelectorAll('.open-privacy-trigger, #open-privacy-link').forEach(el => {
+  el.addEventListener('click', (e) => {
     e.preventDefault();
     if (legalModalTitle) legalModalTitle.textContent = "PRIVACY POLICY";
     if (legalModalContent) legalModalContent.innerHTML = privacyText;
     if (legalModal) legalModal.style.display = 'flex';
   });
-}
+});
 
-if (openCreditsLink) {
-  openCreditsLink.addEventListener('click', (e) => {
+document.querySelectorAll('.open-credits-trigger, #open-credits-link').forEach(el => {
+  el.addEventListener('click', (e) => {
     e.preventDefault();
     if (legalModalTitle) legalModalTitle.textContent = "CREDITS & 3D ASSETS";
     if (legalModalContent) legalModalContent.innerHTML = creditsText;
     if (legalModal) legalModal.style.display = 'flex';
   });
-}
+});
 
 if (closeLegalModalBtn) {
   closeLegalModalBtn.addEventListener('click', () => {

@@ -88,6 +88,15 @@
             <input type="text" id="private-room-input" placeholder="Room Code" style="flex-grow: 1; padding: 0.5rem; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px;" />
             <button id="join-private-btn" class="action-btn" style="width: auto; padding: 0.5rem 1rem;">Join</button>
           </div>
+
+          <!-- Main Menu Legal & Credits Footer -->
+          <div style="margin-top: 1.2rem; font-size: 0.75rem; color: #64748b; display: flex; justify-content: center; gap: 0.8rem; flex-wrap: wrap;">
+            <a href="#" class="open-terms-trigger" style="color: #94a3b8; text-decoration: underline;">Terms</a>
+            <span>•</span>
+            <a href="#" class="open-privacy-trigger" style="color: #94a3b8; text-decoration: underline;">Privacy</a>
+            <span>•</span>
+            <a href="#" class="open-credits-trigger" style="color: #38bdf8; text-decoration: underline; font-weight: bold;">📜 Credits & 3D Assets</a>
+          </div>
         </div>
         
         <!-- Loading overlay for Solo mode -->
@@ -669,7 +678,14 @@
           <input type="range" id="sensitivity-slider" min="0.1" max="3.0" step="0.1" value="1.0" style="width: 100%; margin-top: 0.5rem; accent-color: var(--human-accent);">
         </div>
         
+        <div style="margin-top: 1.2rem; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 0.8rem; display: flex; justify-content: center; gap: 0.8rem; font-size: 0.8rem;">
+          <a href="#" class="open-credits-trigger" style="color: #38bdf8; text-decoration: underline; font-weight: bold; cursor: pointer;">📜 View Game & 3D Asset Credits</a>
+        </div>
+
         <button id="close-settings-btn" class="action-btn" style="margin-top: 1rem; background: linear-gradient(135deg, #10b981, #047857);">Save & Apply</button>
+      </div>
+    </div>
+
     <!-- 8. Terms of Service & Privacy Policy Modal -->
     <div id="legal-modal" class="settings-modal" style="display: none; z-index: 30000;">
       <div class="settings-panel" style="max-width: 580px; width: 92%; max-height: 85vh; overflow-y: auto; text-align: left;">
