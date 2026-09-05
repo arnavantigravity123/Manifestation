@@ -884,6 +884,12 @@ export function initGame(socket, socketId, matchConfig) {
   latestSoundBeacon = null;
   gateSolved = false;
   codeEntered = "";
+  window.securityLockoutActive = false;
+  window.securityLockoutEndTime = 0;
+  if (window._securityLockoutTimer) {
+    clearTimeout(window._securityLockoutTimer);
+    window._securityLockoutTimer = null;
+  }
   functionalKeysRevealed = [];
   foundKeysList = [];
   carriedKeys = [];
@@ -1324,6 +1330,13 @@ export function initGame(socket, socketId, matchConfig) {
     threadGroup.add(gateLight);
 
     scene.add(threadGroup);
+
+    window.securityLockoutActive = false;
+    window.securityLockoutEndTime = 0;
+    if (window._securityLockoutTimer) {
+      clearTimeout(window._securityLockoutTimer);
+      window._securityLockoutTimer = null;
+    }
 
     // Auto-complete objectives for testing
     carriedKeys = [
@@ -3283,8 +3296,14 @@ function updateInteractionPrompt() {
         promptText = `ACCESS DENIED: Need ${totalBreakersRequired} Breakers to power terminal (${fixedBreakersCount}/${totalBreakersRequired})`;
       } else if (!gateSolved) {
         if (window.securityLockoutActive) {
-          const remaining = Math.max(1, Math.ceil((window.securityLockoutEndTime - performance.now()) / 1000));
-          promptText = `ACCESS DENIED: Security Lockout (${remaining}s remaining)`;
+          const diff = window.securityLockoutEndTime - performance.now();
+          if (diff <= 0) {
+            window.securityLockoutActive = false;
+            promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
+          } else {
+            const remaining = Math.max(1, Math.ceil(diff / 1000));
+            promptText = `ACCESS DENIED: Security Lockout (${remaining}s remaining)`;
+          }
         } else {
           promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
         }
@@ -3421,9 +3440,14 @@ function checkInteractions() {
 
     if (!gateSolved) {
       if (window.securityLockoutActive) {
-        const remaining = Math.max(1, Math.ceil((window.securityLockoutEndTime - performance.now()) / 1000));
-        triggerNotification(`ACCESS DENIED: Keypad locked out for ${remaining} more seconds!`);
-        return;
+        const diff = window.securityLockoutEndTime - performance.now();
+        if (diff <= 0) {
+          window.securityLockoutActive = false;
+        } else {
+          const remaining = Math.max(1, Math.ceil(diff / 1000));
+          triggerNotification(`ACCESS DENIED: Keypad locked out for ${remaining} more seconds!`);
+          return;
+        }
       }
       openKeypadModal();
       return;
@@ -3870,6 +3894,16 @@ function openKeypadModal() {
   if (gateSolved) {
     triggerNotification("Master Gate protocol already bypassed.");
     return;
+  }
+  if (window.securityLockoutActive) {
+    const diff = window.securityLockoutEndTime - performance.now();
+    if (diff <= 0) {
+      window.securityLockoutActive = false;
+    } else {
+      const remaining = Math.max(1, Math.ceil(diff / 1000));
+      triggerNotification(`ACCESS DENIED: Keypad locked out for ${remaining} more seconds!`);
+      return;
+    }
   }
   if (!keypadUI) return;
   keypadUI.style.display = 'flex';
@@ -4674,17 +4708,26 @@ function setupSocketListeners() {
   });
 
   // Keypad failure penalty trigger
-  socketClient.on('cipher_failed_penalty', ({ cooldownSeconds, revealSeconds }) => {
+  socketClient.on('cipher_failed_penalty', ({ cooldownSeconds = 30, revealSeconds = 10 }) => {
     window.securityLockoutActive = true;
     window.securityLockoutEndTime = performance.now() + (cooldownSeconds * 1000);
     triggerAlarmFlashing();
     playWrongCodeAnimation();
-    triggerNotification(`terminal lockout active (${cooldownSeconds}s) | outlines exposed (${revealSeconds}s)`);
+    triggerNotification(`Terminal lockout active (${cooldownSeconds}s) | Outlines exposed (${revealSeconds}s)`);
+
+    if (window._securityLockoutTimer) clearTimeout(window._securityLockoutTimer);
+    window._securityLockoutTimer = setTimeout(() => {
+      if (window.securityLockoutActive) {
+        window.securityLockoutActive = false;
+        triggerNotification('Terminal lockout ended. Keypad ready.');
+      }
+    }, cooldownSeconds * 1000);
   });
 
   socketClient.on('security_cooldown_ended', () => {
+    if (window._securityLockoutTimer) clearTimeout(window._securityLockoutTimer);
     window.securityLockoutActive = false;
-    triggerNotification('terminal lockout ended. keypad ready.');
+    triggerNotification('Terminal lockout ended. Keypad ready.');
   });
 
   socketClient.on('corridor_realignment', (realignmentState) => {
