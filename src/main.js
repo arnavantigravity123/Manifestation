@@ -6,7 +6,13 @@ import { Capacitor } from '@capacitor/core';
 // Initialize RevenueCat safely only on Native mobile platforms
 if (Capacitor.isNativePlatform()) {
   try {
-    Purchases.configure({ apiKey: "test_cMsleegvwoeSHogVfNJSxcSJCqj" });
+    const platform = Capacitor.getPlatform(); // 'ios' or 'android'
+    const apiKey = platform === 'ios'
+      ? (import.meta.env.VITE_REVENUECAT_APPLE_API_KEY || import.meta.env.VITE_REVENUECAT_API_KEY || "test_cMsleegvwoeSHogVfNJSxcSJCqj")
+      : (import.meta.env.VITE_REVENUECAT_GOOGLE_API_KEY || import.meta.env.VITE_REVENUECAT_API_KEY || "test_cMsleegvwoeSHogVfNJSxcSJCqj");
+
+    Purchases.configure({ apiKey });
+    console.log(`[RevenueCat] Initialized on ${platform} with key: ${apiKey.startsWith('test_') ? '(Sandbox Test Key)' : apiKey.substring(0, 8) + '...'}`);
   } catch (err) {
     console.warn("RevenueCat native configuration warning:", err);
   }
