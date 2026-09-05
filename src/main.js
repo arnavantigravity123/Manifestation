@@ -1008,8 +1008,10 @@ buySkinBtns.forEach(btn => {
 // Socket Initialization Wrapper
 function initializeSocketConnection() {
   if (socket) return socket;
-  // Use production Render URL for socket connections from mobile
-  const socketUrl = 'https://manifestation-e53w.onrender.com/';
+  // Connect to Cloudflare production domain (manifestationgame.com) or current origin
+  const socketUrl = (typeof window !== 'undefined' && window.location && window.location.origin && !window.location.origin.includes('localhost') && !window.location.origin.startsWith('capacitor://') && !window.location.origin.startsWith('http://localhost'))
+    ? window.location.origin
+    : 'https://manifestationgame.com';
   socket = io(socketUrl);
 
   socket.on('connect', () => {
