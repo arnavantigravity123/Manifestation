@@ -388,11 +388,7 @@ if (loginForm) {
         authToken = res.token;
         localStorage.setItem('manifestation_auth_token', authToken);
         localStorage.setItem('manifestation_username', currentUser.username);
-        // Auto-transfer existing device VIP to logged-in account
-        if (localStorage.getItem('manifestation_is_vip') === 'true' && !currentUser.isVip) {
-          currentUser.isVip = true;
-          sock.emit('account_update_vip', { token: authToken, isVip: true });
-        }
+        localStorage.setItem('manifestation_is_vip', currentUser.isVip ? 'true' : 'false');
         localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
         
         // Link to RevenueCat user ID on mobile platforms
@@ -454,16 +450,9 @@ if (registerForm) {
         localStorage.setItem('manifestation_auth_token', authToken);
         localStorage.setItem('manifestation_username', currentUser.username);
 
-        // Auto-transfer existing device VIP to newly registered account
-        if (localStorage.getItem('manifestation_is_vip') === 'true') {
-          currentUser.isVip = true;
-          sock.emit('account_update_vip', { token: authToken, isVip: true });
-        }
-        // Auto-transfer existing device credits if higher than default
-        if (playerCredits > (currentUser.credits || 0)) {
-          currentUser.credits = playerCredits;
-          sock.emit('account_update_credits', { token: authToken, credits: playerCredits });
-        }
+        localStorage.setItem('manifestation_is_vip', currentUser.isVip ? 'true' : 'false');
+        localStorage.setItem('manifestation_credits', (currentUser.credits || 100).toString());
+        playerCredits = currentUser.credits || 100;
         localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
 
         // Link to RevenueCat user ID on mobile platforms
@@ -499,6 +488,9 @@ if (accountLogoutBtn) {
     currentUser = null;
     localStorage.removeItem('manifestation_auth_token');
     localStorage.removeItem('manifestation_user_profile');
+    localStorage.removeItem('manifestation_is_vip');
+    playerCredits = 0;
+    localStorage.setItem('manifestation_credits', '0');
     updateAccountUI();
     alert("Logged out. You are now playing as Guest.");
   });

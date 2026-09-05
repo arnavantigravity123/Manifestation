@@ -23,6 +23,44 @@ app.use(cors());
 // Serve static files from the Vite build directory when available
 app.use(express.static(join(__dirname, 'dist')));
 
+app.get('/api/db-status', async (req, res) => {
+  const mongoStatus = mongoose.connection.readyState;
+  const statusNames = ['disconnected', 'connected', 'connecting', 'disconnecting'];
+  const localUsers = loadUsersLocal();
+  let mongoUsers = [];
+  let mongoError = null;
+
+  if (mongoStatus === 1) {
+    try {
+      mongoUsers = await UserModel.find({}, { passwordHash: 0, salt: 0 }).lean().exec();
+    } catch (e) {
+      mongoError = e.message;
+    }
+  }
+
+  res.json({
+    timestamp: new Date().toISOString(),
+    mongo: {
+      status: statusNames[mongoStatus] || mongoStatus,
+      readyState: mongoStatus,
+      error: mongoError,
+      usersCount: mongoUsers.length,
+      users: mongoUsers
+    },
+    local: {
+      usersCount: Object.keys(localUsers).length,
+      users: Object.values(localUsers).map(u => ({
+        username: u.username,
+        lookupKey: u.lookupKey,
+        isVip: u.isVip,
+        credits: u.credits,
+        equippedSkin: u.equippedSkin,
+        createdAt: u.createdAt
+      }))
+    }
+  });
+});
+
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
