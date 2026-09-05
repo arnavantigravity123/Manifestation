@@ -119,8 +119,51 @@ function registerAnimationToActiveMixers(animName, clip) {
 let isHazmatLoading = false;
 let isHumanGLBLoading = false;
 let isGhostGLBLoading = false;
+let preloadedSoldierFBX = null;
+let isSoldierFBXLoading = false;
+let soldierDiffuseTexture = null;
+let soldierNormalTexture = null;
+let soldierSpecularTexture = null;
+
+function upgradeMeshGroupToSoldierFBX(group) {
+  if (!group || !preloadedSoldierFBX) return;
+  if (group.userData && group.userData.skinId && group.userData.skinId !== 'skin_soldier') {
+    return; // Preserve other skins
+  }
+  // Remove non-username children
+  const toRemove = [];
+  group.children.forEach(c => {
+    if (c.userData && c.userData.isUsernameTag) return;
+    toRemove.push(c);
+  });
+  toRemove.forEach(c => group.remove(c));
+
+  const clone = SkeletonUtils.clone(preloadedSoldierFBX);
+  group.add(clone);
+
+  const mixer = new THREE.AnimationMixer(clone);
+  const actions = {};
+
+  Object.keys(humanAnimClips).forEach(key => {
+    const clip = humanAnimClips[key];
+    if (clip) {
+      actions[key] = mixer.clipAction(clip);
+    }
+  });
+
+  if (actions.idle) {
+    actions.idle.play();
+  }
+
+  activeAnimationMixers.push(mixer);
+  group.userData.animMixer = mixer;
+  group.userData.animActions = actions;
+  group.userData.currentAction = 'idle';
+}
+
 function upgradeMeshGroupToGLB(group) {
   if (!group || !preloadedHumanModel) return;
+  if (group.userData && group.userData.skinId && group.userData.skinId !== 'skin_default') return;
   // Remove non-username children
   const toRemove = [];
   group.children.forEach(c => {
@@ -311,6 +354,93 @@ export function loadHumanGLBAsset() {
         upgradeMeshGroupToGLB(p);
       }
     });
+  });
+}
+
+export function loadSoldierFBXAssets() {
+  // Ensure the locomotion animations (idle, walk, sprint, strafe) are also loading
+  loadHazmatFBXAssets();
+
+  if (preloadedSoldierFBX || isSoldierFBXLoading) return;
+  isSoldierFBXLoading = true;
+
+  if (!soldierDiffuseTexture) {
+    soldierDiffuseTexture = textureLoader.load('/assets/futuristic_soldier_diffuse.png');
+    soldierDiffuseTexture.colorSpace = THREE.SRGBColorSpace;
+    soldierDiffuseTexture.flipY = false;
+  }
+  if (!soldierNormalTexture) {
+    soldierNormalTexture = textureLoader.load('/assets/futuristic_soldier_normal.png');
+    soldierNormalTexture.flipY = false;
+  }
+  if (!soldierSpecularTexture) {
+    soldierSpecularTexture = textureLoader.load('/assets/futuristic_soldier_specular.png');
+    soldierSpecularTexture.flipY = false;
+  }
+
+  fbxLoader.load('/assets/futuristic_soldier.fbx', (fbx) => {
+    // Compute true bounding box and scale to standard player height (1.85 meters)
+    const initialBox = new THREE.Box3().setFromObject(fbx);
+    const rawSize = initialBox.getSize(new THREE.Vector3());
+    const rawHeight = rawSize.y || 183.2;
+    
+    const targetHeight = 1.85;
+    const scale = targetHeight / rawHeight;
+    fbx.scale.set(scale, scale, scale);
+    fbx.rotation.y = Math.PI; // Face forward direction
+
+    // Recenter pivot so feet rest perfectly on the floor (y = 0) and centered on X/Z
+    const scaledBox = new THREE.Box3().setFromObject(fbx);
+    const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+    fbx.position.x = -scaledCenter.x;
+    fbx.position.z = -scaledCenter.z;
+    fbx.position.y = -scaledBox.min.y;
+
+    fbx.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.frustumCulled = false;
+        if (child.name === 'vanguard_visor') {
+          // Cyberpunk glowing visor faceplate
+          child.material = new THREE.MeshStandardMaterial({
+            color: 0x00f0ff,
+            emissive: 0x00bfff,
+            emissiveIntensity: 0.95,
+            metalness: 0.9,
+            roughness: 0.1,
+            side: THREE.DoubleSide
+          });
+        } else {
+          child.material = new THREE.MeshStandardMaterial({
+            map: soldierDiffuseTexture,
+            normalMap: soldierNormalTexture,
+            roughnessMap: soldierSpecularTexture,
+            roughness: 0.4,
+            metalness: 0.45,
+            side: THREE.DoubleSide
+          });
+        }
+      }
+    });
+
+    preloadedSoldierFBX = fbx;
+    isSoldierFBXLoading = false;
+
+    // Upgrade localPlayerVisual if skin_soldier was waiting for FBX
+    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_soldier' && !localPlayerVisual.userData.animMixer) {
+      upgradeMeshGroupToSoldierFBX(localPlayerVisual);
+    }
+
+    // Upgrade all remote human players with skin_soldier
+    Object.values(players3D).forEach(p => {
+      if (p && p.userData && p.userData.skinId === 'skin_soldier' && !p.userData.animMixer) {
+        upgradeMeshGroupToSoldierFBX(p);
+      }
+    });
+  }, undefined, (err) => {
+    console.error('[SOLDIER] Failed to load futuristic_soldier.fbx:', err);
+    isSoldierFBXLoading = false;
   });
 }
 
@@ -858,6 +988,8 @@ export function initGame(socket, socketId, matchConfig) {
   const myEquippedSkin = (me && me.skinId) || localStorage.getItem('manifestation_equipped_skin') || 'skin_default';
   if (myEquippedSkin === 'skin_hazmat') {
     loadHazmatFBXAssets();
+  } else if (myEquippedSkin === 'skin_soldier') {
+    loadSoldierFBXAssets();
   } else if (myEquippedSkin === 'skin_default') {
     loadHumanGLBAsset();
   }
@@ -867,6 +999,7 @@ export function initGame(socket, socketId, matchConfig) {
       if (p.team === 'Ghost') loadGhostGLBAsset();
       const pSkin = p.skinId || 'skin_default';
       if (pSkin === 'skin_hazmat') loadHazmatFBXAssets();
+      if (pSkin === 'skin_soldier') loadSoldierFBXAssets();
       if (pSkin === 'skin_default') loadHumanGLBAsset();
     });
   }
@@ -5378,6 +5511,45 @@ function createHumanMeshGroup(skinId, username) {
       const spriteMat = new THREE.SpriteMaterial({ 
         map: getLoadedTexture('/assets/human_sprite.png'), 
         color: 0xf59e0b,
+        fog: true,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.scale.set(1.2, 1.2, 1);
+      sprite.position.y = 0.8;
+      group.add(sprite);
+    }
+  } else if (effectiveSkin === 'skin_soldier') {
+    loadSoldierFBXAssets();
+    if (preloadedSoldierFBX) {
+      const clone = SkeletonUtils.clone(preloadedSoldierFBX);
+      group.add(clone);
+
+      // Setup full 8-directional locomotion animation mixer & actions
+      const mixer = new THREE.AnimationMixer(clone);
+      const actions = {};
+
+      Object.keys(humanAnimClips).forEach(key => {
+        const clip = humanAnimClips[key];
+        if (clip) {
+          actions[key] = mixer.clipAction(clip);
+        }
+      });
+
+      if (actions.idle) {
+        actions.idle.play();
+      }
+
+      activeAnimationMixers.push(mixer);
+      group.userData.animMixer = mixer;
+      group.userData.animActions = actions;
+      group.userData.currentAction = 'idle';
+    } else {
+      const spriteMat = new THREE.SpriteMaterial({ 
+        map: getLoadedTexture('/assets/human_sprite.png'), 
+        color: 0x38bdf8,
         fog: true,
         transparent: true,
         blending: THREE.AdditiveBlending,
