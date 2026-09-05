@@ -2012,19 +2012,21 @@ function loadDungeonPackAssets() {
     try {
       const pMat = new THREE.MeshStandardMaterial({
         map: getLoadedTexture('/assets/dungeon/textures/ColumnColor.png', null, true),
-        normalMap: getLoadedTexture('/assets/dungeon/textures/ColumnNormal.png'),
         roughnessMap: getLoadedTexture('/assets/dungeon/textures/ColumnRoughness.png'),
-        roughness: 0.85,
-        metalness: 0.1,
-        color: 0xd0d0d0
+        roughness: 0.8,
+        metalness: 0.08,
+        color: 0xffffff,
+        emissive: 0x1a1a14,
+        emissiveIntensity: 0.5
       });
       const sMat = new THREE.MeshStandardMaterial({
         map: getLoadedTexture('/assets/dungeon/textures/StatueColor.png', null, true),
-        normalMap: getLoadedTexture('/assets/dungeon/textures/StatueNormal.png'),
         roughnessMap: getLoadedTexture('/assets/dungeon/textures/StatueRoughness.png'),
         roughness: 0.82,
-        metalness: 0.12,
-        color: 0xd0d0d0
+        metalness: 0.1,
+        color: 0xffffff,
+        emissive: 0x141410,
+        emissiveIntensity: 0.45
       });
       const rMat = new THREE.MeshStandardMaterial({
         map: getLoadedTexture('/assets/dungeon/textures/RugColor.png', null, true),
@@ -2301,11 +2303,22 @@ function generateMaze(keysCount = 8) {
   const currentTheme = localStorage.getItem('manifestation_maze_theme') || 'dungeon';
   const isDungeon = currentTheme === 'dungeon';
 
+  // Ambient light boost for dungeon — prevents lower wall faces from going pitch black
+  if (ambientLight) {
+    if (isDungeon) {
+      ambientLight.intensity = 3.5;
+      ambientLight.color.setHex(0x5a4e3a); // Warm torchlit amber for dungeon
+    } else {
+      ambientLight.intensity = 2.0;
+      ambientLight.color.setHex(0x445566); // Cool facility blue
+    }
+  }
+
   // Fog & Atmosphere adjustment for Dungeon Corridor
   if (scene && scene.fog) {
     if (isDungeon) {
       scene.fog.color.setHex(0x06080e);
-      scene.fog.density = 0.02;
+      scene.fog.density = 0.018;
     } else {
       scene.fog.color.setHex(0x000000);
       scene.fog.density = 0.015;
@@ -2324,15 +2337,12 @@ function generateMaze(keysCount = 8) {
   let floorMat;
   if (isDungeon) {
     const groundTex = getLoadedTexture('/assets/dungeon/textures/GroundColor.png', { x: floorRep * 2.2, y: floorRep * 2.2 }, true);
-    const groundNormal = getLoadedTexture('/assets/dungeon/textures/GroundNormal.png', { x: floorRep * 2.2, y: floorRep * 2.2 });
     const groundRoughness = getLoadedTexture('/assets/dungeon/textures/GroundRoughness.png', { x: floorRep * 2.2, y: floorRep * 2.2 });
     floorMat = new THREE.MeshStandardMaterial({ 
       map: groundTex,
-      normalMap: groundNormal,
-      normalScale: new THREE.Vector2(1.2, 1.2),
       roughnessMap: groundRoughness,
-      roughness: 0.85,
-      metalness: 0.08,
+      roughness: 0.88,
+      metalness: 0.05,
       color: 0xcccccc
     });
   } else {
@@ -2359,12 +2369,9 @@ function generateMaze(keysCount = 8) {
   let ceilMat;
   if (isDungeon) {
     const ceilTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', { x: ceilRep * 2, y: ceilRep * 2 }, true);
-    const ceilNormal = getLoadedTexture('/assets/dungeon/textures/WallNormal.png', { x: ceilRep * 2, y: ceilRep * 2 });
     ceilMat = new THREE.MeshStandardMaterial({ 
       map: ceilTex,
-      normalMap: ceilNormal,
-      normalScale: new THREE.Vector2(0.8, 0.8),
-      color: 0x222226, 
+      color: 0x888888, 
       roughness: 0.95,
       metalness: 0.02
     });
@@ -2536,27 +2543,22 @@ function generateMaze(keysCount = 8) {
   let wallMat, slidingWallMat;
   if (isDungeon) {
     const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', { x: 1, y: 1 }, true);
-    const dungeonWallNormal = getLoadedTexture('/assets/dungeon/textures/WallNormal.png', { x: 1, y: 1 });
     const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/WallRoughness.png', { x: 1, y: 1 });
 
     wallMat = new THREE.MeshStandardMaterial({ 
       map: dungeonWallTex,
-      normalMap: dungeonWallNormal,
-      normalScale: new THREE.Vector2(1.2, 1.2),
       roughnessMap: dungeonWallRoughness,
       roughness: 0.85,
       metalness: 0.05,
-      color: 0xd8d8d8
+      color: 0xe8e8e8
     });
     
     slidingWallMat = new THREE.MeshStandardMaterial({
       map: dungeonWallTex,
-      normalMap: dungeonWallNormal,
-      normalScale: new THREE.Vector2(1.2, 1.2),
       roughnessMap: dungeonWallRoughness,
-      roughness: 0.8,
-      metalness: 0.22,
-      color: 0x6e7b8b // Iron-reinforced dark dungeon portcullis stone
+      roughness: 0.78,
+      metalness: 0.25,
+      color: 0x8899aa
     });
   } else {
     const generatedTex = getLoadedTexture('/assets/wall_texture.png', { x: 1, y: 1 });
