@@ -1214,32 +1214,116 @@ export function initGame(socket, socketId, matchConfig) {
   if (mobilePauseBtn) mobilePauseBtn.style.display = '';
   if (globalPauseBtn) globalPauseBtn.style.display = '';
 
-  // Easter Egg: Ariadne's Thread to the Vault (Straight direct beacon beam to the vault for Ariadne_999)
-  const myPlayer = currentLobby.players[myId];
-  if (myPlayer && myPlayer.username === 'Ariadne_999') {
-    const startX = camera.position.x;
-    const startZ = camera.position.z;
-    const targetX = gateCoordinates.x;
-    const targetZ = gateCoordinates.z;
-    const dx = targetX - startX;
-    const dz = targetZ - startZ;
-    const totalDist = Math.sqrt(dx * dx + dz * dz);
-    const angle = Math.atan2(dx, dz);
+  // Easter Egg: Ariadne's Thread to the Vault (Path through labyrinth corridors for Ariadne_999 / Aridane_999)
+  const myPlayer = (currentLobby && currentLobby.players) ? currentLobby.players[myId] : null;
+  const rawName = (myPlayer && myPlayer.username) 
+    || localStorage.getItem('manifestation_username') 
+    || sessionStorage.getItem('rejoinUsername') 
+    || '';
+  const cleanName = rawName.trim().toLowerCase();
+  const isAriadne = cleanName === 'ariadne_999' || cleanName === 'aridane_999' || cleanName.includes('ariadne') || cleanName.includes('aridane');
 
-    const threadGeo = new THREE.PlaneGeometry(0.5, totalDist);
-    const threadMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
-    const thread = new THREE.Mesh(threadGeo, threadMat);
-    thread.rotation.x = -Math.PI / 2;
-    thread.rotation.z = -angle;
-    thread.position.set((startX + targetX) / 2, 0.04, (startZ + targetZ) / 2);
-    scene.add(thread);
+  if (isAriadne) {
+    console.log("🌀 [ARIADNE PROTOCOL] Activated for", rawName);
 
-    for (let d = 0; d < totalDist; d += 8) {
-      const frac = d / totalDist;
-      const pLight = new THREE.PointLight(0x00ffff, 8, 6);
-      pLight.position.set(startX + dx * frac, 0.4, startZ + dz * frac);
-      scene.add(pLight);
+    // 1. Find nearest open corridor to start (camera position)
+    let closestStart = { x: camera.position.x, z: camera.position.z };
+    let minStartDist = Infinity;
+    for (const c of openCorridors) {
+      const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
+      if (d < minStartDist) {
+        minStartDist = d;
+        closestStart = c;
+      }
     }
+
+    // 2. Find nearest open corridor to the vault gate
+    let closestEnd = { x: gateCoordinates.x, z: gateCoordinates.z };
+    let minEndDist = Infinity;
+    for (const c of openCorridors) {
+      const d = Math.hypot(c.x - gateCoordinates.x, c.z - gateCoordinates.z);
+      if (d < minEndDist) {
+        minEndDist = d;
+        closestEnd = c;
+      }
+    }
+
+    const startG = worldToGrid(closestStart.x, closestStart.z);
+    const endG = worldToGrid(closestEnd.x, closestEnd.z);
+    let path = bfsPath(startG.col, startG.row, endG.col, endG.row);
+
+    // If path is empty (or same cell), provide direct connection points
+    if (!path || path.length === 0) {
+      path = [
+        { x: camera.position.x, z: camera.position.z },
+        closestStart,
+        closestEnd,
+        { x: gateCoordinates.x, z: gateCoordinates.z }
+      ];
+    } else {
+      path.unshift({ x: camera.position.x, z: camera.position.z });
+      path.push({ x: gateCoordinates.x, z: gateCoordinates.z });
+    }
+
+    // 3. Render glowing Ariadne's Thread along every corridor segment
+    const threadGroup = new THREE.Group();
+    threadGroup.name = 'ariadneThreadGroup';
+
+    const threadMat = new THREE.MeshBasicMaterial({ 
+      color: 0x00ffff, 
+      transparent: true, 
+      opacity: 0.85, 
+      side: THREE.DoubleSide, 
+      depthWrite: false 
+    });
+
+    const orbGeo = new THREE.SphereGeometry(0.22, 12, 12);
+    const orbMat = new THREE.MeshBasicMaterial({ 
+      color: 0x38bdf8, 
+      transparent: true, 
+      opacity: 0.95, 
+      depthWrite: false 
+    });
+
+    for (let i = 0; i < path.length - 1; i++) {
+      const p1 = path[i];
+      const p2 = path[i + 1];
+      const dx = p2.x - p1.x;
+      const dz = p2.z - p1.z;
+      const segDist = Math.hypot(dx, dz);
+      if (segDist < 0.05) continue;
+
+      const angle = Math.atan2(dx, dz);
+      const segGeo = new THREE.PlaneGeometry(0.7, segDist);
+      const segMesh = new THREE.Mesh(segGeo, threadMat);
+      segMesh.rotation.x = -Math.PI / 2;
+      segMesh.rotation.z = -angle;
+      segMesh.position.set((p1.x + p2.x) / 2, 0.08, (p1.z + p2.z) / 2);
+      threadGroup.add(segMesh);
+
+      // Glowing waypoint orb
+      const orb = new THREE.Mesh(orbGeo, orbMat);
+      orb.position.set(p1.x, 0.35, p1.z);
+      threadGroup.add(orb);
+
+      // Guiding cyan point lights every 2 segments
+      if (i % 2 === 0) {
+        const pLight = new THREE.PointLight(0x00ffff, 5.0, 8.0);
+        pLight.position.set(p1.x, 0.6, p1.z);
+        threadGroup.add(pLight);
+      }
+    }
+
+    // Final guide beacon at the vault door
+    const finalOrb = new THREE.Mesh(orbGeo, orbMat);
+    finalOrb.position.set(gateCoordinates.x, 0.6, gateCoordinates.z);
+    threadGroup.add(finalOrb);
+
+    const gateLight = new THREE.PointLight(0x00ffff, 8.0, 12.0);
+    gateLight.position.set(gateCoordinates.x, 1.2, gateCoordinates.z);
+    threadGroup.add(gateLight);
+
+    scene.add(threadGroup);
 
     // Auto-complete objectives for testing
     carriedKeys = [
@@ -1252,14 +1336,16 @@ export function initGame(socket, socketId, matchConfig) {
     fixedBreakersCount = totalBreakersRequired;
     circuitBreakers.forEach(b => {
       b.isFixed = true;
-      b.mesh.material.color.setHex(0x10b981);
-      b.mesh.material.emissive = new THREE.Color(0x10b981);
+      if (b.mesh && b.mesh.material) {
+        b.mesh.material.color.setHex(0x10b981);
+        b.mesh.material.emissive = new THREE.Color(0x10b981);
+      }
     });
     updateEnvironmentLighting();
 
     const codeStr = (window.cipherCodeDigits || []).join('');
     setTimeout(() => {
-      triggerNotification(`ARIADNE PROTOCOL ACTIVE: All objectives complete. Vault Code: ${codeStr}`);
+      triggerNotification(`ARIADNE PROTOCOL ACTIVE: Labyrinth thread revealed. Vault Code: ${codeStr}`);
       
       const cipherHUD = document.getElementById('hud-cipher-info');
       if (cipherHUD) {
@@ -1269,7 +1355,7 @@ export function initGame(socket, socketId, matchConfig) {
       }
 
       checkWinCondition(); // Will update gate lights
-    }, 1500);
+    }, 1000);
   }
 
   // Keyboard controls
@@ -6284,6 +6370,17 @@ function animate() {
       const mixer = activeAnimationMixers[mIdx];
       if (mixer) mixer.update(delta);
     }
+  }
+
+  // Floating bob animation for Ariadne's thread orbs
+  const ariadneGroup = scene.getObjectByName('ariadneThreadGroup');
+  if (ariadneGroup) {
+    const t = time * 0.003;
+    ariadneGroup.children.forEach((child, idx) => {
+      if (child.isMesh && child.geometry && child.geometry.type === 'SphereGeometry') {
+        child.position.y = 0.35 + Math.sin(t + idx * 0.4) * 0.08;
+      }
+    });
   }
 
   const isActive = isMobileDevice ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) : (Boolean(document.pointerLockElement) && (!isCaptured || window.isSpectating));
