@@ -228,7 +228,14 @@ function updateAccountUI() {
     if (Array.isArray(currentUser.unlockedSkins)) {
       currentUser.unlockedSkins.forEach(sid => localStorage.setItem(`unlocked_${sid}`, 'true'));
     }
-    if (currentUser.equippedSkin) {
+    const localEquipped = localStorage.getItem('manifestation_equipped_skin');
+    if (localEquipped) {
+      currentUser.equippedSkin = localEquipped;
+      localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
+      if (socket && authToken) {
+        socket.emit('account_update_skin', { token: authToken, equippedSkin: localEquipped });
+      }
+    } else if (currentUser.equippedSkin) {
       localStorage.setItem('manifestation_equipped_skin', currentUser.equippedSkin);
     }
     updateSkinButtons();
@@ -241,6 +248,7 @@ function updateAccountUI() {
       if (saved) usernameInput.value = saved;
     }
     if (vipStoreBtn) vipStoreBtn.style.display = 'block';
+    updateSkinButtons();
   }
 }
 
@@ -883,9 +891,13 @@ buySkinBtns.forEach(btn => {
       // Already owned, just equip
       localStorage.setItem('manifestation_equipped_skin', skinId);
       updateSkinButtons();
-      if (currentUser && socket && authToken) {
+      if (currentUser) {
         currentUser.equippedSkin = skinId;
-        socket.emit('account_update_skin', { token: authToken, equippedSkin: skinId });
+        localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
+        const sock = socket || initializeSocketConnection();
+        if (sock && authToken) {
+          sock.emit('account_update_skin', { token: authToken, equippedSkin: skinId });
+        }
       }
       return;
     }
@@ -904,11 +916,14 @@ buySkinBtns.forEach(btn => {
       if (accountCreditsDisplay) accountCreditsDisplay.textContent = `💰 ${playerCredits}`;
       updateSkinButtons();
       
-      if (currentUser && socket && authToken) {
-        currentUser.credits = playerCredits;
-        currentUser.equippedSkin = skinId;
-        if (!currentUser.unlockedSkins.includes(skinId)) currentUser.unlockedSkins.push(skinId);
-        socket.emit('account_update_skin', { 
+      currentUser.credits = playerCredits;
+      currentUser.equippedSkin = skinId;
+      if (!currentUser.unlockedSkins.includes(skinId)) currentUser.unlockedSkins.push(skinId);
+      localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
+      
+      const sock = socket || initializeSocketConnection();
+      if (sock && authToken) {
+        sock.emit('account_update_skin', { 
           token: authToken, 
           unlockedSkins: currentUser.unlockedSkins, 
           equippedSkin: skinId 
@@ -1030,7 +1045,7 @@ function getUsername() {
 }
 
 function getSkinId() {
-  return localStorage.getItem('manifestation_equipped_skin') || null;
+  return localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
 }
 
 soloBtn.addEventListener('click', () => {

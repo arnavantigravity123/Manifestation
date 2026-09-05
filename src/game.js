@@ -2494,7 +2494,7 @@ function toggleCameraView() {
   }
   
   // Make sure we have a local player visual if we enter TPS, and recreate if equipped skin changed
-  const pSkinId = localStorage.getItem('manifestation_equipped_skin') || null;
+  const pSkinId = myTeam === 'Ghost' ? 'skin_ghost' : (localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat');
   const pUsername = localStorage.getItem('manifestation_username') || 'Operative';
   
   if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId !== pSkinId) {
@@ -5815,6 +5815,7 @@ function createGhostMeshGroup(skinId) {
 
   group.userData = {
     type: 'Ghost',
+    skinId: 'skin_ghost',
     bobAccumulator: Math.random() * 10,
     flickerTimer: Math.random() * 100,
     lastPosition: new THREE.Vector3()
