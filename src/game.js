@@ -44,6 +44,88 @@ textureLoader.load('/assets/hazmat_texture.png', (tex) => {
   }
 });
 
+// Golden VIP Aura Visual Cues & PointLight
+export function applyVipGlow(object3D, enabled = true, color = 0xffd700) {
+  if (!object3D) return;
+  object3D.userData = object3D.userData || {};
+  if (enabled) {
+    object3D.userData.isVip = true;
+  }
+
+  // 1. Dynamic PointLight for real-time 3D aura
+  let vipLight = object3D.getObjectByName('vipGlowLight');
+  if (enabled) {
+    if (!vipLight) {
+      vipLight = new THREE.PointLight(color, 1.2, 4.0);
+      vipLight.name = 'vipGlowLight';
+      vipLight.position.set(0, 1.2, 0);
+      object3D.add(vipLight);
+    } else {
+      vipLight.color.setHex(color);
+      vipLight.visible = true;
+    }
+  } else if (vipLight) {
+    vipLight.visible = false;
+  }
+
+  // 2. Emissive material tint on 3D avatar meshes and sprites
+  object3D.traverse(c => {
+    if (c.userData && c.userData.isUsernameTag) return;
+    if (c.isMesh && c.material) {
+      const mats = Array.isArray(c.material) ? c.material : [c.material];
+      mats.forEach(m => {
+        if (!m) return;
+        if (enabled) {
+          if (!m.userData) m.userData = {};
+          if (m.userData.origEmissive === undefined && m.emissive) {
+            m.userData.origEmissive = m.emissive.clone();
+            m.userData.origEmissiveIntensity = m.emissiveIntensity !== undefined ? m.emissiveIntensity : 0;
+          }
+          if (m.emissive) {
+            m.emissive.setHex(color);
+            m.emissiveIntensity = 0.55;
+          }
+        } else {
+          if (m.userData && m.userData.origEmissive && m.emissive) {
+            m.emissive.copy(m.userData.origEmissive);
+            m.emissiveIntensity = m.userData.origEmissiveIntensity;
+          } else if (m.emissive) {
+            m.emissive.setHex(0x000000);
+            m.emissiveIntensity = 0;
+          }
+        }
+      });
+    } else if (c.isSprite && c.material && !c.userData?.isUsernameTag) {
+      if (enabled) {
+        if (!c.userData) c.userData = {};
+        if (c.userData.origColor === undefined && c.material.color) {
+          c.userData.origColor = c.material.color.clone();
+        }
+        c.material.color.setHex(color);
+      } else {
+        if (c.userData && c.userData.origColor && c.material.color) {
+          c.material.color.copy(c.userData.origColor);
+        }
+      }
+    }
+  });
+}
+
+window.applyVipGlow = applyVipGlow;
+window.updateAllVipGlows = function(enabled) {
+  const isVipLocal = window.isVipActive ? window.isVipActive() : false;
+  if (typeof localPlayerVisual !== 'undefined' && localPlayerVisual && isVipLocal) {
+    applyVipGlow(localPlayerVisual, enabled);
+  }
+  if (typeof players3D !== 'undefined') {
+    Object.values(players3D).forEach(pMesh => {
+      if (pMesh && pMesh.userData && pMesh.userData.isVip) {
+        applyVipGlow(pMesh, enabled);
+      }
+    });
+  }
+};
+
 function upgradeMeshGroupToFBX(group) {
   if (!group || !preloadedHumanFBX) return;
   if (group.userData && group.userData.skinId && group.userData.skinId !== 'skin_hazmat') {
@@ -78,6 +160,10 @@ function upgradeMeshGroupToFBX(group) {
   group.userData.animMixer = mixer;
   group.userData.animActions = actions;
   group.userData.currentAction = 'idle';
+
+  if (group.userData && group.userData.isVip && (window.isVipGlowEnabled ? window.isVipGlowEnabled() : true)) {
+    applyVipGlow(group, true);
+  }
 }
 
 // Strip root motion (Hips position tracks) from animation clips so the game controls position
@@ -98,21 +184,23 @@ function registerAnimationToActiveMixers(animName, clip) {
   humanAnimClips[animName] = clip;
   clip.name = animName;
 
-  // Dynamically bind to localPlayerVisual if already spawned with skin_hazmat
-  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_hazmat' && localPlayerVisual.userData.animMixer) {
+  // Dynamically bind to localPlayerVisual if already spawned with skin_hazmat or skin_soldier
+  if (localPlayerVisual && localPlayerVisual.userData && (localPlayerVisual.userData.skinId === 'skin_hazmat' || localPlayerVisual.userData.skinId === 'skin_soldier') && localPlayerVisual.userData.animMixer) {
     const mixer = localPlayerVisual.userData.animMixer;
-    if (!localPlayerVisual.userData.animActions[animName]) {
-      localPlayerVisual.userData.animActions[animName] = mixer.clipAction(clip);
+    localPlayerVisual.userData.animActions = localPlayerVisual.userData.animActions || {};
+    localPlayerVisual.userData.animActions[animName] = mixer.clipAction(clip);
+    // If currently performing this action, seamlessly transition
+    if (localPlayerVisual.userData.currentAction === animName) {
+      setHumanLocomotionAction(localPlayerVisual, animName, 0.15);
     }
   }
 
-  // Dynamically bind to remote hazmat players in lobby
+  // Dynamically bind to remote players in lobby
   Object.values(players3D).forEach(p => {
-    if (p && p.userData && p.userData.skinId === 'skin_hazmat' && p.userData.animMixer) {
+    if (p && p.userData && (p.userData.skinId === 'skin_hazmat' || p.userData.skinId === 'skin_soldier') && p.userData.animMixer) {
       const mixer = p.userData.animMixer;
-      if (!p.userData.animActions[animName]) {
-        p.userData.animActions[animName] = mixer.clipAction(clip);
-      }
+      p.userData.animActions = p.userData.animActions || {};
+      p.userData.animActions[animName] = mixer.clipAction(clip);
     }
   });
 }
@@ -143,13 +231,27 @@ function upgradeMeshGroupToSoldier(group) {
   const actions = {};
 
   if (soldierAnimClips.idle) actions.idle = mixer.clipAction(soldierAnimClips.idle);
-  if (soldierAnimClips.walk) {
-    actions.walk = mixer.clipAction(soldierAnimClips.walk);
+  if (soldierAnimClips.walk) actions.walk = mixer.clipAction(soldierAnimClips.walk);
+  if (soldierAnimClips.sprint) actions.sprint = mixer.clipAction(soldierAnimClips.sprint);
+
+  // Bind strafe and backward clips from humanAnimClips if loaded, else fallback to walk
+  if (humanAnimClips.walkBack) {
+    actions.walkBack = mixer.clipAction(humanAnimClips.walkBack);
+  } else if (soldierAnimClips.walk) {
     actions.walkBack = mixer.clipAction(soldierAnimClips.walk);
+  }
+
+  if (humanAnimClips.strafeLeft) {
+    actions.strafeLeft = mixer.clipAction(humanAnimClips.strafeLeft);
+  } else if (soldierAnimClips.walk) {
     actions.strafeLeft = mixer.clipAction(soldierAnimClips.walk);
+  }
+
+  if (humanAnimClips.strafeRight) {
+    actions.strafeRight = mixer.clipAction(humanAnimClips.strafeRight);
+  } else if (soldierAnimClips.walk) {
     actions.strafeRight = mixer.clipAction(soldierAnimClips.walk);
   }
-  if (soldierAnimClips.sprint) actions.sprint = mixer.clipAction(soldierAnimClips.sprint);
 
   if (actions.idle) {
     actions.idle.play();
@@ -159,6 +261,10 @@ function upgradeMeshGroupToSoldier(group) {
   group.userData.animMixer = mixer;
   group.userData.animActions = actions;
   group.userData.currentAction = 'idle';
+
+  if (group.userData && group.userData.isVip && (window.isVipGlowEnabled ? window.isVipGlowEnabled() : true)) {
+    applyVipGlow(group, true);
+  }
 }
 
 function upgradeMeshGroupToGLB(group) {
@@ -175,6 +281,10 @@ function upgradeMeshGroupToGLB(group) {
   const clone = SkeletonUtils.clone(preloadedHumanModel);
   clone.rotation.y = Math.PI; // Face forward direction
   group.add(clone);
+
+  if (group.userData && group.userData.isVip && (window.isVipGlowEnabled ? window.isVipGlowEnabled() : true)) {
+    applyVipGlow(group, true);
+  }
 }
 
 export function loadHazmatFBXAssets() {
@@ -242,7 +352,15 @@ export function loadHazmatFBXAssets() {
     });
   });
 
-  // 2. Load Walk Forward animation (With-Skin FBX)
+  loadLocomotionFBXClips();
+}
+
+let isLocomotionClipsLoading = false;
+export function loadLocomotionFBXClips() {
+  if (isLocomotionClipsLoading) return;
+  isLocomotionClipsLoading = true;
+
+  // 1. Load Walk Forward animation (With-Skin FBX)
   fbxLoader.load('/assets/Walking (1).fbx', (anim) => {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('walk', anim.animations[0]);
@@ -255,7 +373,7 @@ export function loadHazmatFBXAssets() {
     });
   });
 
-  // 3. Load Sprint Forward animation (With-Skin FBX)
+  // 2. Load Sprint Forward animation (With-Skin FBX)
   fbxLoader.load('/assets/Sprint.fbx', (anim) => {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('sprint', anim.animations[0]);
@@ -268,7 +386,7 @@ export function loadHazmatFBXAssets() {
     });
   });
 
-  // 4. Load Walk Backwards animation (With-Skin FBX)
+  // 3. Load Walk Backwards animation (With-Skin FBX)
   fbxLoader.load('/assets/Walking Backwards (1).fbx', (anim) => {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('walkBack', anim.animations[0]);
@@ -281,7 +399,7 @@ export function loadHazmatFBXAssets() {
     });
   });
 
-  // 5. Load Left Strafe Walk animation (With-Skin FBX)
+  // 4. Load Left Strafe Walk animation (With-Skin FBX)
   fbxLoader.load('/assets/Left Strafe Walking.fbx', (anim) => {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('strafeLeft', anim.animations[0]);
@@ -294,7 +412,7 @@ export function loadHazmatFBXAssets() {
     });
   });
 
-  // 6. Load Right Strafe Walk animation (With-Skin FBX)
+  // 5. Load Right Strafe Walk animation (With-Skin FBX)
   fbxLoader.load('/assets/Right Strafe Walking (1).fbx', (anim) => {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('strafeRight', anim.animations[0]);
@@ -358,6 +476,7 @@ export function loadHumanGLBAsset() {
 }
 
 export function loadSoldierAsset() {
+  loadLocomotionFBXClips();
   if (preloadedSoldierModel || isSoldierLoading) return;
   isSoldierLoading = true;
 
@@ -804,10 +923,16 @@ function shuffleArray(array) {
   return array;
 }
 
-export function initGame(socket, socketId, matchConfig) {
+export function initGame(socket, socketId, matchConfig, isSolo = false) {
   socketClient = socket;
   myId = socketId;
   currentLobby = matchConfig;
+  window.isSoloMatch = Boolean(
+    isSolo ||
+    (matchConfig && matchConfig.id && matchConfig.id.startsWith('solo-')) ||
+    (sessionStorage.getItem('rejoinIsSolo') === 'true') ||
+    (!matchConfig.isPublic && Object.keys(matchConfig.players || {}).length <= 1)
+  );
 
   // Initialize seededRandom using server-provided mazeGeometrySeed
   const seed = (matchConfig.puzzleState && matchConfig.puzzleState.mazeGeometrySeed) || 0.12345;
@@ -952,7 +1077,7 @@ export function initGame(socket, socketId, matchConfig) {
   if (capturedOverlay) capturedOverlay.style.display = 'none';
 
   const hudOverlay = document.getElementById('hud-overlay');
-  if (hudOverlay) hudOverlay.style.display = 'flex';
+  if (hudOverlay) hudOverlay.style.display = 'none';
 
   const me = matchConfig.players[myId];
   myTeam = me.team;
@@ -1064,26 +1189,82 @@ export function initGame(socket, socketId, matchConfig) {
     }
   });
 
-  // Display Role Splash (Tap to dismiss immediately)
+  // Display Role Splash & Class Assignment Screen (Stage 2 of Match Entry)
   const roleSplash = document.getElementById('role-splash-screen');
-  document.getElementById('splash-role-title').textContent = `${myTeam.toUpperCase()}: ${myClass.toUpperCase()}`;
-  document.getElementById('splash-role-desc').textContent = "Survive the labyrinth. Find the twin keys. Enter the Master Gate code.";
-  roleSplash.style.display = 'flex';
-  window.gameReady = false;
-  
-  const dismissSplash = () => {
-    roleSplash.style.display = 'none';
-    window.gameReady = true;
-  };
-  roleSplash.addEventListener('click', dismissSplash);
-  roleSplash.addEventListener('touchstart', (e) => {
-    if (e.cancelable) e.preventDefault();
-    dismissSplash();
-  }, { passive: false });
+  const splashBadge = document.getElementById('splash-team-badge');
+  const splashTitle = document.getElementById('splash-role-title');
+  const splashDesc = document.getElementById('splash-role-desc');
+  const splashObjectives = document.getElementById('splash-objectives');
+  const roleEnterBtn = document.getElementById('role-enter-btn');
 
-  setTimeout(() => { 
-    dismissSplash();
-  }, 3500);
+  const isGhostRole = (myTeam === 'Ghost');
+  if (splashBadge) {
+    splashBadge.textContent = isGhostRole ? "SPECTRAL ENTITY (GHOST)" : "HUMAN OPERATIVE";
+    splashBadge.style.background = isGhostRole ? "rgba(168, 85, 247, 0.2)" : "rgba(56, 189, 248, 0.2)";
+    splashBadge.style.border = isGhostRole ? "1px solid #a855f7" : "1px solid #38bdf8";
+    splashBadge.style.color = isGhostRole ? "#c084fc" : "#38bdf8";
+  }
+  if (splashTitle) {
+    splashTitle.textContent = `${myClass.toUpperCase()}`;
+    splashTitle.style.color = isGhostRole ? "#c084fc" : "#38bdf8";
+  }
+  if (splashDesc) {
+    const classInfo = (window.classesData && window.classesData[myTeam] && window.classesData[myTeam][myClass]) 
+      ? window.classesData[myTeam][myClass].desc 
+      : "Standard tactical operative gear equipped.";
+    splashDesc.textContent = classInfo;
+  }
+  if (splashObjectives) {
+    splashObjectives.textContent = isGhostRole
+      ? "Patrol the dark corridors, stalk the human survivors, and harvest all souls before they break the ciphers and escape."
+      : "Survive the labyrinth, fix power breakers, crack the 4-digit cipher at the keypad terminal, find the twin gate keys, and reach the extraction gate.";
+  }
+
+  if (roleSplash) roleSplash.style.display = 'flex';
+  window.gameReady = false;
+
+  let roleCountdownSeconds = 5;
+  let roleCountdownInterval = null;
+
+  const dismissSplash = () => {
+    if (roleCountdownInterval) {
+      clearInterval(roleCountdownInterval);
+      roleCountdownInterval = null;
+    }
+    if (roleSplash) roleSplash.style.display = 'none';
+    const hud = document.getElementById('hud-overlay');
+    if (hud) hud.style.display = 'flex';
+    window.gameReady = true;
+
+    // Relink pointer lock or mobile joystick controls
+    if (isMobileDevice) {
+      window.mobileGameActive = true;
+      const mobileCtrl = document.getElementById('mobile-controls-container');
+      if (mobileCtrl) mobileCtrl.style.display = 'flex';
+    } else {
+      const lockTarget = (renderer && renderer.domElement) || container;
+      if (lockTarget && lockTarget.requestPointerLock && !document.pointerLockElement) {
+        lockTarget.requestPointerLock();
+      }
+    }
+  };
+
+  if (roleEnterBtn) {
+    roleEnterBtn.textContent = `ENTER LABYRINTH (${roleCountdownSeconds}s)`;
+    roleEnterBtn.onclick = (e) => {
+      e.stopPropagation();
+      dismissSplash();
+    };
+  }
+
+  roleCountdownInterval = setInterval(() => {
+    roleCountdownSeconds -= 1;
+    if (roleCountdownSeconds <= 0) {
+      dismissSplash();
+    } else if (roleEnterBtn) {
+      roleEnterBtn.textContent = `ENTER LABYRINTH (${roleCountdownSeconds}s)`;
+    }
+  }, 1000);
 
   // Setup ThreeJS scene
   scene = new THREE.Scene();
@@ -1798,8 +1979,8 @@ let staticWallsMesh = null;
 
 // Shared Texture Cache to prevent duplicate GPU memory allocations
 const textureCache = new Map();
-function getLoadedTexture(url, wrapRepeat = null) {
-  const cacheKey = wrapRepeat ? `${url}_${wrapRepeat.x}_${wrapRepeat.y}` : url;
+function getLoadedTexture(url, wrapRepeat = null, isColor = false) {
+  const cacheKey = wrapRepeat ? `${url}_${wrapRepeat.x}_${wrapRepeat.y}_${isColor}` : `${url}_${isColor}`;
   if (!textureCache.has(cacheKey)) {
     const tex = new THREE.TextureLoader().load(url);
     if (wrapRepeat) {
@@ -1807,9 +1988,265 @@ function getLoadedTexture(url, wrapRepeat = null) {
       tex.wrapT = THREE.RepeatWrapping;
       tex.repeat.set(wrapRepeat.x, wrapRepeat.y);
     }
+    if (isColor && THREE.SRGBColorSpace) {
+      tex.colorSpace = THREE.SRGBColorSpace;
+    }
     textureCache.set(cacheKey, tex);
   }
   return textureCache.get(cacheKey);
+}
+
+// --- Dungeon Corridor Pack 3D Props & Materials ---
+let dungeonAssetsLoaded = false;
+let dungeonPillarGeo = null;
+let dungeonPillarMat = null;
+let dungeonStatueGeo = null;
+let dungeonStatueMat = null;
+let dungeonRugGeo = null;
+let dungeonRugMat = null;
+let dungeonProps = [];
+let pendingDungeonPropsFn = null;
+
+function loadDungeonPackAssets() {
+  fbxLoader.load('/assets/dungeon/models/DungedonAssets.fbx', (fbx) => {
+    try {
+      const pMat = new THREE.MeshStandardMaterial({
+        map: getLoadedTexture('/assets/dungeon/textures/ColumnColor.png', null, true),
+        normalMap: getLoadedTexture('/assets/dungeon/textures/ColumnNormal.png'),
+        roughnessMap: getLoadedTexture('/assets/dungeon/textures/ColumnRoughness.png'),
+        roughness: 0.85,
+        metalness: 0.1,
+        color: 0xd0d0d0
+      });
+      const sMat = new THREE.MeshStandardMaterial({
+        map: getLoadedTexture('/assets/dungeon/textures/StatueColor.png', null, true),
+        normalMap: getLoadedTexture('/assets/dungeon/textures/StatueNormal.png'),
+        roughnessMap: getLoadedTexture('/assets/dungeon/textures/StatueRoughness.png'),
+        roughness: 0.82,
+        metalness: 0.12,
+        color: 0xd0d0d0
+      });
+      const rMat = new THREE.MeshStandardMaterial({
+        map: getLoadedTexture('/assets/dungeon/textures/RugColor.png', null, true),
+        metalnessMap: getLoadedTexture('/assets/dungeon/textures/RugMetalness.png'),
+        roughnessMap: getLoadedTexture('/assets/dungeon/textures/RugRoughness.png'),
+        roughness: 0.9,
+        metalness: 0.2
+      });
+
+      fbx.traverse(c => {
+        if (!c.isMesh) return;
+        if (c.name === 'IndAssetPillar' && !dungeonPillarGeo) {
+          const geo = c.geometry.clone();
+          geo.rotateX(-Math.PI / 2);
+          geo.center();
+          geo.computeBoundingBox();
+          geo.translate(0, -geo.boundingBox.min.y, 0);
+          const s = 4.5 / (geo.boundingBox.max.y - geo.boundingBox.min.y);
+          geo.scale(s, s, s);
+          geo.computeVertexNormals();
+          dungeonPillarGeo = geo;
+          dungeonPillarMat = pMat;
+        } else if (c.name === 'IndAssetStatue' && !dungeonStatueGeo) {
+          const geo = c.geometry.clone();
+          geo.rotateX(-Math.PI / 2);
+          geo.center();
+          geo.computeBoundingBox();
+          geo.translate(0, -geo.boundingBox.min.y, 0);
+          geo.computeVertexNormals();
+          dungeonStatueGeo = geo;
+          dungeonStatueMat = sMat;
+        } else if (c.name === 'IndAssetRugs' && !dungeonRugGeo) {
+          const geo = c.geometry.clone();
+          geo.rotateX(-Math.PI / 2);
+          geo.center();
+          geo.computeBoundingBox();
+          geo.translate(0, -geo.boundingBox.min.y, 0);
+          geo.scale(0.55, 1, 0.55);
+          geo.translate(0, 0.02, 0);
+          geo.computeVertexNormals();
+          dungeonRugGeo = geo;
+          dungeonRugMat = rMat;
+        }
+      });
+
+      dungeonAssetsLoaded = true;
+      console.log('[DUNGEON] Dungeon corridor pack models and PBR materials loaded successfully!');
+      if (typeof pendingDungeonPropsFn === 'function') {
+        pendingDungeonPropsFn();
+        pendingDungeonPropsFn = null;
+      }
+    } catch (err) {
+      console.error('[DUNGEON] Error preparing dungeon props:', err);
+    }
+  }, undefined, (err) => {
+    console.warn('[DUNGEON] FBXLoader failed or pack not found, proceeding with texture-based dungeon:', err);
+  });
+}
+
+// Preload Dungeon Assets immediately
+loadDungeonPackAssets();
+
+function spawnDungeonProps(layout, blockSize) {
+  // Clear any existing props
+  dungeonProps.forEach(p => {
+    scene.remove(p);
+  });
+  dungeonProps = [];
+
+  const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
+  if (!isDungeon) return;
+
+  if (!dungeonAssetsLoaded || !dungeonPillarGeo) {
+    pendingDungeonPropsFn = () => spawnDungeonProps(layout, blockSize);
+    return;
+  }
+
+  // 1. Master Vault Gate Flanking (Pillars + Gargoyles + Entrance Runner Rug)
+  if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
+    const edge = window.vaultEdge || 'N';
+    const isNorthSouth = (edge === 'N' || edge === 'S');
+
+    [-2.3, 2.3].forEach(offset => {
+      const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+      if (isNorthSouth) {
+        pMesh.position.set(gateCoordinates.x + offset, 0, gateCoordinates.z);
+      } else {
+        pMesh.position.set(gateCoordinates.x, 0, gateCoordinates.z + offset);
+      }
+      pMesh.castShadow = true;
+      pMesh.receiveShadow = true;
+      pMesh.userData = { isDungeonProp: true, halfSizeX: 0.65, halfSizeZ: 0.65 };
+      scene.add(pMesh);
+      dungeonProps.push(pMesh);
+      walls.push(pMesh);
+    });
+
+    if (dungeonStatueGeo) {
+      [-3.3, 3.3].forEach((offset) => {
+        const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
+        if (isNorthSouth) {
+          sMesh.position.set(gateCoordinates.x + offset, 0, gateCoordinates.z);
+          sMesh.rotation.y = (offset < 0) ? Math.PI * 0.4 : -Math.PI * 0.4;
+          if (edge === 'S') sMesh.rotation.y += Math.PI;
+        } else {
+          sMesh.position.set(gateCoordinates.x, 0, gateCoordinates.z + offset);
+          sMesh.rotation.y = (offset < 0) ? -Math.PI * 0.1 : Math.PI * 0.9;
+          if (edge === 'W') sMesh.rotation.y += Math.PI;
+        }
+        sMesh.castShadow = true;
+        sMesh.receiveShadow = true;
+        sMesh.userData = { isDungeonProp: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+        scene.add(sMesh);
+        dungeonProps.push(sMesh);
+        walls.push(sMesh);
+      });
+    }
+
+    if (dungeonRugGeo) {
+      const rugMesh = new THREE.Mesh(dungeonRugGeo, dungeonRugMat);
+      let rugX = gateCoordinates.x;
+      let rugZ = gateCoordinates.z;
+      if (edge === 'N') { rugZ += 2.0; rugMesh.rotation.y = 0; }
+      else if (edge === 'S') { rugZ -= 2.0; rugMesh.rotation.y = Math.PI; }
+      else if (edge === 'E') { rugX -= 2.0; rugMesh.rotation.y = Math.PI / 2; }
+      else if (edge === 'W') { rugX += 2.0; rugMesh.rotation.y = -Math.PI / 2; }
+      rugMesh.position.set(rugX, 0, rugZ);
+      rugMesh.receiveShadow = true;
+      scene.add(rugMesh);
+      dungeonProps.push(rugMesh);
+    }
+  }
+
+  // 2. Pillars around Light Sanctuaries (Sanctuary Shrines)
+  if (Array.isArray(sanctuaryZones) && sanctuaryZones.length > 0) {
+    sanctuaryZones.forEach(s => {
+      const angles = [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75];
+      const radius = 3.2;
+      angles.forEach(ang => {
+        const px = s.x + Math.cos(ang) * radius;
+        const pz = s.z + Math.sin(ang) * radius;
+        const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+        pMesh.position.set(px, 0, pz);
+        pMesh.castShadow = true;
+        pMesh.receiveShadow = true;
+        pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+        scene.add(pMesh);
+        dungeonProps.push(pMesh);
+        walls.push(pMesh);
+      });
+    });
+  }
+
+  // 3. Statues at Dead-Ends in the Maze (eerie stone gargoyles)
+  if (dungeonStatueGeo && layout && layout.length > 0) {
+    const deadEnds = [];
+    const dirs = [
+      { dx: 0, dz: -1, rot: 0 },
+      { dx: 0, dz: 1, rot: Math.PI },
+      { dx: -1, dz: 0, rot: -Math.PI / 2 },
+      { dx: 1, dz: 0, rot: Math.PI / 2 }
+    ];
+
+    for (let r = 2; r < layout.length - 2; r++) {
+      for (let c = 2; c < layout[r].length - 2; c++) {
+        if (layout[r][c] === 0) {
+          let openCount = 0;
+          let openDir = null;
+          for (const d of dirs) {
+            if (layout[r + d.dz] && layout[r + d.dz][c + d.dx] === 0) {
+              openCount++;
+              openDir = d;
+            }
+          }
+          if (openCount === 1 && openDir) {
+            const xPos = (c - layout[r].length / 2) * blockSize + blockSize / 2;
+            const zPos = (r - layout.length / 2) * blockSize + blockSize / 2;
+            if (Math.hypot(xPos, zPos) > 14) {
+              deadEnds.push({ x: xPos, z: zPos, dir: openDir });
+            }
+          }
+        }
+      }
+    }
+
+    const statueLimit = Math.min(8, deadEnds.length);
+    for (let i = 0; i < statueLimit; i++) {
+      const idx = (i * 3 + 1) % deadEnds.length;
+      const de = deadEnds[idx];
+      const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
+      const backOffsetX = -de.dir.dx * 1.3;
+      const backOffsetZ = -de.dir.dz * 1.3;
+      sMesh.position.set(de.x + backOffsetX, 0, de.z + backOffsetZ);
+      sMesh.rotation.y = de.dir.rot;
+      sMesh.castShadow = true;
+      sMesh.receiveShadow = true;
+      sMesh.userData = { isDungeonProp: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+      scene.add(sMesh);
+      dungeonProps.push(sMesh);
+      walls.push(sMesh);
+    }
+  }
+
+  // 4. Corridor Rugs along long straight paths
+  if (dungeonRugGeo && openCorridors && openCorridors.length > 0) {
+    const rugCandidates = openCorridors.filter(c => {
+      const d = Math.hypot(c.x, c.z);
+      return d > 10 && d < (mazeSizeGlobal * 1.5) && !isLocationOccupied(c.x, c.z, 5.0);
+    });
+    const rugsToPlace = Math.min(6, Math.floor(rugCandidates.length / 4));
+    for (let i = 0; i < rugsToPlace; i++) {
+      const c = rugCandidates[Math.floor((i + 1) * (rugCandidates.length / (rugsToPlace + 1)))];
+      if (c) {
+        const rugMesh = new THREE.Mesh(dungeonRugGeo, dungeonRugMat);
+        rugMesh.position.set(c.x, 0, c.z);
+        rugMesh.rotation.y = (i % 2 === 0) ? 0 : Math.PI / 2;
+        rugMesh.receiveShadow = true;
+        scene.add(rugMesh);
+        dungeonProps.push(rugMesh);
+      }
+    }
+  }
 }
 
 // Reusable scratch objects to eliminate Garbage Collection allocations in render loops
@@ -1822,6 +2259,7 @@ function generateMaze(keysCount = 8) {
   // Clear any existing walls
   walls.forEach(w => {
     scene.remove(w);
+    if (w.userData && w.userData.isDungeonProp) return;
     if (w.geometry) w.geometry.dispose();
     if (w.material) {
       if (Array.isArray(w.material)) {
@@ -1842,6 +2280,12 @@ function generateMaze(keysCount = 8) {
     staticWallsMesh = null;
   }
 
+  // Clear any existing dungeon props
+  dungeonProps.forEach(p => {
+    scene.remove(p);
+  });
+  dungeonProps = [];
+
   // Cleanup old floor and ceiling
   if (floorMesh) {
     scene.remove(floorMesh);
@@ -1854,6 +2298,20 @@ function generateMaze(keysCount = 8) {
     if (ceilingMesh.material) ceilingMesh.material.dispose();
   }
 
+  const currentTheme = localStorage.getItem('manifestation_maze_theme') || 'dungeon';
+  const isDungeon = currentTheme === 'dungeon';
+
+  // Fog & Atmosphere adjustment for Dungeon Corridor
+  if (scene && scene.fog) {
+    if (isDungeon) {
+      scene.fog.color.setHex(0x06080e);
+      scene.fog.density = 0.02;
+    } else {
+      scene.fog.color.setHex(0x000000);
+      scene.fog.density = 0.015;
+    }
+  }
+
   // Ground plane with photorealistic floor texture scaled to difficulty map size
   const blockSize = mazeBlockSize || 4.5;
   const mazeSize = (typeof mazeSizeGlobal !== 'undefined' && mazeSizeGlobal) ? mazeSizeGlobal : getMazeSizeForDifficulty(window.gameDifficulty);
@@ -1862,17 +2320,34 @@ function generateMaze(keysCount = 8) {
 
   const floorExtent = Math.max(300, (mazeSize * blockSize) + 120);
   const floorRep = Math.max(6, Math.round(mazeSize / 4));
-  const floorTex = getLoadedTexture('/assets/floor_texture.png', { x: floorRep, y: floorRep });
   
+  let floorMat;
+  if (isDungeon) {
+    const groundTex = getLoadedTexture('/assets/dungeon/textures/GroundColor.png', { x: floorRep * 2.2, y: floorRep * 2.2 }, true);
+    const groundNormal = getLoadedTexture('/assets/dungeon/textures/GroundNormal.png', { x: floorRep * 2.2, y: floorRep * 2.2 });
+    const groundRoughness = getLoadedTexture('/assets/dungeon/textures/GroundRoughness.png', { x: floorRep * 2.2, y: floorRep * 2.2 });
+    floorMat = new THREE.MeshStandardMaterial({ 
+      map: groundTex,
+      normalMap: groundNormal,
+      normalScale: new THREE.Vector2(1.2, 1.2),
+      roughnessMap: groundRoughness,
+      roughness: 0.85,
+      metalness: 0.08,
+      color: 0xcccccc
+    });
+  } else {
+    const floorTex = getLoadedTexture('/assets/floor_texture.png', { x: floorRep, y: floorRep });
+    floorMat = new THREE.MeshStandardMaterial({ 
+      map: floorTex,
+      bumpMap: floorTex,
+      bumpScale: 0.08,
+      color: 0x1a1a2e, 
+      roughness: 0.92,
+      metalness: 0.05
+    });
+  }
+
   const floorGeo = new THREE.PlaneGeometry(floorExtent, floorExtent);
-  const floorMat = new THREE.MeshStandardMaterial({ 
-    map: floorTex,
-    bumpMap: floorTex,
-    bumpScale: 0.08,
-    color: 0x1a1a2e, 
-    roughness: 0.92,
-    metalness: 0.05
-  });
   floorMesh = new THREE.Mesh(floorGeo, floorMat);
   floorMesh.rotation.x = -Math.PI / 2;
   floorMesh.receiveShadow = true;
@@ -1881,15 +2356,29 @@ function generateMaze(keysCount = 8) {
 
   // Ceiling with photorealistic texture scaled to difficulty map size
   const ceilRep = Math.max(5, Math.round(mazeSize / 5));
-  const ceilTex = getLoadedTexture('/assets/ceiling_texture.png', { x: ceilRep, y: ceilRep });
+  let ceilMat;
+  if (isDungeon) {
+    const ceilTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', { x: ceilRep * 2, y: ceilRep * 2 }, true);
+    const ceilNormal = getLoadedTexture('/assets/dungeon/textures/WallNormal.png', { x: ceilRep * 2, y: ceilRep * 2 });
+    ceilMat = new THREE.MeshStandardMaterial({ 
+      map: ceilTex,
+      normalMap: ceilNormal,
+      normalScale: new THREE.Vector2(0.8, 0.8),
+      color: 0x222226, 
+      roughness: 0.95,
+      metalness: 0.02
+    });
+  } else {
+    const ceilTex = getLoadedTexture('/assets/ceiling_texture.png', { x: ceilRep, y: ceilRep });
+    ceilMat = new THREE.MeshStandardMaterial({ 
+      map: ceilTex,
+      color: 0x060a12, 
+      roughness: 0.95,
+      metalness: 0.0
+    });
+  }
   
   const ceilGeo = new THREE.PlaneGeometry(floorExtent, floorExtent);
-  const ceilMat = new THREE.MeshStandardMaterial({ 
-    map: ceilTex,
-    color: 0x060a12, 
-    roughness: 0.95,
-    metalness: 0.0
-  });
   ceilingMesh = new THREE.Mesh(ceilGeo, ceilMat);
   ceilingMesh.rotation.x = Math.PI / 2;
   ceilingMesh.position.y = 4.5; // Match wall height exactly
@@ -2044,26 +2533,53 @@ function generateMaze(keysCount = 8) {
   // Store layout globally for ghost pathfinding & spatial collision
   mazeLayout = layout.map(row => row.map(cell => cell === 0 ? 0 : 1)); // 0=open, 1=wall
 
-  const generatedTex = getLoadedTexture('/assets/wall_texture.png', { x: 1, y: 1 });
-  const wallBumpTex = getLoadedTexture('/assets/wall_bump_map.png', { x: 1, y: 1 });
+  let wallMat, slidingWallMat;
+  if (isDungeon) {
+    const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', { x: 1, y: 1 }, true);
+    const dungeonWallNormal = getLoadedTexture('/assets/dungeon/textures/WallNormal.png', { x: 1, y: 1 });
+    const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/WallRoughness.png', { x: 1, y: 1 });
 
-  const wallMat = new THREE.MeshStandardMaterial({ 
-    map: generatedTex,
-    bumpMap: wallBumpTex,
-    bumpScale: 0.25,
-    color: 0x64748b, // Clean balanced stone tone for visibility
-    roughness: 0.85,
-    metalness: 0.05
-  });
-  
-  const slidingWallMat = new THREE.MeshStandardMaterial({
-    map: generatedTex,
-    bumpMap: wallBumpTex,
-    bumpScale: 0.25,
-    color: 0x475569,
-    roughness: 0.85,
-    metalness: 0.05
-  });
+    wallMat = new THREE.MeshStandardMaterial({ 
+      map: dungeonWallTex,
+      normalMap: dungeonWallNormal,
+      normalScale: new THREE.Vector2(1.2, 1.2),
+      roughnessMap: dungeonWallRoughness,
+      roughness: 0.85,
+      metalness: 0.05,
+      color: 0xd8d8d8
+    });
+    
+    slidingWallMat = new THREE.MeshStandardMaterial({
+      map: dungeonWallTex,
+      normalMap: dungeonWallNormal,
+      normalScale: new THREE.Vector2(1.2, 1.2),
+      roughnessMap: dungeonWallRoughness,
+      roughness: 0.8,
+      metalness: 0.22,
+      color: 0x6e7b8b // Iron-reinforced dark dungeon portcullis stone
+    });
+  } else {
+    const generatedTex = getLoadedTexture('/assets/wall_texture.png', { x: 1, y: 1 });
+    const wallBumpTex = getLoadedTexture('/assets/wall_bump_map.png', { x: 1, y: 1 });
+
+    wallMat = new THREE.MeshStandardMaterial({ 
+      map: generatedTex,
+      bumpMap: wallBumpTex,
+      bumpScale: 0.25,
+      color: 0x64748b, // Clean balanced stone tone for visibility
+      roughness: 0.85,
+      metalness: 0.05
+    });
+    
+    slidingWallMat = new THREE.MeshStandardMaterial({
+      map: generatedTex,
+      bumpMap: wallBumpTex,
+      bumpScale: 0.25,
+      color: 0x475569,
+      roughness: 0.85,
+      metalness: 0.05
+    });
+  }
 
   const wallGeo = new THREE.BoxGeometry(blockSize + 0.5, 4.5, blockSize + 0.5);
 
@@ -2196,6 +2712,8 @@ function generateMaze(keysCount = 8) {
   generateConsumableItems();
   // Spawn Light Sanctuaries
   generateLightSanctuaries();
+  // Spawn Dungeon Corridor Pack 3D Props (Gothic Pillars, Statues, Rugs)
+  spawnDungeonProps(layout, blockSize);
 }
 
 // Spatial isolation tracker ensuring ZERO overlap across all spawn entities
@@ -2602,7 +3120,13 @@ function toggleCameraView() {
   }
   
   if (mode !== 'fps' && !localPlayerVisual) {
-    localPlayerVisual = myTeam === 'Ghost' ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername);
+    const isVip = window.isVipActive ? window.isVipActive() : false;
+    localPlayerVisual = myTeam === 'Ghost' ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername, isVip);
+    localPlayerVisual.userData.isVip = isVip;
+    const glowPref = window.isVipGlowEnabled ? window.isVipGlowEnabled() : true;
+    if (isVip && glowPref) {
+      applyVipGlow(localPlayerVisual, true);
+    }
     // Align visual downwards slightly since camera is at eye level (1.6)
     localPlayerVisual.position.set(0, myTeam === 'Ghost' ? -1.25 : -1.6, 0);
     camera.add(localPlayerVisual);
@@ -4615,7 +5139,7 @@ function checkWinCondition() {
 
 // Setup network synchronization
 function setupSocketListeners() {
-  socketClient.on('player_moved', ({ id, position, rotation, team, characterClass }) => {
+  socketClient.on('player_moved', ({ id, position, rotation, team, characterClass, isVip: isVipMove }) => {
     // Ignore local player position broadcasts so we don't spawn a clone on ourselves
     if (!id || id === myId) return;
 
@@ -4638,7 +5162,13 @@ function setupSocketListeners() {
       const isGhost = team === 'Ghost';
       const pSkinId = currentLobby && currentLobby.players[id] ? currentLobby.players[id].skinId : null;
       const pUsername = currentLobby && currentLobby.players[id] ? currentLobby.players[id].username : 'Unknown';
-      const capMesh = isGhost ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername);
+      const isVipPlayer = Boolean((currentLobby && currentLobby.players[id] && currentLobby.players[id].isVip) || isVipMove);
+      const capMesh = isGhost ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername, isVipPlayer);
+      capMesh.userData.isVip = isVipPlayer;
+      const glowPref = window.isVipGlowEnabled ? window.isVipGlowEnabled() : true;
+      if (isVipPlayer && glowPref) {
+        applyVipGlow(capMesh, true);
+      }
       
       // Setup thermal camera support (Cyan for teammates, Red for ghosts)
       const meshThermalMat = new THREE.MeshBasicMaterial({ 
@@ -4672,6 +5202,11 @@ function setupSocketListeners() {
       const isGhost = team === 'Ghost';
       players3D[id].position.set(position.x, isGhost ? 0.35 : 0, position.z);
       players3D[id].rotation.y = rotation.y;
+      if (isVipMove !== undefined && players3D[id].userData.isVip !== isVipMove) {
+        players3D[id].userData.isVip = isVipMove;
+        const glowPref = window.isVipGlowEnabled ? window.isVipGlowEnabled() : true;
+        applyVipGlow(players3D[id], isVipMove && glowPref);
+      }
     }
   });
 
@@ -4877,7 +5412,9 @@ function setupSocketListeners() {
           document.getElementById('hud-overlay').style.display = 'none';
           const mobileCtrl = document.getElementById('mobile-controls-container');
           if (mobileCtrl) mobileCtrl.style.display = 'none';
-          document.getElementById('captured-overlay').style.display = 'flex';
+          if (!window.isSoloMatch) {
+            document.getElementById('captured-overlay').style.display = 'flex';
+          }
         });
       }
     } else {
@@ -5016,52 +5553,108 @@ function setupSocketListeners() {
     isCaptured = true;
 
     const renderOverlay = () => {
+      // Hide active in-game overlays so they never overlap with the end screen
+      const capOverlay = document.getElementById('captured-overlay');
+      if (capOverlay) capOverlay.style.display = 'none';
+      const hud = document.getElementById('hud-overlay');
+      if (hud) hud.style.display = 'none';
+      const mobileCtrl = document.getElementById('mobile-controls-container');
+      if (mobileCtrl) mobileCtrl.style.display = 'none';
+
       // Show the End Game Overlay
       const overlay = document.getElementById('end-game-overlay');
       const title = document.getElementById('end-game-title');
       const details = document.getElementById('end-game-details');
+      const retryBtn = document.getElementById('end-game-retry-btn');
+      const lobbyBtn = document.getElementById('end-game-lobby-btn');
 
       if (overlay && title && details) {
         overlay.style.display = 'flex';
-      
-      const isMyWin = (myTeam === winner);
 
-      if (isMyWin) {
-        title.textContent = "VICTORY";
-        title.style.color = myTeam === 'Ghost' ? "#a855f7" : "#10b981";
-        title.style.textShadow = myTeam === 'Ghost' ? "0 0 20px rgba(168, 85, 247, 0.7)" : "0 0 20px rgba(16, 185, 129, 0.7)";
-        const victoryMsg = myTeam === 'Ghost' ? "ALL SURVIVORS HARVESTED!" : "SURVIVORS ESCAPED!";
-        details.innerHTML = `<div style="font-weight:bold; color: ${title.style.color}; margin-bottom: 1rem; font-size: 1.3rem;">${victoryMsg}</div>`;
-      } else {
-        title.textContent = "DEFEAT";
-        title.style.color = "#ef4444";
-        title.style.textShadow = "0 0 20px rgba(239, 68, 68, 0.6)";
-        const defeatMsg = myTeam === 'Ghost' ? "SURVIVORS ESCAPED THE LABYRINTH!" : "ALL SURVIVORS ELIMINATED!";
-        details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 1rem; font-size: 1.3rem;">${defeatMsg}</div>`;
+        if (window.isSoloMatch) {
+          // SOLO MODE END GAME FLOW
+          const isEscapeWin = (winner === 'Human' || window.isEscaping);
+          if (isEscapeWin) {
+            title.textContent = "ESCAPED!";
+            title.style.color = "#10b981";
+            title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
+            details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate!</p>`;
+          } else {
+            title.textContent = "YOU DIED";
+            title.style.color = "#ef4444";
+            title.style.textShadow = "0 0 30px rgba(239, 68, 68, 0.9)";
+            details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 0.8rem; font-size: 1.3rem;">CONSUMED BY THE VOID</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You were dragged into the darkness before completing the extraction sequence.</p>`;
+          }
+
+          if (retryBtn) {
+            retryBtn.style.display = 'inline-block';
+            retryBtn.onclick = () => {
+              sessionStorage.setItem('rejoinRetrySolo', 'true');
+              sessionStorage.setItem('rejoinIsSolo', 'true');
+              if (window.leaveGameWithAd) {
+                window.leaveGameWithAd(() => window.location.reload());
+              } else {
+                window.location.reload();
+              }
+            };
+          }
+
+          if (lobbyBtn) {
+            lobbyBtn.textContent = 'Main Menu';
+            lobbyBtn.onclick = () => {
+              sessionStorage.removeItem('rejoinLobbyId');
+              sessionStorage.removeItem('rejoinUsername');
+              sessionStorage.removeItem('rejoinIsPublic');
+              sessionStorage.removeItem('rejoinIsSolo');
+              sessionStorage.removeItem('rejoinRetrySolo');
+              if (window.leaveGameWithAd) {
+                window.leaveGameWithAd(() => window.location.reload());
+              } else {
+                window.location.reload();
+              }
+            };
+          }
+        } else {
+          // MULTIPLAYER MODE END GAME FLOW
+          const isMyWin = (myTeam === winner);
+          if (isMyWin) {
+            title.textContent = "VICTORY";
+            title.style.color = myTeam === 'Ghost' ? "#a855f7" : "#10b981";
+            title.style.textShadow = myTeam === 'Ghost' ? "0 0 20px rgba(168, 85, 247, 0.7)" : "0 0 20px rgba(16, 185, 129, 0.7)";
+            const victoryMsg = myTeam === 'Ghost' ? "ALL SURVIVORS HARVESTED!" : "SURVIVORS ESCAPED!";
+            details.innerHTML = `<div style="font-weight:bold; color: ${title.style.color}; margin-bottom: 1rem; font-size: 1.3rem;">${victoryMsg}</div>`;
+          } else {
+            title.textContent = "DEFEAT";
+            title.style.color = "#ef4444";
+            title.style.textShadow = "0 0 20px rgba(239, 68, 68, 0.6)";
+            const defeatMsg = myTeam === 'Ghost' ? "SURVIVORS ESCAPED THE LABYRINTH!" : "ALL SURVIVORS ELIMINATED!";
+            details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 1rem; font-size: 1.3rem;">${defeatMsg}</div>`;
+          }
+
+          // Add detailed player status list
+          let summaryHTML = `<div style="text-align: left; font-size: 0.95rem; line-height: 1.6; max-height: 200px; overflow-y: auto; padding-right: 10px;">`;
+          if (Array.isArray(summary)) {
+            summary.forEach(p => {
+              const teamColor = p.team === 'Ghost' ? '#a855f7' : '#3b82f6';
+              const statusText = p.team === 'Ghost' ? 'Spectral Threat' : (p.isCaptured ? 'Captured' : 'Escaped');
+              const statusColor = p.team === 'Ghost' ? '#a855f7' : (p.isCaptured ? '#ef4444' : '#10b981');
+              summaryHTML += `<div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom:0.2rem;">
+                <span style="font-weight: bold; color: ${teamColor};">${p.username}</span> 
+                <span style="font-weight: bold; color: ${statusColor};">${statusText.toUpperCase()}</span>
+              </div>`;
+            });
+          }
+          summaryHTML += `</div>`;
+          details.innerHTML += summaryHTML;
+
+          if (retryBtn) retryBtn.style.display = 'none';
+          if (lobbyBtn) {
+            lobbyBtn.textContent = 'Return to Lobby';
+          }
+          bindRejoinBtn('end-game-lobby-btn');
+        }
       }
-
-      // Add detailed player status list
-      let summaryHTML = `<div style="text-align: left; font-size: 0.95rem; line-height: 1.6; max-height: 200px; overflow-y: auto; padding-right: 10px;">`;
-      summary.forEach(p => {
-        const teamColor = p.team === 'Ghost' ? '#a855f7' : '#3b82f6';
-        const statusText = p.team === 'Ghost' ? 'Spectral Threat' : (p.isCaptured ? 'Captured' : 'Escaped');
-        const statusColor = p.team === 'Ghost' ? '#a855f7' : (p.isCaptured ? '#ef4444' : '#10b981');
-        summaryHTML += `<div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom:0.2rem;">
-          <span style="font-weight: bold; color: ${teamColor};">${p.username}</span> 
-          <span style="font-weight: bold; color: ${statusColor};">${statusText.toUpperCase()}</span>
-        </div>`;
-      });
-      summaryHTML += `</div>`;
-      details.innerHTML += summaryHTML;
-
-      // Trigger post-match interstitial ad for free players (VIPs automatically bypass)
-      if (window.showInterstitialAd) {
-        setTimeout(() => {
-          window.showInterstitialAd();
-        }, 1200);
-      }
-    }
-  };
+    };
 
     const bindRejoinBtn = (btnId) => {
       const btn = document.getElementById(btnId);
@@ -5549,13 +6142,21 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   }
   const actions = humanGroup.userData.animActions;
 
-  // On-demand action instantiation for FBX skins (Hazmat only)
-  if (humanGroup.userData.skinId === 'skin_hazmat') {
-    if (!actions[targetActionName] && humanAnimClips[targetActionName]) {
-      actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
+  // On-demand action instantiation if clip finished loading after mesh creation (Hazmat & Soldier)
+  if (humanGroup.userData.skinId === 'skin_hazmat' || humanGroup.userData.skinId === 'skin_soldier') {
+    if (humanAnimClips[targetActionName]) {
+      const existingAct = actions[targetActionName];
+      // Rebind if action is missing or if it was assigned to fallback walk clip
+      if (!existingAct || (existingAct._clip && existingAct._clip.name === 'Walk' && targetActionName !== 'walk')) {
+        actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
+      }
     }
-    if (!actions.idle && humanAnimClips.idle) {
-      actions.idle = mixer.clipAction(humanAnimClips.idle);
+    if (!actions.idle) {
+      if (soldierAnimClips.idle && humanGroup.userData.skinId === 'skin_soldier') {
+        actions.idle = mixer.clipAction(soldierAnimClips.idle);
+      } else if (humanAnimClips.idle) {
+        actions.idle = mixer.clipAction(humanAnimClips.idle);
+      }
     }
   }
 
@@ -5565,10 +6166,11 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
 
   const currentAction = actions[currentActionName] || actions.idle;
 
-  // Direction timeScale (e.g. walkBack reverses walk clip on soldier)
-  const desiredTimeScale = (targetActionName === 'walkBack' && humanGroup.userData.skinId === 'skin_soldier') ? -1.0 : 1.0;
+  // Direction timeScale: only reverse walk clip if dedicated backwards clip is not present
+  const isFallbackWalkBack = targetActionName === 'walkBack' && humanGroup.userData.skinId === 'skin_soldier' && (!targetAction._clip || targetAction._clip.name === 'Walk');
+  const desiredTimeScale = isFallbackWalkBack ? -1.0 : 1.0;
 
-  // If already playing the EXACT same AnimationAction instance (e.g. strafeLeft <-> walk), do not reset or crossfade
+  // If already playing the EXACT same AnimationAction instance, do not reset or crossfade
   if (currentAction === targetAction) {
     if (targetAction.getEffectiveTimeScale() !== desiredTimeScale) {
       targetAction.setEffectiveTimeScale(desiredTimeScale);
@@ -5605,14 +6207,16 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   }
 }
 
-function createHumanMeshGroup(skinId, username) {
+function createHumanMeshGroup(skinId, username, isVip) {
   const group = new THREE.Group();
   const effectiveSkin = skinId || 'skin_default';
+  const vipActive = isVip !== undefined ? Boolean(isVip) : (window.isVipActive ? window.isVipActive() : false);
   group.userData = group.userData || {};
   group.userData.type = 'Human';
   group.userData.skinId = effectiveSkin;
   group.userData.walkCycle = 0;
   group.userData.lastPosition = new THREE.Vector3();
+  group.userData.isVip = vipActive;
   
   if (effectiveSkin === 'skin_default') {
     loadHumanGLBAsset();
@@ -5688,13 +6292,27 @@ function createHumanMeshGroup(skinId, username) {
       const actions = {};
 
       if (soldierAnimClips.idle) actions.idle = mixer.clipAction(soldierAnimClips.idle);
-      if (soldierAnimClips.walk) {
-        actions.walk = mixer.clipAction(soldierAnimClips.walk);
+      if (soldierAnimClips.walk) actions.walk = mixer.clipAction(soldierAnimClips.walk);
+      if (soldierAnimClips.sprint) actions.sprint = mixer.clipAction(soldierAnimClips.sprint);
+
+      // Bind dedicated strafe and backwards clips if available, else fallback to walk
+      if (humanAnimClips.walkBack) {
+        actions.walkBack = mixer.clipAction(humanAnimClips.walkBack);
+      } else if (soldierAnimClips.walk) {
         actions.walkBack = mixer.clipAction(soldierAnimClips.walk);
+      }
+
+      if (humanAnimClips.strafeLeft) {
+        actions.strafeLeft = mixer.clipAction(humanAnimClips.strafeLeft);
+      } else if (soldierAnimClips.walk) {
         actions.strafeLeft = mixer.clipAction(soldierAnimClips.walk);
+      }
+
+      if (humanAnimClips.strafeRight) {
+        actions.strafeRight = mixer.clipAction(humanAnimClips.strafeRight);
+      } else if (soldierAnimClips.walk) {
         actions.strafeRight = mixer.clipAction(soldierAnimClips.walk);
       }
-      if (soldierAnimClips.sprint) actions.sprint = mixer.clipAction(soldierAnimClips.sprint);
 
       if (actions.idle) {
         actions.idle.play();
@@ -5755,6 +6373,7 @@ function createHumanMeshGroup(skinId, username) {
     const textSprite = new THREE.Sprite(mat);
     textSprite.scale.set(1.5, 0.375, 1);
     textSprite.position.y = 2.8; // Place it well above the head
+    textSprite.userData = { isUsernameTag: true };
     
     // We add it to the group, but ThreeJS sprites always face the camera automatically
     group.add(textSprite);
@@ -5770,6 +6389,11 @@ function createHumanMeshGroup(skinId, username) {
   if (!group.userData.rightArm) group.userData.rightArm = { rotation: {x:0} };
   if (!group.userData.lastPosition) group.userData.lastPosition = new THREE.Vector3();
   
+  const glowPref = window.isVipGlowEnabled ? window.isVipGlowEnabled() : true;
+  if (vipActive && glowPref) {
+    applyVipGlow(group, true);
+  }
+
   return group;
 }
 
@@ -6571,7 +7195,11 @@ function animate() {
       // Update local player 3D Hazmat/Default locomotion animation state
       if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
         let desired = 'idle';
-        if (moveForward) {
+        const absX = Math.abs(direction.x);
+        const absZ = Math.abs(direction.z);
+        if ((moveLeft || moveRight) && (absX >= absZ || (!moveForward && !moveBackward))) {
+          desired = moveLeft ? 'strafeLeft' : 'strafeRight';
+        } else if (moveForward) {
           desired = isSprinting ? 'sprint' : 'walk';
         } else if (moveBackward) {
           desired = 'walkBack';
@@ -6831,7 +7459,9 @@ function animate() {
             document.getElementById('hud-overlay').style.display = 'none';
             const mobileCtrl = document.getElementById('mobile-controls-container');
             if (mobileCtrl) mobileCtrl.style.display = 'none';
-            document.getElementById('captured-overlay').style.display = 'flex';
+            if (!window.isSoloMatch) {
+              document.getElementById('captured-overlay').style.display = 'flex';
+            }
           });
         }
       }
@@ -7160,7 +7790,8 @@ function animate() {
         position: { x: camera.position.x, z: camera.position.z },
         rotation: { y: camera.rotation.y },
         team: myTeam,
-        characterClass: myClass
+        characterClass: myClass,
+        isVip: window.isVipActive ? window.isVipActive() : false
       });
 
       // Emit walking sound frequency (only for Humans)

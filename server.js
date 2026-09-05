@@ -563,7 +563,7 @@ io.on('connection', (socket) => {
     return callback && callback({ success: true, user: sanitizeUser(user) });
   });
 
-  socket.on('join_public_matchmaking', ({ username, skinId }) => {
+  socket.on('join_public_matchmaking', ({ username, skinId, isVip }) => {
     // Find an open public lobby
     let targetRoomId = null;
     for (const [id, lobby] of Object.entries(lobbies)) {
@@ -582,14 +582,14 @@ io.on('connection', (socket) => {
     }
 
     // Call join room with public flag
-    joinRoomHandler(socket, { roomId: targetRoomId, username, skinId, isPublic: true });
+    joinRoomHandler(socket, { roomId: targetRoomId, username, skinId, isPublic: true, isVip });
   });
 
   socket.on('join_room', (data) => {
     joinRoomHandler(socket, data);
   });
 
-  function joinRoomHandler(socket, { roomId, username, skinId = null, isPublic = false }) {
+  function joinRoomHandler(socket, { roomId, username, skinId = null, isPublic = false, isVip = false }) {
     if (socket.roomId && socket.roomId !== roomId && lobbies[socket.roomId]) {
       delete lobbies[socket.roomId].players[socket.id];
       socket.leave(socket.roomId);
@@ -628,6 +628,7 @@ io.on('connection', (socket) => {
         characterClass: 'Locksmith',
         isHost: isHost,
         isReady: false,
+        isVip: Boolean(isVip),
         isCaptured: true // Start captured so they don't prevent the match from ending
       };
 
@@ -646,6 +647,7 @@ io.on('connection', (socket) => {
     let isReady = isHost;
     let team = 'Human';
     let characterClass = 'Locksmith';
+    let isVipPlayer = Boolean(isVip);
 
     if (existingEntry) {
       const [oldId, oldPlayer] = existingEntry;
@@ -653,6 +655,7 @@ io.on('connection', (socket) => {
       isReady = oldPlayer.isReady || isHost;
       team = oldPlayer.team || 'Human';
       characterClass = oldPlayer.characterClass || 'Locksmith';
+      isVipPlayer = oldPlayer.isVip !== undefined ? oldPlayer.isVip : Boolean(isVip);
       delete lobby.players[oldId];
     }
 
@@ -664,6 +667,7 @@ io.on('connection', (socket) => {
       characterClass,
       isHost,
       isReady,
+      isVip: isVipPlayer,
     };
 
     socket.roomId = roomId;
@@ -684,6 +688,8 @@ io.on('connection', (socket) => {
       if (updates.characterClass !== undefined) player.characterClass = updates.characterClass;
     }
     if (updates.isReady !== undefined) player.isReady = updates.isReady;
+    if (updates.isVip !== undefined) player.isVip = updates.isVip;
+    if (updates.skinId !== undefined) player.skinId = updates.skinId;
 
     updateLobbyState(roomId);
   });

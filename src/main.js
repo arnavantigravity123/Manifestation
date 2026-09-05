@@ -61,6 +61,18 @@ const authStatusMsg = document.getElementById('auth-status-msg');
 let currentUser = null;
 let authToken = localStorage.getItem('manifestation_auth_token') || null;
 
+export function isVipActive() {
+  return (currentUser && currentUser.isVip) || (localStorage.getItem('manifestation_is_vip') === 'true');
+}
+
+export function isVipGlowEnabled() {
+  const pref = localStorage.getItem('manifestation_vip_glow_enabled');
+  return pref === null ? true : pref === 'true';
+}
+
+window.isVipActive = isVipActive;
+window.isVipGlowEnabled = isVipGlowEnabled;
+
 // Main Menu Action Buttons
 const soloBtn = document.getElementById('solo-btn');
 const joinPublicBtn = document.getElementById('join-public-btn');
@@ -122,6 +134,7 @@ const classesData = {
     Banshee: { desc: "Loadout: Ghost Claws, Sound Scrambler. Ability: Unleashes an auditory shockwave blinding and scrambling human sensors (radius: 18m - 45m, duration: 5s - 16s, CD: 50s - 20s based on difficulty)." }
   }
 };
+window.classesData = classesData;
 
 let currentSelectedTeam = localStorage.getItem('manifestation_team') || 'Human';
 
@@ -280,7 +293,7 @@ function updateAccountUI() {
       callsignHint.style.color = "#94a3b8";
     }
 
-    if (currentUser.isVip) {
+    if (isVipActive()) {
       if (accountVipBadge) accountVipBadge.style.display = 'inline-block';
       if (vipStoreBtn) vipStoreBtn.style.display = 'none';
     } else {
@@ -666,7 +679,7 @@ const privacyText = `
 
 const creditsText = `
   <p><b>🎮 3D Models & Assets Attribution:</b></p>
-  <p>• <b>"Futuristic Soldier"</b> (<a href="https://skfb.ly/6WpYT" target="_blank" style="color: #38bdf8;">https://skfb.ly/6WpYT</a>) by <b>Unlimited Studio</b> is licensed under Creative Commons Attribution (<a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" style="color: #38bdf8;">CC-BY 4.0</a>).</p>
+  <p>• <b>"Soldier"</b> (<a href="https://skfb.ly/6WpYT" target="_blank" style="color: #38bdf8;">https://skfb.ly/6WpYT</a>) by <b>Unlimited Studio</b> is licensed under Creative Commons Attribution (<a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" style="color: #38bdf8;">CC-BY 4.0</a>).</p>
   <p>• <b>Biohazard Hazmat Suit & Ghost 3D Models:</b> Sourced via Sketchfab under Creative Commons Attribution (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" style="color: #38bdf8;">CC-BY 4.0</a> / <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" style="color: #38bdf8;">CC-BY-SA</a>). All respective model artists and 3D creators retain full credit and ownership of their original works.</p>
   <p>• <b>Character Skeletal Rigging & Motion Capture:</b> Powered by Mixamo / Adobe Systems.</p>
   <p>• <b>3D Graphics & Rendering Engine:</b> Three.js (WebGL, MIT License).</p>
@@ -729,6 +742,7 @@ if (acceptLegalBtn) {
 // ==========================================
 // Ad Monetization Engine (Rewarded & Interstitial)
 // ==========================================
+const gameAdBackdrop = document.getElementById('game-ad-backdrop');
 const gameAdModal = document.getElementById('game-ad-modal');
 const adTimerCountdown = document.getElementById('ad-timer-countdown');
 const adProgressBar = document.getElementById('ad-progress-bar');
@@ -754,6 +768,7 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
 
   if (activeAdInterval) clearInterval(activeAdInterval);
 
+  if (gameAdBackdrop) gameAdBackdrop.style.display = 'flex';
   gameAdModal.style.display = 'block';
   if (adRewardLabel) {
     adRewardLabel.textContent = isRewarded 
@@ -785,6 +800,7 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
     if (elapsed >= totalMs) {
       clearInterval(activeAdInterval);
       activeAdInterval = null;
+      if (gameAdBackdrop) gameAdBackdrop.style.display = 'none';
       gameAdModal.style.display = 'none';
       if (isRewarded && onReward) onReward();
       if (onComplete) onComplete();
@@ -795,6 +811,7 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
     adSkipBtn.onclick = () => {
       if (activeAdInterval) clearInterval(activeAdInterval);
       activeAdInterval = null;
+      if (gameAdBackdrop) gameAdBackdrop.style.display = 'none';
       gameAdModal.style.display = 'none';
       if (onComplete) onComplete();
     };
@@ -804,6 +821,7 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
     adVipPromoBtn.onclick = () => {
       if (activeAdInterval) clearInterval(activeAdInterval);
       activeAdInterval = null;
+      if (gameAdBackdrop) gameAdBackdrop.style.display = 'none';
       gameAdModal.style.display = 'none';
       if (!currentUser) {
         promptGuestToCreateAccount('VIP Pass via RevenueCat');
@@ -1053,7 +1071,7 @@ function initializeSocketConnection() {
       }
 
       socket.emit('update_settings', { botsEnabled: true, difficulty: selectedDiff });
-      socket.emit('update_player', { team: 'Human', characterClass: chosenClass });
+      socket.emit('update_player', { team: 'Human', characterClass: chosenClass, isVip: isVipActive() });
       setTimeout(() => {
         socket.emit('start_match');
         soloLoadingOverlay.style.display = 'none';
@@ -1087,10 +1105,10 @@ function initializeSocketConnection() {
     authView.style.display = 'none';
     lobbyView.style.display = 'none';
 
-    // Show interstitial ad before entering match (VIP automatically bypasses)
+    // Step 1: Interstitial Ad (VIP bypasses instantly)
     window.showInterstitialAd(() => {
-      hudOverlay.style.display = 'flex';
-      initGame(socket, myId, matchConfig);
+      // Step 2 & 3: Role Reveal and Gameplay initialization handled inside initGame
+      initGame(socket, myId, matchConfig, isSoloMode);
     });
   });
 
@@ -1134,24 +1152,24 @@ soloBtn.addEventListener('click', () => {
   const s = initializeSocketConnection();
   
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false });
+  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
 });
 
 createPublicBtn.addEventListener('click', () => {
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: true });
+  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: true, isVip: isVipActive() });
 });
 
 joinPublicBtn.addEventListener('click', () => {
   const s = initializeSocketConnection();
-  s.emit('join_public_matchmaking', { username: getUsername(), skinId: getSkinId() });
+  s.emit('join_public_matchmaking', { username: getUsername(), skinId: getSkinId(), isVip: isVipActive() });
 });
 
 createPrivateBtn.addEventListener('click', () => {
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false });
+  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
 });
 
 joinPrivateBtn.addEventListener('click', () => {
@@ -1161,7 +1179,7 @@ joinPrivateBtn.addEventListener('click', () => {
     return;
   }
   const s = initializeSocketConnection();
-  s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), skinId: getSkinId(), isPublic: false });
+  s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
 });
 
 // ====== Quit Handlers ======
@@ -1288,6 +1306,19 @@ function renderLobby() {
       hostB.className = 'badge host';
       hostB.textContent = 'Host';
       nameWrap.appendChild(hostB);
+    }
+    if (p.isVip) {
+      const vipB = document.createElement('span');
+      vipB.className = 'badge vip-badge';
+      vipB.textContent = '👑 VIP';
+      vipB.style.background = 'linear-gradient(135deg, #fde047, #d97706)';
+      vipB.style.color = '#0f172a';
+      vipB.style.fontWeight = 'bold';
+      vipB.style.fontSize = '0.75rem';
+      vipB.style.padding = '2px 6px';
+      vipB.style.borderRadius = '4px';
+      vipB.style.marginLeft = '6px';
+      nameWrap.appendChild(vipB);
     }
     row.appendChild(nameWrap);
 
@@ -1429,6 +1460,18 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   } catch (e) {}
 
+  const rejoinRetrySoloStr = sessionStorage.getItem('rejoinRetrySolo');
+  if (rejoinRetrySoloStr === 'true') {
+    sessionStorage.removeItem('rejoinRetrySolo');
+    sessionStorage.removeItem('rejoinIsSolo');
+    const startScreen = document.getElementById('start-screen');
+    if (startScreen) startScreen.style.display = 'none';
+    setTimeout(() => {
+      if (soloBtn) soloBtn.click();
+    }, 250);
+    return;
+  }
+
   const rejoinId = sessionStorage.getItem('rejoinLobbyId');
   const rejoinUser = sessionStorage.getItem('rejoinUsername');
   const rejoinPublicStr = sessionStorage.getItem('rejoinIsPublic');
@@ -1456,7 +1499,8 @@ window.addEventListener('DOMContentLoaded', () => {
       roomId: rejoinId,
       username: rejoinUser,
       skinId: getSkinId(),
-      isPublic: rejoinPublicStr === 'true'
+      isPublic: rejoinPublicStr === 'true',
+      isVip: isVipActive()
     });
   } else {
     // Connect to server on startup to verify authentication token / load account state
@@ -1468,7 +1512,17 @@ window.addEventListener('DOMContentLoaded', () => {
   const controlSelect = document.getElementById('control-scheme-select');
   const sensitivitySlider = document.getElementById('sensitivity-slider');
   const sensitivityValue = document.getElementById('sensitivity-value');
+  const vipGlowToggle = document.getElementById('vip-glow-toggle');
+  const vipGlowStatusTag = document.getElementById('vip-glow-status-tag');
   
+  if (vipGlowToggle) {
+    vipGlowToggle.checked = isVipGlowEnabled();
+    vipGlowToggle.addEventListener('change', (e) => {
+      localStorage.setItem('manifestation_vip_glow_enabled', e.target.checked ? 'true' : 'false');
+      if (window.updateAllVipGlows) window.updateAllVipGlows(e.target.checked);
+    });
+  }
+
   const savedControlMode = localStorage.getItem('control_mode') || 'auto';
   controlSelect.value = savedControlMode;
   setMobileMode(savedControlMode);
@@ -1484,10 +1538,28 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const themeSelect = document.getElementById('theme-select');
+  const savedTheme = localStorage.getItem('manifestation_maze_theme') || 'dungeon';
+  if (themeSelect) {
+    themeSelect.value = savedTheme;
+    themeSelect.addEventListener('change', (e) => {
+      localStorage.setItem('manifestation_maze_theme', e.target.value);
+    });
+  }
+
   const showSettings = (e) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
+    }
+    if (vipGlowToggle) {
+      vipGlowToggle.checked = isVipGlowEnabled();
+      const active = isVipActive();
+      if (vipGlowStatusTag) {
+        vipGlowStatusTag.textContent = active ? "(VIP Active)" : "(Requires VIP Pass)";
+        vipGlowStatusTag.style.color = active ? "#fde047" : "#94a3b8";
+      }
+      vipGlowToggle.disabled = !active;
     }
     settingsModal.style.display = 'flex';
   };
@@ -1501,6 +1573,15 @@ window.addEventListener('DOMContentLoaded', () => {
     if (sensitivitySlider) {
       localStorage.setItem('look_sensitivity', sensitivitySlider.value);
       window.lookSensitivity = parseFloat(sensitivitySlider.value);
+    }
+
+    if (themeSelect) {
+      localStorage.setItem('manifestation_maze_theme', themeSelect.value);
+    }
+
+    if (vipGlowToggle) {
+      localStorage.setItem('manifestation_vip_glow_enabled', vipGlowToggle.checked ? 'true' : 'false');
+      if (window.updateAllVipGlows) window.updateAllVipGlows(vipGlowToggle.checked);
     }
   };
 
