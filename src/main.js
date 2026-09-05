@@ -583,7 +583,7 @@ const privacyText = `
 
 const creditsText = `
   <p><b>🎮 3D Models & Assets Attribution:</b></p>
-  <p>• <b>Cyberpunk Survivor & Ghost 3D Models:</b> Sourced via Sketchfab under Creative Commons Attribution (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" style="color: #38bdf8;">CC-BY 4.0</a> / <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" style="color: #38bdf8;">CC-BY-SA</a>). All respective 3D creators and Sketchfab artists retain full credit and copyright of their original assets.</p>
+  <p>• <b>Character & Ghost 3D Models:</b> Sourced via Sketchfab under Creative Commons Attribution (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" style="color: #38bdf8;">CC-BY 4.0</a> / <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" style="color: #38bdf8;">CC-BY-SA</a>). All respective model artists and 3D creators retain full credit and ownership of their original works.</p>
   <p>• <b>Character Skeletal Rigging & Motion Capture:</b> Powered by Mixamo / Adobe Systems.</p>
   <p>• <b>3D Graphics & Rendering Engine:</b> Three.js (WebGL, MIT License).</p>
   <p>• <b>Cross-Platform Native Runtime:</b> Capacitor.js (Ionic Framework, MIT License).</p>
@@ -835,7 +835,11 @@ buyCreditsBtns.forEach(btn => {
 });
 
 function updateSkinButtons() {
-  const equipped = localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
+  let equipped = localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
+  if (equipped === 'skin_cyberpunk') {
+    equipped = 'skin_hazmat';
+    localStorage.setItem('manifestation_equipped_skin', 'skin_hazmat');
+  }
   const allSkinBtns = document.querySelectorAll('.buy-skin-btn');
   allSkinBtns.forEach(btn => {
     const skinId = btn.getAttribute('data-skin-id');
