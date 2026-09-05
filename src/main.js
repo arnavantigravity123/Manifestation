@@ -597,6 +597,10 @@ document.querySelectorAll('.open-terms-trigger, #open-terms-link').forEach(el =>
     e.preventDefault();
     if (legalModalTitle) legalModalTitle.textContent = "TERMS OF SERVICE";
     if (legalModalContent) legalModalContent.innerHTML = termsText;
+    if (acceptLegalBtn) {
+      acceptLegalBtn.textContent = "I UNDERSTAND & AGREE";
+      acceptLegalBtn.style.background = "linear-gradient(135deg, #3b82f6, #1d4ed8)";
+    }
     if (legalModal) legalModal.style.display = 'flex';
   });
 });
@@ -606,6 +610,10 @@ document.querySelectorAll('.open-privacy-trigger, #open-privacy-link').forEach(e
     e.preventDefault();
     if (legalModalTitle) legalModalTitle.textContent = "PRIVACY POLICY";
     if (legalModalContent) legalModalContent.innerHTML = privacyText;
+    if (acceptLegalBtn) {
+      acceptLegalBtn.textContent = "I UNDERSTAND & AGREE";
+      acceptLegalBtn.style.background = "linear-gradient(135deg, #3b82f6, #1d4ed8)";
+    }
     if (legalModal) legalModal.style.display = 'flex';
   });
 });
@@ -615,6 +623,10 @@ document.querySelectorAll('.open-credits-trigger, #open-credits-link').forEach(e
     e.preventDefault();
     if (legalModalTitle) legalModalTitle.textContent = "CREDITS & 3D ASSETS";
     if (legalModalContent) legalModalContent.innerHTML = creditsText;
+    if (acceptLegalBtn) {
+      acceptLegalBtn.textContent = "CLOSE CREDITS";
+      acceptLegalBtn.style.background = "linear-gradient(135deg, #0284c7, #0f172a)";
+    }
     if (legalModal) legalModal.style.display = 'flex';
   });
 });
