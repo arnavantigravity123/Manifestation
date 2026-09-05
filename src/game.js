@@ -2368,10 +2368,11 @@ function generateMaze(keysCount = 8) {
   const ceilRep = Math.max(5, Math.round(mazeSize / 5));
   let ceilMat;
   if (isDungeon) {
-    const ceilTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', { x: ceilRep * 2, y: ceilRep * 2 }, true);
+    // Use GroundColor for ceiling — it's fully tileable. WallColor has a black void in the bottom half.
+    const ceilTex = getLoadedTexture('/assets/dungeon/textures/GroundColor.png', { x: ceilRep * 2, y: ceilRep * 2 }, true);
     ceilMat = new THREE.MeshStandardMaterial({ 
       map: ceilTex,
-      color: 0x888888, 
+      color: 0x555555, 
       roughness: 0.95,
       metalness: 0.02
     });
@@ -2542,8 +2543,19 @@ function generateMaze(keysCount = 8) {
 
   let wallMat, slidingWallMat;
   if (isDungeon) {
+    // WallColor.png has bricks in the top ~55% and a black void in the bottom ~45%.
+    // We crop the UV to only sample the brick region and tile it 2x vertically.
     const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', { x: 1, y: 1 }, true);
+    dungeonWallTex.repeat.set(1, 0.52);   // Only sample the top 52% of the image (the brick area)
+    dungeonWallTex.offset.set(0, 0.48);   // Skip the bottom 48% (the black void)
+    dungeonWallTex.wrapS = THREE.RepeatWrapping;
+    dungeonWallTex.wrapT = THREE.RepeatWrapping;
+
     const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/WallRoughness.png', { x: 1, y: 1 });
+    dungeonWallRoughness.repeat.set(1, 0.52);
+    dungeonWallRoughness.offset.set(0, 0.48);
+    dungeonWallRoughness.wrapS = THREE.RepeatWrapping;
+    dungeonWallRoughness.wrapT = THREE.RepeatWrapping;
 
     wallMat = new THREE.MeshStandardMaterial({ 
       map: dungeonWallTex,
@@ -2553,9 +2565,12 @@ function generateMaze(keysCount = 8) {
       color: 0xe8e8e8
     });
     
+    // Clone textures for sliding wall so they can have independent settings
+    const slidingWallTex = dungeonWallTex.clone();
+    const slidingRoughness = dungeonWallRoughness.clone();
     slidingWallMat = new THREE.MeshStandardMaterial({
-      map: dungeonWallTex,
-      roughnessMap: dungeonWallRoughness,
+      map: slidingWallTex,
+      roughnessMap: slidingRoughness,
       roughness: 0.78,
       metalness: 0.25,
       color: 0x8899aa
