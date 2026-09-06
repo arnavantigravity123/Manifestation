@@ -1139,26 +1139,33 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     window.gameReady = true;
     ptrOverlay.style.display = 'none';
     if (roleSplash) roleSplash.style.display = 'none';
+
     if (!isMobileDevice) {
-      const lockTarget = (renderer && renderer.domElement) || container;
+      if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
+      }
+      const lockTarget = (renderer && renderer.domElement) || container || document.body;
       if (lockTarget && lockTarget.requestPointerLock) {
         try {
           const promise = lockTarget.requestPointerLock();
           if (promise && promise.catch) {
             promise.catch(err => {
-              console.warn('[POINTER] Pointer lock request rejected:', err);
-              ptrOverlay.style.display = 'flex';
+              console.warn('[POINTER] Pointer lock request deferred by browser:', err);
+              // Do NOT force pause overlay back on temporary browser Esc-cooldown
             });
           }
         } catch(err) {
           console.warn('[POINTER] Pointer lock exception:', err);
-          ptrOverlay.style.display = 'flex';
         }
       }
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   };
 
+  ptrOverlay.addEventListener('click', (e) => {
+    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.glass-panel')) return;
+    handleEnterGame(e);
+  });
   container.addEventListener('click', handleEnterGame);
   const resumeBtn = document.getElementById('resume-click-target');
   if (resumeBtn) {
@@ -1171,8 +1178,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     pauseResumeBtn.addEventListener('touchstart', handleEnterGame, { passive: false });
   }
 
-  // Global click-to-relock during gameplay: clicking anywhere while in-game restores mouse control
-  window.addEventListener('click', (e) => {
+  // Global helper to request pointer lock during active gameplay
+  window.requestGamePointerLock = () => {
     if (isMobileDevice || !window.gameReady || window.isSpectating) return;
     if (document.pointerLockElement) return;
     if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
@@ -1181,12 +1188,29 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     const endEl = document.getElementById('end-game-overlay');
     if ((capturedEl && capturedEl.style.display === 'flex') || (endEl && endEl.style.display === 'flex')) return;
 
-    const lockTarget = (renderer && renderer.domElement) || container;
+    if (document.activeElement && document.activeElement.blur) {
+      document.activeElement.blur();
+    }
+    const lockTarget = (renderer && renderer.domElement) || container || document.body;
     if (lockTarget && lockTarget.requestPointerLock) {
       try {
         const p = lockTarget.requestPointerLock();
         if (p && p.catch) p.catch(() => {});
       } catch(_) {}
+    }
+  };
+
+  // Global click & pointerdown to relock mouse anytime player clicks during gameplay
+  window.addEventListener('click', (e) => {
+    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel')) return;
+    if (ptrOverlay.style.display !== 'flex') {
+      window.requestGamePointerLock();
+    }
+  });
+  window.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel')) return;
+    if (ptrOverlay.style.display !== 'flex') {
+      window.requestGamePointerLock();
     }
   });
 
@@ -1219,11 +1243,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
 
   document.addEventListener('pointerlockerror', () => {
     if (isMobileDevice) return;
-    console.warn('[POINTER] Pointer lock error event fired');
-    // If the browser temporarily rejected pointer lock (e.g. Esc cooldown), keep pause screen so next click succeeds
-    if (!document.pointerLockElement && window.gameReady) {
-      ptrOverlay.style.display = 'flex';
-    }
+    console.warn('[POINTER] Pointer lock error/cooldown event fired — awaiting next player interaction');
   });
 
   // Display Role Splash & Class Assignment Screen (Stage 2 of Match Entry)
@@ -2047,66 +2067,95 @@ let pendingDungeonPropsFn = null;
 function loadDungeonPackAssets() {
   if (dungeonAssetsLoaded) return;
 
-  const geoLoader = new THREE.BufferGeometryLoader();
+  gltfLoader.load('/assets/dungeon/models/dungeon_kit.glb', (gltf) => {
+    let pillarMesh = null;
+    let statueMesh = null;
+    let rugMesh = null;
 
-  dungeonPillarMat = new THREE.MeshStandardMaterial({
-    map: getLoadedTexture('/assets/dungeon/textures/ColumnColor.png', null, true),
-    roughnessMap: getLoadedTexture('/assets/dungeon/textures/ColumnRoughness.png'),
-    roughness: 0.65,
-    metalness: 0.05,
-    color: 0xffffff,
-    emissive: 0x333333,
-    emissiveIntensity: 0.35
-  });
-
-  dungeonStatueMat = new THREE.MeshStandardMaterial({
-    map: getLoadedTexture('/assets/dungeon/textures/StatueColor.png', null, true),
-    roughnessMap: getLoadedTexture('/assets/dungeon/textures/StatueRoughness.png'),
-    roughness: 0.7,
-    metalness: 0.08,
-    color: 0xffffff,
-    emissive: 0x333333,
-    emissiveIntensity: 0.35
-  });
-
-  dungeonRugMat = new THREE.MeshStandardMaterial({
-    map: getLoadedTexture('/assets/dungeon/textures/RugColor.png', null, true),
-    roughnessMap: getLoadedTexture('/assets/dungeon/textures/RugRoughness.png'),
-    roughness: 0.85,
-    metalness: 0.05,
-    transparent: true,
-    alphaTest: 0.2,
-    emissive: 0x440808,
-    emissiveIntensity: 0.45
-  });
-
-  let loaded = 0;
-  const checkComplete = () => {
-    loaded++;
-    if (loaded >= 3) {
-      dungeonAssetsLoaded = true;
-      console.log('[DUNGEON] All 3D dungeon props (Pillars, Statues, Rugs) loaded successfully via BufferGeometryLoader!');
-      if (typeof pendingDungeonPropsFn === 'function') {
-        pendingDungeonPropsFn();
-        pendingDungeonPropsFn = null;
+    gltf.scene.traverse((child) => {
+      if (child.isMesh) {
+        const name = child.name || '';
+        if (!pillarMesh && name.includes('Pillar')) {
+          pillarMesh = child;
+        } else if (!statueMesh && name.includes('Statue')) {
+          statueMesh = child;
+        } else if (!rugMesh && (name.includes('Rugs') || name.includes('Alfombra'))) {
+          rugMesh = child;
+        }
       }
+    });
+
+    if (pillarMesh) {
+      dungeonPillarGeo = pillarMesh.geometry.clone();
+      dungeonPillarGeo.rotateX(-Math.PI / 2);
+      dungeonPillarGeo.computeBoundingBox();
+      const pSize = new THREE.Vector3();
+      dungeonPillarGeo.boundingBox.getSize(pSize);
+      const pScale = 4.5 / (pSize.y || 9.14);
+      dungeonPillarGeo.scale(pScale, pScale, pScale);
+      dungeonPillarGeo.computeBoundingBox();
+      const pMin = dungeonPillarGeo.boundingBox.min;
+      const pMax = dungeonPillarGeo.boundingBox.max;
+      dungeonPillarGeo.translate(-(pMin.x + pMax.x) / 2, -pMin.y, -(pMin.z + pMax.z) / 2);
+      dungeonPillarGeo.computeVertexNormals();
+
+      dungeonPillarMat = pillarMesh.material ? pillarMesh.material.clone() : new THREE.MeshStandardMaterial({ color: 0xffffff });
+      dungeonPillarMat.color.setHex(0xffffff);
+      dungeonPillarMat.emissive.setHex(0x333333);
+      dungeonPillarMat.emissiveIntensity = 0.35;
+      dungeonPillarMat.roughness = 0.6;
+      dungeonPillarMat.metalness = 0.05;
+      dungeonPillarMat.needsUpdate = true;
     }
-  };
 
-  geoLoader.load('/assets/dungeon/models/pillar.json', (geo) => {
-    dungeonPillarGeo = geo;
-    checkComplete();
-  }, undefined, (err) => console.error('[DUNGEON] Error loading pillar.json:', err));
+    if (statueMesh) {
+      dungeonStatueGeo = statueMesh.geometry.clone();
+      dungeonStatueGeo.rotateX(-Math.PI / 2);
+      dungeonStatueGeo.computeBoundingBox();
+      const sMin = dungeonStatueGeo.boundingBox.min;
+      const sMax = dungeonStatueGeo.boundingBox.max;
+      dungeonStatueGeo.translate(-(sMin.x + sMax.x) / 2, -sMin.y, -(sMin.z + sMax.z) / 2);
+      dungeonStatueGeo.computeVertexNormals();
 
-  geoLoader.load('/assets/dungeon/models/statue.json', (geo) => {
-    dungeonStatueGeo = geo;
-    checkComplete();
-  }, undefined, (err) => console.error('[DUNGEON] Error loading statue.json:', err));
+      dungeonStatueMat = statueMesh.material ? statueMesh.material.clone() : new THREE.MeshStandardMaterial({ color: 0xffffff });
+      dungeonStatueMat.color.setHex(0xffffff);
+      dungeonStatueMat.emissive.setHex(0x333333);
+      dungeonStatueMat.emissiveIntensity = 0.35;
+      dungeonStatueMat.roughness = 0.65;
+      dungeonStatueMat.metalness = 0.08;
+      dungeonStatueMat.needsUpdate = true;
+    }
 
-  geoLoader.load('/assets/dungeon/models/rug.json', (geo) => {
-    dungeonRugGeo = geo;
-    checkComplete();
-  }, undefined, (err) => console.error('[DUNGEON] Error loading rug.json:', err));
+    if (rugMesh) {
+      dungeonRugGeo = rugMesh.geometry.clone();
+      dungeonRugGeo.rotateX(-Math.PI / 2);
+      dungeonRugGeo.center();
+      dungeonRugGeo.computeBoundingBox();
+      const rSize = new THREE.Vector3();
+      dungeonRugGeo.boundingBox.getSize(rSize);
+      const scaleX = 2.4 / (rSize.x || 3.34);
+      const scaleZ = 4.5 / (rSize.z || 8.40);
+      dungeonRugGeo.scale(scaleX, 1.0, scaleZ);
+      dungeonRugGeo.translate(0, 0.02, 0);
+      dungeonRugGeo.computeVertexNormals();
+
+      dungeonRugMat = rugMesh.material ? rugMesh.material.clone() : new THREE.MeshStandardMaterial({ color: 0xffffff });
+      dungeonRugMat.color.setHex(0xffffff);
+      dungeonRugMat.emissive.setHex(0x440808);
+      dungeonRugMat.emissiveIntensity = 0.45;
+      dungeonRugMat.side = THREE.DoubleSide;
+      dungeonRugMat.needsUpdate = true;
+    }
+
+    dungeonAssetsLoaded = true;
+    console.log('[DUNGEON] Official 3D GLB Dungeon Kit loaded successfully with 1k PBR textures!');
+    if (typeof pendingDungeonPropsFn === 'function') {
+      pendingDungeonPropsFn();
+      pendingDungeonPropsFn = null;
+    }
+  }, undefined, (err) => {
+    console.error('[DUNGEON] Failed to load dungeon_kit.glb:', err);
+  });
 }
 
 // Preload Dungeon Assets immediately
@@ -2248,17 +2297,17 @@ function spawnDungeonProps(layout, blockSize) {
   // 4. White Marble Columns Lining Corridor Walls (Placed inside corridor against walls, matching example)
   if (layout && layout.length > 0) {
     let pillarCount = 0;
-    const maxPillars = 60;
+    const maxPillars = 80;
     for (let r = 2; r < layout.length - 2 && pillarCount < maxPillars; r++) {
       for (let c = 2; c < layout[r].length - 2 && pillarCount < maxPillars; c++) {
-        if (layout[r][c] === 0 && (r + c) % 3 === 0) {
+        if (layout[r][c] === 0 && (r + c) % 2 === 0) {
           const cx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
           const cz = (r - layout.length / 2) * blockSize + blockSize / 2;
 
           // Check if corridor has west/east walls
           if (layout[r][c - 1] === 1) {
             const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-            pMesh.position.set(cx - 1.5, 0, cz);
+            pMesh.position.set(cx - 1.55, 0, cz);
             pMesh.castShadow = true;
             pMesh.receiveShadow = true;
             pMesh.userData = { isDungeonProp: true, halfSizeX: 0.55, halfSizeZ: 0.55 };
@@ -2269,7 +2318,7 @@ function spawnDungeonProps(layout, blockSize) {
           }
           if (layout[r][c + 1] === 1 && pillarCount < maxPillars) {
             const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-            pMesh.position.set(cx + 1.5, 0, cz);
+            pMesh.position.set(cx + 1.55, 0, cz);
             pMesh.castShadow = true;
             pMesh.receiveShadow = true;
             pMesh.userData = { isDungeonProp: true, halfSizeX: 0.55, halfSizeZ: 0.55 };
@@ -2283,13 +2332,13 @@ function spawnDungeonProps(layout, blockSize) {
     }
   }
 
-  // 5. Red Velvet Runner Carpets along Corridors (IndAssetRugs)
+  // 5. Red Velvet Runner Carpets along Corridors (Alfombra with Gold Winged Crest)
   if (layout && layout.length > 0) {
     let rugCount = 0;
-    const maxRugs = 40;
+    const maxRugs = 80;
     for (let r = 1; r < layout.length - 1 && rugCount < maxRugs; r++) {
       for (let c = 1; c < layout[r].length - 1 && rugCount < maxRugs; c++) {
-        if (layout[r][c] === 0 && (r + c) % 2 === 0) {
+        if (layout[r][c] === 0) {
           const isNS = (layout[r - 1] && layout[r - 1][c] === 0) || (layout[r + 1] && layout[r + 1][c] === 0);
           const isEW = (layout[r][c - 1] === 0) || (layout[r][c + 1] === 0);
           if (isNS || isEW) {
@@ -2396,14 +2445,16 @@ function generateMaze(keysCount = 8) {
   if (isDungeon) {
     const groundTex = getLoadedTexture('/assets/dungeon/textures/GroundColor.png', { x: floorRep * 2.2, y: floorRep * 2.2 }, true);
     const groundRoughness = getLoadedTexture('/assets/dungeon/textures/GroundRoughness.png', { x: floorRep * 2.2, y: floorRep * 2.2 });
+    const groundNormal = getLoadedTexture('/assets/dungeon/textures/GroundNormal.png', { x: floorRep * 2.2, y: floorRep * 2.2 });
     floorMat = new THREE.MeshStandardMaterial({ 
       map: groundTex,
       roughnessMap: groundRoughness,
-      roughness: 0.72,
+      normalMap: groundNormal,
+      roughness: 0.7,
       metalness: 0.04,
       color: 0xffffff,
       emissive: 0x222222,
-      emissiveIntensity: 0.2
+      emissiveIntensity: 0.25
     });
   } else {
     const floorTex = getLoadedTexture('/assets/floor_texture.png', { x: floorRep, y: floorRep });
@@ -2603,17 +2654,19 @@ function generateMaze(keysCount = 8) {
 
   let wallMat, slidingWallMat;
   if (isDungeon) {
-    const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/DungeonBrickClean.png', { x: 1, y: 1 }, true);
-    const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/DungeonBrickRoughness.png', { x: 1, y: 1 });
+    const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/DungeonWallClean.png', { x: 1, y: 1 }, true);
+    const dungeonWallNormal = getLoadedTexture('/assets/dungeon/textures/DungeonWallNormal.png', { x: 1, y: 1 });
+    const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/DungeonWallRoughness.png', { x: 1, y: 1 });
 
     wallMat = new THREE.MeshStandardMaterial({ 
       map: dungeonWallTex,
+      normalMap: dungeonWallNormal,
       roughnessMap: dungeonWallRoughness,
-      roughness: 0.72,
+      roughness: 0.65,
       metalness: 0.04,
       color: 0xffffff,
-      emissive: 0x222222,
-      emissiveIntensity: 0.25
+      emissive: 0x333333,
+      emissiveIntensity: 0.3
     });
     
     // Clone textures for sliding wall so they can have independent settings
@@ -3482,22 +3535,50 @@ function setupControls() {
   });
   
   document.addEventListener('mousedown', (e) => {
-    if (!document.pointerLockElement || (isCaptured && !window.isSpectating)) return;
+    window._lastMouseX = e.clientX;
+    window._lastMouseY = e.clientY;
+    if (!document.pointerLockElement && window.gameReady && !isCaptured && window.requestGamePointerLock) {
+      window.requestGamePointerLock();
+    }
+    if ((!document.pointerLockElement && e.target.id !== 'canvas-container') || (isCaptured && !window.isSpectating)) return;
     if (e.button === 0 && !window.isSpectating) { // Left click
       useActiveItem();
     }
   });
 
-  // Mouse camera rotation controller
+  // Mouse camera rotation controller with seamless relock & drag fallback
   document.addEventListener('mousemove', (e) => {
-    if (!document.pointerLockElement || (isCaptured && !window.isSpectating)) return;
-    
-    // Ignore massive spikes caused by browser Pointer Lock bugs
-    if (Math.abs(e.movementX) > 200 || Math.abs(e.movementY) > 200) return;
+    const hasLock = Boolean(document.pointerLockElement);
+    if ((!hasLock && e.buttons !== 1 && !window.gameReady) || (isCaptured && !window.isSpectating)) return;
+    const ptrOverlay = document.getElementById('pointer-lock-overlay');
+    if (ptrOverlay && ptrOverlay.style.display === 'flex') return;
+    if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
+    if (isMinimapExpanded) return;
+
+    let mx = e.movementX;
+    let my = e.movementY;
+    if (!hasLock) {
+      if (typeof window._lastMouseX === 'number' && typeof window._lastMouseY === 'number') {
+        mx = e.clientX - window._lastMouseX;
+        my = e.clientY - window._lastMouseY;
+      } else {
+        mx = 0;
+        my = 0;
+      }
+      window._lastMouseX = e.clientX;
+      window._lastMouseY = e.clientY;
+      if (window.requestGamePointerLock) window.requestGamePointerLock();
+    } else {
+      window._lastMouseX = e.clientX;
+      window._lastMouseY = e.clientY;
+    }
+
+    // Ignore massive spikes caused by browser Pointer Lock transitions
+    if (Math.abs(mx) > 150 || Math.abs(my) > 150) return;
 
     const sensitivity = window.lookSensitivity !== undefined ? window.lookSensitivity : 1.0;
-    camera.rotation.y -= e.movementX * 0.002 * sensitivity;
-    camera.rotation.x -= e.movementY * 0.002 * sensitivity;
+    camera.rotation.y -= mx * 0.002 * sensitivity;
+    camera.rotation.x -= my * 0.002 * sensitivity;
     camera.rotation.x = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, camera.rotation.x));
   });
 
