@@ -662,13 +662,6 @@ let totalBreakersRequired = 3;
 window.gameDifficulty = localStorage.getItem('manifestation_difficulty') || 'medium';
 
 function getMazeSizeForDifficulty(difficulty = window.gameDifficulty || 'medium') {
-  const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
-  if (isDungeon) {
-    if (difficulty === 'easy') return 7;
-    if (difficulty === 'hard') return 11;
-    if (difficulty === 'impossible') return 13;
-    return 9; // medium (216m x 216m modular dungeon labyrinth)
-  }
   if (difficulty === 'easy') return 25;
   if (difficulty === 'hard') return 45;
   if (difficulty === 'impossible') return 55;
@@ -2254,6 +2247,7 @@ function loadDungeonPackAssets() {
     dungeonModules.squareWall = extractModule('IndAssetSquareWall', new THREE.Vector3(0, 0, 0));
     dungeonModules.pillar = extractModule('IndAssetPillar', new THREE.Vector3(0, 0, 0));
     dungeonModules.statue = extractModule('IndAssetStatue', new THREE.Vector3(0, 0, 0));
+    dungeonModules.rug = extractModule('IndAssetRugs', new THREE.Vector3(0, 0, 0));
 
     // Standalone references for props if needed
     if (dungeonModules.pillar && dungeonModules.pillar.children[0]) {
@@ -2264,13 +2258,23 @@ function loadDungeonPackAssets() {
       dungeonStatueGeo = dungeonModules.statue.children[0].geometry;
       dungeonStatueMat = dungeonModules.statue.children[0].material;
     }
-    if (dungeonModules.wall && dungeonModules.wall.children[0]) {
-      dungeonRugGeo = dungeonModules.wall.children[0].geometry;
-      dungeonRugCrestGeo = dungeonRugGeo;
-      dungeonRugMat = dungeonModules.wall.children[0].material;
+    // Seamless continuous runner rug (3.2m wide x 6.0m cell length)
+    dungeonRugGeo = new THREE.PlaneGeometry(3.2, 6.0);
+    dungeonRugGeo.rotateX(-Math.PI / 2);
+    dungeonRugGeo.translate(0, 0.025, 0);
+    dungeonRugCrestGeo = dungeonRugGeo;
+    if (dungeonModules.rug && dungeonModules.rug.children[0]) {
+      dungeonRugMat = dungeonModules.rug.children[0].material;
+    } else {
+      dungeonRugMat = makeDungeonMat(
+        '/assets/dungeon/textures/RugColor.png',
+        null,
+        '/assets/dungeon/textures/RugRoughness.png',
+        { roughness: 0.85, emissive: 0x661111, emissiveIntensity: 0.5, doubleSide: true }
+      );
     }
 
-    console.log('[DUNGEON] ✓ All modular corridor sets (#2, #3, #4, #5, #6) and individual wall slots (#1) extracted successfully!');
+    console.log('[DUNGEON] ✓ All dungeon 3D kit assets extracted successfully!');
     dungeonAssetsLoaded = true;
 
     if (typeof pendingDungeonPropsFn === 'function') {
@@ -2438,9 +2442,9 @@ function spawnDungeonProps(layout, blockSize) {
     });
   }
 
-  // 4. Ornate Columns & Monk Statues Lining Corridor Walls (Procedural Fallback Only)
-  if (!dungeonModules.cross && layout && layout.length > 0) {
-    const wallOffset = 2.4; // Nested snugly against the wall in 6.0m wide corridor
+  // 4. Ornate Columns & Monk Statues Lining Corridor Walls
+  if (layout && layout.length > 0) {
+    const wallOffset = 2.45; // Nested snugly against the wall in 6.0m wide corridor
     for (let r = 1; r < layout.length - 1; r++) {
       for (let c = 1; c < layout[r].length - 1; c++) {
         if (layout[r][c] === 0 && (r + c) % 2 === 0) {
@@ -2515,8 +2519,8 @@ function spawnDungeonProps(layout, blockSize) {
     }
   }
 
-  // 5. Seamless Continuous Red Velvet Runner Carpets (Procedural Fallback Only)
-  if (!dungeonModules.cross && layout && layout.length > 0) {
+  // 5. Seamless Continuous Red Velvet Runner Carpets
+  if (layout && layout.length > 0) {
     for (let r = 1; r < layout.length - 1; r++) {
       for (let c = 1; c < layout[r].length - 1; c++) {
         if (layout[r][c] === 0) {
@@ -2525,23 +2529,32 @@ function spawnDungeonProps(layout, blockSize) {
           const westOpen  = (layout[r][c - 1] === 0);
           const eastOpen  = (layout[r][c + 1] === 0);
 
-          if (northOpen || southOpen || westOpen || eastOpen) {
+          const hasNS = (northOpen || southOpen);
+          const hasEW = (westOpen || eastOpen);
+
+          if (hasNS || hasEW) {
             const rx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
             const rz = (r - layout.length / 2) * blockSize + blockSize / 2;
 
-            // Every 3rd cell gets the grand gold winged crest, other cells have the seamless continuous velvet runner
-            const hasCrest = (r + c) % 3 === 0;
-            const rugGeo = (hasCrest && dungeonRugCrestGeo) ? dungeonRugCrestGeo : dungeonRugGeo;
-            const rugMesh = new THREE.Mesh(rugGeo, dungeonRugMat);
-            rugMesh.position.set(rx, 0, rz);
+            if (hasNS) {
+              const rugMesh = new THREE.Mesh(dungeonRugGeo, dungeonRugMat);
+              rugMesh.position.set(rx, 0, rz);
+              rugMesh.rotation.y = 0;
+              rugMesh.receiveShadow = true;
+              scene.add(rugMesh);
+              dungeonProps.push(rugMesh);
+              placedRugs++;
+            }
 
-            // Orient runner along the corridor axis
-            const isPureEW = (westOpen && eastOpen && !northOpen && !southOpen) || (!northOpen && !southOpen && (westOpen || eastOpen));
-            rugMesh.rotation.y = isPureEW ? Math.PI / 2 : 0;
-            rugMesh.receiveShadow = true;
-            scene.add(rugMesh);
-            dungeonProps.push(rugMesh);
-            placedRugs++;
+            if (hasEW && (!hasNS || (westOpen && eastOpen))) {
+              const rugMesh = new THREE.Mesh(dungeonRugGeo, dungeonRugMat);
+              rugMesh.position.set(rx, 0, rz);
+              rugMesh.rotation.y = Math.PI / 2;
+              rugMesh.receiveShadow = true;
+              scene.add(rugMesh);
+              dungeonProps.push(rugMesh);
+              placedRugs++;
+            }
           }
         }
       }
@@ -2626,7 +2639,7 @@ function generateMaze(keysCount = 8) {
   }
 
   // Ground plane with photorealistic floor texture scaled to difficulty map size
-  const blockSize = isDungeon ? 24.0 : 6.0;
+  const blockSize = 6.0;
   mazeBlockSize = blockSize;
   window.mazeBlockSize = blockSize;
   const mazeSize = (typeof mazeSizeGlobal !== 'undefined' && mazeSizeGlobal) ? mazeSizeGlobal : getMazeSizeForDifficulty(window.gameDifficulty);
@@ -2638,7 +2651,7 @@ function generateMaze(keysCount = 8) {
   
   let floorMat;
   if (isDungeon) {
-    const dungeonFloorRep = Math.max(15, Math.round(floorExtent / blockSize));
+    const dungeonFloorRep = Math.max(15, Math.round(floorExtent / 3.0));
     const groundTex = getLoadedTexture('/assets/dungeon/textures/GroundColor.png', { x: dungeonFloorRep, y: dungeonFloorRep }, true);
     const groundRoughness = getLoadedTexture('/assets/dungeon/textures/GroundRoughness.png', { x: dungeonFloorRep, y: dungeonFloorRep });
     const groundNormal = getLoadedTexture('/assets/dungeon/textures/GroundNormal.png', { x: dungeonFloorRep, y: dungeonFloorRep });
@@ -2669,17 +2682,14 @@ function generateMaze(keysCount = 8) {
   floorMesh.rotation.x = -Math.PI / 2;
   floorMesh.receiveShadow = true;
   floorMesh.frustumCulled = false;
-  // In modular dungeon mode, each 3D corridor module contains its own floor & carpet
-  if (!isDungeon || !dungeonModules.cross) {
-    scene.add(floorMesh);
-  }
+  scene.add(floorMesh);
 
   // Ceiling with photorealistic texture scaled to difficulty map size
   const ceilRep = Math.max(5, Math.round(mazeSize / 5));
   let ceilMat;
   if (isDungeon) {
-    const dungeonCeilRep = Math.max(15, Math.round(floorExtent / (blockSize * 1.5)));
-    const ceilTex = getLoadedTexture('/assets/dungeon/textures/GroundColor.png', { x: dungeonCeilRep, y: dungeonCeilRep }, true);
+    const dungeonCeilRep = Math.max(15, Math.round(floorExtent / 3.0));
+    const ceilTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', { x: dungeonCeilRep, y: dungeonCeilRep }, true);
     ceilMat = new THREE.MeshStandardMaterial({ 
       map: ceilTex,
       color: 0x555555, 
@@ -2701,9 +2711,7 @@ function generateMaze(keysCount = 8) {
   ceilingMesh.rotation.x = Math.PI / 2;
   ceilingMesh.position.y = isDungeon ? 4.8 : 4.5;
   ceilingMesh.frustumCulled = false;
-  if (!isDungeon || !dungeonModules.cross) {
-    scene.add(ceilingMesh);
-  }
+  scene.add(ceilingMesh);
 
   // Grid layout for corridors (Procedurally Scaled with Difficulty)
   const layout = Array(mazeSize).fill(0).map(() => Array(mazeSize).fill(1));
@@ -2855,9 +2863,9 @@ function generateMaze(keysCount = 8) {
 
   let wallMat, slidingWallMat;
   if (isDungeon) {
-    const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/DungeonWallClean.png', { x: 2, y: 1 }, true);
-    const dungeonWallNormal = getLoadedTexture('/assets/dungeon/textures/DungeonWallNormal.png', { x: 2, y: 1 });
-    const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/DungeonWallRoughness.png', { x: 2, y: 1 });
+    const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', { x: 2, y: 1.5 }, true);
+    const dungeonWallNormal = getLoadedTexture('/assets/dungeon/textures/WallNormal.png', { x: 2, y: 1.5 });
+    const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/WallRoughness.png', { x: 2, y: 1.5 });
 
     wallMat = new THREE.MeshStandardMaterial({ 
       map: dungeonWallTex,
@@ -2916,18 +2924,17 @@ function generateMaze(keysCount = 8) {
       const zPos = (r - layout.length / 2) * blockSize + blockSize/2;
 
       if (type === 1) {
-        if (!isDungeon || !dungeonModules.cross) {
-          // Static wall: create transformed geometry for single merged mesh
-          const singleGeo = new THREE.BoxGeometry(blockSize + 0.5, wallHeight, blockSize + 0.5);
-          singleGeo.translate(xPos, wallHeight / 2, zPos);
-          wallGeometries.push(singleGeo);
-        }
+        // Static wall: create transformed geometry for single merged mesh
+        const singleGeo = new THREE.BoxGeometry(blockSize + 0.5, wallHeight, blockSize + 0.5);
+        singleGeo.translate(xPos, wallHeight / 2, zPos);
+        wallGeometries.push(singleGeo);
       } else if (type === 2) {
         // Dynamic sliding door: Piece #1 (IndAssetWall) in dungeon mode!
         let wallMesh;
         if (isDungeon && dungeonModules.wall) {
           wallMesh = dungeonModules.wall.clone(true);
           wallMesh.position.set(xPos, 0, zPos);
+          wallMesh.scale.set(1.5, 2.25, 1.5);
           const isEW = (c > 0 && layout[r][c - 1] === 0) || (c < layout[r].length - 1 && layout[r][c + 1] === 0);
           wallMesh.rotation.y = isEW ? 0 : Math.PI / 2;
           wallMesh.userData = { 
@@ -2935,8 +2942,8 @@ function generateMaze(keysCount = 8) {
             col: c, 
             row: r, 
             isDungeonProp: true, 
-            halfSizeX: isEW ? 0.4 : 2.5, 
-            halfSizeZ: isEW ? 2.5 : 0.4 
+            halfSizeX: isEW ? 0.4 : 3.0, 
+            halfSizeZ: isEW ? 3.0 : 0.4 
           };
           scene.add(wallMesh);
           dungeonProps.push(wallMesh);
@@ -2954,116 +2961,6 @@ function generateMaze(keysCount = 8) {
         }
       } else {
         openCorridors.push({ x: xPos, z: zPos });
-
-        if (isDungeon && dungeonModules.cross) {
-          // Modular corridor assembly directly using pre-modeled 3D sets (#2, #3, #5, #6)
-          const northOpen = (r > 0 && layout[r - 1][c] === 0);
-          const southOpen = (r < layout.length - 1 && layout[r + 1][c] === 0);
-          const westOpen  = (c > 0 && layout[r][c - 1] === 0);
-          const eastOpen  = (c < layout[r].length - 1 && layout[r][c + 1] === 0);
-
-          const openCount = (northOpen?1:0) + (southOpen?1:0) + (westOpen?1:0) + (eastOpen?1:0);
-          let moduleMesh = null;
-
-          if (openCount === 4) {
-            // #2 CrossCorridor (4-way intersection)
-            moduleMesh = dungeonModules.cross.clone(true);
-            [[-7.5, -7.5], [7.5, -7.5], [-7.5, 7.5], [7.5, 7.5]].forEach(([ox, oz]) => {
-              walls.push({ position: { x: xPos + ox, y: 1.13, z: zPos + oz }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-            });
-          } else if (openCount === 3) {
-            // #6 TCorridor (3-way intersection)
-            moduleMesh = dungeonModules.t.clone(true);
-            if (!northOpen) {
-              moduleMesh.rotation.y = 0;
-              walls.push({ position: { x: xPos, y: 1.13, z: zPos - 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
-              walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-              walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-            } else if (!westOpen) {
-              moduleMesh.rotation.y = Math.PI / 2;
-              walls.push({ position: { x: xPos - 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
-              walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-              walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-            } else if (!southOpen) {
-              moduleMesh.rotation.y = Math.PI;
-              walls.push({ position: { x: xPos, y: 1.13, z: zPos + 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
-              walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-              walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-            } else {
-              moduleMesh.rotation.y = -Math.PI / 2;
-              walls.push({ position: { x: xPos + 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
-              walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-              walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-            }
-          } else if (openCount === 2) {
-            if (northOpen && southOpen) {
-              // #3 Corridor_X2 (Straight North-South)
-              moduleMesh = dungeonModules.straight2.clone(true);
-              moduleMesh.rotation.y = 0;
-              walls.push({ position: { x: xPos - 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
-              walls.push({ position: { x: xPos + 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
-            } else if (westOpen && eastOpen) {
-              // #3 Corridor_X2 (Straight East-West)
-              moduleMesh = dungeonModules.straight2.clone(true);
-              moduleMesh.rotation.y = Math.PI / 2;
-              walls.push({ position: { x: xPos, y: 1.13, z: zPos - 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
-              walls.push({ position: { x: xPos, y: 1.13, z: zPos + 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
-            } else {
-              // #5 CornerCorridor (Corner Turn)
-              moduleMesh = dungeonModules.corner.clone(true);
-              if (westOpen && northOpen) {
-                moduleMesh.rotation.y = 0;
-                walls.push({ position: { x: xPos + 5.0, y: 1.13, z: zPos + 5.0 }, userData: { isDungeonProp: true, halfSizeX: 7.0, halfSizeZ: 7.0 } });
-                walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-              } else if (southOpen && westOpen) {
-                moduleMesh.rotation.y = Math.PI / 2;
-                walls.push({ position: { x: xPos + 5.0, y: 1.13, z: zPos - 5.0 }, userData: { isDungeonProp: true, halfSizeX: 7.0, halfSizeZ: 7.0 } });
-                walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-              } else if (eastOpen && southOpen) {
-                moduleMesh.rotation.y = Math.PI;
-                walls.push({ position: { x: xPos - 5.0, y: 1.13, z: zPos - 5.0 }, userData: { isDungeonProp: true, halfSizeX: 7.0, halfSizeZ: 7.0 } });
-                walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-              } else {
-                moduleMesh.rotation.y = -Math.PI / 2;
-                walls.push({ position: { x: xPos - 5.0, y: 1.13, z: zPos + 5.0 }, userData: { isDungeonProp: true, halfSizeX: 7.0, halfSizeZ: 7.0 } });
-                walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
-              }
-            }
-          } else {
-            // Dead-End: Straight corridor + Piece #1 (IndAssetWall) cap
-            moduleMesh = dungeonModules.straight2.clone(true);
-            const isEW = (westOpen || eastOpen);
-            moduleMesh.rotation.y = isEW ? Math.PI / 2 : 0;
-            if (isEW) {
-              walls.push({ position: { x: xPos, y: 1.13, z: zPos - 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
-              walls.push({ position: { x: xPos, y: 1.13, z: zPos + 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
-            } else {
-              walls.push({ position: { x: xPos - 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
-              walls.push({ position: { x: xPos + 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
-            }
-
-            // Cap the dead end with Piece #1
-            if (dungeonModules.wall) {
-              const capWall = dungeonModules.wall.clone(true);
-              let capX = xPos, capZ = zPos;
-              if (northOpen) capZ += 12.0;
-              else if (southOpen) capZ -= 12.0;
-              else if (westOpen) capX += 12.0;
-              else if (eastOpen) capX -= 12.0;
-              capWall.position.set(capX, 0, capZ);
-              capWall.rotation.y = isEW ? 0 : Math.PI / 2;
-              scene.add(capWall);
-              dungeonProps.push(capWall);
-              walls.push(capWall);
-            }
-          }
-
-          if (moduleMesh) {
-            moduleMesh.position.set(xPos, 0, zPos);
-            scene.add(moduleMesh);
-            dungeonProps.push(moduleMesh);
-          }
-        }
       }
     }
   }
