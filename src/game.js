@@ -2008,86 +2008,68 @@ let dungeonProps = [];
 let pendingDungeonPropsFn = null;
 
 function loadDungeonPackAssets() {
-  fbxLoader.load('/assets/dungeon/models/DungedonAssets.fbx', (fbx) => {
-    try {
-      const pMat = new THREE.MeshStandardMaterial({
-        map: getLoadedTexture('/assets/dungeon/textures/ColumnColor.png', null, true),
-        roughnessMap: getLoadedTexture('/assets/dungeon/textures/ColumnRoughness.png'),
-        roughness: 0.65,
-        metalness: 0.05,
-        color: 0xffffff,
-        emissive: 0x333333,
-        emissiveIntensity: 0.35
-      });
-      const sMat = new THREE.MeshStandardMaterial({
-        map: getLoadedTexture('/assets/dungeon/textures/StatueColor.png', null, true),
-        roughnessMap: getLoadedTexture('/assets/dungeon/textures/StatueRoughness.png'),
-        roughness: 0.7,
-        metalness: 0.08,
-        color: 0xffffff,
-        emissive: 0x333333,
-        emissiveIntensity: 0.35
-      });
-      const rMat = new THREE.MeshStandardMaterial({
-        map: getLoadedTexture('/assets/dungeon/textures/RugColor.png', null, true),
-        metalnessMap: getLoadedTexture('/assets/dungeon/textures/RugMetalness.png'),
-        roughnessMap: getLoadedTexture('/assets/dungeon/textures/RugRoughness.png'),
-        roughness: 0.85,
-        metalness: 0.05,
-        transparent: true,
-        alphaTest: 0.2,
-        emissive: 0x330808,
-        emissiveIntensity: 0.4
-      });
+  if (dungeonAssetsLoaded) return;
 
-      fbx.traverse(c => {
-        if (!c.isMesh) return;
-        if (c.name === 'IndAssetPillar' && !dungeonPillarGeo) {
-          const geo = c.geometry.clone();
-          geo.rotateX(-Math.PI / 2);
-          geo.center();
-          geo.computeBoundingBox();
-          geo.translate(0, -geo.boundingBox.min.y, 0);
-          const s = 4.5 / (geo.boundingBox.max.y - geo.boundingBox.min.y);
-          geo.scale(s, s, s);
-          // Preserve author's exact hard-edge vertex normals (do not recalculate)
-          dungeonPillarGeo = geo;
-          dungeonPillarMat = pMat;
-        } else if (c.name === 'IndAssetStatue' && !dungeonStatueGeo) {
-          const geo = c.geometry.clone();
-          geo.rotateX(-Math.PI / 2);
-          geo.center();
-          geo.computeBoundingBox();
-          geo.translate(0, -geo.boundingBox.min.y, 0);
-          const s = 2.8 / (geo.boundingBox.max.y - geo.boundingBox.min.y);
-          geo.scale(s, s, s);
-          dungeonStatueGeo = geo;
-          dungeonStatueMat = sMat;
-        } else if (c.name === 'IndAssetRugs' && !dungeonRugGeo) {
-          const geo = c.geometry.clone();
-          geo.rotateX(-Math.PI / 2);
-          geo.center();
-          geo.computeBoundingBox();
-          geo.translate(0, -geo.boundingBox.min.y + 0.03, 0);
-          const s = 2.4 / (geo.boundingBox.max.x - geo.boundingBox.min.x);
-          geo.scale(s, 1, s);
-          dungeonRugGeo = geo;
-          dungeonRugMat = rMat;
-        }
-      });
+  const geoLoader = new THREE.BufferGeometryLoader();
 
+  dungeonPillarMat = new THREE.MeshStandardMaterial({
+    map: getLoadedTexture('/assets/dungeon/textures/ColumnColor.png', null, true),
+    roughnessMap: getLoadedTexture('/assets/dungeon/textures/ColumnRoughness.png'),
+    roughness: 0.65,
+    metalness: 0.05,
+    color: 0xffffff,
+    emissive: 0x333333,
+    emissiveIntensity: 0.35
+  });
+
+  dungeonStatueMat = new THREE.MeshStandardMaterial({
+    map: getLoadedTexture('/assets/dungeon/textures/StatueColor.png', null, true),
+    roughnessMap: getLoadedTexture('/assets/dungeon/textures/StatueRoughness.png'),
+    roughness: 0.7,
+    metalness: 0.08,
+    color: 0xffffff,
+    emissive: 0x333333,
+    emissiveIntensity: 0.35
+  });
+
+  dungeonRugMat = new THREE.MeshStandardMaterial({
+    map: getLoadedTexture('/assets/dungeon/textures/RugColor.png', null, true),
+    roughnessMap: getLoadedTexture('/assets/dungeon/textures/RugRoughness.png'),
+    roughness: 0.85,
+    metalness: 0.05,
+    transparent: true,
+    alphaTest: 0.2,
+    emissive: 0x440808,
+    emissiveIntensity: 0.45
+  });
+
+  let loaded = 0;
+  const checkComplete = () => {
+    loaded++;
+    if (loaded >= 3) {
       dungeonAssetsLoaded = true;
-      console.log('[DUNGEON] Dungeon corridor pack models and PBR materials loaded successfully!');
+      console.log('[DUNGEON] All 3D dungeon props (Pillars, Statues, Rugs) loaded successfully via BufferGeometryLoader!');
       if (typeof pendingDungeonPropsFn === 'function') {
         pendingDungeonPropsFn();
         pendingDungeonPropsFn = null;
       }
-    } catch (err) {
-      console.error('[DUNGEON] Error preparing dungeon props:', err);
     }
-  }, undefined, (err) => {
-    console.warn('[DUNGEON] FBXLoader failed or pack not found, proceeding with texture-based dungeon:', err);
-  });
+  };
+
+  geoLoader.load('/assets/dungeon/models/pillar.json', (geo) => {
+    dungeonPillarGeo = geo;
+    checkComplete();
+  }, undefined, (err) => console.error('[DUNGEON] Error loading pillar.json:', err));
+
+  geoLoader.load('/assets/dungeon/models/statue.json', (geo) => {
+    dungeonStatueGeo = geo;
+    checkComplete();
+  }, undefined, (err) => console.error('[DUNGEON] Error loading statue.json:', err));
+
+  geoLoader.load('/assets/dungeon/models/rug.json', (geo) => {
+    dungeonRugGeo = geo;
+    checkComplete();
+  }, undefined, (err) => console.error('[DUNGEON] Error loading rug.json:', err));
 }
 
 // Preload Dungeon Assets immediately
@@ -2103,7 +2085,7 @@ function spawnDungeonProps(layout, blockSize) {
   const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
   if (!isDungeon) return;
 
-  if (!dungeonAssetsLoaded || !dungeonPillarGeo) {
+  if (!dungeonAssetsLoaded || !dungeonPillarGeo || !dungeonStatueGeo || !dungeonRugGeo) {
     pendingDungeonPropsFn = () => spawnDungeonProps(layout, blockSize);
     return;
   }
@@ -2129,40 +2111,36 @@ function spawnDungeonProps(layout, blockSize) {
       walls.push(pMesh);
     });
 
-    if (dungeonStatueGeo) {
-      [-2.8, 2.8].forEach((offset) => {
-        const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-        if (isNorthSouth) {
-          sMesh.position.set(gateCoordinates.x + offset, 0, gateCoordinates.z);
-          sMesh.rotation.y = (offset < 0) ? Math.PI * 0.35 : -Math.PI * 0.35;
-          if (edge === 'S') sMesh.rotation.y += Math.PI;
-        } else {
-          sMesh.position.set(gateCoordinates.x, 0, gateCoordinates.z + offset);
-          sMesh.rotation.y = (offset < 0) ? -Math.PI * 0.15 : Math.PI * 0.85;
-          if (edge === 'W') sMesh.rotation.y += Math.PI;
-        }
-        sMesh.castShadow = true;
-        sMesh.receiveShadow = true;
-        sMesh.userData = { isDungeonProp: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
-        scene.add(sMesh);
-        dungeonProps.push(sMesh);
-        walls.push(sMesh);
-      });
-    }
+    [-2.8, 2.8].forEach((offset) => {
+      const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
+      if (isNorthSouth) {
+        sMesh.position.set(gateCoordinates.x + offset, 0, gateCoordinates.z);
+        sMesh.rotation.y = (offset < 0) ? Math.PI * 0.35 : -Math.PI * 0.35;
+        if (edge === 'S') sMesh.rotation.y += Math.PI;
+      } else {
+        sMesh.position.set(gateCoordinates.x, 0, gateCoordinates.z + offset);
+        sMesh.rotation.y = (offset < 0) ? -Math.PI * 0.15 : Math.PI * 0.85;
+        if (edge === 'W') sMesh.rotation.y += Math.PI;
+      }
+      sMesh.castShadow = true;
+      sMesh.receiveShadow = true;
+      sMesh.userData = { isDungeonProp: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+      scene.add(sMesh);
+      dungeonProps.push(sMesh);
+      walls.push(sMesh);
+    });
 
-    if (dungeonRugGeo) {
-      const rugMesh = new THREE.Mesh(dungeonRugGeo, dungeonRugMat);
-      let rugX = gateCoordinates.x;
-      let rugZ = gateCoordinates.z;
-      if (edge === 'N') { rugZ += 2.2; rugMesh.rotation.y = 0; }
-      else if (edge === 'S') { rugZ -= 2.2; rugMesh.rotation.y = Math.PI; }
-      else if (edge === 'E') { rugX -= 2.2; rugMesh.rotation.y = Math.PI / 2; }
-      else if (edge === 'W') { rugX += 2.2; rugMesh.rotation.y = -Math.PI / 2; }
-      rugMesh.position.set(rugX, 0, rugZ);
-      rugMesh.receiveShadow = true;
-      scene.add(rugMesh);
-      dungeonProps.push(rugMesh);
-    }
+    const rugMesh = new THREE.Mesh(dungeonRugGeo, dungeonRugMat);
+    let rugX = gateCoordinates.x;
+    let rugZ = gateCoordinates.z;
+    if (edge === 'N') { rugZ += 2.2; rugMesh.rotation.y = 0; }
+    else if (edge === 'S') { rugZ -= 2.2; rugMesh.rotation.y = Math.PI; }
+    else if (edge === 'E') { rugX -= 2.2; rugMesh.rotation.y = Math.PI / 2; }
+    else if (edge === 'W') { rugX += 2.2; rugMesh.rotation.y = -Math.PI / 2; }
+    rugMesh.position.set(rugX, 0, rugZ);
+    rugMesh.receiveShadow = true;
+    scene.add(rugMesh);
+    dungeonProps.push(rugMesh);
   }
 
   // 2. Pillars around Light Sanctuaries (Sanctuary Shrines)
@@ -2185,8 +2163,8 @@ function spawnDungeonProps(layout, blockSize) {
     });
   }
 
-  // 3. Statues at Dead-Ends in the Maze (eerie stone gargoyles on plinths facing hallway)
-  if (dungeonStatueGeo && layout && layout.length > 0) {
+  // 3. Statues at ALL Dead-Ends in the Maze (facing down the corridor, on their stone plinths!)
+  if (layout && layout.length > 0) {
     const deadEnds = [];
     const dirs = [
       { dx: 0, dz: -1, rot: 0 },
@@ -2195,8 +2173,8 @@ function spawnDungeonProps(layout, blockSize) {
       { dx: 1, dz: 0, rot: Math.PI / 2 }
     ];
 
-    for (let r = 2; r < layout.length - 2; r++) {
-      for (let c = 2; c < layout[r].length - 2; c++) {
+    for (let r = 1; r < layout.length - 1; r++) {
+      for (let c = 1; c < layout[r].length - 1; c++) {
         if (layout[r][c] === 0) {
           let openCount = 0;
           let openDir = null;
@@ -2209,21 +2187,16 @@ function spawnDungeonProps(layout, blockSize) {
           if (openCount === 1 && openDir) {
             const xPos = (c - layout[r].length / 2) * blockSize + blockSize / 2;
             const zPos = (r - layout.length / 2) * blockSize + blockSize / 2;
-            if (Math.hypot(xPos, zPos) > 10) {
-              deadEnds.push({ x: xPos, z: zPos, dir: openDir });
-            }
+            deadEnds.push({ x: xPos, z: zPos, dir: openDir });
           }
         }
       }
     }
 
-    const statueLimit = Math.min(10, deadEnds.length);
-    for (let i = 0; i < statueLimit; i++) {
-      const idx = (i * 3 + 1) % deadEnds.length;
-      const de = deadEnds[idx];
+    deadEnds.forEach(de => {
       const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-      const backOffsetX = -de.dir.dx * 1.4;
-      const backOffsetZ = -de.dir.dz * 1.4;
+      const backOffsetX = -de.dir.dx * 1.3;
+      const backOffsetZ = -de.dir.dz * 1.3;
       sMesh.position.set(de.x + backOffsetX, 0, de.z + backOffsetZ);
       sMesh.rotation.y = de.dir.rot;
       sMesh.castShadow = true;
@@ -2232,30 +2205,37 @@ function spawnDungeonProps(layout, blockSize) {
       scene.add(sMesh);
       dungeonProps.push(sMesh);
       walls.push(sMesh);
-    }
+    });
   }
 
-  // 4. Pillars at Corridor Wall Corners / Junctions (frames hallways with white columns like the reference)
-  if (dungeonPillarGeo && layout && layout.length > 0) {
+  // 4. White Marble Columns Lining Corridor Walls (Placed inside corridor against walls, matching example)
+  if (layout && layout.length > 0) {
     let pillarCount = 0;
-    const maxCorridorPillars = 44;
-    for (let r = 2; r < layout.length - 2 && pillarCount < maxCorridorPillars; r += 2) {
-      for (let c = 2; c < layout[r].length - 2 && pillarCount < maxCorridorPillars; c += 2) {
-        if (layout[r][c] === 1) {
-          const adjOpen = (
-            (layout[r-1] && layout[r-1][c] === 0) ||
-            (layout[r+1] && layout[r+1][c] === 0) ||
-            (layout[r][c-1] === 0) ||
-            (layout[r][c+1] === 0)
-          );
-          if (adjOpen) {
-            const px = (c - layout[r].length / 2) * blockSize + blockSize / 2;
-            const pz = (r - layout.length / 2) * blockSize + blockSize / 2;
+    const maxPillars = 60;
+    for (let r = 2; r < layout.length - 2 && pillarCount < maxPillars; r++) {
+      for (let c = 2; c < layout[r].length - 2 && pillarCount < maxPillars; c++) {
+        if (layout[r][c] === 0 && (r + c) % 3 === 0) {
+          const cx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
+          const cz = (r - layout.length / 2) * blockSize + blockSize / 2;
+
+          // Check if corridor has west/east walls
+          if (layout[r][c - 1] === 1) {
             const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-            pMesh.position.set(px, 0, pz);
+            pMesh.position.set(cx - 1.5, 0, cz);
             pMesh.castShadow = true;
             pMesh.receiveShadow = true;
-            pMesh.userData = { isDungeonProp: true, halfSizeX: 0.65, halfSizeZ: 0.65 };
+            pMesh.userData = { isDungeonProp: true, halfSizeX: 0.55, halfSizeZ: 0.55 };
+            scene.add(pMesh);
+            dungeonProps.push(pMesh);
+            walls.push(pMesh);
+            pillarCount++;
+          }
+          if (layout[r][c + 1] === 1 && pillarCount < maxPillars) {
+            const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+            pMesh.position.set(cx + 1.5, 0, cz);
+            pMesh.castShadow = true;
+            pMesh.receiveShadow = true;
+            pMesh.userData = { isDungeonProp: true, halfSizeX: 0.55, halfSizeZ: 0.55 };
             scene.add(pMesh);
             dungeonProps.push(pMesh);
             walls.push(pMesh);
@@ -2266,22 +2246,27 @@ function spawnDungeonProps(layout, blockSize) {
     }
   }
 
-  // 5. Corridor Red Carpet Runners (IndAssetRugs along open paths)
-  if (dungeonRugGeo && openCorridors && openCorridors.length > 0) {
-    const rugTiles = openCorridors.filter(c => {
-      const d = Math.hypot(c.x, c.z);
-      return d > 6 && !isLocationOccupied(c.x, c.z, 4.0);
-    });
-    const rugsToPlace = Math.min(16, Math.floor(rugTiles.length / 3));
-    for (let i = 0; i < rugsToPlace; i++) {
-      const c = rugTiles[Math.floor((i + 0.5) * (rugTiles.length / rugsToPlace))];
-      if (c) {
-        const rugMesh = new THREE.Mesh(dungeonRugGeo, dungeonRugMat);
-        rugMesh.position.set(c.x, 0, c.z);
-        rugMesh.rotation.y = (i % 2 === 0) ? 0 : Math.PI / 2;
-        rugMesh.receiveShadow = true;
-        scene.add(rugMesh);
-        dungeonProps.push(rugMesh);
+  // 5. Red Velvet Runner Carpets along Corridors (IndAssetRugs)
+  if (layout && layout.length > 0) {
+    let rugCount = 0;
+    const maxRugs = 40;
+    for (let r = 1; r < layout.length - 1 && rugCount < maxRugs; r++) {
+      for (let c = 1; c < layout[r].length - 1 && rugCount < maxRugs; c++) {
+        if (layout[r][c] === 0 && (r + c) % 2 === 0) {
+          const isNS = (layout[r - 1] && layout[r - 1][c] === 0) || (layout[r + 1] && layout[r + 1][c] === 0);
+          const isEW = (layout[r][c - 1] === 0) || (layout[r][c + 1] === 0);
+          if (isNS || isEW) {
+            const rx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
+            const rz = (r - layout.length / 2) * blockSize + blockSize / 2;
+            const rugMesh = new THREE.Mesh(dungeonRugGeo, dungeonRugMat);
+            rugMesh.position.set(rx, 0, rz);
+            rugMesh.rotation.y = isNS ? 0 : Math.PI / 2;
+            rugMesh.receiveShadow = true;
+            scene.add(rugMesh);
+            dungeonProps.push(rugMesh);
+            rugCount++;
+          }
+        }
       }
     }
   }
