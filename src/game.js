@@ -2401,6 +2401,11 @@ function spawnDungeonProps(layout, blockSize) {
   let placedStatues = 0;
   let placedRugs = 0;
 
+  // Helper: prevent spawning any dungeon prop on top of or within collision radius of a circuit breaker
+  function isBlockedByBreaker(x, z, radius = 1.8) {
+    return Array.isArray(circuitBreakers) && circuitBreakers.some(b => b.mesh && Math.hypot(b.mesh.position.x - x, b.mesh.position.z - z) < radius);
+  }
+
   // 1. Master Vault Gate Flanking (Pillars + Statues + Entrance Grand Runner Rug)
   if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
     const edge = window.vaultEdge || 'N';
@@ -2408,13 +2413,13 @@ function spawnDungeonProps(layout, blockSize) {
 
     // Pillars flanking gate door frame
     [-2.2, 2.2].forEach(offset => {
+      const px = isNorthSouth ? (gateCoordinates.x + offset) : gateCoordinates.x;
+      const pz = isNorthSouth ? gateCoordinates.z : (gateCoordinates.z + offset);
+      if (isBlockedByBreaker(px, pz)) return;
+
       const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
       pMesh.scale.set(1.5, 1.68, 1.5);
-      if (isNorthSouth) {
-        pMesh.position.set(gateCoordinates.x + offset, 0, gateCoordinates.z);
-      } else {
-        pMesh.position.set(gateCoordinates.x, 0, gateCoordinates.z + offset);
-      }
+      pMesh.position.set(px, 0, pz);
       pMesh.castShadow = true;
       pMesh.receiveShadow = true;
       pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
@@ -2425,14 +2430,17 @@ function spawnDungeonProps(layout, blockSize) {
     });
 
     [-3.4, 3.4].forEach((offset) => {
+      const sx = isNorthSouth ? (gateCoordinates.x + offset) : gateCoordinates.x;
+      const sz = isNorthSouth ? gateCoordinates.z : (gateCoordinates.z + offset);
+      if (isBlockedByBreaker(sx, sz)) return;
+
       const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
       sMesh.scale.set(1.3, 1.45, 1.3);
+      sMesh.position.set(sx, 0, sz);
       if (isNorthSouth) {
-        sMesh.position.set(gateCoordinates.x + offset, 0, gateCoordinates.z);
         sMesh.rotation.y = (offset < 0) ? Math.PI * 0.35 : -Math.PI * 0.35;
         if (edge === 'S') sMesh.rotation.y += Math.PI;
       } else {
-        sMesh.position.set(gateCoordinates.x, 0, gateCoordinates.z + offset);
         sMesh.rotation.y = (offset < 0) ? -Math.PI * 0.15 : Math.PI * 0.85;
         if (edge === 'W') sMesh.rotation.y += Math.PI;
       }
@@ -2467,6 +2475,8 @@ function spawnDungeonProps(layout, blockSize) {
       angles.forEach(ang => {
         const px = s.x + Math.cos(ang) * radius;
         const pz = s.z + Math.sin(ang) * radius;
+        if (isBlockedByBreaker(px, pz)) return;
+
         const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
         pMesh.scale.set(1.5, 1.68, 1.5);
         pMesh.position.set(px, 0, pz);
@@ -2512,12 +2522,15 @@ function spawnDungeonProps(layout, blockSize) {
     }
 
     deadEnds.forEach(de => {
-      const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-      sMesh.scale.set(1.3, 1.45, 1.3);
-      // Place against back wall of the dead end, facing forward into open hall
       const backOffsetX = -de.dir.dx * 2.2;
       const backOffsetZ = -de.dir.dz * 2.2;
-      sMesh.position.set(de.x + backOffsetX, 0, de.z + backOffsetZ);
+      const sx = de.x + backOffsetX;
+      const sz = de.z + backOffsetZ;
+      if (isBlockedByBreaker(sx, sz)) return;
+
+      const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
+      sMesh.scale.set(1.3, 1.45, 1.3);
+      sMesh.position.set(sx, 0, sz);
       sMesh.rotation.y = de.dir.rot;
       sMesh.castShadow = true;
       sMesh.receiveShadow = true;
@@ -2540,55 +2553,71 @@ function spawnDungeonProps(layout, blockSize) {
 
           // West wall
           if (layout[r][c - 1] === 1) {
-            const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-            pMesh.scale.set(1.5, 1.68, 1.5);
-            pMesh.position.set(cx - wallOffset, 0, cz);
-            pMesh.castShadow = true;
-            pMesh.receiveShadow = true;
-            pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
-            scene.add(pMesh);
-            dungeonProps.push(pMesh);
-            walls.push(pMesh);
-            placedPillars++;
+            const px = cx - wallOffset;
+            const pz = cz;
+            if (!isBlockedByBreaker(px, pz)) {
+              const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+              pMesh.scale.set(1.5, 1.68, 1.5);
+              pMesh.position.set(px, 0, pz);
+              pMesh.castShadow = true;
+              pMesh.receiveShadow = true;
+              pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+              scene.add(pMesh);
+              dungeonProps.push(pMesh);
+              walls.push(pMesh);
+              placedPillars++;
+            }
           }
           // East wall
           if (layout[r][c + 1] === 1) {
-            const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-            pMesh.scale.set(1.5, 1.68, 1.5);
-            pMesh.position.set(cx + wallOffset, 0, cz);
-            pMesh.castShadow = true;
-            pMesh.receiveShadow = true;
-            pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
-            scene.add(pMesh);
-            dungeonProps.push(pMesh);
-            walls.push(pMesh);
-            placedPillars++;
+            const px = cx + wallOffset;
+            const pz = cz;
+            if (!isBlockedByBreaker(px, pz)) {
+              const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+              pMesh.scale.set(1.5, 1.68, 1.5);
+              pMesh.position.set(px, 0, pz);
+              pMesh.castShadow = true;
+              pMesh.receiveShadow = true;
+              pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+              scene.add(pMesh);
+              dungeonProps.push(pMesh);
+              walls.push(pMesh);
+              placedPillars++;
+            }
           }
           // North wall
           if (layout[r - 1] && layout[r - 1][c] === 1) {
-            const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-            pMesh.scale.set(1.5, 1.68, 1.5);
-            pMesh.position.set(cx, 0, cz - wallOffset);
-            pMesh.castShadow = true;
-            pMesh.receiveShadow = true;
-            pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
-            scene.add(pMesh);
-            dungeonProps.push(pMesh);
-            walls.push(pMesh);
-            placedPillars++;
+            const px = cx;
+            const pz = cz - wallOffset;
+            if (!isBlockedByBreaker(px, pz)) {
+              const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+              pMesh.scale.set(1.5, 1.68, 1.5);
+              pMesh.position.set(px, 0, pz);
+              pMesh.castShadow = true;
+              pMesh.receiveShadow = true;
+              pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+              scene.add(pMesh);
+              dungeonProps.push(pMesh);
+              walls.push(pMesh);
+              placedPillars++;
+            }
           }
           // South wall
           if (layout[r + 1] && layout[r + 1][c] === 1) {
-            const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-            pMesh.scale.set(1.5, 1.68, 1.5);
-            pMesh.position.set(cx, 0, cz + wallOffset);
-            pMesh.castShadow = true;
-            pMesh.receiveShadow = true;
-            pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
-            scene.add(pMesh);
-            dungeonProps.push(pMesh);
-            walls.push(pMesh);
-            placedPillars++;
+            const px = cx;
+            const pz = cz + wallOffset;
+            if (!isBlockedByBreaker(px, pz)) {
+              const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+              pMesh.scale.set(1.5, 1.68, 1.5);
+              pMesh.position.set(px, 0, pz);
+              pMesh.castShadow = true;
+              pMesh.receiveShadow = true;
+              pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+              scene.add(pMesh);
+              dungeonProps.push(pMesh);
+              walls.push(pMesh);
+              placedPillars++;
+            }
           }
         }
       }
@@ -3136,16 +3165,16 @@ function generateMaze(keysCount = 8) {
   // Initialize dedicated spawn placement tracker with entrance & exit gate protection
   resetSpawnLocations();
 
-  // Spawn circuit breakers on walls
+  // Spawn Light Sanctuaries FIRST (establishes sanctuaryZones)
+  generateLightSanctuaries();
+  // Spawn Dungeon Corridor Pack 3D Props (Gothic Pillars, Statues, Rugs)
+  spawnDungeonProps(layout, blockSize);
+  // Spawn circuit breakers on walls (guaranteed to avoid all pillars and props)
   generateCircuitBreakers();
   // Spawn key collectibles & cipher clue notes
   generateCollectibles(keysCount);
   // Spawn consumable items
   generateConsumableItems();
-  // Spawn Light Sanctuaries
-  generateLightSanctuaries();
-  // Spawn Dungeon Corridor Pack 3D Props (Gothic Pillars, Statues, Rugs)
-  spawnDungeonProps(layout, blockSize);
 }
 
 // Spatial isolation tracker ensuring ZERO overlap across all spawn entities
@@ -3289,6 +3318,7 @@ function generateCircuitBreakers() {
   circuitBreakers = [];
   fixedBreakersCount = 0;
 
+  const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
   const breakerGeo = new THREE.BoxGeometry(0.8, 1.2, 0.15);
   const breakerTex = getLoadedTexture('/assets/breaker_texture.png');
   const breakerMat = new THREE.MeshStandardMaterial({ map: breakerTex, color: 0xffaaaa, roughness: 0.4, metalness: 0.8 });
@@ -3314,6 +3344,9 @@ function generateCircuitBreakers() {
         const nr = row + d.dr;
         const nc = col + d.dc;
         if (nr >= 0 && nr < mazeSizeGlobal && nc >= 0 && nc < mazeSizeGlobal && mazeLayout[nr][nc] === 1) {
+          // Never mount on dynamic sliding doors / walls
+          if (mazeLayout[nr][nc] === 2) continue;
+
           const expandedWallWidth = mazeBlockSize + 0.5;
           const distToWallFace = mazeBlockSize - (expandedWallWidth / 2);
           const breakerThickness = 0.15;
@@ -3321,8 +3354,34 @@ function generateCircuitBreakers() {
 
           const dirX = Math.sign(d.rx);
           const dirZ = Math.sign(d.rz);
+          const candX = corr.x + dirX * offset;
+          const candZ = corr.z + dirZ * offset;
 
-          mesh.position.set(corr.x + dirX * offset, 1.5, corr.z + dirZ * offset);
+          if (isDungeon) {
+            // 1. Strict avoidance: never mount in cells with wall columns ((row + col) % 2 === 0)
+            if ((row + col) % 2 === 0) continue;
+
+            // 2. Strict avoidance: never mount within 2.0m of ANY dungeon prop (pillars, statues, shrines)
+            const collidesWithProp = dungeonProps.some(p => {
+              if (p.userData && p.userData.isDungeonProp) {
+                return Math.hypot(p.position.x - candX, p.position.z - candZ) < 2.0;
+              }
+              return false;
+            });
+            if (collidesWithProp) continue;
+
+            // 3. Never mount near master vault gate entrance
+            if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
+              if (Math.hypot(candX - gateCoordinates.x, candZ - gateCoordinates.z) < 5.0) continue;
+            }
+
+            // 4. Never mount near light sanctuary perimeter pillars
+            if (typeof sanctuaryZones !== 'undefined' && Array.isArray(sanctuaryZones)) {
+              if (sanctuaryZones.some(s => Math.hypot(candX - s.x, candZ - s.z) < 5.0)) continue;
+            }
+          }
+
+          mesh.position.set(candX, 1.5, candZ);
           mesh.rotation.y = d.rotY;
           mounted = true;
 
@@ -3335,9 +3394,14 @@ function generateCircuitBreakers() {
     
     if (!mounted) {
       const available = shuffleArray(getAvailableCorridors(4.5));
-      const fallback = available.length > 0 ? available[0] : { x: (seededRandom() - 0.5) * 40, z: (seededRandom() - 0.5) * 40 };
-      mesh.position.set(fallback.x, 1.5, fallback.z);
-      claimSpawnLocation(fallback.x, fallback.z, 4.5, `Breaker_${i}`);
+      const fallbackCorr = available.find(c => {
+        const cCol = Math.floor(c.x / mazeBlockSize + mazeSizeGlobal / 2);
+        const cRow = Math.floor(c.z / mazeBlockSize + mazeSizeGlobal / 2);
+        if (isDungeon && (cRow + cCol) % 2 === 0) return false;
+        return !dungeonProps.some(p => Math.hypot(p.position.x - c.x, p.position.z - c.z) < 2.0);
+      }) || (available.length > 0 ? available[0] : { x: (seededRandom() - 0.5) * 40, z: (seededRandom() - 0.5) * 40 });
+      mesh.position.set(fallbackCorr.x, 1.5, fallbackCorr.z);
+      claimSpawnLocation(fallbackCorr.x, fallbackCorr.z, 4.5, `Breaker_${i}`);
     }
     
     scene.add(mesh);
