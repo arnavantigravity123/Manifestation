@@ -2064,97 +2064,201 @@ let dungeonRugMat = null;
 let dungeonProps = [];
 let pendingDungeonPropsFn = null;
 
+/* ── Helper: create PBR material from separate texture PNGs ── */
+function makeDungeonMat(colorPath, normalPath, roughPath, opts = {}) {
+  const mat = new THREE.MeshStandardMaterial({
+    map:          getLoadedTexture(colorPath, null, true),
+    normalMap:    normalPath ? getLoadedTexture(normalPath) : null,
+    roughnessMap: roughPath  ? getLoadedTexture(roughPath)  : null,
+    roughness:    opts.roughness ?? 0.6,
+    metalness:    opts.metalness ?? 0.05,
+    color:        0xffffff,
+    emissive:     new THREE.Color(opts.emissive ?? 0x333333),
+    emissiveIntensity: opts.emissiveIntensity ?? 0.35,
+    side:         opts.doubleSide ? THREE.DoubleSide : THREE.FrontSide,
+  });
+  mat.needsUpdate = true;
+  return mat;
+}
+
+/* ── Procedural fallback (always works, uses texture PNGs) ── */
+function createProceduralDungeonAssets() {
+  if (dungeonAssetsLoaded) return;
+  console.log('[DUNGEON] Creating procedural dungeon assets from texture PNGs...');
+
+  // Pillar — ornate octagonal column, floor-to-ceiling
+  dungeonPillarGeo = new THREE.CylinderGeometry(0.42, 0.52, 4.5, 8);
+  dungeonPillarGeo.translate(0, 2.25, 0); // sit on y=0
+  dungeonPillarMat = makeDungeonMat(
+    '/assets/dungeon/textures/ColumnColor.png',
+    '/assets/dungeon/textures/ColumnNormal.png',
+    '/assets/dungeon/textures/ColumnRoughness.png',
+    { roughness: 0.55, emissive: 0x444444, emissiveIntensity: 0.4 }
+  );
+
+  // Statue — approximated as tapered box with stone texture
+  const statueShape = new THREE.Shape();
+  statueShape.moveTo(-0.35, 0);   statueShape.lineTo(0.35, 0);
+  statueShape.lineTo(0.28, 2.2);  statueShape.lineTo(-0.28, 2.2);
+  statueShape.lineTo(-0.35, 0);
+  const extrudeSettings = { depth: 0.5, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.06, bevelSegments: 2 };
+  dungeonStatueGeo = new THREE.ExtrudeGeometry(statueShape, extrudeSettings);
+  dungeonStatueGeo.translate(0, 0, -0.25); // centre on Z
+  dungeonStatueGeo.computeVertexNormals();
+  dungeonStatueMat = makeDungeonMat(
+    '/assets/dungeon/textures/StatueColor.png',
+    '/assets/dungeon/textures/StatueNormal.png',
+    '/assets/dungeon/textures/StatueRoughness.png',
+    { roughness: 0.65, metalness: 0.08, emissive: 0x444444, emissiveIntensity: 0.4 }
+  );
+
+  // Rug — flat plane with the RED velvet runner texture
+  dungeonRugGeo = new THREE.PlaneGeometry(2.4, 4.5);
+  dungeonRugGeo.rotateX(-Math.PI / 2);
+  dungeonRugGeo.translate(0, 0.025, 0);
+  dungeonRugMat = makeDungeonMat(
+    '/assets/dungeon/textures/RugColor.png',
+    null,
+    '/assets/dungeon/textures/RugRoughness.png',
+    { roughness: 0.85, emissive: 0x551010, emissiveIntensity: 0.5, doubleSide: true }
+  );
+
+  dungeonAssetsLoaded = true;
+  console.log('[DUNGEON] Procedural dungeon assets created (pillars, statues, red rugs)');
+  if (typeof pendingDungeonPropsFn === 'function') {
+    pendingDungeonPropsFn();
+    pendingDungeonPropsFn = null;
+  }
+}
+
+/* ── Main loader: try GLB first, fallback to procedural ── */
 function loadDungeonPackAssets() {
   if (dungeonAssetsLoaded) return;
 
-  gltfLoader.load('/assets/dungeon/models/dungeon_kit.glb', (gltf) => {
-    let pillarMesh = null;
-    let statueMesh = null;
-    let rugMesh = null;
+  // Safety timer — if GLB hasn't finished in 6s, use procedural fallback
+  const fallbackTimer = setTimeout(() => {
+    if (!dungeonAssetsLoaded) {
+      console.warn('[DUNGEON] GLB load timed out after 6s — using procedural fallback');
+      createProceduralDungeonAssets();
+    }
+  }, 6000);
 
+  gltfLoader.load('/assets/dungeon/models/dungeon_kit.glb', (gltf) => {
+    clearTimeout(fallbackTimer);
+    if (dungeonAssetsLoaded) return; // fallback already fired
+
+    console.log('[DUNGEON] GLB parsed — extracting individual asset meshes...');
+    gltf.scene.updateMatrixWorld(true);
+
+    // Log all mesh names for debugging
+    const meshNames = [];
+    gltf.scene.traverse(c => { if (c.isMesh) meshNames.push(c.name); });
+    console.log('[DUNGEON] All GLB meshes:', meshNames.join(', '));
+
+    // Find ONLY the individual asset meshes (prefix "Ind.Asset.")
+    let pillarMesh = null, statueMesh = null, rugMesh = null;
     gltf.scene.traverse((child) => {
-      if (child.isMesh) {
-        const name = child.name || '';
-        if (!pillarMesh && name.includes('Pillar')) {
-          pillarMesh = child;
-        } else if (!statueMesh && name.includes('Statue')) {
-          statueMesh = child;
-        } else if (!rugMesh && (name.includes('Rugs') || name.includes('Alfombra'))) {
-          rugMesh = child;
-        }
-      }
+      if (!child.isMesh) return;
+      const n = child.name || '';
+      if (!pillarMesh && n.startsWith('Ind.Asset.Pillar')) pillarMesh = child;
+      if (!statueMesh && n.startsWith('Ind.Asset.Statue')) statueMesh = child;
+      if (!rugMesh    && n.startsWith('Ind.Asset.Rugs'))   rugMesh = child;
     });
 
+    console.log('[DUNGEON] Found meshes — Pillar:', pillarMesh?.name, 'Statue:', statueMesh?.name, 'Rug:', rugMesh?.name);
+
+    // Helper: clone geometry with world transform baked in, then normalise
+    function extractGeo(mesh, targetHeight) {
+      const geo = mesh.geometry.clone();
+      // Apply the full ancestor transform chain (scale ≈100, FBX rotation, etc.)
+      geo.applyMatrix4(mesh.matrixWorld);
+      geo.computeBoundingBox();
+      const box = geo.boundingBox;
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const center = new THREE.Vector3();
+      box.getCenter(center);
+      // Centre on X/Z, sit on floor (y=0)
+      geo.translate(-center.x, -box.min.y, -center.z);
+      // Scale uniformly to target height
+      if (targetHeight && size.y > 0.001) {
+        const s = targetHeight / size.y;
+        geo.scale(s, s, s);
+      }
+      geo.computeBoundingBox();
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    let glbOk = true;
+
+    // ── Pillar ──
     if (pillarMesh) {
-      dungeonPillarGeo = pillarMesh.geometry.clone();
-      dungeonPillarGeo.rotateX(-Math.PI / 2);
-      dungeonPillarGeo.computeBoundingBox();
-      const pSize = new THREE.Vector3();
-      dungeonPillarGeo.boundingBox.getSize(pSize);
-      const pScale = 4.5 / (pSize.y || 9.14);
-      dungeonPillarGeo.scale(pScale, pScale, pScale);
-      dungeonPillarGeo.computeBoundingBox();
-      const pMin = dungeonPillarGeo.boundingBox.min;
-      const pMax = dungeonPillarGeo.boundingBox.max;
-      dungeonPillarGeo.translate(-(pMin.x + pMax.x) / 2, -pMin.y, -(pMin.z + pMax.z) / 2);
-      dungeonPillarGeo.computeVertexNormals();
+      dungeonPillarGeo = extractGeo(pillarMesh, 4.5);
+      dungeonPillarMat = makeDungeonMat(
+        '/assets/dungeon/textures/ColumnColor.png',
+        '/assets/dungeon/textures/ColumnNormal.png',
+        '/assets/dungeon/textures/ColumnRoughness.png',
+        { roughness: 0.55, emissive: 0x444444, emissiveIntensity: 0.4 }
+      );
+      console.log('[DUNGEON] ✓ Pillar geometry extracted, bbox:', dungeonPillarGeo.boundingBox);
+    } else { glbOk = false; }
 
-      dungeonPillarMat = pillarMesh.material ? pillarMesh.material.clone() : new THREE.MeshStandardMaterial({ color: 0xffffff });
-      dungeonPillarMat.color.setHex(0xffffff);
-      dungeonPillarMat.emissive.setHex(0x333333);
-      dungeonPillarMat.emissiveIntensity = 0.35;
-      dungeonPillarMat.roughness = 0.6;
-      dungeonPillarMat.metalness = 0.05;
-      dungeonPillarMat.needsUpdate = true;
-    }
-
+    // ── Statue ──
     if (statueMesh) {
-      dungeonStatueGeo = statueMesh.geometry.clone();
-      dungeonStatueGeo.rotateX(-Math.PI / 2);
-      dungeonStatueGeo.computeBoundingBox();
-      const sMin = dungeonStatueGeo.boundingBox.min;
-      const sMax = dungeonStatueGeo.boundingBox.max;
-      dungeonStatueGeo.translate(-(sMin.x + sMax.x) / 2, -sMin.y, -(sMin.z + sMax.z) / 2);
-      dungeonStatueGeo.computeVertexNormals();
+      dungeonStatueGeo = extractGeo(statueMesh, 2.2);
+      dungeonStatueMat = makeDungeonMat(
+        '/assets/dungeon/textures/StatueColor.png',
+        '/assets/dungeon/textures/StatueNormal.png',
+        '/assets/dungeon/textures/StatueRoughness.png',
+        { roughness: 0.65, metalness: 0.08, emissive: 0x444444, emissiveIntensity: 0.4 }
+      );
+      console.log('[DUNGEON] ✓ Statue geometry extracted, bbox:', dungeonStatueGeo.boundingBox);
+    } else { glbOk = false; }
 
-      dungeonStatueMat = statueMesh.material ? statueMesh.material.clone() : new THREE.MeshStandardMaterial({ color: 0xffffff });
-      dungeonStatueMat.color.setHex(0xffffff);
-      dungeonStatueMat.emissive.setHex(0x333333);
-      dungeonStatueMat.emissiveIntensity = 0.35;
-      dungeonStatueMat.roughness = 0.65;
-      dungeonStatueMat.metalness = 0.08;
-      dungeonStatueMat.needsUpdate = true;
-    }
-
+    // ── Rug ──
     if (rugMesh) {
-      dungeonRugGeo = rugMesh.geometry.clone();
-      dungeonRugGeo.rotateX(-Math.PI / 2);
-      dungeonRugGeo.center();
-      dungeonRugGeo.computeBoundingBox();
+      const rGeo = rugMesh.geometry.clone();
+      rGeo.applyMatrix4(rugMesh.matrixWorld);
+      rGeo.computeBoundingBox();
+      const rBox = rGeo.boundingBox;
+      const rCenter = new THREE.Vector3();
+      rBox.getCenter(rCenter);
       const rSize = new THREE.Vector3();
-      dungeonRugGeo.boundingBox.getSize(rSize);
-      const scaleX = 2.4 / (rSize.x || 3.34);
-      const scaleZ = 4.5 / (rSize.z || 8.40);
-      dungeonRugGeo.scale(scaleX, 1.0, scaleZ);
-      dungeonRugGeo.translate(0, 0.02, 0);
-      dungeonRugGeo.computeVertexNormals();
+      rBox.getSize(rSize);
+      // Centre, lay flat on floor
+      rGeo.translate(-rCenter.x, -rBox.min.y + 0.025, -rCenter.z);
+      // Scale to fit corridor (2.4 wide × 4.5 long)
+      const sX = 2.4 / (rSize.x > rSize.z ? rSize.x : rSize.z);
+      const sZ = 4.5 / (rSize.x > rSize.z ? rSize.z : rSize.x);
+      rGeo.scale(sX, 1, sZ);
+      rGeo.computeVertexNormals();
+      dungeonRugGeo = rGeo;
+      dungeonRugMat = makeDungeonMat(
+        '/assets/dungeon/textures/RugColor.png',
+        null,
+        '/assets/dungeon/textures/RugRoughness.png',
+        { roughness: 0.85, emissive: 0x551010, emissiveIntensity: 0.5, doubleSide: true }
+      );
+      console.log('[DUNGEON] ✓ Rug geometry extracted, bbox:', dungeonRugGeo.boundingBox);
+    } else { glbOk = false; }
 
-      dungeonRugMat = rugMesh.material ? rugMesh.material.clone() : new THREE.MeshStandardMaterial({ color: 0xffffff });
-      dungeonRugMat.color.setHex(0xffffff);
-      dungeonRugMat.emissive.setHex(0x440808);
-      dungeonRugMat.emissiveIntensity = 0.45;
-      dungeonRugMat.side = THREE.DoubleSide;
-      dungeonRugMat.needsUpdate = true;
+    if (!glbOk) {
+      console.warn('[DUNGEON] Some GLB meshes missing — falling back to procedural assets');
+      createProceduralDungeonAssets();
+      return;
     }
 
     dungeonAssetsLoaded = true;
-    console.log('[DUNGEON] Official 3D GLB Dungeon Kit loaded successfully with 1k PBR textures!');
+    console.log('[DUNGEON] ✓ All dungeon assets extracted from GLB with PBR textures!');
     if (typeof pendingDungeonPropsFn === 'function') {
       pendingDungeonPropsFn();
       pendingDungeonPropsFn = null;
     }
   }, undefined, (err) => {
-    console.error('[DUNGEON] Failed to load dungeon_kit.glb:', err);
+    clearTimeout(fallbackTimer);
+    console.error('[DUNGEON] GLB load failed:', err, '— using procedural fallback');
+    createProceduralDungeonAssets();
   });
 }
 
