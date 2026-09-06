@@ -2060,6 +2060,7 @@ let dungeonPillarMat = null;
 let dungeonStatueGeo = null;
 let dungeonStatueMat = null;
 let dungeonRugGeo = null;
+let dungeonRugCrestGeo = null;
 let dungeonRugMat = null;
 let dungeonProps = [];
 let pendingDungeonPropsFn = null;
@@ -2116,6 +2117,7 @@ function createProceduralDungeonAssets() {
   dungeonRugGeo = new THREE.PlaneGeometry(2.4, 4.5);
   dungeonRugGeo.rotateX(-Math.PI / 2);
   dungeonRugGeo.translate(0, 0.025, 0);
+  dungeonRugCrestGeo = dungeonRugGeo;
   dungeonRugMat = makeDungeonMat(
     '/assets/dungeon/textures/RugColor.png',
     null,
