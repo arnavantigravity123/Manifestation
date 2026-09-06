@@ -2347,6 +2347,12 @@ function loadDungeonPackAssets() {
     }
     if (dungeonModules.statue && dungeonModules.statue.children[0]) {
       dungeonStatueGeo = dungeonModules.statue.children[0].geometry;
+      // In dungeon.glb, IndAssetStatue's intrinsic front faces +X.
+      // Rotate by -Math.PI / 2 around Y so its intrinsic front faces +Z (South),
+      // matching the standard maze orientation (rotation 0 = South +Z) used across all props and corridor walls.
+      dungeonStatueGeo.applyMatrix4(new THREE.Matrix4().makeRotationY(-Math.PI / 2));
+      dungeonStatueGeo.computeBoundingBox();
+      dungeonStatueGeo.computeVertexNormals();
       dungeonStatueMat = dungeonModules.statue.children[0].material;
     }
     // Seamless continuous runner rug (Full 6m, Half 3m, Dead-End 4.4m, width 2.0m with zero horizontal yellow lines)
@@ -2507,10 +2513,10 @@ function spawnDungeonProps(layout, blockSize) {
   if (layout && layout.length > 0) {
     const deadEnds = [];
     const dirs = [
-      { dx: 0, dz: -1, rot: 0 },
-      { dx: 0, dz: 1, rot: Math.PI },
-      { dx: -1, dz: 0, rot: -Math.PI / 2 },
-      { dx: 1, dz: 0, rot: Math.PI / 2 }
+      { dx: 0, dz: -1, rot: Math.PI },        // Open North (-Z) -> statue against South wall faces North (-Z)
+      { dx: 0, dz: 1, rot: 0 },              // Open South (+Z) -> statue against North wall faces South (+Z)
+      { dx: -1, dz: 0, rot: -Math.PI / 2 },  // Open West (-X) -> statue against East wall faces West (-X)
+      { dx: 1, dz: 0, rot: Math.PI / 2 }     // Open East (+X) -> statue against West wall faces East (+X)
     ];
 
     for (let r = 1; r < layout.length - 1; r++) {
