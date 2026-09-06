@@ -2064,8 +2064,11 @@ let dungeonModules = {
   wall: null,
   squareWall: null,
   pillar: null,
-  statue: null
+  statue: null,
+  rug: null
 };
+let dungeonWallGeo = null;
+let dungeonWallMat = null;
 let dungeonPillarGeo = null;
 let dungeonPillarMat = null;
 let dungeonStatueGeo = null;
@@ -2085,12 +2088,43 @@ function makeDungeonMat(colorPath, normalPath, roughPath, opts = {}) {
     roughness:    opts.roughness ?? 0.6,
     metalness:    opts.metalness ?? 0.05,
     color:        0xffffff,
-    emissive:     new THREE.Color(opts.emissive ?? 0x333333),
-    emissiveIntensity: opts.emissiveIntensity ?? 0.35,
+    emissive:     new THREE.Color(opts.emissive ?? 0x111418),
+    emissiveIntensity: opts.emissiveIntensity ?? 0.15,
     side:         opts.doubleSide ? THREE.DoubleSide : THREE.FrontSide,
   });
   mat.needsUpdate = true;
   return mat;
+}
+
+/* ── Seamless Rug Plane Generators (Zero yellow cutoffs!) ── */
+function createSeamlessRugGeo(width = 2.4, length = 6.0) {
+  const geo = new THREE.PlaneGeometry(width, length);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, 0.02, 0);
+  const uvAttr = geo.attributes.uv;
+  for (let i = 0; i < uvAttr.count; i++) {
+    const u = uvAttr.getX(i);
+    const v = uvAttr.getY(i);
+    // Sample strictly from continuous runner half of RugColor.png (u: 0.005 -> 0.510)
+    uvAttr.setXY(i, 0.005 + u * (0.510 - 0.005), 0.020 + v * (0.988 - 0.020));
+  }
+  uvAttr.needsUpdate = true;
+  return geo;
+}
+
+function createCrestRugGeo(width = 2.4, length = 6.0) {
+  const geo = new THREE.PlaneGeometry(width, length);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, 0.025, 0);
+  const uvAttr = geo.attributes.uv;
+  for (let i = 0; i < uvAttr.count; i++) {
+    const u = uvAttr.getX(i);
+    const v = uvAttr.getY(i);
+    // Sample strictly from the golden crest portion (u: 0.632 -> 0.994)
+    uvAttr.setXY(i, 0.632 + u * (0.994 - 0.632), 0.020 + v * (0.988 - 0.020));
+  }
+  uvAttr.needsUpdate = true;
+  return geo;
 }
 
 /* ── Procedural fallback (always works, uses texture PNGs) ── */
@@ -2098,42 +2132,50 @@ function createProceduralDungeonAssets() {
   if (dungeonAssetsLoaded) return;
   console.log('[DUNGEON] Creating procedural dungeon assets from texture PNGs...');
 
-  // Pillar — ornate octagonal column, floor-to-ceiling
-  dungeonPillarGeo = new THREE.CylinderGeometry(0.42, 0.52, 4.5, 8);
-  dungeonPillarGeo.translate(0, 2.25, 0); // sit on y=0
+  // Wall — stone wall segment with moldings
+  dungeonWallGeo = new THREE.BoxGeometry(0.4, 3.5, 6.0);
+  dungeonWallGeo.translate(0, 1.75, 0);
+  dungeonWallMat = makeDungeonMat(
+    '/assets/dungeon/textures/WallColor.png',
+    '/assets/dungeon/textures/WallNormal.png',
+    '/assets/dungeon/textures/WallRoughness.png',
+    { roughness: 0.75, emissive: 0x111418, emissiveIntensity: 0.15 }
+  );
+
+  // Pillar — ornate column
+  dungeonPillarGeo = new THREE.CylinderGeometry(0.48, 0.56, 3.5, 8);
+  dungeonPillarGeo.translate(0, 1.75, 0);
   dungeonPillarMat = makeDungeonMat(
     '/assets/dungeon/textures/ColumnColor.png',
     '/assets/dungeon/textures/ColumnNormal.png',
     '/assets/dungeon/textures/ColumnRoughness.png',
-    { roughness: 0.55, emissive: 0x444444, emissiveIntensity: 0.4 }
+    { roughness: 0.7, emissive: 0x111418, emissiveIntensity: 0.15 }
   );
 
-  // Statue — approximated as tapered box with stone texture
+  // Statue — monk statue
   const statueShape = new THREE.Shape();
-  statueShape.moveTo(-0.35, 0);   statueShape.lineTo(0.35, 0);
-  statueShape.lineTo(0.28, 2.2);  statueShape.lineTo(-0.28, 2.2);
-  statueShape.lineTo(-0.35, 0);
-  const extrudeSettings = { depth: 0.5, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.06, bevelSegments: 2 };
+  statueShape.moveTo(-0.45, 0);   statueShape.lineTo(0.45, 0);
+  statueShape.lineTo(0.38, 2.8);  statueShape.lineTo(-0.38, 2.8);
+  statueShape.lineTo(-0.45, 0);
+  const extrudeSettings = { depth: 0.6, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.06, bevelSegments: 2 };
   dungeonStatueGeo = new THREE.ExtrudeGeometry(statueShape, extrudeSettings);
-  dungeonStatueGeo.translate(0, 0, -0.25); // centre on Z
+  dungeonStatueGeo.translate(0, 0, -0.3);
   dungeonStatueGeo.computeVertexNormals();
   dungeonStatueMat = makeDungeonMat(
     '/assets/dungeon/textures/StatueColor.png',
     '/assets/dungeon/textures/StatueNormal.png',
     '/assets/dungeon/textures/StatueRoughness.png',
-    { roughness: 0.65, metalness: 0.08, emissive: 0x444444, emissiveIntensity: 0.4 }
+    { roughness: 0.7, metalness: 0.06, emissive: 0x181a1e, emissiveIntensity: 0.2 }
   );
 
-  // Rug — flat plane with the RED velvet runner texture
-  dungeonRugGeo = new THREE.PlaneGeometry(2.4, 4.5);
-  dungeonRugGeo.rotateX(-Math.PI / 2);
-  dungeonRugGeo.translate(0, 0.025, 0);
-  dungeonRugCrestGeo = dungeonRugGeo;
+  // Seamless continuous velvet runner rugs
+  dungeonRugGeo = createSeamlessRugGeo(2.4, 6.0);
+  dungeonRugCrestGeo = createCrestRugGeo(2.4, 6.0);
   dungeonRugMat = makeDungeonMat(
     '/assets/dungeon/textures/RugColor.png',
     null,
     '/assets/dungeon/textures/RugRoughness.png',
-    { roughness: 0.85, emissive: 0x551010, emissiveIntensity: 0.5, doubleSide: true }
+    { roughness: 0.85, emissive: 0x661111, emissiveIntensity: 0.45, doubleSide: true }
   );
 
   dungeonAssetsLoaded = true;
@@ -2250,6 +2292,10 @@ function loadDungeonPackAssets() {
     dungeonModules.rug = extractModule('IndAssetRugs', new THREE.Vector3(0, 0, 0));
 
     // Standalone references for props if needed
+    if (dungeonModules.wall && dungeonModules.wall.children[0]) {
+      dungeonWallGeo = dungeonModules.wall.children[0].geometry;
+      dungeonWallMat = dungeonModules.wall.children[0].material;
+    }
     if (dungeonModules.pillar && dungeonModules.pillar.children[0]) {
       dungeonPillarGeo = dungeonModules.pillar.children[0].geometry;
       dungeonPillarMat = dungeonModules.pillar.children[0].material;
@@ -2258,11 +2304,9 @@ function loadDungeonPackAssets() {
       dungeonStatueGeo = dungeonModules.statue.children[0].geometry;
       dungeonStatueMat = dungeonModules.statue.children[0].material;
     }
-    // Seamless continuous runner rug (3.2m wide x 6.0m cell length)
-    dungeonRugGeo = new THREE.PlaneGeometry(3.2, 6.0);
-    dungeonRugGeo.rotateX(-Math.PI / 2);
-    dungeonRugGeo.translate(0, 0.025, 0);
-    dungeonRugCrestGeo = dungeonRugGeo;
+    // Seamless continuous runner rug (2.4m wide x 6.0m cell length with zero yellow borders)
+    dungeonRugGeo = createSeamlessRugGeo(2.4, 6.0);
+    dungeonRugCrestGeo = createCrestRugGeo(2.4, 6.0);
     if (dungeonModules.rug && dungeonModules.rug.children[0]) {
       dungeonRugMat = dungeonModules.rug.children[0].material;
     } else {
@@ -2270,7 +2314,7 @@ function loadDungeonPackAssets() {
         '/assets/dungeon/textures/RugColor.png',
         null,
         '/assets/dungeon/textures/RugRoughness.png',
-        { roughness: 0.85, emissive: 0x661111, emissiveIntensity: 0.5, doubleSide: true }
+        { roughness: 0.85, emissive: 0x661111, emissiveIntensity: 0.45, doubleSide: true }
       );
     }
 
@@ -2327,6 +2371,7 @@ function spawnDungeonProps(layout, blockSize) {
     // Pillars flanking gate door frame
     [-2.2, 2.2].forEach(offset => {
       const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+      pMesh.scale.set(1.5, 1.68, 1.5);
       if (isNorthSouth) {
         pMesh.position.set(gateCoordinates.x + offset, 0, gateCoordinates.z);
       } else {
@@ -2343,6 +2388,7 @@ function spawnDungeonProps(layout, blockSize) {
 
     [-3.4, 3.4].forEach((offset) => {
       const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
+      sMesh.scale.set(1.3, 1.45, 1.3);
       if (isNorthSouth) {
         sMesh.position.set(gateCoordinates.x + offset, 0, gateCoordinates.z);
         sMesh.rotation.y = (offset < 0) ? Math.PI * 0.35 : -Math.PI * 0.35;
@@ -2384,6 +2430,7 @@ function spawnDungeonProps(layout, blockSize) {
         const px = s.x + Math.cos(ang) * radius;
         const pz = s.z + Math.sin(ang) * radius;
         const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+        pMesh.scale.set(1.5, 1.68, 1.5);
         pMesh.position.set(px, 0, pz);
         pMesh.castShadow = true;
         pMesh.receiveShadow = true;
@@ -2428,8 +2475,10 @@ function spawnDungeonProps(layout, blockSize) {
 
     deadEnds.forEach(de => {
       const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-      const backOffsetX = -de.dir.dx * 1.8;
-      const backOffsetZ = -de.dir.dz * 1.8;
+      sMesh.scale.set(1.3, 1.45, 1.3);
+      // Place against back wall of the dead end, facing forward into open hall
+      const backOffsetX = -de.dir.dx * 2.2;
+      const backOffsetZ = -de.dir.dz * 2.2;
       sMesh.position.set(de.x + backOffsetX, 0, de.z + backOffsetZ);
       sMesh.rotation.y = de.dir.rot;
       sMesh.castShadow = true;
@@ -2442,9 +2491,9 @@ function spawnDungeonProps(layout, blockSize) {
     });
   }
 
-  // 4. Ornate Columns & Monk Statues Lining Corridor Walls
+  // 4. Ornate Columns Lining Corridor Walls (Every 6m cell at wall edges)
   if (layout && layout.length > 0) {
-    const wallOffset = 2.45; // Nested snugly against the wall in 6.0m wide corridor
+    const wallOffset = 2.45; // Snug against wall in 6.0m wide corridor
     for (let r = 1; r < layout.length - 1; r++) {
       for (let c = 1; c < layout[r].length - 1; c++) {
         if (layout[r][c] === 0 && (r + c) % 2 === 0) {
@@ -2454,6 +2503,7 @@ function spawnDungeonProps(layout, blockSize) {
           // West wall
           if (layout[r][c - 1] === 1) {
             const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+            pMesh.scale.set(1.5, 1.68, 1.5);
             pMesh.position.set(cx - wallOffset, 0, cz);
             pMesh.castShadow = true;
             pMesh.receiveShadow = true;
@@ -2465,34 +2515,21 @@ function spawnDungeonProps(layout, blockSize) {
           }
           // East wall
           if (layout[r][c + 1] === 1) {
-            // Every 5th tile, place a Monk Statue on pedestal against wall instead of a pillar
-            const isStatueNiche = ((r * 3 + c) % 5 === 0);
-            if (isStatueNiche) {
-              const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-              sMesh.position.set(cx + wallOffset, 0, cz);
-              sMesh.rotation.y = -Math.PI / 2; // Facing into corridor
-              sMesh.castShadow = true;
-              sMesh.receiveShadow = true;
-              sMesh.userData = { isDungeonProp: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
-              scene.add(sMesh);
-              dungeonProps.push(sMesh);
-              walls.push(sMesh);
-              placedStatues++;
-            } else {
-              const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-              pMesh.position.set(cx + wallOffset, 0, cz);
-              pMesh.castShadow = true;
-              pMesh.receiveShadow = true;
-              pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
-              scene.add(pMesh);
-              dungeonProps.push(pMesh);
-              walls.push(pMesh);
-              placedPillars++;
-            }
+            const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+            pMesh.scale.set(1.5, 1.68, 1.5);
+            pMesh.position.set(cx + wallOffset, 0, cz);
+            pMesh.castShadow = true;
+            pMesh.receiveShadow = true;
+            pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+            scene.add(pMesh);
+            dungeonProps.push(pMesh);
+            walls.push(pMesh);
+            placedPillars++;
           }
-          // North wall (for EW corridors)
+          // North wall
           if (layout[r - 1] && layout[r - 1][c] === 1) {
             const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+            pMesh.scale.set(1.5, 1.68, 1.5);
             pMesh.position.set(cx, 0, cz - wallOffset);
             pMesh.castShadow = true;
             pMesh.receiveShadow = true;
@@ -2502,9 +2539,10 @@ function spawnDungeonProps(layout, blockSize) {
             walls.push(pMesh);
             placedPillars++;
           }
-          // South wall (for EW corridors)
+          // South wall
           if (layout[r + 1] && layout[r + 1][c] === 1) {
             const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+            pMesh.scale.set(1.5, 1.68, 1.5);
             pMesh.position.set(cx, 0, cz + wallOffset);
             pMesh.castShadow = true;
             pMesh.receiveShadow = true;
@@ -2709,7 +2747,7 @@ function generateMaze(keysCount = 8) {
   const ceilGeo = new THREE.PlaneGeometry(floorExtent, floorExtent);
   ceilingMesh = new THREE.Mesh(ceilGeo, ceilMat);
   ceilingMesh.rotation.x = Math.PI / 2;
-  ceilingMesh.position.y = isDungeon ? 4.8 : 4.5;
+  ceilingMesh.position.y = isDungeon ? 3.5 : 4.5;
   ceilingMesh.frustumCulled = false;
   scene.add(ceilingMesh);
 
@@ -2911,8 +2949,8 @@ function generateMaze(keysCount = 8) {
     });
   }
 
-  const wallHeight = isDungeon ? 4.8 : 4.5;
-  const wallGeo = new THREE.BoxGeometry(blockSize + 0.5, wallHeight, blockSize + 0.5);
+  const wallHeight = isDungeon ? 3.5 : 4.5;
+  const wallGeo = new THREE.BoxGeometry(blockSize + 0.1, wallHeight, blockSize + 0.1);
 
   openCorridors = []; // Reset for new maze
   const wallGeometries = [];
@@ -2925,7 +2963,7 @@ function generateMaze(keysCount = 8) {
 
       if (type === 1) {
         // Static wall: create transformed geometry for single merged mesh
-        const singleGeo = new THREE.BoxGeometry(blockSize + 0.5, wallHeight, blockSize + 0.5);
+        const singleGeo = new THREE.BoxGeometry(blockSize + 0.1, wallHeight, blockSize + 0.1);
         singleGeo.translate(xPos, wallHeight / 2, zPos);
         wallGeometries.push(singleGeo);
       } else if (type === 2) {
@@ -2934,7 +2972,7 @@ function generateMaze(keysCount = 8) {
         if (isDungeon && dungeonModules.wall) {
           wallMesh = dungeonModules.wall.clone(true);
           wallMesh.position.set(xPos, 0, zPos);
-          wallMesh.scale.set(1.5, 2.25, 1.5);
+          wallMesh.scale.set(1.87, 1.75, 1.5);
           const isEW = (c > 0 && layout[r][c - 1] === 0) || (c < layout[r].length - 1 && layout[r][c + 1] === 0);
           wallMesh.rotation.y = isEW ? 0 : Math.PI / 2;
           wallMesh.userData = { 
