@@ -1449,8 +1449,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
       camera.position.set(minFarDist, 1.6, minFarDist);
     }
   } else {
-    // All humans spawn together at the exact same labyrinth entrance
-    camera.position.set(0, 1.6, 0);
+    // All humans spawn together at the exact same labyrinth entrance (guaranteed open corridor hub)
+    const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+    const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+    camera.position.set(sx, 1.6, sz);
   }
 
   // Pause buttons remain active in all modes to access In-Game Menu & Settings
@@ -2081,6 +2083,7 @@ let dungeonRugGeoDeadEnd = null;
 let dungeonRugCrestGeo = null;
 let dungeonRugMat = null;
 let dungeonProps = [];
+let dungeonPropColliders = []; // Solid collision for pillars (radius 0.60m) and statues (radius 0.80m)
 let pendingDungeonPropsFn = null;
 
 /* ── Helper: create PBR material from separate texture PNGs ── */
@@ -2348,9 +2351,9 @@ function loadDungeonPackAssets() {
     if (dungeonModules.statue && dungeonModules.statue.children[0]) {
       dungeonStatueGeo = dungeonModules.statue.children[0].geometry;
       // In dungeon.glb, IndAssetStatue's intrinsic front faces +X.
-      // Rotate by -Math.PI / 2 around Y so its intrinsic front faces +Z (South),
-      // matching the standard maze orientation (rotation 0 = South +Z) used across all props and corridor walls.
-      dungeonStatueGeo.applyMatrix4(new THREE.Matrix4().makeRotationY(-Math.PI / 2));
+      // Rotate by +Math.PI / 2 around Y so its front faces away from the back wall
+      // and directly down the corridor towards the approaching player and red runner rug.
+      dungeonStatueGeo.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI / 2));
       dungeonStatueGeo.computeBoundingBox();
       dungeonStatueGeo.computeVertexNormals();
       dungeonStatueMat = dungeonModules.statue.children[0].material;
@@ -2413,6 +2416,7 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   console.log('[DUNGEON-SPAWN] Placing dungeon props throughout the entire labyrinth...');
+  dungeonPropColliders = [];
   let placedPillars = 0;
   let placedStatues = 0;
   let placedRugs = 0;
@@ -2427,6 +2431,43 @@ function spawnDungeonProps(layout, blockSize) {
     return dungeonProps.some(p => p.userData && p.userData.isStatue && Math.hypot(p.position.x - x, p.position.z - z) < minDist);
   }
 
+  // Helper: prevent spawning props inside or within collision radius of player spawn hub
+  function isNearSpawn(x, z, minDist = 2.8) {
+    if (!window.humanSpawnPos) return false;
+    return Math.hypot(x - window.humanSpawnPos.x, z - window.humanSpawnPos.z) < minDist;
+  }
+
+  function spawnPillarMesh(px, pz) {
+    if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz)) return null;
+    const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+    pMesh.scale.set(1.5, 1.68, 1.5);
+    pMesh.position.set(px, 0, pz);
+    pMesh.castShadow = true;
+    pMesh.receiveShadow = true;
+    pMesh.userData = { isDungeonProp: true, isPillar: true };
+    scene.add(pMesh);
+    dungeonProps.push(pMesh);
+    dungeonPropColliders.push({ x: px, z: pz, radius: 0.60 });
+    placedPillars++;
+    return pMesh;
+  }
+
+  function spawnStatueMesh(sx, sz, rotY = 0) {
+    if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz)) return null;
+    const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
+    sMesh.scale.set(1.3, 1.45, 1.3);
+    sMesh.position.set(sx, 0, sz);
+    sMesh.rotation.y = rotY;
+    sMesh.castShadow = true;
+    sMesh.receiveShadow = true;
+    sMesh.userData = { isDungeonProp: true, isStatue: true };
+    scene.add(sMesh);
+    dungeonProps.push(sMesh);
+    dungeonPropColliders.push({ x: sx, z: sz, radius: 0.80 });
+    placedStatues++;
+    return sMesh;
+  }
+
   // 1. Master Vault Gate Flanking (Pillars + Statues + Entrance Grand Runner Rug)
   if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
     const edge = window.vaultEdge || 'N';
@@ -2436,40 +2477,21 @@ function spawnDungeonProps(layout, blockSize) {
     [-2.2, 2.2].forEach(offset => {
       const px = isNorthSouth ? (gateCoordinates.x + offset) : gateCoordinates.x;
       const pz = isNorthSouth ? gateCoordinates.z : (gateCoordinates.z + offset);
-      if (isBlockedByBreaker(px, pz)) return;
-
-      const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-      pMesh.scale.set(1.5, 1.68, 1.5);
-      pMesh.position.set(px, 0, pz);
-      pMesh.castShadow = true;
-      pMesh.receiveShadow = true;
-      pMesh.userData = { isDungeonProp: true, isPillar: true };
-      scene.add(pMesh);
-      dungeonProps.push(pMesh);
-      placedPillars++;
+      spawnPillarMesh(px, pz);
     });
 
     [-3.4, 3.4].forEach((offset) => {
       const sx = isNorthSouth ? (gateCoordinates.x + offset) : gateCoordinates.x;
       const sz = isNorthSouth ? gateCoordinates.z : (gateCoordinates.z + offset);
-      if (isBlockedByBreaker(sx, sz)) return;
-
-      const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-      sMesh.scale.set(1.3, 1.45, 1.3);
-      sMesh.position.set(sx, 0, sz);
+      let rotY = 0;
       if (isNorthSouth) {
-        sMesh.rotation.y = (offset < 0) ? Math.PI * 0.35 : -Math.PI * 0.35;
-        if (edge === 'S') sMesh.rotation.y += Math.PI;
+        rotY = (offset < 0) ? Math.PI * 0.35 : -Math.PI * 0.35;
+        if (edge === 'S') rotY += Math.PI;
       } else {
-        sMesh.rotation.y = (offset < 0) ? -Math.PI * 0.15 : Math.PI * 0.85;
-        if (edge === 'W') sMesh.rotation.y += Math.PI;
+        rotY = (offset < 0) ? -Math.PI * 0.15 : Math.PI * 0.85;
+        if (edge === 'W') rotY += Math.PI;
       }
-      sMesh.castShadow = true;
-      sMesh.receiveShadow = true;
-      sMesh.userData = { isDungeonProp: true, isStatue: true };
-      scene.add(sMesh);
-      dungeonProps.push(sMesh);
-      placedStatues++;
+      spawnStatueMesh(sx, sz, rotY);
     });
 
     const rugMesh = new THREE.Mesh(dungeonRugCrestGeo || dungeonRugGeo, dungeonRugMat);
@@ -2494,17 +2516,7 @@ function spawnDungeonProps(layout, blockSize) {
       angles.forEach(ang => {
         const px = s.x + Math.cos(ang) * radius;
         const pz = s.z + Math.sin(ang) * radius;
-        if (isBlockedByBreaker(px, pz)) return;
-
-        const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-        pMesh.scale.set(1.5, 1.68, 1.5);
-        pMesh.position.set(px, 0, pz);
-        pMesh.castShadow = true;
-        pMesh.receiveShadow = true;
-        pMesh.userData = { isDungeonProp: true, isPillar: true };
-        scene.add(pMesh);
-        dungeonProps.push(pMesh);
-        placedPillars++;
+        spawnPillarMesh(px, pz);
       });
     });
   }
@@ -2545,18 +2557,7 @@ function spawnDungeonProps(layout, blockSize) {
       const backOffsetZ = -de.dir.dz * 2.2;
       const sx = de.x + backOffsetX;
       const sz = de.z + backOffsetZ;
-      if (isBlockedByBreaker(sx, sz)) return;
-
-      const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-      sMesh.scale.set(1.3, 1.45, 1.3);
-      sMesh.position.set(sx, 0, sz);
-      sMesh.rotation.y = de.dir.rot;
-      sMesh.castShadow = true;
-      sMesh.receiveShadow = true;
-      sMesh.userData = { isDungeonProp: true, isStatue: true };
-      scene.add(sMesh);
-      dungeonProps.push(sMesh);
-      placedStatues++;
+      spawnStatueMesh(sx, sz, de.dir.rot);
 
       // 2. Flank statue with two ornate columns on LEFT and RIGHT (exactly like reference photo media_1788720074161.png)
       const isNS = (de.dir.dz !== 0);
@@ -2572,18 +2573,7 @@ function spawnDungeonProps(layout, blockSize) {
           px = de.x - de.dir.dx * pillarDistFromCenter;
           pz = de.z + fo;
         }
-
-        if (!isBlockedByBreaker(px, pz)) {
-          const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-          pMesh.scale.set(1.5, 1.68, 1.5);
-          pMesh.position.set(px, 0, pz);
-          pMesh.castShadow = true;
-          pMesh.receiveShadow = true;
-          pMesh.userData = { isDungeonProp: true, isPillar: true };
-          scene.add(pMesh);
-          dungeonProps.push(pMesh);
-          placedPillars++;
-        }
+        spawnPillarMesh(px, pz);
       });
     });
   }
@@ -2622,64 +2612,18 @@ function spawnDungeonProps(layout, blockSize) {
               const eastSolid = (layout[r][c + 1] === 1);
               if (westSolid && !isBlockedByBreaker(cx - wallOffset, cz) && !isNearStatue(cx - wallOffset, cz, 4.0)) {
                 // Statue against West wall facing East (+X)
-                const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-                sMesh.scale.set(1.3, 1.45, 1.3);
-                sMesh.position.set(cx - wallOffset, 0, cz);
-                sMesh.rotation.y = Math.PI / 2;
-                sMesh.castShadow = true;
-                sMesh.receiveShadow = true;
-                sMesh.userData = { isDungeonProp: true, isStatue: true };
-                scene.add(sMesh);
-                dungeonProps.push(sMesh);
-                placedStatues++;
-                shrineCells.add(`${r},${c}`);
-
-                // Flanking Pillars (North & South of statue at ±1.85m)
-                [-flankDist, flankDist].forEach(fo => {
-                  const pz = cz + fo;
-                  const px = cx - pillarWallOffset;
-                  if (!isBlockedByBreaker(px, pz)) {
-                    const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-                    pMesh.scale.set(1.5, 1.68, 1.5);
-                    pMesh.position.set(px, 0, pz);
-                    pMesh.castShadow = true;
-                    pMesh.receiveShadow = true;
-                    pMesh.userData = { isDungeonProp: true, isPillar: true };
-                    scene.add(pMesh);
-                    dungeonProps.push(pMesh);
-                    placedPillars++;
-                  }
-                });
+                if (spawnStatueMesh(cx - wallOffset, cz, Math.PI / 2)) {
+                  shrineCells.add(`${r},${c}`);
+                  // Flanking Pillars (North & South of statue at ±1.85m)
+                  [-flankDist, flankDist].forEach(fo => spawnPillarMesh(cx - pillarWallOffset, cz + fo));
+                }
               } else if (eastSolid && !isBlockedByBreaker(cx + wallOffset, cz) && !isNearStatue(cx + wallOffset, cz, 4.0)) {
                 // Statue against East wall facing West (-X)
-                const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-                sMesh.scale.set(1.3, 1.45, 1.3);
-                sMesh.position.set(cx + wallOffset, 0, cz);
-                sMesh.rotation.y = -Math.PI / 2;
-                sMesh.castShadow = true;
-                sMesh.receiveShadow = true;
-                sMesh.userData = { isDungeonProp: true, isStatue: true };
-                scene.add(sMesh);
-                dungeonProps.push(sMesh);
-                placedStatues++;
-                shrineCells.add(`${r},${c}`);
-
-                // Flanking Pillars (North & South of statue at ±1.85m)
-                [-flankDist, flankDist].forEach(fo => {
-                  const pz = cz + fo;
-                  const px = cx + pillarWallOffset;
-                  if (!isBlockedByBreaker(px, pz)) {
-                    const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-                    pMesh.scale.set(1.5, 1.68, 1.5);
-                    pMesh.position.set(px, 0, pz);
-                    pMesh.castShadow = true;
-                    pMesh.receiveShadow = true;
-                    pMesh.userData = { isDungeonProp: true, isPillar: true };
-                    scene.add(pMesh);
-                    dungeonProps.push(pMesh);
-                    placedPillars++;
-                  }
-                });
+                if (spawnStatueMesh(cx + wallOffset, cz, -Math.PI / 2)) {
+                  shrineCells.add(`${r},${c}`);
+                  // Flanking Pillars (North & South of statue at ±1.85m)
+                  [-flankDist, flankDist].forEach(fo => spawnPillarMesh(cx + pillarWallOffset, cz + fo));
+                }
               }
             }
           }
@@ -2692,64 +2636,18 @@ function spawnDungeonProps(layout, blockSize) {
               const southSolid = (layout[r + 1] && layout[r + 1][c] === 1);
               if (northSolid && !isBlockedByBreaker(cx, cz - wallOffset) && !isNearStatue(cx, cz - wallOffset, 4.0)) {
                 // Statue against North wall facing South (+Z)
-                const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-                sMesh.scale.set(1.3, 1.45, 1.3);
-                sMesh.position.set(cx, 0, cz - wallOffset);
-                sMesh.rotation.y = 0;
-                sMesh.castShadow = true;
-                sMesh.receiveShadow = true;
-                sMesh.userData = { isDungeonProp: true, isStatue: true };
-                scene.add(sMesh);
-                dungeonProps.push(sMesh);
-                placedStatues++;
-                shrineCells.add(`${r},${c}`);
-
-                // Flanking Pillars (West & East of statue at ±1.85m)
-                [-flankDist, flankDist].forEach(fo => {
-                  const px = cx + fo;
-                  const pz = cz - pillarWallOffset;
-                  if (!isBlockedByBreaker(px, pz)) {
-                    const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-                    pMesh.scale.set(1.5, 1.68, 1.5);
-                    pMesh.position.set(px, 0, pz);
-                    pMesh.castShadow = true;
-                    pMesh.receiveShadow = true;
-                    pMesh.userData = { isDungeonProp: true, isPillar: true };
-                    scene.add(pMesh);
-                    dungeonProps.push(pMesh);
-                    placedPillars++;
-                  }
-                });
+                if (spawnStatueMesh(cx, cz - wallOffset, 0)) {
+                  shrineCells.add(`${r},${c}`);
+                  // Flanking Pillars (West & East of statue at ±1.85m)
+                  [-flankDist, flankDist].forEach(fo => spawnPillarMesh(cx + fo, cz - pillarWallOffset));
+                }
               } else if (southSolid && !isBlockedByBreaker(cx, cz + wallOffset) && !isNearStatue(cx, cz + wallOffset, 4.0)) {
                 // Statue against South wall facing North (-Z)
-                const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-                sMesh.scale.set(1.3, 1.45, 1.3);
-                sMesh.position.set(cx, 0, cz + wallOffset);
-                sMesh.rotation.y = Math.PI;
-                sMesh.castShadow = true;
-                sMesh.receiveShadow = true;
-                sMesh.userData = { isDungeonProp: true, isStatue: true };
-                scene.add(sMesh);
-                dungeonProps.push(sMesh);
-                placedStatues++;
-                shrineCells.add(`${r},${c}`);
-
-                // Flanking Pillars (West & East of statue at ±1.85m)
-                [-flankDist, flankDist].forEach(fo => {
-                  const px = cx + fo;
-                  const pz = cz + pillarWallOffset;
-                  if (!isBlockedByBreaker(px, pz)) {
-                    const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-                    pMesh.scale.set(1.5, 1.68, 1.5);
-                    pMesh.position.set(px, 0, pz);
-                    pMesh.castShadow = true;
-                    pMesh.receiveShadow = true;
-                    pMesh.userData = { isDungeonProp: true, isPillar: true };
-                    scene.add(pMesh);
-                    dungeonProps.push(pMesh);
-                    placedPillars++;
-                  }
-                });
+                if (spawnStatueMesh(cx, cz + wallOffset, Math.PI)) {
+                  shrineCells.add(`${r},${c}`);
+                  // Flanking Pillars (West & East of statue at ±1.85m)
+                  [-flankDist, flankDist].forEach(fo => spawnPillarMesh(cx + fo, cz + pillarWallOffset));
+                }
               }
             }
           }
@@ -2779,64 +2677,32 @@ function spawnDungeonProps(layout, blockSize) {
           if (layout[r][c - 1] === 1) {
             const px = cx - wallOffset;
             const pz = cz;
-            if (!isBlockedByBreaker(px, pz) && !isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
-              const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-              pMesh.scale.set(1.5, 1.68, 1.5);
-              pMesh.position.set(px, 0, pz);
-              pMesh.castShadow = true;
-              pMesh.receiveShadow = true;
-              pMesh.userData = { isDungeonProp: true, isPillar: true };
-              scene.add(pMesh);
-              dungeonProps.push(pMesh);
-              placedPillars++;
+            if (!isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
+              spawnPillarMesh(px, pz);
             }
           }
           // East wall
           if (layout[r][c + 1] === 1) {
             const px = cx + wallOffset;
             const pz = cz;
-            if (!isBlockedByBreaker(px, pz) && !isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
-              const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-              pMesh.scale.set(1.5, 1.68, 1.5);
-              pMesh.position.set(px, 0, pz);
-              pMesh.castShadow = true;
-              pMesh.receiveShadow = true;
-              pMesh.userData = { isDungeonProp: true, isPillar: true };
-              scene.add(pMesh);
-              dungeonProps.push(pMesh);
-              placedPillars++;
+            if (!isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
+              spawnPillarMesh(px, pz);
             }
           }
           // North wall
           if (layout[r - 1] && layout[r - 1][c] === 1) {
             const px = cx;
             const pz = cz - wallOffset;
-            if (!isBlockedByBreaker(px, pz) && !isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
-              const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-              pMesh.scale.set(1.5, 1.68, 1.5);
-              pMesh.position.set(px, 0, pz);
-              pMesh.castShadow = true;
-              pMesh.receiveShadow = true;
-              pMesh.userData = { isDungeonProp: true, isPillar: true };
-              scene.add(pMesh);
-              dungeonProps.push(pMesh);
-              placedPillars++;
+            if (!isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
+              spawnPillarMesh(px, pz);
             }
           }
           // South wall
           if (layout[r + 1] && layout[r + 1][c] === 1) {
             const px = cx;
             const pz = cz + wallOffset;
-            if (!isBlockedByBreaker(px, pz) && !isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
-              const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-              pMesh.scale.set(1.5, 1.68, 1.5);
-              pMesh.position.set(px, 0, pz);
-              pMesh.castShadow = true;
-              pMesh.receiveShadow = true;
-              pMesh.userData = { isDungeonProp: true, isPillar: true };
-              scene.add(pMesh);
-              dungeonProps.push(pMesh);
-              placedPillars++;
+            if (!isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
+              spawnPillarMesh(px, pz);
             }
           }
         }
@@ -2985,6 +2851,7 @@ function generateMaze(keysCount = 8) {
     scene.remove(p);
   });
   dungeonProps = [];
+  dungeonPropColliders = [];
 
   // Cleanup old floor and ceiling
   if (floorMesh) {
@@ -3102,9 +2969,18 @@ function generateMaze(keysCount = 8) {
   const layout = Array(mazeSize).fill(0).map(() => Array(mazeSize).fill(1));
   const centerCoord = Math.floor(mazeSize / 2) | 1; // Always an odd index
 
+  // Calculate guaranteed open human spawn coordinates in world space (exact center tile)
+  const humanSpawnX = (centerCoord - mazeSize / 2) * blockSize + blockSize / 2;
+  const humanSpawnZ = (centerCoord - mazeSize / 2) * blockSize + blockSize / 2;
+  window.humanSpawnPos = { x: humanSpawnX, y: 1.6, z: humanSpawnZ };
+
   // 1. Pure Stack-Based Iterative DFS Maze Carving (Guarantees strict 1-tile tight corridors everywhere)
   const stack = [[centerCoord, centerCoord]];
   layout[centerCoord][centerCoord] = 0;
+  if (centerCoord > 1) layout[centerCoord - 1][centerCoord] = 0;
+  if (centerCoord < mazeSize - 2) layout[centerCoord + 1][centerCoord] = 0;
+  if (centerCoord > 1) layout[centerCoord][centerCoord - 1] = 0;
+  if (centerCoord < mazeSize - 2) layout[centerCoord][centerCoord + 1] = 0;
 
   while (stack.length > 0) {
     const [currX, currZ] = stack[stack.length - 1];
@@ -8102,6 +7978,22 @@ function animate() {
             }
           }
         }
+
+        // 3. Solid Dungeon Props Collision (Pillars & Statues - prevents phasing through)
+        const playerBodyRadius = 0.45;
+        for (let i = 0; i < dungeonPropColliders.length; i++) {
+          const prop = dungeonPropColliders[i];
+          const dx = camera.position.x - prop.x;
+          const dz = camera.position.z - prop.z;
+          const maxD = prop.radius + playerBodyRadius;
+          if (Math.abs(dx) > maxD || Math.abs(dz) > maxD) continue; // Fast AABB prune
+          const dist = Math.hypot(dx, dz);
+          if (dist < maxD && dist > 0.0001) {
+            const overlap = maxD - dist;
+            camera.position.x += (dx / dist) * overlap;
+            camera.position.z += (dz / dist) * overlap;
+          }
+        }
       }
 
       // Hard Map Boundary Safety Clamp (Prevents glitching outside walls or void falling)
@@ -8109,7 +8001,9 @@ function animate() {
       camera.position.x = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, camera.position.x));
       camera.position.z = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, camera.position.z));
       if (camera.position.y < -2.0 || isNaN(camera.position.y)) {
-        camera.position.set(0, 1.6, 0); // Safety recovery to center spawn
+        const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+        const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+        camera.position.set(sx, 1.6, sz); // Safety recovery to center spawn
         velocity.set(0, 0, 0);
       }
     }
