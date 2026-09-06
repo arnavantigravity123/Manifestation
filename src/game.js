@@ -2437,10 +2437,9 @@ function spawnDungeonProps(layout, blockSize) {
       pMesh.position.set(px, 0, pz);
       pMesh.castShadow = true;
       pMesh.receiveShadow = true;
-      pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+      pMesh.userData = { isDungeonProp: true, isPillar: true };
       scene.add(pMesh);
       dungeonProps.push(pMesh);
-      walls.push(pMesh);
       placedPillars++;
     });
 
@@ -2461,10 +2460,9 @@ function spawnDungeonProps(layout, blockSize) {
       }
       sMesh.castShadow = true;
       sMesh.receiveShadow = true;
-      sMesh.userData = { isDungeonProp: true, isStatue: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+      sMesh.userData = { isDungeonProp: true, isStatue: true };
       scene.add(sMesh);
       dungeonProps.push(sMesh);
-      walls.push(sMesh);
       placedStatues++;
     });
 
@@ -2497,10 +2495,9 @@ function spawnDungeonProps(layout, blockSize) {
         pMesh.position.set(px, 0, pz);
         pMesh.castShadow = true;
         pMesh.receiveShadow = true;
-        pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+        pMesh.userData = { isDungeonProp: true, isPillar: true };
         scene.add(pMesh);
         dungeonProps.push(pMesh);
-        walls.push(pMesh);
         placedPillars++;
       });
     });
@@ -2550,10 +2547,9 @@ function spawnDungeonProps(layout, blockSize) {
       sMesh.rotation.y = de.dir.rot;
       sMesh.castShadow = true;
       sMesh.receiveShadow = true;
-      sMesh.userData = { isDungeonProp: true, isStatue: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+      sMesh.userData = { isDungeonProp: true, isStatue: true };
       scene.add(sMesh);
       dungeonProps.push(sMesh);
-      walls.push(sMesh);
       placedStatues++;
 
       // 2. Flank statue with two ornate columns on LEFT and RIGHT (exactly like reference photo media_1788720074161.png)
@@ -2577,10 +2573,9 @@ function spawnDungeonProps(layout, blockSize) {
           pMesh.position.set(px, 0, pz);
           pMesh.castShadow = true;
           pMesh.receiveShadow = true;
-          pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+          pMesh.userData = { isDungeonProp: true, isPillar: true };
           scene.add(pMesh);
           dungeonProps.push(pMesh);
-          walls.push(pMesh);
           placedPillars++;
         }
       });
@@ -2627,10 +2622,9 @@ function spawnDungeonProps(layout, blockSize) {
                 sMesh.rotation.y = Math.PI / 2;
                 sMesh.castShadow = true;
                 sMesh.receiveShadow = true;
-                sMesh.userData = { isDungeonProp: true, isStatue: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+                sMesh.userData = { isDungeonProp: true, isStatue: true };
                 scene.add(sMesh);
                 dungeonProps.push(sMesh);
-                walls.push(sMesh);
                 placedStatues++;
                 shrineCells.add(`${r},${c}`);
 
@@ -2644,10 +2638,9 @@ function spawnDungeonProps(layout, blockSize) {
                     pMesh.position.set(px, 0, pz);
                     pMesh.castShadow = true;
                     pMesh.receiveShadow = true;
-                    pMesh.userData = { isDungeonProp: true, isPillar: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+                    pMesh.userData = { isDungeonProp: true, isPillar: true };
                     scene.add(pMesh);
                     dungeonProps.push(pMesh);
-                    walls.push(pMesh);
                     placedPillars++;
                   }
                 });
@@ -2659,10 +2652,9 @@ function spawnDungeonProps(layout, blockSize) {
                 sMesh.rotation.y = -Math.PI / 2;
                 sMesh.castShadow = true;
                 sMesh.receiveShadow = true;
-                sMesh.userData = { isDungeonProp: true, isStatue: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+                sMesh.userData = { isDungeonProp: true, isStatue: true };
                 scene.add(sMesh);
                 dungeonProps.push(sMesh);
-                walls.push(sMesh);
                 placedStatues++;
                 shrineCells.add(`${r},${c}`);
 
@@ -2676,10 +2668,9 @@ function spawnDungeonProps(layout, blockSize) {
                     pMesh.position.set(px, 0, pz);
                     pMesh.castShadow = true;
                     pMesh.receiveShadow = true;
-                    pMesh.userData = { isDungeonProp: true, isPillar: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+                    pMesh.userData = { isDungeonProp: true, isPillar: true };
                     scene.add(pMesh);
                     dungeonProps.push(pMesh);
-                    walls.push(pMesh);
                     placedPillars++;
                   }
                 });
@@ -2701,10 +2692,9 @@ function spawnDungeonProps(layout, blockSize) {
                 sMesh.rotation.y = 0;
                 sMesh.castShadow = true;
                 sMesh.receiveShadow = true;
-                sMesh.userData = { isDungeonProp: true, isStatue: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+                sMesh.userData = { isDungeonProp: true, isStatue: true };
                 scene.add(sMesh);
                 dungeonProps.push(sMesh);
-                walls.push(sMesh);
                 placedStatues++;
                 shrineCells.add(`${r},${c}`);
 
@@ -2718,10 +2708,9 @@ function spawnDungeonProps(layout, blockSize) {
                     pMesh.position.set(px, 0, pz);
                     pMesh.castShadow = true;
                     pMesh.receiveShadow = true;
-                    pMesh.userData = { isDungeonProp: true, isPillar: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+                    pMesh.userData = { isDungeonProp: true, isPillar: true };
                     scene.add(pMesh);
                     dungeonProps.push(pMesh);
-                    walls.push(pMesh);
                     placedPillars++;
                   }
                 });
@@ -2733,10 +2722,9 @@ function spawnDungeonProps(layout, blockSize) {
                 sMesh.rotation.y = Math.PI;
                 sMesh.castShadow = true;
                 sMesh.receiveShadow = true;
-                sMesh.userData = { isDungeonProp: true, isStatue: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+                sMesh.userData = { isDungeonProp: true, isStatue: true };
                 scene.add(sMesh);
                 dungeonProps.push(sMesh);
-                walls.push(sMesh);
                 placedStatues++;
                 shrineCells.add(`${r},${c}`);
 
@@ -2750,10 +2738,9 @@ function spawnDungeonProps(layout, blockSize) {
                     pMesh.position.set(px, 0, pz);
                     pMesh.castShadow = true;
                     pMesh.receiveShadow = true;
-                    pMesh.userData = { isDungeonProp: true, isPillar: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+                    pMesh.userData = { isDungeonProp: true, isPillar: true };
                     scene.add(pMesh);
                     dungeonProps.push(pMesh);
-                    walls.push(pMesh);
                     placedPillars++;
                   }
                 });
@@ -2792,10 +2779,9 @@ function spawnDungeonProps(layout, blockSize) {
               pMesh.position.set(px, 0, pz);
               pMesh.castShadow = true;
               pMesh.receiveShadow = true;
-              pMesh.userData = { isDungeonProp: true, isPillar: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+              pMesh.userData = { isDungeonProp: true, isPillar: true };
               scene.add(pMesh);
               dungeonProps.push(pMesh);
-              walls.push(pMesh);
               placedPillars++;
             }
           }
@@ -2809,10 +2795,9 @@ function spawnDungeonProps(layout, blockSize) {
               pMesh.position.set(px, 0, pz);
               pMesh.castShadow = true;
               pMesh.receiveShadow = true;
-              pMesh.userData = { isDungeonProp: true, isPillar: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+              pMesh.userData = { isDungeonProp: true, isPillar: true };
               scene.add(pMesh);
               dungeonProps.push(pMesh);
-              walls.push(pMesh);
               placedPillars++;
             }
           }
@@ -2826,10 +2811,9 @@ function spawnDungeonProps(layout, blockSize) {
               pMesh.position.set(px, 0, pz);
               pMesh.castShadow = true;
               pMesh.receiveShadow = true;
-              pMesh.userData = { isDungeonProp: true, isPillar: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+              pMesh.userData = { isDungeonProp: true, isPillar: true };
               scene.add(pMesh);
               dungeonProps.push(pMesh);
-              walls.push(pMesh);
               placedPillars++;
             }
           }
@@ -2843,10 +2827,9 @@ function spawnDungeonProps(layout, blockSize) {
               pMesh.position.set(px, 0, pz);
               pMesh.castShadow = true;
               pMesh.receiveShadow = true;
-              pMesh.userData = { isDungeonProp: true, isPillar: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+              pMesh.userData = { isDungeonProp: true, isPillar: true };
               scene.add(pMesh);
               dungeonProps.push(pMesh);
-              walls.push(pMesh);
               placedPillars++;
             }
           }
@@ -2860,11 +2843,11 @@ function spawnDungeonProps(layout, blockSize) {
   if (layout && layout.length > 0) {
     for (let r = 1; r < layout.length - 1; r++) {
       for (let c = 1; c < layout[r].length - 1; c++) {
-        if (layout[r][c] === 0) {
-          const northOpen = (layout[r - 1] && layout[r - 1][c] === 0);
-          const southOpen = (layout[r + 1] && layout[r + 1][c] === 0);
-          const westOpen  = (layout[r][c - 1] === 0);
-          const eastOpen  = (layout[r][c + 1] === 0);
+        if (layout[r][c] === 0 || layout[r][c] === 2) {
+          const northOpen = (layout[r - 1] && (layout[r - 1][c] === 0 || layout[r - 1][c] === 2));
+          const southOpen = (layout[r + 1] && (layout[r + 1][c] === 0 || layout[r + 1][c] === 2));
+          const westOpen  = (layout[r][c - 1] === 0 || layout[r][c - 1] === 2);
+          const eastOpen  = (layout[r][c + 1] === 0 || layout[r][c + 1] === 2);
 
           const openCount = (northOpen ? 1 : 0) + (southOpen ? 1 : 0) + (westOpen ? 1 : 0) + (eastOpen ? 1 : 0);
           if (openCount === 0) continue;
@@ -3254,8 +3237,8 @@ function generateMaze(keysCount = 8) {
     }
   }
 
-  // Store layout globally for ghost pathfinding & spatial collision
-  mazeLayout = layout.map(row => row.map(cell => cell === 0 ? 0 : 1)); // 0=open, 1=wall
+  // Store layout globally for ghost pathfinding & spatial collision (0=open, 1=static wall, 2=sliding door)
+  mazeLayout = layout.map(row => row.map(cell => cell === 2 ? 2 : (cell === 0 ? 0 : 1)));
 
   let wallMat, slidingWallMat;
   if (isDungeon) {
@@ -3329,36 +3312,38 @@ function generateMaze(keysCount = 8) {
         singleGeo.translate(xPos, wallHeight / 2, zPos);
         wallGeometries.push(singleGeo);
       } else if (type === 2) {
-        // Dynamic sliding door: Piece #1 (IndAssetWall) in dungeon mode!
+        // Dynamic sliding door: Piece #1 (IndAssetWall) or matching procedural door barrier
         let wallMesh;
+        const isEW = (c > 0 && layout[r][c - 1] === 0) || (c < layout[r].length - 1 && layout[r][c + 1] === 0);
+        const halfX = isEW ? 0.35 : (blockSize / 2);
+        const halfZ = isEW ? (blockSize / 2) : 0.35;
+
         if (isDungeon && dungeonModules.wall) {
           wallMesh = dungeonModules.wall.clone(true);
           wallMesh.position.set(xPos, 0, zPos);
           wallMesh.scale.set(1.87, 1.75, 1.5);
-          const isEW = (c > 0 && layout[r][c - 1] === 0) || (c < layout[r].length - 1 && layout[r][c + 1] === 0);
           wallMesh.rotation.y = isEW ? 0 : Math.PI / 2;
-          wallMesh.userData = { 
-            isSliding: true, 
-            col: c, 
-            row: r, 
-            isDungeonProp: true, 
-            halfSizeX: isEW ? 0.4 : 3.0, 
-            halfSizeZ: isEW ? 3.0 : 0.4 
-          };
-          scene.add(wallMesh);
-          dungeonProps.push(wallMesh);
-          walls.push(wallMesh);
-          slidingWallSegments.push(wallMesh);
         } else {
-          wallMesh = new THREE.Mesh(wallGeo, slidingWallMat);
-          wallMesh.position.set(xPos, wallHeight / 2, zPos);
+          // Precise doorway thickness matching corridor opening
+          const doorGeo = isDungeon
+            ? createDungeonWallBox(isEW ? 0.7 : blockSize + 0.1, wallHeight, isEW ? blockSize + 0.1 : 0.7)
+            : new THREE.BoxGeometry(isEW ? 0.7 : blockSize + 0.1, wallHeight, isEW ? blockSize + 0.1 : 0.7);
+          wallMesh = new THREE.Mesh(doorGeo, slidingWallMat);
+          wallMesh.position.set(xPos, 0, zPos);
           wallMesh.castShadow = true;
           wallMesh.receiveShadow = true;
-          wallMesh.userData = { isSliding: true, col: c, row: r };
-          scene.add(wallMesh);
-          walls.push(wallMesh);
-          slidingWallSegments.push(wallMesh);
         }
+
+        wallMesh.userData = { 
+          isSliding: true, 
+          col: c, 
+          row: r, 
+          halfSizeX: halfX, 
+          halfSizeZ: halfZ 
+        };
+        scene.add(wallMesh);
+        walls.push(wallMesh);
+        slidingWallSegments.push(wallMesh);
       } else {
         openCorridors.push({ x: xPos, z: zPos });
       }
@@ -3875,7 +3860,7 @@ function realignMazeCorridors(realignmentState) {
     // Update mazeLayout immediately for pathfinding path recalculation
     if (segment.userData && segment.userData.col !== undefined) {
       const { col, row } = segment.userData;
-      mazeLayout[row][col] = (targetY < 0) ? 0 : 1;
+      mazeLayout[row][col] = (targetY < -0.5) ? 0 : 2;
     }
 
     // Smooth sliding animation
@@ -8093,7 +8078,7 @@ function animate() {
         // 2. Test active dynamic walls (sliding doors & gate blocker)
         for (let i = 0; i < walls.length; i++) {
           const wall = walls[i];
-          if (wall.position.y < 0) continue; // Skip lowered sliding doors
+          if (wall.position.y < -0.5) continue; // Skip lowered sliding doors
           
           const wx = wall.position.x;
           const wz = wall.position.z;
@@ -8586,7 +8571,7 @@ function animate() {
 
       // Wall collision — push ghost out if clipping
       walls.forEach(wall => {
-        if (wall.position.y < 0) return; // Skip walls shifted below floor level (open sliding gates)
+        if (wall.position.y < -0.5) return; // Skip walls shifted below floor level (open sliding gates)
         const dx = ghost.position.x - wall.position.x;
         const dz = ghost.position.z - wall.position.z;
         const dist2D = Math.sqrt(dx*dx + dz*dz);
