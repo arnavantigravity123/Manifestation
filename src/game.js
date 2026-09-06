@@ -662,6 +662,13 @@ let totalBreakersRequired = 3;
 window.gameDifficulty = localStorage.getItem('manifestation_difficulty') || 'medium';
 
 function getMazeSizeForDifficulty(difficulty = window.gameDifficulty || 'medium') {
+  const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
+  if (isDungeon) {
+    if (difficulty === 'easy') return 7;
+    if (difficulty === 'hard') return 11;
+    if (difficulty === 'impossible') return 13;
+    return 9; // medium (216m x 216m modular dungeon labyrinth)
+  }
   if (difficulty === 'easy') return 25;
   if (difficulty === 'hard') return 45;
   if (difficulty === 'impossible') return 55;
@@ -2055,6 +2062,17 @@ function getLoadedTexture(url, wrapRepeat = null, isColor = false) {
 
 // --- Dungeon Corridor Pack 3D Props & Materials ---
 let dungeonAssetsLoaded = false;
+let dungeonModules = {
+  cross: null,
+  t: null,
+  corner: null,
+  straight2: null,
+  straight4: null,
+  wall: null,
+  squareWall: null,
+  pillar: null,
+  statue: null
+};
 let dungeonPillarGeo = null;
 let dungeonPillarMat = null;
 let dungeonStatueGeo = null;
@@ -2126,18 +2144,17 @@ function createProceduralDungeonAssets() {
   );
 
   dungeonAssetsLoaded = true;
-  console.log('[DUNGEON] Procedural dungeon assets created (pillars, statues, red rugs)');
+  console.log('[DUNGEON] Procedural dungeon assets created');
   if (typeof pendingDungeonPropsFn === 'function') {
     pendingDungeonPropsFn();
     pendingDungeonPropsFn = null;
   }
 }
 
-/* ── Main loader: try GLB first, fallback to procedural ── */
+/* ── Main loader: extracts modular corridor sets from dungeon.glb ── */
 function loadDungeonPackAssets() {
   if (dungeonAssetsLoaded) return;
 
-  // Safety timer — if GLB hasn't finished in 6s, use procedural fallback
   const fallbackTimer = setTimeout(() => {
     if (!dungeonAssetsLoaded) {
       console.warn('[DUNGEON] GLB load timed out after 6s — using procedural fallback');
@@ -2145,160 +2162,129 @@ function loadDungeonPackAssets() {
     }
   }, 6000);
 
-  gltfLoader.load('/assets/dungeon/models/dungeon_kit.glb', (gltf) => {
+  function processGLTF(gltf) {
     clearTimeout(fallbackTimer);
     if (dungeonAssetsLoaded) return;
 
-    console.log('[DUNGEON] GLB parsed — extracting individual asset meshes...');
+    console.log('[DUNGEON] dungeon.glb parsed — extracting modular corridor sets & individual pieces...');
     gltf.scene.updateMatrixWorld(true);
 
-    // Find the individual asset meshes (Three.js sanitizes dots: IndAssetPillar, IndAssetStatue, IndAssetRugs)
-    let pillarMesh = null, statueMesh = null, rugMesh = null;
-    gltf.scene.traverse((child) => {
-      if (!child.isMesh) return;
-      const n = child.name || '';
-      if (!pillarMesh && (n.includes('IndAssetPillar') || n.includes('Ind.Asset.Pillar'))) pillarMesh = child;
-      if (!statueMesh && (n.includes('IndAssetStatue') || n.includes('Ind.Asset.Statue'))) statueMesh = child;
-      if (!rugMesh    && (n.includes('IndAssetRugs')   || n.includes('Ind.Asset.Rugs')))   rugMesh = child;
-    });
-
-    // Secondary fallback matching if specific names not found
-    if (!pillarMesh || !statueMesh || !rugMesh) {
-      gltf.scene.traverse((child) => {
-        if (!child.isMesh) return;
-        const n = child.name || '';
-        if (!pillarMesh && n.includes('Pillar')) pillarMesh = child;
-        if (!statueMesh && n.includes('Statue')) statueMesh = child;
-        if (!rugMesh    && (n.includes('Rugs') || n.includes('Alfombra'))) rugMesh = child;
+    function extractModule(name, pivotOffset = null) {
+      let sourceNode = null;
+      gltf.scene.traverse(c => {
+        if (!sourceNode && (c.name === name || c.name.replace(/[\._]/g, '') === name.replace(/[\._]/g, ''))) {
+          sourceNode = c;
+        }
       });
-    }
-
-    console.log('[DUNGEON] Target meshes found — Pillar:', pillarMesh?.name, 'Statue:', statueMesh?.name, 'Rug:', rugMesh?.name);
-
-    // Helper: clone geometry with world transform baked in, then normalise
-    function extractGeo(mesh, targetHeight) {
-      const geo = mesh.geometry.clone();
-      // Apply the full ancestor transform chain (scale ≈100, FBX rotation, etc.)
-      geo.applyMatrix4(mesh.matrixWorld);
-      geo.computeBoundingBox();
-      const box = geo.boundingBox;
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const center = new THREE.Vector3();
-      box.getCenter(center);
-      // Centre on X/Z, sit on floor (y=0)
-      geo.translate(-center.x, -box.min.y, -center.z);
-      // Scale uniformly to target height
-      if (targetHeight && size.y > 0.001) {
-        const s = targetHeight / size.y;
-        geo.scale(s, s, s);
+      if (!sourceNode) {
+        console.warn('[DUNGEON] Module node not found:', name);
+        return null;
       }
-      geo.computeBoundingBox();
-      geo.computeVertexNormals();
-      return geo;
+
+      const worldBox = new THREE.Box3().setFromObject(sourceNode);
+      const center = worldBox.getCenter(new THREE.Vector3());
+      if (pivotOffset) center.add(pivotOffset);
+
+      const group = new THREE.Group();
+      group.name = name;
+
+      sourceNode.traverse(child => {
+        if (child.isMesh) {
+          const meshClone = child.clone();
+          const relMatrix = new THREE.Matrix4();
+          relMatrix.makeTranslation(-center.x, -worldBox.min.y, -center.z);
+          relMatrix.multiply(child.matrixWorld);
+
+          meshClone.geometry = child.geometry.clone();
+          meshClone.geometry.applyMatrix4(relMatrix);
+          meshClone.geometry.computeBoundingBox();
+          meshClone.geometry.computeVertexNormals();
+          meshClone.matrixAutoUpdate = true;
+          meshClone.position.set(0, 0, 0);
+          meshClone.rotation.set(0, 0, 0);
+          meshClone.scale.set(1, 1, 1);
+          meshClone.castShadow = true;
+          meshClone.receiveShadow = true;
+
+          if (meshClone.material) {
+            meshClone.material = meshClone.material.clone();
+            const matName = (meshClone.material.name || child.name || '').toLowerCase();
+            if (matName.includes('alfombra') || matName.includes('rug')) {
+              meshClone.material.metalness = 0.0;
+              meshClone.material.roughness = 0.85;
+              meshClone.material.emissive = new THREE.Color(0x881111);
+              meshClone.material.emissiveIntensity = 0.65;
+              meshClone.material.side = THREE.DoubleSide;
+            } else if (matName.includes('statue') || matName.includes('estatua')) {
+              meshClone.material.metalness = 0.04;
+              meshClone.material.roughness = 0.75;
+              meshClone.material.color = new THREE.Color(0xcccccc);
+              meshClone.material.emissive = new THREE.Color(0x111418);
+              meshClone.material.emissiveIntensity = 0.2;
+            } else if (matName.includes('pillar') || matName.includes('column') || matName.includes('material.004') || matName.includes('material004')) {
+              meshClone.material.metalness = 0.02;
+              meshClone.material.roughness = 0.75;
+              meshClone.material.color = new THREE.Color(0xcccccc);
+              meshClone.material.emissive = new THREE.Color(0x111418);
+              meshClone.material.emissiveIntensity = 0.2;
+            } else {
+              meshClone.material.metalness = 0.02;
+              meshClone.material.roughness = 0.8;
+              meshClone.material.color = new THREE.Color(0xcccccc);
+              meshClone.material.emissive = new THREE.Color(0x111418);
+              meshClone.material.emissiveIntensity = 0.15;
+            }
+            meshClone.material.needsUpdate = true;
+          }
+
+          group.add(meshClone);
+        }
+      });
+
+      return group;
     }
 
-    let glbOk = true;
+    // Extract modules aligned with exact 12m arm radius connection portals
+    dungeonModules.cross = extractModule('CrossCorridor', new THREE.Vector3(0, 0, 0));
+    dungeonModules.t = extractModule('TCorridor', new THREE.Vector3(0, 0, -4.8));
+    dungeonModules.corner = extractModule('CornerCorridor', new THREE.Vector3(4.8, 0, 4.8));
+    dungeonModules.straight2 = extractModule('Corridor_X2', new THREE.Vector3(0, 0, 0));
+    dungeonModules.straight4 = extractModule('Corridor_X4', new THREE.Vector3(0, 0, 0));
+    dungeonModules.wall = extractModule('IndAssetWall', new THREE.Vector3(0, 0, 0));
+    dungeonModules.squareWall = extractModule('IndAssetSquareWall', new THREE.Vector3(0, 0, 0));
+    dungeonModules.pillar = extractModule('IndAssetPillar', new THREE.Vector3(0, 0, 0));
+    dungeonModules.statue = extractModule('IndAssetStatue', new THREE.Vector3(0, 0, 0));
 
-    // ── Pillar (Ornate Column) ──
-    if (pillarMesh) {
-      dungeonPillarGeo = extractGeo(pillarMesh, 4.8);
-      dungeonPillarGeo.computeBoundingBox();
-      const pSize = new THREE.Vector3();
-      dungeonPillarGeo.boundingBox.getSize(pSize);
-      if (pSize.x > 0.01) {
-        // Slender 1.2m diameter so the 6.0m corridor walkway is wide and spacious
-        dungeonPillarGeo.scale(1.2 / pSize.x, 1, 1.2 / pSize.z);
-        dungeonPillarGeo.computeVertexNormals();
-      }
-      dungeonPillarMat = pillarMesh.material ? pillarMesh.material.clone() : new THREE.MeshStandardMaterial();
-      dungeonPillarMat.color.setHex(0xcccccc);
-      dungeonPillarMat.metalness = 0.02;
-      dungeonPillarMat.roughness = 0.75;
-      dungeonPillarMat.emissive = new THREE.Color(0x111418);
-      dungeonPillarMat.emissiveIntensity = 0.2;
-      if (!dungeonPillarMat.map) dungeonPillarMat.map = getLoadedTexture('/assets/dungeon/textures/ColumnColor.png', null, true);
-      dungeonPillarMat.needsUpdate = true;
-      console.log('[DUNGEON] ✓ Slender ornate pillar extracted successfully');
-    } else { glbOk = false; }
-
-    // ── Statue (Monk on Stone Pedestal) ──
-    if (statueMesh) {
-      dungeonStatueGeo = extractGeo(statueMesh, 2.5);
-      dungeonStatueMat = statueMesh.material ? statueMesh.material.clone() : new THREE.MeshStandardMaterial();
-      dungeonStatueMat.color.setHex(0xcccccc);
-      dungeonStatueMat.metalness = 0.04;
-      dungeonStatueMat.roughness = 0.75;
-      dungeonStatueMat.emissive = new THREE.Color(0x111418);
-      dungeonStatueMat.emissiveIntensity = 0.2;
-      if (!dungeonStatueMat.map) dungeonStatueMat.map = getLoadedTexture('/assets/dungeon/textures/StatueColor.png', null, true);
-      dungeonStatueMat.needsUpdate = true;
-      console.log('[DUNGEON] ✓ Monk statue extracted successfully');
-    } else { glbOk = false; }
-
-    // ── Helper: create clean seamless runner quad from texture region (ZERO horizontal lines!) ──
-    function createRunnerQuad(w, l, uMin = 0.0, uMax = 0.51) {
-      const geo = new THREE.BufferGeometry();
-      const halfW = w / 2;
-      const halfL = l / 2;
-      const pos = new Float32Array([
-        -halfW, 0.025, -halfL,
-         halfW, 0.025, -halfL,
-        -halfW, 0.025,  halfL,
-         halfW, 0.025,  halfL
-      ]);
-      const norm = new Float32Array([
-        0, 1, 0,
-        0, 1, 0,
-        0, 1, 0,
-        0, 1, 0
-      ]);
-      const uvs = new Float32Array([
-        uMin, 0,
-        uMax, 0,
-        uMin, 1,
-        uMax, 1
-      ]);
-      const indices = [0, 2, 1, 2, 3, 1];
-      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      geo.setAttribute('normal', new THREE.BufferAttribute(norm, 3));
-      geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-      geo.setIndex(indices);
-      return geo;
+    // Standalone references for props if needed
+    if (dungeonModules.pillar && dungeonModules.pillar.children[0]) {
+      dungeonPillarGeo = dungeonModules.pillar.children[0].geometry;
+      dungeonPillarMat = dungeonModules.pillar.children[0].material;
+    }
+    if (dungeonModules.statue && dungeonModules.statue.children[0]) {
+      dungeonStatueGeo = dungeonModules.statue.children[0].geometry;
+      dungeonStatueMat = dungeonModules.statue.children[0].material;
+    }
+    if (dungeonModules.wall && dungeonModules.wall.children[0]) {
+      dungeonRugGeo = dungeonModules.wall.children[0].geometry;
+      dungeonRugCrestGeo = dungeonRugGeo;
+      dungeonRugMat = dungeonModules.wall.children[0].material;
     }
 
-    // ── Seamless Continuous Red Velvet Runner Rug (Gold Stripes along sides, NO horizontal bars!) ──
-    dungeonRugGeo = createRunnerQuad(3.0, 6.04, 0.00, 0.51);
-    dungeonRugCrestGeo = createRunnerQuad(3.0, 6.04, 0.65, 0.99);
-
-    // Alfombra in GLB has metalness 0.81 which makes it look black in PBR lighting! Reset to 0 and boost red!
-    dungeonRugMat = (rugMesh && rugMesh.material) ? rugMesh.material.clone() : new THREE.MeshStandardMaterial();
-    dungeonRugMat.color.setHex(0xffffff);
-    dungeonRugMat.metalness = 0.0;
-    dungeonRugMat.roughness = 0.85;
-    dungeonRugMat.emissive = new THREE.Color(0x881111); // Vibrant royal crimson velvet glow
-    dungeonRugMat.emissiveIntensity = 0.65;
-    dungeonRugMat.side = THREE.DoubleSide;
-    if (!dungeonRugMat.map) dungeonRugMat.map = getLoadedTexture('/assets/dungeon/textures/RugColor.png', null, true);
-    dungeonRugMat.needsUpdate = true;
-    console.log('[DUNGEON] ✓ Seamless Continuous Red Velvet Runner Rug created successfully');
-
-    if (!glbOk) {
-      console.warn('[DUNGEON] Some GLB meshes missing — falling back to procedural assets');
-      createProceduralDungeonAssets();
-      return;
-    }
-
+    console.log('[DUNGEON] ✓ All modular corridor sets (#2, #3, #4, #5, #6) and individual wall slots (#1) extracted successfully!');
     dungeonAssetsLoaded = true;
-    console.log('[DUNGEON] ✓ All 3D dungeon kit assets extracted from GLB with 1k PBR textures!');
+
     if (typeof pendingDungeonPropsFn === 'function') {
       pendingDungeonPropsFn();
       pendingDungeonPropsFn = null;
     }
-  }, undefined, (err) => {
-    clearTimeout(fallbackTimer);
-    console.error('[DUNGEON] GLB load failed:', err, '— using procedural fallback');
-    createProceduralDungeonAssets();
+  }
+
+  gltfLoader.load('/assets/dungeon/models/dungeon.glb', processGLTF, undefined, () => {
+    console.warn('[DUNGEON] dungeon.glb failed, trying fallback dungeon_kit.glb');
+    gltfLoader.load('/assets/dungeon/models/dungeon_kit.glb', processGLTF, undefined, () => {
+      clearTimeout(fallbackTimer);
+      createProceduralDungeonAssets();
+    });
   });
 }
 
@@ -2452,8 +2438,8 @@ function spawnDungeonProps(layout, blockSize) {
     });
   }
 
-  // 4. Ornate Columns & Monk Statues Lining Corridor Walls across the ENTIRE maze
-  if (layout && layout.length > 0) {
+  // 4. Ornate Columns & Monk Statues Lining Corridor Walls (Procedural Fallback Only)
+  if (!dungeonModules.cross && layout && layout.length > 0) {
     const wallOffset = 2.4; // Nested snugly against the wall in 6.0m wide corridor
     for (let r = 1; r < layout.length - 1; r++) {
       for (let c = 1; c < layout[r].length - 1; c++) {
@@ -2529,8 +2515,8 @@ function spawnDungeonProps(layout, blockSize) {
     }
   }
 
-  // 5. Seamless Continuous Red Velvet Runner Carpets along ALL Corridors (Gold Crests placed periodically)
-  if (layout && layout.length > 0) {
+  // 5. Seamless Continuous Red Velvet Runner Carpets (Procedural Fallback Only)
+  if (!dungeonModules.cross && layout && layout.length > 0) {
     for (let r = 1; r < layout.length - 1; r++) {
       for (let c = 1; c < layout[r].length - 1; c++) {
         if (layout[r][c] === 0) {
@@ -2640,7 +2626,9 @@ function generateMaze(keysCount = 8) {
   }
 
   // Ground plane with photorealistic floor texture scaled to difficulty map size
-  const blockSize = mazeBlockSize || 4.5;
+  const blockSize = isDungeon ? 24.0 : 6.0;
+  mazeBlockSize = blockSize;
+  window.mazeBlockSize = blockSize;
   const mazeSize = (typeof mazeSizeGlobal !== 'undefined' && mazeSizeGlobal) ? mazeSizeGlobal : getMazeSizeForDifficulty(window.gameDifficulty);
   mazeSizeGlobal = mazeSize;
   window.mazeSizeGlobal = mazeSize;
@@ -2681,13 +2669,15 @@ function generateMaze(keysCount = 8) {
   floorMesh.rotation.x = -Math.PI / 2;
   floorMesh.receiveShadow = true;
   floorMesh.frustumCulled = false;
-  scene.add(floorMesh);
+  // In modular dungeon mode, each 3D corridor module contains its own floor & carpet
+  if (!isDungeon || !dungeonModules.cross) {
+    scene.add(floorMesh);
+  }
 
   // Ceiling with photorealistic texture scaled to difficulty map size
   const ceilRep = Math.max(5, Math.round(mazeSize / 5));
   let ceilMat;
   if (isDungeon) {
-    // Use GroundColor for ceiling — it's fully tileable.
     const dungeonCeilRep = Math.max(15, Math.round(floorExtent / (blockSize * 1.5)));
     const ceilTex = getLoadedTexture('/assets/dungeon/textures/GroundColor.png', { x: dungeonCeilRep, y: dungeonCeilRep }, true);
     ceilMat = new THREE.MeshStandardMaterial({ 
@@ -2709,9 +2699,11 @@ function generateMaze(keysCount = 8) {
   const ceilGeo = new THREE.PlaneGeometry(floorExtent, floorExtent);
   ceilingMesh = new THREE.Mesh(ceilGeo, ceilMat);
   ceilingMesh.rotation.x = Math.PI / 2;
-  ceilingMesh.position.y = isDungeon ? 4.8 : 4.5; // Match wall height exactly
+  ceilingMesh.position.y = isDungeon ? 4.8 : 4.5;
   ceilingMesh.frustumCulled = false;
-  scene.add(ceilingMesh);
+  if (!isDungeon || !dungeonModules.cross) {
+    scene.add(ceilingMesh);
+  }
 
   // Grid layout for corridors (Procedurally Scaled with Difficulty)
   const layout = Array(mazeSize).fill(0).map(() => Array(mazeSize).fill(1));
@@ -2924,28 +2916,154 @@ function generateMaze(keysCount = 8) {
       const zPos = (r - layout.length / 2) * blockSize + blockSize/2;
 
       if (type === 1) {
-        // Static wall: create transformed geometry for single merged mesh (1 draw call, native shadow support!)
-        const singleGeo = new THREE.BoxGeometry(blockSize + 0.5, wallHeight, blockSize + 0.5);
-        singleGeo.translate(xPos, wallHeight / 2, zPos);
-        wallGeometries.push(singleGeo);
-        if (isDungeon) {
-          // Add architectural stone cap/cornice along the top of dungeon walls matching the example!
-          const capGeo = new THREE.BoxGeometry(blockSize + 0.8, 0.35, blockSize + 0.8);
-          capGeo.translate(xPos, wallHeight - 0.175, zPos);
-          wallGeometries.push(capGeo);
+        if (!isDungeon || !dungeonModules.cross) {
+          // Static wall: create transformed geometry for single merged mesh
+          const singleGeo = new THREE.BoxGeometry(blockSize + 0.5, wallHeight, blockSize + 0.5);
+          singleGeo.translate(xPos, wallHeight / 2, zPos);
+          wallGeometries.push(singleGeo);
         }
       } else if (type === 2) {
-        // Dynamic sliding door: separate mesh for smooth height animations
-        const wallMesh = new THREE.Mesh(wallGeo, slidingWallMat);
-        wallMesh.position.set(xPos, wallHeight / 2, zPos);
-        wallMesh.castShadow = true;
-        wallMesh.receiveShadow = true;
-        wallMesh.userData = { isSliding: true, col: c, row: r };
-        scene.add(wallMesh);
-        walls.push(wallMesh);
-        slidingWallSegments.push(wallMesh);
+        // Dynamic sliding door: Piece #1 (IndAssetWall) in dungeon mode!
+        let wallMesh;
+        if (isDungeon && dungeonModules.wall) {
+          wallMesh = dungeonModules.wall.clone(true);
+          wallMesh.position.set(xPos, 0, zPos);
+          const isEW = (c > 0 && layout[r][c - 1] === 0) || (c < layout[r].length - 1 && layout[r][c + 1] === 0);
+          wallMesh.rotation.y = isEW ? 0 : Math.PI / 2;
+          wallMesh.userData = { 
+            isSliding: true, 
+            col: c, 
+            row: r, 
+            isDungeonProp: true, 
+            halfSizeX: isEW ? 0.4 : 2.5, 
+            halfSizeZ: isEW ? 2.5 : 0.4 
+          };
+          scene.add(wallMesh);
+          dungeonProps.push(wallMesh);
+          walls.push(wallMesh);
+          slidingWallSegments.push(wallMesh);
+        } else {
+          wallMesh = new THREE.Mesh(wallGeo, slidingWallMat);
+          wallMesh.position.set(xPos, wallHeight / 2, zPos);
+          wallMesh.castShadow = true;
+          wallMesh.receiveShadow = true;
+          wallMesh.userData = { isSliding: true, col: c, row: r };
+          scene.add(wallMesh);
+          walls.push(wallMesh);
+          slidingWallSegments.push(wallMesh);
+        }
       } else {
         openCorridors.push({ x: xPos, z: zPos });
+
+        if (isDungeon && dungeonModules.cross) {
+          // Modular corridor assembly directly using pre-modeled 3D sets (#2, #3, #5, #6)
+          const northOpen = (r > 0 && layout[r - 1][c] === 0);
+          const southOpen = (r < layout.length - 1 && layout[r + 1][c] === 0);
+          const westOpen  = (c > 0 && layout[r][c - 1] === 0);
+          const eastOpen  = (c < layout[r].length - 1 && layout[r][c + 1] === 0);
+
+          const openCount = (northOpen?1:0) + (southOpen?1:0) + (westOpen?1:0) + (eastOpen?1:0);
+          let moduleMesh = null;
+
+          if (openCount === 4) {
+            // #2 CrossCorridor (4-way intersection)
+            moduleMesh = dungeonModules.cross.clone(true);
+            [[-7.5, -7.5], [7.5, -7.5], [-7.5, 7.5], [7.5, 7.5]].forEach(([ox, oz]) => {
+              walls.push({ position: { x: xPos + ox, y: 1.13, z: zPos + oz }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+            });
+          } else if (openCount === 3) {
+            // #6 TCorridor (3-way intersection)
+            moduleMesh = dungeonModules.t.clone(true);
+            if (!northOpen) {
+              moduleMesh.rotation.y = 0;
+              walls.push({ position: { x: xPos, y: 1.13, z: zPos - 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
+              walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+              walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+            } else if (!westOpen) {
+              moduleMesh.rotation.y = Math.PI / 2;
+              walls.push({ position: { x: xPos - 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
+              walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+              walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+            } else if (!southOpen) {
+              moduleMesh.rotation.y = Math.PI;
+              walls.push({ position: { x: xPos, y: 1.13, z: zPos + 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
+              walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+              walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+            } else {
+              moduleMesh.rotation.y = -Math.PI / 2;
+              walls.push({ position: { x: xPos + 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
+              walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+              walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+            }
+          } else if (openCount === 2) {
+            if (northOpen && southOpen) {
+              // #3 Corridor_X2 (Straight North-South)
+              moduleMesh = dungeonModules.straight2.clone(true);
+              moduleMesh.rotation.y = 0;
+              walls.push({ position: { x: xPos - 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
+              walls.push({ position: { x: xPos + 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
+            } else if (westOpen && eastOpen) {
+              // #3 Corridor_X2 (Straight East-West)
+              moduleMesh = dungeonModules.straight2.clone(true);
+              moduleMesh.rotation.y = Math.PI / 2;
+              walls.push({ position: { x: xPos, y: 1.13, z: zPos - 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
+              walls.push({ position: { x: xPos, y: 1.13, z: zPos + 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
+            } else {
+              // #5 CornerCorridor (Corner Turn)
+              moduleMesh = dungeonModules.corner.clone(true);
+              if (westOpen && northOpen) {
+                moduleMesh.rotation.y = 0;
+                walls.push({ position: { x: xPos + 5.0, y: 1.13, z: zPos + 5.0 }, userData: { isDungeonProp: true, halfSizeX: 7.0, halfSizeZ: 7.0 } });
+                walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+              } else if (southOpen && westOpen) {
+                moduleMesh.rotation.y = Math.PI / 2;
+                walls.push({ position: { x: xPos + 5.0, y: 1.13, z: zPos - 5.0 }, userData: { isDungeonProp: true, halfSizeX: 7.0, halfSizeZ: 7.0 } });
+                walls.push({ position: { x: xPos - 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+              } else if (eastOpen && southOpen) {
+                moduleMesh.rotation.y = Math.PI;
+                walls.push({ position: { x: xPos - 5.0, y: 1.13, z: zPos - 5.0 }, userData: { isDungeonProp: true, halfSizeX: 7.0, halfSizeZ: 7.0 } });
+                walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos + 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+              } else {
+                moduleMesh.rotation.y = -Math.PI / 2;
+                walls.push({ position: { x: xPos - 5.0, y: 1.13, z: zPos + 5.0 }, userData: { isDungeonProp: true, halfSizeX: 7.0, halfSizeZ: 7.0 } });
+                walls.push({ position: { x: xPos + 7.5, y: 1.13, z: zPos - 7.5 }, userData: { isDungeonProp: true, halfSizeX: 4.8, halfSizeZ: 4.8 } });
+              }
+            }
+          } else {
+            // Dead-End: Straight corridor + Piece #1 (IndAssetWall) cap
+            moduleMesh = dungeonModules.straight2.clone(true);
+            const isEW = (westOpen || eastOpen);
+            moduleMesh.rotation.y = isEW ? Math.PI / 2 : 0;
+            if (isEW) {
+              walls.push({ position: { x: xPos, y: 1.13, z: zPos - 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
+              walls.push({ position: { x: xPos, y: 1.13, z: zPos + 3.2 }, userData: { isDungeonProp: true, halfSizeX: 12.0, halfSizeZ: 1.0 } });
+            } else {
+              walls.push({ position: { x: xPos - 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
+              walls.push({ position: { x: xPos + 3.2, y: 1.13, z: zPos }, userData: { isDungeonProp: true, halfSizeX: 1.0, halfSizeZ: 12.0 } });
+            }
+
+            // Cap the dead end with Piece #1
+            if (dungeonModules.wall) {
+              const capWall = dungeonModules.wall.clone(true);
+              let capX = xPos, capZ = zPos;
+              if (northOpen) capZ += 12.0;
+              else if (southOpen) capZ -= 12.0;
+              else if (westOpen) capX += 12.0;
+              else if (eastOpen) capX -= 12.0;
+              capWall.position.set(capX, 0, capZ);
+              capWall.rotation.y = isEW ? 0 : Math.PI / 2;
+              scene.add(capWall);
+              dungeonProps.push(capWall);
+              walls.push(capWall);
+            }
+          }
+
+          if (moduleMesh) {
+            moduleMesh.position.set(xPos, 0, zPos);
+            scene.add(moduleMesh);
+            dungeonProps.push(moduleMesh);
+          }
+        }
       }
     }
   }
@@ -3414,12 +3532,13 @@ function realignMazeCorridors(realignmentState) {
   // Display shifting alert
   triggerNotification(`maze realignment triggered! walls shifting...`);
 
-  // Move sliding wall pieces either completely flush (upY) or completely submerged under the floor (-5.0)
+  // Move sliding wall pieces either completely flush (upY) or completely submerged under the floor (downY)
   const isDungeonTheme = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
-  const upY = isDungeonTheme ? 2.4 : 2.25;
+  const upY = isDungeonTheme ? 0 : 2.25;
+  const downY = isDungeonTheme ? -3.5 : -5.0;
   slidingWallSegments.forEach((segment, idx) => {
-    // Odd/Even shift patterns: upY is full ceiling height wall, -5.0 is completely below floor
-    const targetY = (solvedCount % 2 === 0) ? (idx % 2 === 0 ? upY : -5.0) : (idx % 2 === 0 ? -5.0 : upY);
+    // Odd/Even shift patterns: upY blocks passage, downY opens passage
+    const targetY = (solvedCount % 2 === 0) ? (idx % 2 === 0 ? upY : downY) : (idx % 2 === 0 ? downY : upY);
     
     // Update mazeLayout immediately for pathfinding path recalculation
     if (segment.userData && segment.userData.col !== undefined) {
@@ -7297,7 +7416,7 @@ function drawMinimap() {
     ctx.fill();
   }
 
-  const blockSize = 4.5;
+  const blockSize = mazeBlockSize || 4.5;
 
   // Draw Light Sanctuaries (Feature 4: Warm Gold Lantern markers)
   if (typeof sanctuaryZones !== 'undefined') {
