@@ -2074,6 +2074,9 @@ let dungeonPillarMat = null;
 let dungeonStatueGeo = null;
 let dungeonStatueMat = null;
 let dungeonRugGeo = null;
+let dungeonRugGeoFull = null;
+let dungeonRugGeoHalf = null;
+let dungeonRugGeoDeadEnd = null;
 let dungeonRugCrestGeo = null;
 let dungeonRugMat = null;
 let dungeonProps = [];
@@ -2096,8 +2099,8 @@ function makeDungeonMat(colorPath, normalPath, roughPath, opts = {}) {
   return mat;
 }
 
-/* ── Seamless Rug Plane Generators (Zero yellow cutoffs!) ── */
-function createSeamlessRugGeo(width = 2.4, length = 6.0) {
+/* ── Seamless Rug Plane Generators (Zero yellow cutoffs or horizontal lines!) ── */
+function createSeamlessRugGeo(width = 2.0, length = 6.0) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
   geo.translate(0, 0.02, 0);
@@ -2105,14 +2108,14 @@ function createSeamlessRugGeo(width = 2.4, length = 6.0) {
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
     const v = uvAttr.getY(i);
-    // Sample strictly from continuous runner half of RugColor.png (u: 0.005 -> 0.510)
-    uvAttr.setXY(i, 0.005 + u * (0.510 - 0.005), 0.020 + v * (0.988 - 0.020));
+    // Sample strictly from single seamless velvet runner segment (zero horizontal border lines!)
+    uvAttr.setXY(i, 0.020 + u * (0.475 - 0.020), 0.775 + v * (0.960 - 0.775));
   }
   uvAttr.needsUpdate = true;
   return geo;
 }
 
-function createCrestRugGeo(width = 2.4, length = 6.0) {
+function createCrestRugGeo(width = 2.0, length = 6.0) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
   geo.translate(0, 0.025, 0);
@@ -2196,9 +2199,12 @@ function createProceduralDungeonAssets() {
     { roughness: 0.7, metalness: 0.06, emissive: 0x181a1e, emissiveIntensity: 0.2 }
   );
 
-  // Seamless continuous velvet runner rugs
-  dungeonRugGeo = createSeamlessRugGeo(2.4, 6.0);
-  dungeonRugCrestGeo = createCrestRugGeo(2.4, 6.0);
+  // Seamless continuous velvet runner rugs (Full 6m, Half 3m, Dead-End 4.4m)
+  dungeonRugGeoFull = createSeamlessRugGeo(2.0, 6.0);
+  dungeonRugGeoHalf = createSeamlessRugGeo(2.0, 3.0);
+  dungeonRugGeoDeadEnd = createSeamlessRugGeo(2.0, 4.4);
+  dungeonRugGeo = dungeonRugGeoFull;
+  dungeonRugCrestGeo = createCrestRugGeo(2.0, 6.0);
   dungeonRugMat = makeDungeonMat(
     '/assets/dungeon/textures/RugColor.png',
     null,
@@ -2342,9 +2348,12 @@ function loadDungeonPackAssets() {
       dungeonStatueGeo = dungeonModules.statue.children[0].geometry;
       dungeonStatueMat = dungeonModules.statue.children[0].material;
     }
-    // Seamless continuous runner rug (2.4m wide x 6.0m cell length with zero yellow borders)
-    dungeonRugGeo = createSeamlessRugGeo(2.4, 6.0);
-    dungeonRugCrestGeo = createCrestRugGeo(2.4, 6.0);
+    // Seamless continuous runner rug (Full 6m, Half 3m, Dead-End 4.4m, width 2.0m with zero horizontal yellow lines)
+    dungeonRugGeoFull = createSeamlessRugGeo(2.0, 6.0);
+    dungeonRugGeoHalf = createSeamlessRugGeo(2.0, 3.0);
+    dungeonRugGeoDeadEnd = createSeamlessRugGeo(2.0, 4.4);
+    dungeonRugGeo = dungeonRugGeoFull;
+    dungeonRugCrestGeo = createCrestRugGeo(2.0, 6.0);
     if (dungeonModules.rug && dungeonModules.rug.children[0]) {
       dungeonRugMat = dungeonModules.rug.children[0].material;
     } else {
@@ -2406,6 +2415,11 @@ function spawnDungeonProps(layout, blockSize) {
     return Array.isArray(circuitBreakers) && circuitBreakers.some(b => b.mesh && Math.hypot(b.mesh.position.x - x, b.mesh.position.z - z) < radius);
   }
 
+  // Helper: prevent spawning any column within collision radius of a statue
+  function isNearStatue(x, z, minDist = 2.8) {
+    return dungeonProps.some(p => p.userData && p.userData.isStatue && Math.hypot(p.position.x - x, p.position.z - z) < minDist);
+  }
+
   // 1. Master Vault Gate Flanking (Pillars + Statues + Entrance Grand Runner Rug)
   if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
     const edge = window.vaultEdge || 'N';
@@ -2446,7 +2460,7 @@ function spawnDungeonProps(layout, blockSize) {
       }
       sMesh.castShadow = true;
       sMesh.receiveShadow = true;
-      sMesh.userData = { isDungeonProp: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+      sMesh.userData = { isDungeonProp: true, isStatue: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
       scene.add(sMesh);
       dungeonProps.push(sMesh);
       walls.push(sMesh);
@@ -2534,7 +2548,7 @@ function spawnDungeonProps(layout, blockSize) {
       sMesh.rotation.y = de.dir.rot;
       sMesh.castShadow = true;
       sMesh.receiveShadow = true;
-      sMesh.userData = { isDungeonProp: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
+      sMesh.userData = { isDungeonProp: true, isStatue: true, halfSizeX: 0.5, halfSizeZ: 0.5 };
       scene.add(sMesh);
       dungeonProps.push(sMesh);
       walls.push(sMesh);
@@ -2548,6 +2562,14 @@ function spawnDungeonProps(layout, blockSize) {
     for (let r = 1; r < layout.length - 1; r++) {
       for (let c = 1; c < layout[r].length - 1; c++) {
         if (layout[r][c] === 0 && (r + c) % 2 === 0) {
+          // Dead-End & Alcove Protection: NEVER spawn wall columns in a dead-end cell (monk statue is the sole centerpiece!)
+          let openNeighbors = 0;
+          if (layout[r - 1] && layout[r - 1][c] === 0) openNeighbors++;
+          if (layout[r + 1] && layout[r + 1][c] === 0) openNeighbors++;
+          if (layout[r][c - 1] === 0) openNeighbors++;
+          if (layout[r][c + 1] === 0) openNeighbors++;
+          if (openNeighbors <= 1) continue;
+
           const cx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
           const cz = (r - layout.length / 2) * blockSize + blockSize / 2;
 
@@ -2555,7 +2577,7 @@ function spawnDungeonProps(layout, blockSize) {
           if (layout[r][c - 1] === 1) {
             const px = cx - wallOffset;
             const pz = cz;
-            if (!isBlockedByBreaker(px, pz)) {
+            if (!isBlockedByBreaker(px, pz) && !isNearStatue(px, pz, 2.8)) {
               const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
               pMesh.scale.set(1.5, 1.68, 1.5);
               pMesh.position.set(px, 0, pz);
@@ -2572,7 +2594,7 @@ function spawnDungeonProps(layout, blockSize) {
           if (layout[r][c + 1] === 1) {
             const px = cx + wallOffset;
             const pz = cz;
-            if (!isBlockedByBreaker(px, pz)) {
+            if (!isBlockedByBreaker(px, pz) && !isNearStatue(px, pz, 2.8)) {
               const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
               pMesh.scale.set(1.5, 1.68, 1.5);
               pMesh.position.set(px, 0, pz);
@@ -2589,7 +2611,7 @@ function spawnDungeonProps(layout, blockSize) {
           if (layout[r - 1] && layout[r - 1][c] === 1) {
             const px = cx;
             const pz = cz - wallOffset;
-            if (!isBlockedByBreaker(px, pz)) {
+            if (!isBlockedByBreaker(px, pz) && !isNearStatue(px, pz, 2.8)) {
               const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
               pMesh.scale.set(1.5, 1.68, 1.5);
               pMesh.position.set(px, 0, pz);
@@ -2606,7 +2628,7 @@ function spawnDungeonProps(layout, blockSize) {
           if (layout[r + 1] && layout[r + 1][c] === 1) {
             const px = cx;
             const pz = cz + wallOffset;
-            if (!isBlockedByBreaker(px, pz)) {
+            if (!isBlockedByBreaker(px, pz) && !isNearStatue(px, pz, 2.8)) {
               const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
               pMesh.scale.set(1.5, 1.68, 1.5);
               pMesh.position.set(px, 0, pz);
@@ -2625,6 +2647,7 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   // 5. Seamless Continuous Red Velvet Runner Carpets
+  // Connects strictly along open pathways, never clipping into statues, dead-end pedestals, or wall columns!
   if (layout && layout.length > 0) {
     for (let r = 1; r < layout.length - 1; r++) {
       for (let c = 1; c < layout[r].length - 1; c++) {
@@ -2634,32 +2657,88 @@ function spawnDungeonProps(layout, blockSize) {
           const westOpen  = (layout[r][c - 1] === 0);
           const eastOpen  = (layout[r][c + 1] === 0);
 
-          const hasNS = (northOpen || southOpen);
-          const hasEW = (westOpen || eastOpen);
+          const openCount = (northOpen ? 1 : 0) + (southOpen ? 1 : 0) + (westOpen ? 1 : 0) + (eastOpen ? 1 : 0);
+          if (openCount === 0) continue;
 
-          if (hasNS || hasEW) {
-            const rx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
-            const rz = (r - layout.length / 2) * blockSize + blockSize / 2;
+          const rx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
+          const rz = (r - layout.length / 2) * blockSize + blockSize / 2;
 
-            if (hasNS) {
-              const rugMesh = new THREE.Mesh(dungeonRugGeo, dungeonRugMat);
-              rugMesh.position.set(rx, 0, rz);
+          // Case A: Dead End (exactly 1 open neighbor) -> rug leads up to statue, stopping cleanly 0.2m before pedestal
+          if (openCount === 1) {
+            const rugMesh = new THREE.Mesh(dungeonRugGeoDeadEnd || dungeonRugGeo, dungeonRugMat);
+            rugMesh.receiveShadow = true;
+            if (northOpen) {
+              rugMesh.position.set(rx, 0, rz - 0.8);
               rugMesh.rotation.y = 0;
-              rugMesh.receiveShadow = true;
-              scene.add(rugMesh);
-              dungeonProps.push(rugMesh);
-              placedRugs++;
-            }
-
-            if (hasEW && (!hasNS || (westOpen && eastOpen))) {
-              const rugMesh = new THREE.Mesh(dungeonRugGeo, dungeonRugMat);
-              rugMesh.position.set(rx, 0, rz);
+            } else if (southOpen) {
+              rugMesh.position.set(rx, 0, rz + 0.8);
+              rugMesh.rotation.y = Math.PI;
+            } else if (westOpen) {
+              rugMesh.position.set(rx - 0.8, 0, rz);
+              rugMesh.rotation.y = -Math.PI / 2;
+            } else if (eastOpen) {
+              rugMesh.position.set(rx + 0.8, 0, rz);
               rugMesh.rotation.y = Math.PI / 2;
-              rugMesh.receiveShadow = true;
-              scene.add(rugMesh);
-              dungeonProps.push(rugMesh);
-              placedRugs++;
             }
+            scene.add(rugMesh);
+            dungeonProps.push(rugMesh);
+            placedRugs++;
+            continue;
+          }
+
+          // Case B: Corridors, corners, and junctions (openCount >= 2)
+          // North-South segment
+          if (northOpen && southOpen) {
+            const rugMesh = new THREE.Mesh(dungeonRugGeoFull || dungeonRugGeo, dungeonRugMat);
+            rugMesh.position.set(rx, 0, rz);
+            rugMesh.rotation.y = 0;
+            rugMesh.receiveShadow = true;
+            scene.add(rugMesh);
+            dungeonProps.push(rugMesh);
+            placedRugs++;
+          } else if (northOpen) {
+            const rugMesh = new THREE.Mesh(dungeonRugGeoHalf || dungeonRugGeo, dungeonRugMat);
+            rugMesh.position.set(rx, 0, rz - 1.5);
+            rugMesh.rotation.y = 0;
+            rugMesh.receiveShadow = true;
+            scene.add(rugMesh);
+            dungeonProps.push(rugMesh);
+            placedRugs++;
+          } else if (southOpen) {
+            const rugMesh = new THREE.Mesh(dungeonRugGeoHalf || dungeonRugGeo, dungeonRugMat);
+            rugMesh.position.set(rx, 0, rz + 1.5);
+            rugMesh.rotation.y = Math.PI;
+            rugMesh.receiveShadow = true;
+            scene.add(rugMesh);
+            dungeonProps.push(rugMesh);
+            placedRugs++;
+          }
+
+          // East-West segment
+          if (westOpen && eastOpen) {
+            const rugMesh = new THREE.Mesh(dungeonRugGeoFull || dungeonRugGeo, dungeonRugMat);
+            rugMesh.position.set(rx, 0, rz);
+            rugMesh.rotation.y = Math.PI / 2;
+            rugMesh.receiveShadow = true;
+            scene.add(rugMesh);
+            dungeonProps.push(rugMesh);
+            placedRugs++;
+          } else if (westOpen) {
+            const rugMesh = new THREE.Mesh(dungeonRugGeoHalf || dungeonRugGeo, dungeonRugMat);
+            rugMesh.position.set(rx - 1.5, 0, rz);
+            rugMesh.rotation.y = -Math.PI / 2;
+            rugMesh.receiveShadow = true;
+            scene.add(rugMesh);
+            dungeonProps.push(rugMesh);
+            placedRugs++;
+          } else if (eastOpen) {
+            const rugMesh = new THREE.Mesh(dungeonRugGeoHalf || dungeonRugGeo, dungeonRugMat);
+            rugMesh.position.set(rx + 1.5, 0, rz);
+            rugMesh.rotation.y = Math.PI / 2;
+            rugMesh.receiveShadow = true;
+            scene.add(rugMesh);
+            dungeonProps.push(rugMesh);
+            placedRugs++;
           }
         }
       }
