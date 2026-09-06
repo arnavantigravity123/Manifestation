@@ -2536,6 +2536,7 @@ function spawnDungeonProps(layout, blockSize) {
     }
 
     deadEnds.forEach(de => {
+      // 1. Monk statue centered against the back wall
       const backOffsetX = -de.dir.dx * 2.2;
       const backOffsetZ = -de.dir.dz * 2.2;
       const sx = de.x + backOffsetX;
@@ -2553,6 +2554,35 @@ function spawnDungeonProps(layout, blockSize) {
       dungeonProps.push(sMesh);
       walls.push(sMesh);
       placedStatues++;
+
+      // 2. Flank statue with two ornate columns on LEFT and RIGHT (exactly like reference photo media_1788720074161.png)
+      const isNS = (de.dir.dz !== 0);
+      const flankOffset = 1.85; // Distance to left and right from statue center
+      const pillarDistFromCenter = 2.45; // Snug against back wall
+
+      [-flankOffset, flankOffset].forEach(fo => {
+        let px, pz;
+        if (isNS) {
+          px = de.x + fo;
+          pz = de.z - de.dir.dz * pillarDistFromCenter;
+        } else {
+          px = de.x - de.dir.dx * pillarDistFromCenter;
+          pz = de.z + fo;
+        }
+
+        if (!isBlockedByBreaker(px, pz)) {
+          const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+          pMesh.scale.set(1.5, 1.68, 1.5);
+          pMesh.position.set(px, 0, pz);
+          pMesh.castShadow = true;
+          pMesh.receiveShadow = true;
+          pMesh.userData = { isDungeonProp: true, halfSizeX: 0.6, halfSizeZ: 0.6 };
+          scene.add(pMesh);
+          dungeonProps.push(pMesh);
+          walls.push(pMesh);
+          placedPillars++;
+        }
+      });
     });
   }
 
