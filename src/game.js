@@ -7530,14 +7530,15 @@ function fixBreakerLocal(breakerId) {
 
 function updateMinimapVisibility() {
   if (!mazeLayout || mazeLayout.length === 0) return;
-  const mazeSize = mazeSizeGlobal;
-  const blockSize = 4.5;
+  const totalRows = mazeLayout.length;
+  const totalCols = (mazeLayout[0] && mazeLayout[0].length) ? mazeLayout[0].length : totalRows;
+  const blockSize = mazeBlockSize || 6.0;
   
-  // Calculate current grid cell
+  // Calculate current grid cell safely clamped
   const px = camera.position.x;
   const pz = camera.position.z;
-  const c = Math.floor((px / blockSize) + (mazeSize / 2));
-  const r = Math.floor((pz / blockSize) + (mazeSize / 2));
+  const c = Math.max(0, Math.min(totalCols - 1, Math.floor((px / blockSize) + (totalCols / 2))));
+  const r = Math.max(0, Math.min(totalRows - 1, Math.floor((pz / blockSize) + (totalRows / 2))));
   
   // Mark cells using a 2-step flood fill to prevent revealing through walls
   const queue = [{c, r, dist: 0}];
@@ -7557,17 +7558,17 @@ function updateMinimapVisibility() {
       const nc = curr.c + n.dc;
       const nr = curr.r + n.dr;
       
-      if (nr < 0 || nr >= mazeSize || nc < 0 || nc >= mazeSize) continue;
+      if (nr < 0 || nr >= totalRows || nc < 0 || nc >= totalCols) continue;
       
       const key = `${nr},${nc}`;
       if (currentVisible.has(key)) continue;
       
       // If current cell is a wall, we cannot see PAST it
-      if (curr.dist > 0 && mazeLayout[curr.r][curr.c] !== 0) continue;
+      if (curr.dist > 0 && mazeLayout[curr.r] && mazeLayout[curr.r][curr.c] !== 0) continue;
       
       // Prevent diagonal sight through two adjacent corner walls
       if (Math.abs(n.dc) === 1 && Math.abs(n.dr) === 1) {
-        if (mazeLayout[curr.r][nc] === 1 && mazeLayout[nr][curr.c] === 1) continue; 
+        if (mazeLayout[curr.r] && mazeLayout[nr] && mazeLayout[curr.r][nc] === 1 && mazeLayout[nr][curr.c] === 1) continue; 
       }
       
       currentVisible.add(key);
@@ -7583,16 +7584,19 @@ function drawMinimap() {
   if (!canvas || !mazeLayout || mazeLayout.length === 0) return;
   const ctx = canvas.getContext('2d');
   
-  const mazeSize = mazeSizeGlobal;
-  const cellSize = canvas.width / mazeSize;
+  const totalRows = mazeLayout.length;
+  const totalCols = (mazeLayout[0] && mazeLayout[0].length) ? mazeLayout[0].length : totalRows;
+  const blockSize = mazeBlockSize || 6.0;
+  const cellSize = canvas.width / totalCols;
   
   // Clear canvas
   ctx.fillStyle = myTeam === 'Ghost' ? '#0a0512' : '#050a10';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
   // Draw cells (Ghosts see entire realigned maze, Humans see explored cells)
-  for (let r = 0; r < mazeSize; r++) {
-    for (let c = 0; c < mazeSize; c++) {
+  for (let r = 0; r < totalRows; r++) {
+    if (!mazeLayout[r]) continue;
+    for (let c = 0; c < totalCols; c++) {
       if (myTeam === 'Ghost' || visitedCells.has(`${r},${c}`)) {
         const type = mazeLayout[r][c];
         if (type === 1) {
@@ -7616,13 +7620,11 @@ function drawMinimap() {
     ctx.fill();
   }
 
-  const blockSize = mazeBlockSize || 4.5;
-
   // Draw Light Sanctuaries (Feature 4: Warm Gold Lantern markers)
   if (typeof sanctuaryZones !== 'undefined') {
     sanctuaryZones.forEach(s => {
-      const sc = (s.x / blockSize) + (mazeSize / 2);
-      const sr = (s.z / blockSize) + (mazeSize / 2);
+      const sc = (s.x / blockSize) + (totalCols / 2);
+      const sr = (s.z / blockSize) + (totalRows / 2);
       ctx.save();
       ctx.translate(sc * cellSize, sr * cellSize);
       ctx.fillStyle = '#f59e0b';
@@ -7639,8 +7641,8 @@ function drawMinimap() {
   // Draw AI Ghosts on minimap if player is Ghost
   if (myTeam === 'Ghost' && typeof ghosts3D !== 'undefined') {
     ghosts3D.forEach(g => {
-      const gc = (g.position.x / blockSize) + (mazeSize / 2);
-      const gr = (g.position.z / blockSize) + (mazeSize / 2);
+      const gc = (g.position.x / blockSize) + (totalCols / 2);
+      const gr = (g.position.z / blockSize) + (totalRows / 2);
       ctx.save();
       ctx.translate(gc * cellSize, gr * cellSize);
       ctx.fillStyle = '#c084fc'; // Purple AI Ghost marker
@@ -7654,8 +7656,8 @@ function drawMinimap() {
   // Draw Teammates
   Object.values(players3D).forEach(p => {
     if (p.userData && p.userData.type === myTeam) {
-      const tc = (p.position.x / blockSize) + (mazeSize / 2);
-      const tr = (p.position.z / blockSize) + (mazeSize / 2);
+      const tc = (p.position.x / blockSize) + (totalCols / 2);
+      const tr = (p.position.z / blockSize) + (totalRows / 2);
       
       ctx.save();
       ctx.translate(tc * cellSize, tr * cellSize);
@@ -7673,8 +7675,8 @@ function drawMinimap() {
   });
 
   // Draw Player Marker (Local)
-  const pc = (camera.position.x / blockSize) + (mazeSize / 2);
-  const pr = (camera.position.z / blockSize) + (mazeSize / 2);
+  const pc = (camera.position.x / blockSize) + (totalCols / 2);
+  const pr = (camera.position.z / blockSize) + (totalRows / 2);
   
   ctx.save();
   ctx.translate(pc * cellSize, pr * cellSize);
