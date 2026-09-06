@@ -2127,13 +2127,41 @@ function createCrestRugGeo(width = 2.4, length = 6.0) {
   return geo;
 }
 
+/* ── Authentic Stone Brick Wall Box Generator (100% stone masonry, zero black cutouts or panels) ── */
+function createDungeonWallBox(width = 6.0, height = 3.5, depth = 6.0) {
+  const geo = new THREE.BoxGeometry(width, height, depth);
+  const uvAttr = geo.attributes.uv;
+  // BoxGeometry faces: 0 (+X), 1 (-X), 2 (+Y), 3 (-Y), 4 (+Z), 5 (-Z)
+  const verticalFaces = [0, 1, 4, 5];
+  for (const f of verticalFaces) {
+    const base = f * 4;
+    for (let i = 0; i < 4; i++) {
+      const u = uvAttr.getX(base + i);
+      const v = uvAttr.getY(base + i);
+      // Map strictly into stone masonry brick band (u: 0.005 -> 0.996, v: 0.495 -> 0.985)
+      const mappedU = 0.005 + u * (0.996 - 0.005);
+      const mappedV = 0.495 + v * (0.985 - 0.495);
+      uvAttr.setXY(base + i, mappedU, mappedV);
+    }
+  }
+  // Architectural stone trim / cap on top face (+Y)
+  const topBase = 2 * 4;
+  for (let i = 0; i < 4; i++) {
+    const u = uvAttr.getX(topBase + i);
+    const v = uvAttr.getY(topBase + i);
+    uvAttr.setXY(topBase + i, 0.077 + u * (0.918 - 0.077), 0.435 + v * (0.485 - 0.435));
+  }
+  uvAttr.needsUpdate = true;
+  return geo;
+}
+
 /* ── Procedural fallback (always works, uses texture PNGs) ── */
 function createProceduralDungeonAssets() {
   if (dungeonAssetsLoaded) return;
   console.log('[DUNGEON] Creating procedural dungeon assets from texture PNGs...');
 
   // Wall — stone wall segment with moldings
-  dungeonWallGeo = new THREE.BoxGeometry(0.4, 3.5, 6.0);
+  dungeonWallGeo = createDungeonWallBox(0.4, 3.5, 6.0);
   dungeonWallGeo.translate(0, 1.75, 0);
   dungeonWallMat = makeDungeonMat(
     '/assets/dungeon/textures/WallColor.png',
@@ -2293,8 +2321,18 @@ function loadDungeonPackAssets() {
 
     // Standalone references for props if needed
     if (dungeonModules.wall && dungeonModules.wall.children[0]) {
-      dungeonWallGeo = dungeonModules.wall.children[0].geometry;
-      dungeonWallMat = dungeonModules.wall.children[0].material;
+      // Remap IndAssetWall back-face UVs so both sides show stone brick masonry (zero black slots/holes)
+      const wallMesh = dungeonModules.wall.children[0];
+      const uvs = wallMesh.geometry.attributes.uv;
+      if (uvs && uvs.count >= 12) {
+        uvs.setXY(4, 0.996, 0.495);
+        uvs.setXY(5, 0.996, 0.985);
+        uvs.setXY(6, 0.005, 0.985);
+        uvs.setXY(7, 0.005, 0.495);
+        uvs.needsUpdate = true;
+      }
+      dungeonWallGeo = wallMesh.geometry;
+      dungeonWallMat = wallMesh.material;
     }
     if (dungeonModules.pillar && dungeonModules.pillar.children[0]) {
       dungeonPillarGeo = dungeonModules.pillar.children[0].geometry;
@@ -2727,10 +2765,10 @@ function generateMaze(keysCount = 8) {
   let ceilMat;
   if (isDungeon) {
     const dungeonCeilRep = Math.max(15, Math.round(floorExtent / 3.0));
-    const ceilTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', { x: dungeonCeilRep, y: dungeonCeilRep }, true);
+    const ceilTex = getLoadedTexture('/assets/dungeon/textures/GroundColor.png', { x: dungeonCeilRep, y: dungeonCeilRep }, true);
     ceilMat = new THREE.MeshStandardMaterial({ 
       map: ceilTex,
-      color: 0x555555, 
+      color: 0x252528, 
       roughness: 0.95,
       metalness: 0.02
     });
@@ -2901,9 +2939,9 @@ function generateMaze(keysCount = 8) {
 
   let wallMat, slidingWallMat;
   if (isDungeon) {
-    const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', { x: 2, y: 1.5 }, true);
-    const dungeonWallNormal = getLoadedTexture('/assets/dungeon/textures/WallNormal.png', { x: 2, y: 1.5 });
-    const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/WallRoughness.png', { x: 2, y: 1.5 });
+    const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', null, true);
+    const dungeonWallNormal = getLoadedTexture('/assets/dungeon/textures/WallNormal.png');
+    const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/WallRoughness.png');
 
     wallMat = new THREE.MeshStandardMaterial({ 
       map: dungeonWallTex,
@@ -2950,7 +2988,9 @@ function generateMaze(keysCount = 8) {
   }
 
   const wallHeight = isDungeon ? 3.5 : 4.5;
-  const wallGeo = new THREE.BoxGeometry(blockSize + 0.1, wallHeight, blockSize + 0.1);
+  const wallGeo = isDungeon 
+    ? createDungeonWallBox(blockSize + 0.1, wallHeight, blockSize + 0.1) 
+    : new THREE.BoxGeometry(blockSize + 0.1, wallHeight, blockSize + 0.1);
 
   openCorridors = []; // Reset for new maze
   const wallGeometries = [];
@@ -2963,7 +3003,9 @@ function generateMaze(keysCount = 8) {
 
       if (type === 1) {
         // Static wall: create transformed geometry for single merged mesh
-        const singleGeo = new THREE.BoxGeometry(blockSize + 0.1, wallHeight, blockSize + 0.1);
+        const singleGeo = isDungeon 
+          ? createDungeonWallBox(blockSize + 0.1, wallHeight, blockSize + 0.1) 
+          : new THREE.BoxGeometry(blockSize + 0.1, wallHeight, blockSize + 0.1);
         singleGeo.translate(xPos, wallHeight / 2, zPos);
         wallGeometries.push(singleGeo);
       } else if (type === 2) {
