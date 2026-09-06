@@ -1140,13 +1140,19 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     ptrOverlay.style.display = 'none';
     if (roleSplash) roleSplash.style.display = 'none';
     if (!isMobileDevice) {
-      // Lock on the canvas element (renderer.domElement) — browsers require pointer lock on canvas, not a div
       const lockTarget = (renderer && renderer.domElement) || container;
       if (lockTarget && lockTarget.requestPointerLock) {
         try {
-          lockTarget.requestPointerLock();
+          const promise = lockTarget.requestPointerLock();
+          if (promise && promise.catch) {
+            promise.catch(err => {
+              console.warn('[POINTER] Pointer lock request rejected:', err);
+              ptrOverlay.style.display = 'flex';
+            });
+          }
         } catch(err) {
-          console.warn('Pointer lock request error:', err);
+          console.warn('[POINTER] Pointer lock exception:', err);
+          ptrOverlay.style.display = 'flex';
         }
       }
     }
@@ -1165,15 +1171,37 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     pauseResumeBtn.addEventListener('touchstart', handleEnterGame, { passive: false });
   }
 
+  // Global click-to-relock during gameplay: clicking anywhere while in-game restores mouse control
+  window.addEventListener('click', (e) => {
+    if (isMobileDevice || !window.gameReady || window.isSpectating) return;
+    if (document.pointerLockElement) return;
+    if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
+    if (isMinimapExpanded) return;
+    const capturedEl = document.getElementById('captured-overlay');
+    const endEl = document.getElementById('end-game-overlay');
+    if ((capturedEl && capturedEl.style.display === 'flex') || (endEl && endEl.style.display === 'flex')) return;
+
+    const lockTarget = (renderer && renderer.domElement) || container;
+    if (lockTarget && lockTarget.requestPointerLock) {
+      try {
+        const p = lockTarget.requestPointerLock();
+        if (p && p.catch) p.catch(() => {});
+      } catch(_) {}
+    }
+  });
+
   document.addEventListener('pointerlockchange', () => {
     if (isMobileDevice) return;
     if (document.pointerLockElement) {
       ptrOverlay.style.display = 'none';
     } else {
-      // Don't show pause overlay if the keypad modal or minimap or game over is open
+      // Don't show pause overlay if keypad modal, minimap, or game-over is open
       if ((typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') || isMinimapExpanded) {
         ptrOverlay.style.display = 'none';
-      } else if (document.getElementById('captured-overlay').style.display === 'flex' || document.getElementById('end-game-overlay').style.display === 'flex') {
+      } else if (
+        (document.getElementById('captured-overlay') && document.getElementById('captured-overlay').style.display === 'flex') ||
+        (document.getElementById('end-game-overlay') && document.getElementById('end-game-overlay').style.display === 'flex')
+      ) {
         ptrOverlay.style.display = 'none';
       } else {
         const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
@@ -1186,6 +1214,15 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
         }
         ptrOverlay.style.display = 'flex';
       }
+    }
+  });
+
+  document.addEventListener('pointerlockerror', () => {
+    if (isMobileDevice) return;
+    console.warn('[POINTER] Pointer lock error event fired');
+    // If the browser temporarily rejected pointer lock (e.g. Esc cooldown), keep pause screen so next click succeeds
+    if (!document.pointerLockElement && window.gameReady) {
+      ptrOverlay.style.display = 'flex';
     }
   });
 
