@@ -1647,13 +1647,13 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
       }
     }
 
-    // Final guide beacon at the vault door
+    // Final guide beacon hovering at the top arch of the vault door
     const finalOrb = new THREE.Mesh(orbGeo, orbMat);
-    finalOrb.position.set(gateCoordinates.x, 0.6, gateCoordinates.z);
+    finalOrb.position.set(gateCoordinates.x, 3.2, gateCoordinates.z + 0.3);
     threadGroup.add(finalOrb);
 
-    const gateLight = new THREE.PointLight(0x00ffff, 8.0, 12.0);
-    gateLight.position.set(gateCoordinates.x, 1.2, gateCoordinates.z);
+    const gateLight = new THREE.PointLight(0x00ffff, 1.5, 8.0);
+    gateLight.position.set(gateCoordinates.x, 3.2, gateCoordinates.z + 0.5);
     threadGroup.add(gateLight);
 
     scene.add(threadGroup);
@@ -3518,73 +3518,81 @@ function generateMaze(keysCount = 8) {
   scene.add(vaultGroup);
   vaultObjects.push(vaultGroup);
 
-  // 1. Heavy Reinforced Steel Architrave Frame
+  // 1. Heavy Gothic Wrought Iron & Stone Architrave Frame
   const frameMat = new THREE.MeshStandardMaterial({
-    color: 0x1a202c,
-    metalness: 0.85,
-    roughness: 0.35
+    color: 0x242933,
+    metalness: 0.35,
+    roughness: 0.7
   });
 
-  // Top header lintel beam
-  const lintelGeo = new THREE.BoxGeometry(4.6, 0.45, 0.42);
+  // Top header lintel beam spanning between flanking stone pillars
+  const lintelGeo = new THREE.BoxGeometry(3.8, 0.38, 0.38);
   const lintelMesh = new THREE.Mesh(lintelGeo, frameMat);
-  lintelMesh.position.set(0, 3.42, 0);
+  lintelMesh.position.set(0, 3.25, 0);
   lintelMesh.castShadow = true;
   lintelMesh.receiveShadow = true;
   vaultGroup.add(lintelMesh);
 
   // Left jamb post
-  const leftJambGeo = new THREE.BoxGeometry(0.35, 3.4, 0.42);
+  const leftJambGeo = new THREE.BoxGeometry(0.24, 3.1, 0.38);
   const leftJambMesh = new THREE.Mesh(leftJambGeo, frameMat);
-  leftJambMesh.position.set(-2.15, 1.7, 0);
+  leftJambMesh.position.set(-1.82, 1.55, 0);
   leftJambMesh.castShadow = true;
   leftJambMesh.receiveShadow = true;
   vaultGroup.add(leftJambMesh);
 
   // Right jamb post
-  const rightJambGeo = new THREE.BoxGeometry(0.35, 3.4, 0.42);
+  const rightJambGeo = new THREE.BoxGeometry(0.24, 3.1, 0.38);
   const rightJambMesh = new THREE.Mesh(rightJambGeo, frameMat);
-  rightJambMesh.position.set(2.15, 1.7, 0);
+  rightJambMesh.position.set(1.82, 1.55, 0);
   rightJambMesh.castShadow = true;
   rightJambMesh.receiveShadow = true;
   vaultGroup.add(rightJambMesh);
 
   // Floor threshold plate
-  const threshGeo = new THREE.BoxGeometry(4.6, 0.08, 0.42);
+  const threshGeo = new THREE.BoxGeometry(3.8, 0.05, 0.38);
   const threshMesh = new THREE.Mesh(threshGeo, frameMat);
-  threshMesh.position.set(0, 0.04, 0);
+  threshMesh.position.set(0, 0.025, 0);
   threshMesh.receiveShadow = true;
   vaultGroup.add(threshMesh);
 
-  // Warning hazard stripe accent beam under lintel
-  const hazardGeo = new THREE.BoxGeometry(4.0, 0.12, 0.46);
-  const hazardMat = new THREE.MeshStandardMaterial({
-    color: 0xf59e0b,
-    metalness: 0.3,
-    roughness: 0.4,
-    emissive: 0xb45309,
-    emissiveIntensity: 0.35
+  // Decorative iron rivet studs along the lintel beam
+  const boltGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.03, 8);
+  const boltMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.9, roughness: 0.3 });
+  [-1.4, -0.85, -0.3, 0.3, 0.85, 1.4].forEach(bx => {
+    const bolt = new THREE.Mesh(boltGeo, boltMat);
+    bolt.rotation.x = Math.PI / 2;
+    bolt.position.set(bx, 3.25, 0.20);
+    vaultGroup.add(bolt);
   });
-  const hazardMesh = new THREE.Mesh(hazardGeo, hazardMat);
-  hazardMesh.position.set(0, 3.15, 0);
-  vaultGroup.add(hazardMesh);
 
   // 2. The Massive Reinforced 3D Vault Door (gateMeshRef)
+  // Cropped strictly to the heavy iron circular lock & reinforced hinges (omits 2D room floor/ceiling)
+  const doorGeo = new THREE.BoxGeometry(3.4, 3.06, 0.18);
+  const uvAttr = doorGeo.attributes.uv;
+  // BoxGeometry face 4 (+Z front face): crop to inner steel door mechanism [u: 0.12..0.88, v: 0.10..0.88]
+  const uMin = 0.12, uMax = 0.88;
+  const vMin = 0.10, vMax = 0.88;
+  uvAttr.setXY(16, uMin, vMax);
+  uvAttr.setXY(17, uMax, vMax);
+  uvAttr.setXY(18, uMin, vMin);
+  uvAttr.setXY(19, uMax, vMin);
+  uvAttr.needsUpdate = true;
+
   const vaultTex = getLoadedTexture('/assets/vault_door.png', null, true);
   const doorFrontMat = new THREE.MeshStandardMaterial({
     map: vaultTex,
     color: 0xffffff,
-    metalness: 0.85,
-    roughness: 0.25,
-    emissive: 0x06b6d4,
-    emissiveIntensity: 0.08
+    metalness: 0.75,
+    roughness: 0.65, // Diffused realistic cast iron sheen, zero blown-out glare
+    emissive: 0x021520,
+    emissiveIntensity: 0.05
   });
   const doorBackMat = new THREE.MeshStandardMaterial({
-    color: 0x1e2430,
-    metalness: 0.85,
-    roughness: 0.35
+    color: 0x181e26,
+    metalness: 0.8,
+    roughness: 0.4
   });
-  // BoxGeometry faces: 0(+X), 1(-X), 2(+Y), 3(-Y), 4(+Z, front), 5(-Z, back)
   const doorMaterials = [
     doorBackMat,
     doorBackMat,
@@ -3593,38 +3601,42 @@ function generateMaze(keysCount = 8) {
     doorFrontMat,
     doorBackMat
   ];
-  const doorGeo = new THREE.BoxGeometry(3.9, 3.16, 0.2);
   const gateMesh = new THREE.Mesh(doorGeo, doorMaterials);
-  gateMesh.position.set(0, 1.6, 0);
+  gateMesh.position.set(0, 1.55, 0);
   gateMesh.castShadow = true;
   gateMesh.receiveShadow = true;
   vaultGroup.add(gateMesh);
   gateMeshRef = gateMesh;
 
-  // 3. Overhead Illuminated EXIT / EXTRACTION Bulkhead Sign
-  const exitSignGeo = new THREE.BoxGeometry(2.0, 0.45, 0.25);
+  // 3. Overhead Engraved Extraction Plaque (mounted cleanly on lintel beam below ceiling)
+  const exitSignGeo = new THREE.BoxGeometry(1.6, 0.22, 0.06);
   const exitSignMat = new THREE.MeshStandardMaterial({
-    color: 0x042f2e,
+    color: 0x091e2b,
     emissive: 0x06b6d4,
-    emissiveIntensity: 1.2,
-    roughness: 0.2,
+    emissiveIntensity: 0.65,
+    roughness: 0.3,
     metalness: 0.8
   });
   const exitSignMesh = new THREE.Mesh(exitSignGeo, exitSignMat);
-  exitSignMesh.position.set(0, 3.68, 0.15);
+  exitSignMesh.position.set(0, 3.25, 0.20);
   vaultGroup.add(exitSignMesh);
 
-  // Cyan extraction beacon PointLight casting real-time cyan illumination across corridor
-  const exitBeacon = new THREE.PointLight(0x06b6d4, 3.5, 18);
-  exitBeacon.position.set(0, 3.8, 0.6);
+  // Soft atmospheric cyan extraction beacon casting gentle radiance onto the red runner carpet
+  const exitBeacon = new THREE.PointLight(0x06b6d4, 1.4, 10);
+  exitBeacon.position.set(0, 3.0, 0.7);
   vaultGroup.add(exitBeacon);
 
-  // 4. 3D Keypad Terminal (padMeshRef) mounted on the right frame post
-  const padMountGeo = new THREE.BoxGeometry(0.42, 0.72, 0.14);
-  const padMountMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.8, roughness: 0.3 });
+  // 4. 3D Keypad Terminal mounted prominently on the front face of the right stone column
+  const padGroup = new THREE.Group();
+  padGroup.position.set(2.42, 1.45, 0.62);
+  padGroup.rotation.y = -0.20; // Angled invitingly towards approaching player
+  vaultGroup.add(padGroup);
+
+  const padMountGeo = new THREE.BoxGeometry(0.42, 0.72, 0.12);
+  const padMountMat = new THREE.MeshStandardMaterial({ color: 0x181e29, metalness: 0.8, roughness: 0.35 });
   const padMountMesh = new THREE.Mesh(padMountGeo, padMountMat);
-  padMountMesh.position.set(2.15, 1.5, 0.22);
-  vaultGroup.add(padMountMesh);
+  padMountMesh.position.set(0, 0, 0);
+  padGroup.add(padMountMesh);
 
   const padGeo = new THREE.PlaneGeometry(0.38, 0.66);
   const padTex = getLoadedTexture('/assets/keypad.png', null, true);
@@ -3636,8 +3648,8 @@ function generateMaze(keysCount = 8) {
     emissiveIntensity: 0.3
   });
   const padMesh = new THREE.Mesh(padGeo, padMat);
-  padMesh.position.set(2.15, 1.5, 0.30);
-  vaultGroup.add(padMesh);
+  padMesh.position.set(0, 0, 0.07);
+  padGroup.add(padMesh);
   padMeshRef = padMesh;
 
   // Keypad LED Status Light on top of the mount
@@ -3648,8 +3660,8 @@ function generateMaze(keysCount = 8) {
     emissiveIntensity: 1.5
   });
   const ledMesh = new THREE.Mesh(ledGeo, ledMat);
-  ledMesh.position.set(2.15, 1.83, 0.28);
-  vaultGroup.add(ledMesh);
+  ledMesh.position.set(0, 0.42, 0.05);
+  padGroup.add(ledMesh);
   gateKeypadLed = ledMesh;
 
   // 5. Extraction Chamber (Behind the Door in local -Z)
