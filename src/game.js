@@ -2631,8 +2631,14 @@ function spawnDungeonProps(layout, blockSize) {
     return Math.hypot(x - window.humanSpawnPos.x, z - window.humanSpawnPos.z) < minDist;
   }
 
+  // Helper: prevent spawning props directly in front of or blocking the master vault entrance
+  function isNearVaultDoorway(x, z, minDist = 2.0) {
+    if (typeof gateCoordinates === 'undefined' || !gateCoordinates) return false;
+    return Math.hypot(x - gateCoordinates.x, z - gateCoordinates.z) < minDist;
+  }
+
   function spawnPillarMesh(px, pz) {
-    if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz)) return false;
+    if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz) || isNearVaultDoorway(px, pz)) return false;
     if (isNearPillar(px, pz, 1.8)) return false;
     pillarTransforms.push({ x: px, z: pz });
     addPropCollider(px, pz, 0.60);
@@ -2641,7 +2647,7 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   function spawnStatueMesh(sx, sz, rotY = 0) {
-    if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz)) return false;
+    if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz) || isNearVaultDoorway(sx, sz)) return false;
     if (isNearStatue(sx, sz, 2.5)) return false;
     statueTransforms.push({ x: sx, z: sz, rotY });
     addPropCollider(sx, sz, 0.80);
@@ -2742,6 +2748,9 @@ function spawnDungeonProps(layout, blockSize) {
     }
 
     deadEnds.forEach(de => {
+      // Don't spawn dead-end shrines right in front of the master vault entrance
+      if (isNearVaultDoorway(de.x, de.z, 3.5)) return;
+
       // 1. Monk statue centered against the back wall
       const backOffsetX = -de.dir.dx * 2.2;
       const backOffsetZ = -de.dir.dz * 2.2;
@@ -2866,19 +2875,27 @@ function spawnDungeonProps(layout, blockSize) {
 
           // West wall
           if (layout[r][c - 1] === 1) {
-            spawnPillarMesh(cx - wallOffset, cz);
+            if (!(window.vaultEdge === 'W' && c === 1 && r === window.vaultR)) {
+              spawnPillarMesh(cx - wallOffset, cz);
+            }
           }
           // East wall
           if (layout[r][c + 1] === 1) {
-            spawnPillarMesh(cx + wallOffset, cz);
+            if (!(window.vaultEdge === 'E' && c === layout[r].length - 2 && r === window.vaultR)) {
+              spawnPillarMesh(cx + wallOffset, cz);
+            }
           }
           // North wall
           if (layout[r - 1] && layout[r - 1][c] === 1) {
-            spawnPillarMesh(cx, cz - wallOffset);
+            if (!(window.vaultEdge === 'N' && r === 1 && c === window.vaultC)) {
+              spawnPillarMesh(cx, cz - wallOffset);
+            }
           }
           // South wall
           if (layout[r + 1] && layout[r + 1][c] === 1) {
-            spawnPillarMesh(cx, cz + wallOffset);
+            if (!(window.vaultEdge === 'S' && r === layout.length - 2 && c === window.vaultC)) {
+              spawnPillarMesh(cx, cz + wallOffset);
+            }
           }
         }
       }
