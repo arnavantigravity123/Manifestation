@@ -1023,6 +1023,7 @@ let flashlightBattery = 100;
 
 // Puzzle configuration
 let gateCoordinates = { x: 0, z: -35 };
+let gateKeypadWorldPos = new THREE.Vector3(0, 1.5, -35);
 let gateMeshRef = null;  // Global ref so we can toggle visibility
 let padMeshRef = null;   // Global ref for the keypad
 let vaultObjects = [];   // Global tracker for all 3D vault portal components
@@ -3862,6 +3863,13 @@ function generateMaze(keysCount = 8) {
   ledMesh.position.set(0, 1.85, 0.03);
   padGroup.add(ledMesh);
   gateKeypadLed = ledMesh;
+  padMeshRef = padGroup;
+
+  // Accurately compute and cache the world position of the Keypad terminal
+  vaultGroup.updateMatrixWorld(true);
+  gateKeypadWorldPos = new THREE.Vector3();
+  padGroup.getWorldPosition(gateKeypadWorldPos);
+  gateKeypadWorldPos.y = 1.5;
 
   // 5. Extraction Portal Frame & Open Tunnel Wing Walls (Leading out into the 3D Forest)
   const chamberWallMat = (isDungeon && typeof dungeonWallMat !== 'undefined' && dungeonWallMat) ? dungeonWallMat : frameMat;
@@ -4768,6 +4776,15 @@ function setupControls() {
     }
     if ((!document.pointerLockElement && e.target.id !== 'canvas-container') || (isCaptured && !window.isSpectating)) return;
     if (e.button === 0 && !window.isSpectating) { // Left click
+      // If player clicked while looking at or standing near the Keypad Terminal, open keypad!
+      if (!gateSolved && typeof gateKeypadWorldPos !== 'undefined' && gateKeypadWorldPos) {
+        const distToPad = camera.position.distanceTo(gateKeypadWorldPos);
+        const { looking } = isLookingAtTarget(gateKeypadWorldPos, 5.0, 0.95);
+        if (looking || distToPad < 2.8) {
+          openKeypadModal();
+          return;
+        }
+      }
       useActiveItem();
     }
   });
@@ -5231,45 +5248,53 @@ function updateInteractionPrompt() {
   let minDistance = Infinity;
   let promptText = "";
 
-  // 1. Check Master Gate
-  const gateVec = new THREE.Vector3(gateCoordinates.x, 2, gateCoordinates.z);
-  const { looking: lookingAtGate, dist: distToGate } = isLookingAtTarget(gateVec, 6.0);
+  // 1. Check Master Gate & Keypad Terminal
+  const gateVec = new THREE.Vector3(gateCoordinates.x, 1.8, gateCoordinates.z);
+  const padVec = (gateKeypadWorldPos && gateKeypadWorldPos.lengthSq() > 0) ? gateKeypadWorldPos : gateVec;
 
-  if (lookingAtGate) { // Must be looking roughly at the door/keypad
-    if (distToGate < minDistance) {
-      minDistance = distToGate;
-      const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+  const { looking: lookingAtPad, dist: distToPad } = isLookingAtTarget(padVec, 6.0, 0.95);
+  const { looking: lookingAtGate, dist: distToGate } = isLookingAtTarget(gateVec, 6.5, 0.95);
+  const distPlayerToPad = camera.position.distanceTo(padVec);
+  const distPlayerToGate = camera.position.distanceTo(gateVec);
 
-      if (!breakersFixed) {
-        promptText = `ACCESS DENIED: Need ${totalBreakersRequired} Breakers to power terminal (${fixedBreakersCount}/${totalBreakersRequired})`;
-      } else if (!gateSolved) {
-        if (window.securityLockoutActive) {
-          const diff = window.securityLockoutEndTime - performance.now();
-          if (diff <= 0) {
-            window.securityLockoutActive = false;
-            promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
-          } else {
-            const remaining = Math.max(1, Math.ceil(diff / 1000));
-            promptText = `ACCESS DENIED: Security Lockout (${remaining}s remaining)`;
-          }
-        } else {
+  const nearTerminal = lookingAtPad || lookingAtGate || distPlayerToPad < 3.5 || distPlayerToGate < 3.5;
+  const closestDist = Math.min(distToPad, distToGate, distPlayerToPad, distPlayerToGate);
+
+  if (nearTerminal && closestDist < minDistance) {
+    minDistance = closestDist;
+
+    if (!gateSolved) {
+      if (window.securityLockoutActive) {
+        const diff = window.securityLockoutEndTime - performance.now();
+        if (diff <= 0) {
+          window.securityLockoutActive = false;
           promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
+        } else {
+          const remaining = Math.max(1, Math.ceil(diff / 1000));
+          promptText = `ACCESS DENIED: Security Lockout (${remaining}s remaining)`;
         }
       } else {
-        // Gate keypad is cracked! Now players can insert keys
-        const uninsertedKeyIndex = carriedKeys.findIndex(k => 
-          isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
-        );
+        promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
+      }
+    } else {
+      // Gate keypad cipher is cracked!
+      const uninsertedKeyIndex = carriedKeys.findIndex(k => 
+        isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
+      );
 
-        if (uninsertedKeyIndex !== -1) {
-          const keyToInsert = carriedKeys[uninsertedKeyIndex];
-          const keyId = getKeyIdentifier(keyToInsert);
-          promptText = isMobileDevice ? `Tap INTERACT to Insert [${keyId}]` : `Press <kbd>E</kbd> to Insert [${keyId}]`;
-        } else if (insertedGateKeys.length >= 2) {
-          promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
+      if (uninsertedKeyIndex !== -1) {
+        const keyToInsert = carriedKeys[uninsertedKeyIndex];
+        const keyId = getKeyIdentifier(keyToInsert);
+        promptText = isMobileDevice ? `Tap INTERACT to Insert [${keyId}]` : `Press <kbd>E</kbd> to Insert [${keyId}]`;
+      } else if (insertedGateKeys.length >= 2) {
+        const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+        if (!breakersFixed) {
+          promptText = `MASTER GATE LOCKED: Need ${totalBreakersRequired} Breakers to Power Door (${fixedBreakersCount}/${totalBreakersRequired})`;
         } else {
-          promptText = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
+          promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
         }
+      } else {
+        promptText = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
       }
     }
   }
@@ -5374,18 +5399,18 @@ function checkInteractions() {
     }
   }
 
-  // 1. Check proximity to Keypad Terminal (Master Gate)
-  const gateVec = new THREE.Vector3(gateCoordinates.x, 2, gateCoordinates.z);
-  const { looking: lookingAtGate, dist: distToGate } = isLookingAtTarget(gateVec, 6.0);
+  // 1. Check proximity to Keypad Terminal & Master Gate
+  const gateVec = new THREE.Vector3(gateCoordinates.x, 1.8, gateCoordinates.z);
+  const padVec = (gateKeypadWorldPos && gateKeypadWorldPos.lengthSq() > 0) ? gateKeypadWorldPos : gateVec;
 
-  if (lookingAtGate) {
-    const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+  const { looking: lookingAtPad } = isLookingAtTarget(padVec, 6.0, 0.95);
+  const { looking: lookingAtGate } = isLookingAtTarget(gateVec, 6.5, 0.95);
+  const distPlayerToPad = camera.position.distanceTo(padVec);
+  const distPlayerToGate = camera.position.distanceTo(gateVec);
 
-    if (!breakersFixed) {
-      triggerNotification(`Master Gate needs power! Fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired})`);
-      return;
-    }
+  const nearGateOrPad = lookingAtPad || lookingAtGate || distPlayerToPad < 3.5 || distPlayerToGate < 3.5;
 
+  if (nearGateOrPad) {
     if (!gateSolved) {
       if (window.securityLockoutActive) {
         const diff = window.securityLockoutEndTime - performance.now();
@@ -5428,7 +5453,12 @@ function checkInteractions() {
       return;
     }
 
-    if (insertedGateKeys.length >= 2 && breakersFixed) {
+    const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+    if (insertedGateKeys.length >= 2) {
+      if (!breakersFixed) {
+        triggerNotification(`Master Gate needs power! Fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to open door`);
+        return;
+      }
       // All conditions satisfied -> Escape victory!
       if (socketClient) {
         socketClient.emit('human_escaped', { id: socketClient.id });
@@ -5440,10 +5470,10 @@ function checkInteractions() {
         if (document.pointerLockElement) document.exitPointerLock();
         window.mobileGameActive = false;
       });
+      return;
     } else {
       triggerNotification(`Master Gate requires remaining twin key! (${insertedGateKeys.length}/2 installed: [${insertedGateKeys.join(', ') || 'None'}])`);
     }
-    return;
   }
 
   // 2. Check Key Interactions
@@ -5878,7 +5908,7 @@ function getKeypadDisplayString() {
 
 function openKeypadModal() {
   if (gateSolved) {
-    triggerNotification("Master Gate protocol already bypassed.");
+    triggerNotification("Master Gate cipher already bypassed.");
     return;
   }
   if (window.securityLockoutActive) {
@@ -5891,11 +5921,20 @@ function openKeypadModal() {
       return;
     }
   }
+  if (!keypadUI) {
+    setupKeypadListeners();
+  }
+  if (!keypadUI) {
+    keypadUI = document.getElementById('keypad-modal-ui');
+    keypadScreen = document.getElementById('keypad-screen-display');
+  }
   if (!keypadUI) return;
   keypadUI.style.display = 'flex';
-  document.exitPointerLock();
+  if (document.pointerLockElement) {
+    document.exitPointerLock();
+  }
   codeEntered = "";
-  keypadScreen.textContent = getKeypadDisplayString();
+  if (keypadScreen) keypadScreen.textContent = getKeypadDisplayString();
 }
 
 function setupKeypadListeners() {
