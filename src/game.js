@@ -570,8 +570,8 @@ export function loadGhostGLBAsset() {
 
   gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
     preloadedGhostModel = gltf.scene;
-    // Scale 1.2 ensures ghost is imposing (~2.4m tall) but fits comfortably inside corridors without clipping through walls or pillars
-    preloadedGhostModel.scale.set(1.2, 1.2, 1.2);
+    // Scale 1.6 provides a menacing, imposing presence (~3.2m tall) that fills the corridor while remaining comfortably within the 3.2m pillar clearance
+    preloadedGhostModel.scale.set(1.6, 1.6, 1.6);
 
     // Center the model's pivot point so it rotates in place instead of sweeping
     const box = new THREE.Box3().setFromObject(preloadedGhostModel);
@@ -579,7 +579,7 @@ export function loadGhostGLBAsset() {
 
     preloadedGhostModel.position.x = -center.x;
     preloadedGhostModel.position.z = -center.z;
-    preloadedGhostModel.position.y = -box.min.y + 0.2; // Hover slightly above ground
+    preloadedGhostModel.position.y = -box.min.y + 0.15; // Hover menacingly just above the red runner rug
     
     preloadedGhostModel.traverse((child) => {
       if (child.isMesh) {
@@ -8217,42 +8217,7 @@ function drawMinimap() {
     ctx.fill();
   }
 
-  // Draw Master Gate (Vault) Extraction Point
-  if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
-    const gc = (gateCoordinates.x / blockSize) + (totalCols / 2);
-    const gr = (gateCoordinates.z / blockSize) + (totalRows / 2);
-    
-    ctx.save();
-    ctx.translate(gc * cellSize, gr * cellSize);
-    
-    // Pulsing cyan radar beacon
-    const pulse = 0.8 + 0.25 * Math.sin(performance.now() * 0.004);
-    ctx.fillStyle = 'rgba(6, 182, 212, 0.35)';
-    ctx.beginPath();
-    ctx.arc(0, 0, cellSize * 1.15 * pulse, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Gold perimeter vault ring
-    ctx.strokeStyle = '#f59e0b';
-    ctx.lineWidth = Math.max(1.5, cellSize * 0.15);
-    ctx.beginPath();
-    ctx.arc(0, 0, cellSize * 0.65, 0, Math.PI * 2);
-    ctx.stroke();
 
-    // Solid cyan vault door disk
-    ctx.fillStyle = '#06b6d4';
-    ctx.beginPath();
-    ctx.arc(0, 0, cellSize * 0.52, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Inner vault lock core
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.arc(0, 0, cellSize * 0.22, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.restore();
-  }
 
   // Draw Light Sanctuaries (Feature 4: Warm Gold Lantern markers)
   if (typeof sanctuaryZones !== 'undefined') {
@@ -9329,43 +9294,9 @@ function animate() {
     }
   }
 
-  // Dynamic HUD Vault Waypoint Tracker
-  if (window.gameReady && typeof gateCoordinates !== 'undefined' && gateCoordinates && myTeam === 'Human') {
-    let vaultTrackerEl = document.getElementById('hud-vault-tracker');
-    if (!vaultTrackerEl) {
-      const statsBar = document.querySelector('.objective-inline-stats');
-      if (statsBar) {
-        vaultTrackerEl = document.createElement('span');
-        vaultTrackerEl.id = 'hud-vault-tracker';
-        vaultTrackerEl.style.cssText = 'color: #38bdf8; font-weight: bold; margin-left: 0.5rem; text-shadow: 0 0 6px rgba(56, 189, 248, 0.6);';
-        statsBar.appendChild(vaultTrackerEl);
-      }
-    }
-    if (vaultTrackerEl) {
-      const dx = gateCoordinates.x - camera.position.x;
-      const dz = gateCoordinates.z - camera.position.z;
-      const dist = Math.round(Math.hypot(dx, dz));
-      
-      if (dist <= 6) {
-        vaultTrackerEl.textContent = '📍 AT VAULT!';
-        vaultTrackerEl.style.color = '#10b981';
-      } else {
-        // Angle to vault relative to player's facing direction
-        const angleToVault = Math.atan2(dx, dz);
-        let diffAngle = angleToVault - camera.rotation.y;
-        while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
-        while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
-        
-        // Select 8-way arrow
-        const octant = Math.round(diffAngle / (Math.PI / 4));
-        const arrows = ['⬇', '↘', '➡', '↗', '⬆', '↖', '⬅', '↙'];
-        const arrow = arrows[(octant + 4) % 8];
-        
-        vaultTrackerEl.textContent = `📍 VAULT: ${dist}m ${arrow}`;
-        vaultTrackerEl.style.color = '#38bdf8';
-      }
-    }
-  }
+  // Ensure no lingering vault tracker element in HUD objective bar
+  const existingVaultTracker = document.getElementById('hud-vault-tracker');
+  if (existingVaultTracker) existingVaultTracker.remove();
 
   // Throttled Minimap & Cooldown Timers (60-144Hz canvas overdraw optimization)
   if (window.gameReady) {
