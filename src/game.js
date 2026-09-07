@@ -3648,19 +3648,60 @@ function generateMaze(keysCount = 8) {
   exitBeacon.position.set(0, 3.0, 0.7);
   vaultGroup.add(exitBeacon);
 
-  // 4. 3D Keypad Terminal mounted prominently on the front face of the right stone column
+  // 4. 3D Keypad Terminal Station (Grounded Gothic Cast-Iron Pedestal + Heavy Wall Anchor)
   const padGroup = new THREE.Group();
-  padGroup.position.set(2.42, 1.45, 0.62);
-  padGroup.rotation.y = -0.20; // Angled invitingly towards approaching player
+  padGroup.position.set(2.38, 0, 0.36);
+  padGroup.rotation.y = -0.15; // Angled invitingly towards approaching player
   vaultGroup.add(padGroup);
 
-  const padMountGeo = new THREE.BoxGeometry(0.42, 0.72, 0.12);
   const padMountMat = new THREE.MeshStandardMaterial({ color: 0x181e29, metalness: 0.8, roughness: 0.35 });
+
+  // A. Floor Base Flange Plate resting firmly on dungeon floor
+  const baseFlangeGeo = new THREE.BoxGeometry(0.44, 0.06, 0.44);
+  const baseFlangeMesh = new THREE.Mesh(baseFlangeGeo, padMountMat);
+  baseFlangeMesh.position.set(0, 0.03, 0);
+  baseFlangeMesh.receiveShadow = true;
+  padGroup.add(baseFlangeMesh);
+
+  // Four corner mounting flange bolts
+  const flangeBoltGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.025, 8);
+  [[-0.16, -0.16], [-0.16, 0.16], [0.16, -0.16], [0.16, 0.16]].forEach(([bx, bz]) => {
+    const bMesh = new THREE.Mesh(flangeBoltGeo, boltMat);
+    bMesh.position.set(bx, 0.065, bz);
+    padGroup.add(bMesh);
+  });
+
+  // B. Sturdy Cast-Iron Support Pedestal Column (eliminates vertical floating)
+  const pedestalPostGeo = new THREE.BoxGeometry(0.18, 1.05, 0.18);
+  const pedestalPostMesh = new THREE.Mesh(pedestalPostGeo, padMountMat);
+  pedestalPostMesh.position.set(0, 0.585, 0);
+  pedestalPostMesh.castShadow = true;
+  pedestalPostMesh.receiveShadow = true;
+  padGroup.add(pedestalPostMesh);
+
+  // Sub-console Capital Collar
+  const collarGeo = new THREE.BoxGeometry(0.36, 0.05, 0.28);
+  const collarMesh = new THREE.Mesh(collarGeo, padMountMat);
+  collarMesh.position.set(0, 1.135, 0);
+  padGroup.add(collarMesh);
+
+  // C. Keypad Console Head Housing
+  const padMountGeo = new THREE.BoxGeometry(0.42, 0.68, 0.16);
   const padMountMesh = new THREE.Mesh(padMountGeo, padMountMat);
-  padMountMesh.position.set(0, 0, 0);
+  padMountMesh.position.set(0, 1.48, 0);
+  padMountMesh.castShadow = true;
+  padMountMesh.receiveShadow = true;
   padGroup.add(padMountMesh);
 
-  const padGeo = new THREE.PlaneGeometry(0.38, 0.66);
+  // D. Heavy Wall Mounting Anchor Bracket (extends deeply into stone pillar masonry, eliminating rear air gap)
+  const wallBracketGeo = new THREE.BoxGeometry(0.26, 0.48, 0.44);
+  const wallBracketMesh = new THREE.Mesh(wallBracketGeo, padMountMat);
+  wallBracketMesh.position.set(0, 1.48, -0.22);
+  wallBracketMesh.castShadow = true;
+  padGroup.add(wallBracketMesh);
+
+  // E. Interactive Illuminated Keypad Interface Plane
+  const padGeo = new THREE.PlaneGeometry(0.38, 0.62);
   const padTex = getLoadedTexture('/assets/keypad.png', null, true);
   const padMat = new THREE.MeshStandardMaterial({
     map: padTex,
@@ -3670,19 +3711,24 @@ function generateMaze(keysCount = 8) {
     emissiveIntensity: 0.3
   });
   const padMesh = new THREE.Mesh(padGeo, padMat);
-  padMesh.position.set(0, 0, 0.07);
+  padMesh.position.set(0, 1.48, 0.082);
   padGroup.add(padMesh);
   padMeshRef = padMesh;
 
-  // Keypad LED Status Light on top of the mount
-  const ledGeo = new THREE.SphereGeometry(0.04, 12, 12);
+  // F. Keypad LED Status Light recessed into top bezel
+  const ledBezelGeo = new THREE.CylinderGeometry(0.045, 0.045, 0.025, 12);
+  const ledBezelMesh = new THREE.Mesh(ledBezelGeo, padMountMat);
+  ledBezelMesh.position.set(0, 1.835, 0.03);
+  padGroup.add(ledBezelMesh);
+
+  const ledGeo = new THREE.SphereGeometry(0.035, 12, 12);
   const ledMat = new THREE.MeshStandardMaterial({
     color: 0xef4444,
     emissive: 0xef4444,
     emissiveIntensity: 1.5
   });
   const ledMesh = new THREE.Mesh(ledGeo, ledMat);
-  ledMesh.position.set(0, 0.42, 0.05);
+  ledMesh.position.set(0, 1.85, 0.03);
   padGroup.add(ledMesh);
   gateKeypadLed = ledMesh;
 
