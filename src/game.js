@@ -689,67 +689,52 @@ export function attachForestToVault() {
   const forestClone = preloadedForestModel.clone(true);
   const scale = 0.025; // Clean metric normalization
   forestClone.scale.set(scale, scale, scale);
+  // Rotate 180 degrees so the natural foreground trail and lake face directly toward the vault doorway
+  forestClone.rotation.y = Math.PI;
 
-  // Compute exact bounding box and strictly anchor the forest behind the door in negative Z (Z <= -2.0m)
-  // This mathematically guarantees ZERO vertices ever enter the labyrinth or clip through the ceiling!
   const rawBox = new THREE.Box3().setFromObject(forestClone);
   const centerX = (rawBox.min.x + rawBox.max.x) / 2;
   const groundY = 830 * scale; // Align terrain floor to Y=0
-  const offsetZ = -rawBox.max.z - 2.0; // Strictly outside the doorway in -Z
+  // Position foreground right outside the doorway at Z <= -1.5m
+  const offsetZ = -rawBox.max.z - 1.5;
   forestClone.position.set(-centerX, -groundY, offsetZ);
+
+  // Optimize and enhance all forest meshes: double-sided foliage, alphaTest for crisp leaves, and proper speculars
+  forestClone.traverse(child => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      if (child.material) {
+        child.material.side = THREE.DoubleSide;
+        if (child.material.transparent) {
+          child.material.alphaTest = 0.35;
+          child.material.depthWrite = true;
+        }
+        if (child.material.roughness !== undefined) {
+          child.material.roughness = Math.min(child.material.roughness, 0.75);
+        }
+        if (child.material.metalness !== undefined) {
+          child.material.metalness = Math.min(child.material.metalness, 0.05);
+        }
+      }
+    }
+  });
+
   forestContainer.add(forestClone);
 
-  // Clearing apron leading from vault threshold into the woods
-  const clearingGeo = new THREE.PlaneGeometry(20, 24);
-  const clearingMat = new THREE.MeshStandardMaterial({
-    color: 0x1f3622,
-    roughness: 0.9,
-    metalness: 0.1
-  });
-  const clearingMesh = new THREE.Mesh(clearingGeo, clearingMat);
-  clearingMesh.rotation.x = -Math.PI / 2;
-  clearingMesh.position.set(0, 0.005, -14);
-  clearingMesh.receiveShadow = true;
-  forestContainer.add(clearingMesh);
-
-  // Warm sunlight beaming through the trees and into the doorway
-  const outdoorSun = new THREE.DirectionalLight(0xfffae8, 3.5);
-  outdoorSun.position.set(6, 26, -24);
-  outdoorSun.target.position.set(0, 1.5, 0);
+  // Warm, natural sunlight beaming down through the trees
+  const outdoorSun = new THREE.DirectionalLight(0xfffae5, 3.2);
+  outdoorSun.position.set(15, 35, -35);
+  outdoorSun.target.position.set(0, 1.5, -15);
   outdoorSun.visible = false;
   forestContainer.add(outdoorSun);
   forestContainer.add(outdoorSun.target);
 
-  // Forest canopy ambient sky reflection
-  const skyHemisphere = new THREE.HemisphereLight(0x88ccff, 0x1a3320, 1.6);
-  skyHemisphere.position.set(0, 30, -18);
+  // Soft sky & vegetation ambient fill light
+  const skyHemisphere = new THREE.HemisphereLight(0xbde2ff, 0x2e5c36, 2.4);
+  skyHemisphere.position.set(0, 35, -20);
   skyHemisphere.visible = false;
   forestContainer.add(skyHemisphere);
-
-  // Soft atmospheric sun shaft through trees into the open doorway
-  const shaftGeo = new THREE.CylinderGeometry(0.6, 3.8, 16, 16, 1, true);
-  const shaftMat = new THREE.MeshBasicMaterial({
-    color: 0xfff6d6,
-    transparent: true,
-    opacity: 0.2,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
-  });
-  const shaftMesh = new THREE.Mesh(shaftGeo, shaftMat);
-  shaftMesh.rotation.x = Math.PI / 2.7;
-  shaftMesh.position.set(0, 2.8, -5);
-  forestContainer.add(shaftMesh);
-
-  // Sky Backdrop Dome (twilight blue-green horizon)
-  const skyDomeGeo = new THREE.SphereGeometry(85, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-  const skyDomeMat = new THREE.MeshBasicMaterial({
-    color: 0x122933,
-    side: THREE.BackSide
-  });
-  const skyDome = new THREE.Mesh(skyDomeGeo, skyDomeMat);
-  skyDome.position.set(0, -6, -25);
-  forestContainer.add(skyDome);
 
   forestContainer.userData.outdoorSun = outdoorSun;
   forestContainer.userData.skyHemisphere = skyHemisphere;
@@ -3422,6 +3407,11 @@ function generateMaze(keysCount = 8) {
     else if (window.vaultEdge === 'S') { window.vaultR = mazeSize - 1; for (let i = centerCoord; i < mazeSize - 1; i++) layout[i][centerCoord] = 0; }
     else if (window.vaultEdge === 'E') { window.vaultR = centerCoord; window.vaultC = mazeSize - 1; for (let i = centerCoord; i < mazeSize - 1; i++) layout[centerCoord][i] = 0; }
     else if (window.vaultEdge === 'W') { window.vaultR = centerCoord; window.vaultC = 0; for (let i = 1; i <= centerCoord; i++) layout[centerCoord][i] = 0; }
+  }
+
+  // Clear the doorway cell in layout so collision allows passage
+  if (layout[window.vaultR] && layout[window.vaultR][window.vaultC] !== undefined) {
+    layout[window.vaultR][window.vaultC] = 0;
   }
 
   // 4. BFS Reachability Flood-Fill: Mathematically verify 100% of open maze cells are reachable from spawn
@@ -7436,11 +7426,29 @@ function playEscapeCinematic(callback) {
 
   overlay.style.display = 'block';
 
+  // Force clean first-person camera mode for cinematic presentation
+  currentViewIndex = 0;
+  if (activeViewCamera) {
+    scene.remove(activeViewCamera);
+    activeViewCamera = null;
+  }
+  if (localPlayerVisual) {
+    localPlayerVisual.visible = false;
+  }
+
   // Phase 1: Letterbox bars slide in (cinematic framing)
   setTimeout(() => {
     lbTop.style.top = '0';
     lbBottom.style.bottom = '0';
   }, 100);
+
+  // Position camera directly in front of the vault door facing straight at it
+  if (vaultGroupRef) {
+    const camStart = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, 3.4));
+    const camLookAt = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, -10.0));
+    camera.position.copy(camStart);
+    camera.lookAt(camLookAt);
+  }
 
   // Phase 2: Gate opens — slide the heavy door mesh up over 2.2 seconds
   if (gateMeshRef) {
@@ -7449,20 +7457,20 @@ function playEscapeCinematic(callback) {
     const startTime = performance.now();
     const duration = 2200;
 
-    // REVEAL 3D FOREST: The forest ONLY appears now as the vault door opens to escape!
+    // REVEAL 3D FOREST: The forest appears as the vault door opens to escape!
     if (forestSceneInstance) {
       forestSceneInstance.visible = true;
       if (forestSceneInstance.userData.outdoorSun) forestSceneInstance.userData.outdoorSun.visible = true;
       if (forestSceneInstance.userData.skyHemisphere) forestSceneInstance.userData.skyHemisphere.visible = true;
     }
 
-    // Atmospheric transition: dark dungeon fog opens into lush outdoor forest atmosphere
+    // Atmospheric transition: dark dungeon fog opens into crisp, expansive outdoor forest air
     if (scene.fog) {
-      scene.fog.color.setHex(0x182c22);
-      scene.fog.density = 0.0035; // Expansive clear view into the trees!
+      scene.fog.color.setHex(0xb2d8c0); // Soft natural sky horizon mist
+      scene.fog.density = 0.0018; // Wide, expansive sightlines
     }
     if (ambientLight) {
-      ambientLight.intensity = Math.max(ambientLight.intensity, 1.4);
+      ambientLight.intensity = Math.max(ambientLight.intensity, 1.8);
     }
     
     const animateGate = (now) => {
@@ -7472,6 +7480,11 @@ function playEscapeCinematic(callback) {
       const eased = 1 - Math.pow(1 - progress, 3);
       gateMeshRef.position.y = startY + (targetY - startY) * eased;
       
+      // Keep camera oriented straight through the opening doorway
+      if (vaultGroupRef) {
+        camera.lookAt(vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, -10.0)));
+      }
+
       // Rumble effect during opening
       if (progress < 1) {
         const rumble = (1 - progress) * 2.5;
@@ -7485,7 +7498,7 @@ function playEscapeCinematic(callback) {
     };
     requestAnimationFrame(animateGate);
 
-    // Remove the blocker so the player can conceptually walk through
+    // Remove the collision blocker
     if (gateBlockerRef) {
       setTimeout(() => {
         const idx = walls.indexOf(gateBlockerRef);
@@ -7495,44 +7508,31 @@ function playEscapeCinematic(callback) {
     }
   }
 
-  // Phase 3: Camera auto-walk forward out of the dungeon directly into the 3D Forest!
+  // Phase 3: Camera smoothly steps forward out of the dungeon directly into the 3D Forest!
   setTimeout(() => {
-    const walkDuration = 3200;
+    const walkDuration = 3400;
     const walkStart = performance.now();
-    const startX = camera.position.x;
-    const startZ = camera.position.z;
-    const startY = camera.position.y;
-    
-    // Direction from camera position straight through the gate into the forest
-    let dirX = gateCoordinates.x - startX;
-    let dirZ = gateCoordinates.z - startZ;
-    const len = Math.sqrt(dirX * dirX + dirZ * dirZ);
-    if (len > 0.001) {
-      dirX /= len;
-      dirZ /= len;
-    } else {
-      dirX = 0;
-      dirZ = -1;
-    }
 
-    // Step 12 units through the doorway directly into the trees and clearing
-    const walkTargetX = gateCoordinates.x + dirX * 12;
-    const walkTargetZ = gateCoordinates.z + dirZ * 12;
-    
     const walkAnim = (now) => {
       const elapsed = now - walkStart;
       const progress = Math.min(elapsed / walkDuration, 1);
-      const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2; // Ease in-out
-      
-      camera.position.x = startX + (walkTargetX - startX) * eased;
-      camera.position.z = startZ + (walkTargetZ - startZ) * eased;
-      // Gentle natural walking bob + camera tilts up to admire towering forest canopy
-      camera.position.y = startY + Math.sin(progress * Math.PI * 3) * 0.08;
-      
-      // Look forward into the forest and tilt up toward the sunlit canopy
-      const lookAhead = 16;
-      const lookUpY = 1.6 + eased * 2.2;
-      camera.lookAt(walkTargetX + dirX * lookAhead, lookUpY, walkTargetZ + dirZ * lookAhead);
+      // Smooth ease in-out
+      const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+      if (vaultGroupRef) {
+        // Walk from local Z = 3.4 through threshold Z = 0 out to Z = -14.0 in the open woods
+        const localZ = 3.4 + (-14.0 - 3.4) * eased;
+        const localY = 1.65 + Math.sin(progress * Math.PI * 3.5) * 0.05; // Gentle natural footsteps
+        const localCamPos = new THREE.Vector3(0, localY, localZ);
+        
+        // Look ahead into the trees and gently tilt up toward towering canopy
+        const lookZ = localZ - 18.0;
+        const lookY = 1.65 + eased * 2.0;
+        const localLookTarget = new THREE.Vector3(0, lookY, lookZ);
+
+        camera.position.copy(vaultGroupRef.localToWorld(localCamPos));
+        camera.lookAt(vaultGroupRef.localToWorld(localLookTarget));
+      }
 
       if (progress < 1) requestAnimationFrame(walkAnim);
     };
@@ -7541,11 +7541,11 @@ function playEscapeCinematic(callback) {
 
   // Phase 4: Soft warm sunlight flare at 4.6s (translucent so forest stays visible)
   setTimeout(() => {
-    flash.style.background = 'radial-gradient(circle, rgba(255,250,225,0.6) 0%, rgba(255,255,255,0.2) 70%, transparent 100%)';
-    flash.style.opacity = '0.55';
+    flash.style.background = 'radial-gradient(circle, rgba(255,250,225,0.45) 0%, rgba(255,255,255,0.15) 70%, transparent 100%)';
+    flash.style.opacity = '0.45';
     setTimeout(() => {
       flash.style.transition = 'opacity 1.5s ease';
-      flash.style.opacity = '0.12';
+      flash.style.opacity = '0.08';
     }, 400);
   }, 4600);
 
