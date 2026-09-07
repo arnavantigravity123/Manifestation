@@ -2181,6 +2181,8 @@ let dungeonRugGeoFull = null;
 let dungeonRugGeoHalf = null;
 let dungeonRugGeoDeadEnd = null;
 let dungeonRugCrestGeo = null;
+let dungeonRugGeoCorner = null;
+let dungeonRugGeoCornerArm = null;
 let dungeonRugMat = null;
 let dungeonProps = [];
 let dungeonPropColliders = []; // Solid collision for pillars (radius 0.60m) and statues (radius 0.80m)
@@ -2216,6 +2218,30 @@ function createSeamlessRugGeo(width = 2.0, length = 6.0) {
     // Sample strictly from single seamless velvet runner segment (safe margins, zero border bleed)
     uvAttr.setXY(i, 0.020 + u * (0.480 - 0.020), 0.770 + v * (0.970 - 0.770));
   }
+  uvAttr.needsUpdate = true;
+  return geo;
+}
+
+function createCornerRugGeo(width = 2.0) {
+  const geo = new THREE.PlaneGeometry(width, width);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, 0.02, 0);
+  const uvAttr = geo.attributes.uv;
+  
+  // Exact UV coordinates from CornerCorridor_Alfombra_0 in dungeon.glb:
+  // Maps the authentic L-turn corner with golden border & frayed outer edges
+  const uMin = 0.632, uMax = 0.994;
+  const vMin = 0.038, vMax = 0.387;
+  
+  // V0: (-w/2, 0, -w/2) -> North connection
+  uvAttr.setXY(0, uMin, vMax);
+  // V1: ( w/2, 0, -w/2) -> Outer North-East corner (turning point with gold trim)
+  uvAttr.setXY(1, uMax, vMax);
+  // V2: (-w/2, 0,  w/2) -> Inner South-West corner
+  uvAttr.setXY(2, uMin, vMin);
+  // V3: ( w/2, 0,  w/2) -> East connection
+  uvAttr.setXY(3, uMax, vMin);
+  
   uvAttr.needsUpdate = true;
   return geo;
 }
@@ -2304,9 +2330,11 @@ function createProceduralDungeonAssets() {
     { roughness: 0.8, metalness: 0.04, color: 0x888888, emissive: 0x000000, emissiveIntensity: 0.0 }
   );
 
-  // Seamless continuous velvet runner rugs (Full 6m, Half 3m, Dead-End 4.4m)
+  // Seamless continuous velvet runner rugs (Full 6m, Half 3m, Dead-End 4.4m, Corner Turn 2m, Corner Arm 2m)
   dungeonRugGeoFull = createSeamlessRugGeo(2.0, 6.0);
   dungeonRugGeoHalf = createSeamlessRugGeo(2.0, 3.0);
+  dungeonRugGeoCorner = createCornerRugGeo(2.0);
+  dungeonRugGeoCornerArm = createSeamlessRugGeo(2.0, 2.0);
   dungeonRugGeoDeadEnd = createSeamlessRugGeo(2.0, 4.4);
   dungeonRugGeo = dungeonRugGeoFull;
   dungeonRugCrestGeo = createCrestRugGeo(2.0, 6.0);
@@ -2459,9 +2487,11 @@ function loadDungeonPackAssets() {
       dungeonStatueGeo.computeVertexNormals();
       dungeonStatueMat = dungeonModules.statue.children[0].material;
     }
-    // Seamless continuous runner rug (Full 6m, Half 3m, Dead-End 4.4m, width 2.0m with zero horizontal yellow lines)
+    // Seamless continuous runner rug (Full 6m, Half 3m, Dead-End 4.4m, Corner Turn 2m, Corner Arm 2m)
     dungeonRugGeoFull = createSeamlessRugGeo(2.0, 6.0);
     dungeonRugGeoHalf = createSeamlessRugGeo(2.0, 3.0);
+    dungeonRugGeoCorner = createCornerRugGeo(2.0);
+    dungeonRugGeoCornerArm = createSeamlessRugGeo(2.0, 2.0);
     dungeonRugGeoDeadEnd = createSeamlessRugGeo(2.0, 4.4);
     dungeonRugGeo = dungeonRugGeoFull;
     dungeonRugCrestGeo = createCrestRugGeo(2.0, 6.0);
@@ -2855,7 +2885,34 @@ function spawnDungeonProps(layout, blockSize) {
           const isShrine = shrineCells.has(`${r},${c}`);
           const corridorRugGeo = isShrine ? (dungeonRugCrestGeo || dungeonRugGeoFull) : (dungeonRugGeoFull || dungeonRugGeo);
           const halfRugGeo = dungeonRugGeoHalf || dungeonRugGeo;
+          const cornerGeo = dungeonRugGeoCorner || dungeonRugGeoHalf;
+          const cornerArmGeo = dungeonRugGeoCornerArm || dungeonRugGeoHalf;
 
+          // Check if this is a 90-degree Corner Turn (openCount === 2 with perpendicular openings)
+          const isCorner = (openCount === 2) && !(northOpen && southOpen) && !(westOpen && eastOpen);
+
+          if (isCorner) {
+            if (northOpen && eastOpen) {
+              addRugTile(cornerGeo, rx, rz, 0);
+              addRugTile(cornerArmGeo, rx, rz - 2.0, 0);
+              addRugTile(cornerArmGeo, rx + 2.0, rz, Math.PI / 2);
+            } else if (southOpen && eastOpen) {
+              addRugTile(cornerGeo, rx, rz, -Math.PI / 2);
+              addRugTile(cornerArmGeo, rx, rz + 2.0, Math.PI);
+              addRugTile(cornerArmGeo, rx + 2.0, rz, Math.PI / 2);
+            } else if (southOpen && westOpen) {
+              addRugTile(cornerGeo, rx, rz, Math.PI);
+              addRugTile(cornerArmGeo, rx, rz + 2.0, Math.PI);
+              addRugTile(cornerArmGeo, rx - 2.0, rz, -Math.PI / 2);
+            } else if (northOpen && westOpen) {
+              addRugTile(cornerGeo, rx, rz, Math.PI / 2);
+              addRugTile(cornerArmGeo, rx, rz - 2.0, 0);
+              addRugTile(cornerArmGeo, rx - 2.0, rz, -Math.PI / 2);
+            }
+            continue;
+          }
+
+          // Straight corridors & Multi-branch Junctions (T-junctions & 4-way crosses)
           // North-South segment
           if (northOpen && southOpen) {
             addRugTile(corridorRugGeo, rx, rz, 0);
