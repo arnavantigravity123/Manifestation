@@ -3573,73 +3573,153 @@ function generateCircuitBreakers() {
   }
 }
 
+// Item Visual & Audio Configuration for 3D In-World Collectibles
+const ITEM_CONFIGS = {
+  'EMF Radar':        { tex: '/assets/emf_sprite.png',     haloColor: 0x38bdf8, emissive: 0x0284c7 },
+  'Battery Pack':     { tex: '/assets/battery_sprite.png', haloColor: 0xf59e0b, emissive: 0xd97706 },
+  'Thermal Camera':   { tex: '/assets/thermal_sprite.png', haloColor: 0xef4444, emissive: 0xdc2626 },
+  'Sanity Pills':     { tex: '/assets/pills_sprite.png',   haloColor: 0x10b981, emissive: 0x059669 },
+  'Med Kit':          { tex: '/assets/medkit_sprite.png',  haloColor: 0x22c55e, emissive: 0x16a34a },
+  'Salt Cannister':   { tex: '/assets/salt_sprite.png',    haloColor: 0xe2e8f0, emissive: 0x94a3b8 },
+  'Breaker Remote':   { tex: '/assets/remote_sprite.png',  haloColor: 0xa855f7, emissive: 0x9333ea },
+  'Adrenaline Shot':  { tex: '/assets/pills_sprite.png',   haloColor: 0xf97316, emissive: 0xea580c },
+  'Chalk / UV Spray': { tex: '/assets/salt_sprite.png',    haloColor: 0x06b6d4, emissive: 0x0891b2 },
+  'Defibrillator':    { tex: '/assets/medkit_sprite.png',  haloColor: 0xeab308, emissive: 0xca8a04 }
+};
+
+function disposeItemMesh(mesh) {
+  if (!mesh) return;
+  scene.remove(mesh);
+  mesh.traverse(child => {
+    if (child.isMesh) {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    }
+  });
+}
+
+function createItemPickupMesh(id, name, pos) {
+  const conf = ITEM_CONFIGS[name] || {
+    tex: '/assets/battery_sprite.png',
+    haloColor: 0x38bdf8,
+    emissive: 0x0284c7
+  };
+
+  const group = new THREE.Group();
+  group.name = `pickup_${id}`;
+  // Floating at eye-friendly y = 0.50 ensures it never clips into floor carpets (y = 0.02)
+  group.position.set(pos.x, 0.50, pos.z);
+
+  // 1. Ground pulsing halo ring on the carpet
+  const ringGeo = new THREE.RingGeometry(0.12, 0.45, 24);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: conf.haloColor,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.45,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = -0.47; // Local offset puts ring at world y = 0.03 (above carpet)
+  group.add(ring);
+
+  // 2. Floating 3D Item Badge / Cartridge
+  const badgeGroup = new THREE.Group();
+
+  // 2a. Industrial dark titanium frame/casing
+  const frameGeo = new THREE.BoxGeometry(0.52, 0.62, 0.06);
+  const frameMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    roughness: 0.35,
+    metalness: 0.8
+  });
+  const frame = new THREE.Mesh(frameGeo, frameMat);
+  badgeGroup.add(frame);
+
+  // 2b. Front and Back textured item display faces
+  const tex = getLoadedTexture(conf.tex);
+  const plateGeo = new THREE.PlaneGeometry(0.48, 0.58);
+  const plateMat = new THREE.MeshStandardMaterial({
+    map: tex,
+    roughness: 0.4,
+    metalness: 0.1,
+    emissive: conf.emissive,
+    emissiveIntensity: 0.30,
+    side: THREE.DoubleSide
+  });
+
+  const frontPlate = new THREE.Mesh(plateGeo, plateMat);
+  frontPlate.position.z = 0.032;
+  badgeGroup.add(frontPlate);
+
+  const backPlate = new THREE.Mesh(plateGeo, plateMat);
+  backPlate.position.z = -0.032;
+  backPlate.rotation.y = Math.PI;
+  badgeGroup.add(backPlate);
+
+  badgeGroup.rotation.y = Math.random() * Math.PI * 2;
+  group.add(badgeGroup);
+
+  group.userData.badge = badgeGroup;
+  group.userData.ring = ring;
+  group.userData.bobOffset = Math.random() * Math.PI * 2;
+
+  scene.add(group);
+  return group;
+}
+
 function generateConsumableItems() {
   itemsInMaze.forEach(item => {
-    scene.remove(item.mesh);
-    if (item.mesh.geometry) item.mesh.geometry.dispose();
-    if (item.mesh.material) item.mesh.material.dispose();
+    disposeItemMesh(item.mesh);
   });
   itemsInMaze = [];
 
-  const itemTypes = [
-    { name: 'Battery Pack', map: getLoadedTexture('/assets/battery_sprite.png') },
-    { name: 'EMF Radar', map: getLoadedTexture('/assets/emf_sprite.png') },
-    { name: 'Thermal Camera', map: getLoadedTexture('/assets/thermal_sprite.png') },
-    { name: 'Sanity Pills', map: getLoadedTexture('/assets/pills_sprite.png') },
-    { name: 'Med Kit', map: getLoadedTexture('/assets/medkit_sprite.png') },
-    { name: 'Salt Cannister', map: getLoadedTexture('/assets/salt_sprite.png') },
-    { name: 'Breaker Remote', map: getLoadedTexture('/assets/remote_sprite.png') }
-  ];
-
   // Guaranteed essential items + random utility loot
   const itemsToSpawn = [
-    itemTypes[1], // EMF
-    itemTypes[2], // Thermal
-    itemTypes[6], // Breaker Remote
-    itemTypes[0], // Battery Pack 1
-    itemTypes[0], // Battery Pack 2
-    itemTypes[0], // Battery Pack 3
-    itemTypes[0], // Battery Pack 4
-    itemTypes[0], // Battery Pack 5
-    itemTypes[0]  // Battery Pack 6
+    'EMF Radar',
+    'Thermal Camera',
+    'Breaker Remote',
+    'Battery Pack',
+    'Battery Pack',
+    'Battery Pack',
+    'Battery Pack',
+    'Battery Pack',
+    'Battery Pack'
   ];
   for (let i = 0; i < 10; i++) {
     const rand = seededRandom();
     if (rand > 0.7) {
-      itemsToSpawn.push(itemTypes[0]); // Extra Battery
+      itemsToSpawn.push('Battery Pack'); // Extra Battery
     } else if (rand > 0.4) {
-      itemsToSpawn.push(itemTypes[3]); // Sanity Pills
+      itemsToSpawn.push('Sanity Pills'); // Sanity Pills
     } else if (rand > 0.2) {
-      itemsToSpawn.push(itemTypes[4]); // Med Kit
+      itemsToSpawn.push('Med Kit'); // Med Kit
     } else {
-      itemsToSpawn.push(itemTypes[5]); // Salt Cannister
+      itemsToSpawn.push('Salt Cannister'); // Salt Cannister
     }
   }
 
-  itemsToSpawn.forEach((type, idx) => {
-    const spriteMat = new THREE.SpriteMaterial({ 
-      map: type.map, 
-      color: 0xffffff,
-      fog: true,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-    const mesh = new THREE.Sprite(spriteMat);
-    mesh.scale.set(0.6, 0.6, 1);
-
+  itemsToSpawn.forEach((name, idx) => {
     // Pick unique un-occupied corridor cell
     const available = shuffleArray(getAvailableCorridors(4.0));
     const corr = available.length > 0 ? available[0] : (openCorridors[idx % openCorridors.length] || { x: 0, z: 0 });
 
-    mesh.position.set(corr.x, 0.35, corr.z);
-    scene.add(mesh);
+    const itemId = 'item_' + seededRandom().toString(36).substr(2, 9);
+    const mesh = createItemPickupMesh(itemId, name, corr);
 
-    claimSpawnLocation(corr.x, corr.z, 4.0, `Item_${type.name}`);
+    claimSpawnLocation(corr.x, corr.z, 4.0, `Item_${name}`);
     itemsInMaze.push({
-      id: 'item_' + seededRandom().toString(36).substr(2, 9),
+      id: itemId,
       mesh: mesh,
-      name: type.name
+      name: name
     });
   });
 }
@@ -4796,9 +4876,7 @@ function checkInteractions() {
       const emptyIndex = inventory.indexOf('');
       if (emptyIndex !== -1) {
         inventory[emptyIndex] = item.name;
-        scene.remove(item.mesh);
-        if (item.mesh.geometry) item.mesh.geometry.dispose();
-        if (item.mesh.material) item.mesh.material.dispose();
+        disposeItemMesh(item.mesh);
         itemsInMaze.splice(i, 1);
         if (window.socket) window.socket.emit('item_picked_up', { id: item.id });
         triggerNotification(`Picked up ${item.name}`);
@@ -5217,33 +5295,7 @@ function dropActiveItem() {
 }
 
 function spawnDroppedItemLocal(id, name, pos) {
-  let texPath = '';
-  if (name === 'Battery Pack') texPath = '/assets/battery_sprite.png';
-  else if (name === 'EMF Radar') texPath = '/assets/emf_sprite.png';
-  else if (name === 'Thermal Camera') texPath = '/assets/thermal_sprite.png';
-  else if (name === 'Sanity Pills') texPath = '/assets/pills_sprite.png';
-  else if (name === 'Med Kit') texPath = '/assets/medkit_sprite.png';
-  else if (name === 'Salt Cannister') texPath = '/assets/salt_sprite.png';
-  else if (name === 'Breaker Remote') texPath = '/assets/remote_sprite.png';
-  else if (name === 'Adrenaline Shot') texPath = '/assets/pills_sprite.png';
-  else if (name === 'Chalk / UV Spray') texPath = '/assets/salt_sprite.png';
-  else if (name === 'Defibrillator') texPath = '/assets/medkit_sprite.png';
-  else texPath = '/assets/battery_sprite.png'; // Safe fallback for any new item
-
-  const spriteMat = new THREE.SpriteMaterial({ 
-    map: getLoadedTexture(texPath), 
-    color: 0xffffff,
-    fog: true,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false
-  });
-  const mesh = new THREE.Sprite(spriteMat);
-  mesh.scale.set(0.65, 0.65, 1);
-  
-  mesh.position.copy(pos);
-  mesh.position.y = 0.35; // ensure it is on floor
-  scene.add(mesh);
+  const mesh = createItemPickupMesh(id, name, pos);
 
   itemsInMaze.push({
     id: id,
@@ -6413,9 +6465,7 @@ function setupSocketListeners() {
     const index = itemsInMaze.findIndex(item => item.id === id);
     if (index !== -1) {
       const itemMesh = itemsInMaze[index].mesh;
-      scene.remove(itemMesh);
-      if (itemMesh.geometry) itemMesh.geometry.dispose();
-      if (itemMesh.material) itemMesh.material.dispose();
+      disposeItemMesh(itemMesh);
       itemsInMaze.splice(index, 1);
     }
   });
@@ -7753,6 +7803,35 @@ function animate() {
         child.position.y = 0.35 + Math.sin(t + idx * 0.4) * 0.08;
       }
     });
+  }
+
+  // Floating hover & smooth rotation for 3D maze items (EMF, batteries, cameras, etc.)
+  if (itemsInMaze && itemsInMaze.length > 0) {
+    const t = time * 0.003;
+    for (let i = 0; i < itemsInMaze.length; i++) {
+      const it = itemsInMaze[i];
+      if (!it || !it.mesh) continue;
+      if (it.mesh.userData && it.mesh.userData.badge) {
+        it.mesh.userData.badge.rotation.y = time * 0.0018 + i;
+        it.mesh.userData.badge.position.y = Math.sin(t + (it.mesh.userData.bobOffset || i)) * 0.05;
+        if (it.mesh.userData.ring && it.mesh.userData.ring.material) {
+          it.mesh.userData.ring.material.opacity = 0.35 + Math.sin(time * 0.004 + i) * 0.15;
+        }
+      } else {
+        it.mesh.rotation.y = time * 0.0018 + i;
+      }
+    }
+  }
+
+  // Gentle hover & rotation for maze keys
+  if (keysInMaze && keysInMaze.length > 0) {
+    const t = time * 0.003;
+    for (let i = 0; i < keysInMaze.length; i++) {
+      const k = keysInMaze[i];
+      if (!k || !k.mesh) continue;
+      k.mesh.rotation.y = time * 0.002 + i;
+      k.mesh.position.y = 0.45 + Math.sin(t + i * 0.8) * 0.05;
+    }
   }
 
   const isActive = isMobileDevice ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) : (Boolean(document.pointerLockElement) && (!isCaptured || window.isSpectating));
