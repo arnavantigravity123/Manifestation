@@ -3493,32 +3493,6 @@ function generateMaze(keysCount = 8) {
           wallMesh.receiveShadow = true;
         }
 
-        // Distinct 3D Visual Cues: Iron reinforcement crossbeams across sliding door
-        const ironMat = new THREE.MeshStandardMaterial({
-          color: 0x23272e,
-          roughness: 0.4,
-          metalness: 0.85
-        });
-        if (isDungeon && dungeonModules.wall) {
-          // Local space of dungeon wall module: X is width, Y is height, Z is thickness
-          [0.65, 1.35].forEach(by => {
-            const braceGeo = new THREE.BoxGeometry(3.1, 0.11, 0.58);
-            const braceMesh = new THREE.Mesh(braceGeo, ironMat);
-            braceMesh.position.set(0, by, 0);
-            braceMesh.castShadow = true;
-            wallMesh.add(braceMesh);
-          });
-        } else {
-          const bw = isEW ? 0.82 : blockSize;
-          const bd = isEW ? blockSize : 0.82;
-          [1.1, 2.3].forEach(by => {
-            const braceGeo = new THREE.BoxGeometry(bw, 0.18, bd);
-            const braceMesh = new THREE.Mesh(braceGeo, ironMat);
-            braceMesh.position.set(0, by, 0);
-            braceMesh.castShadow = true;
-            wallMesh.add(braceMesh);
-          });
-        }
 
         // Floor sliding trackway plate embedded in the corridor floor
         const trackGeo = new THREE.PlaneGeometry(isEW ? 0.9 : (blockSize + 0.1), isEW ? (blockSize + 0.1) : 0.9);
