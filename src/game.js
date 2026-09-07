@@ -1674,9 +1674,23 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     fixedBreakersCount = totalBreakersRequired;
     circuitBreakers.forEach(b => {
       b.isFixed = true;
-      if (b.mesh && b.mesh.material) {
-        b.mesh.material.color.setHex(0x10b981);
-        b.mesh.material.emissive = new THREE.Color(0x10b981);
+      if (b.mesh) {
+        if (b.mesh.userData && b.mesh.userData.ledMesh) {
+          b.mesh.userData.ledMesh.material.color.setHex(0x10b981);
+          b.mesh.userData.ledMesh.material.emissive.setHex(0x10b981);
+        }
+        if (b.mesh.userData && b.mesh.userData.statusLight) {
+          b.mesh.userData.statusLight.color.setHex(0x10b981);
+        }
+        if (b.mesh.material) {
+          if (Array.isArray(b.mesh.material)) {
+            b.mesh.material.forEach(m => {
+              if (m.map) m.color.setHex(0xdcfce7);
+            });
+          } else {
+            b.mesh.material.color.setHex(0x10b981);
+          }
+        }
       }
     });
     updateEnvironmentLighting();
@@ -4317,7 +4331,24 @@ function setupControls() {
           // Also visually mark all breakers as fixed
           circuitBreakers.forEach(b => {
             b.isFixed = true;
-            b.mesh.material.color.setHex(0x10b981);
+            if (b.mesh) {
+              if (b.mesh.userData && b.mesh.userData.ledMesh) {
+                b.mesh.userData.ledMesh.material.color.setHex(0x10b981);
+                b.mesh.userData.ledMesh.material.emissive.setHex(0x10b981);
+              }
+              if (b.mesh.userData && b.mesh.userData.statusLight) {
+                b.mesh.userData.statusLight.color.setHex(0x10b981);
+              }
+              if (b.mesh.material) {
+                if (Array.isArray(b.mesh.material)) {
+                  b.mesh.material.forEach(m => {
+                    if (m.map) m.color.setHex(0xdcfce7);
+                  });
+                } else {
+                  b.mesh.material.color.setHex(0x10b981);
+                }
+              }
+            }
           });
           updateEnvironmentLighting();
 
