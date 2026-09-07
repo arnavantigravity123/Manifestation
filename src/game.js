@@ -4388,9 +4388,7 @@ function setupControls() {
           if (typeof socketClient !== 'undefined') socketClient.emit('try_cipher', codeEntered);
           keypadUI.style.display = 'none';
           codeEntered = '';
-          const ptrOverlay = document.getElementById('pointer-lock-overlay');
-          if (ptrOverlay && !window.isMobileDevice) {
-            ptrOverlay.style.display = 'flex';
+          if (!window.isMobileDevice && window.gameReady && !isCaptured) {
             (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
           }
         }
@@ -4485,6 +4483,9 @@ function setupControls() {
           if (mapCtrl) mapCtrl.style.display = 'none';
           if (topCls) topCls.style.display = 'none';
           if (ttlTxt) ttlTxt.textContent = 'MINIMAP (Press M / Tap)';
+          if (!window.isMobileDevice && window.gameReady && !isCaptured) {
+            (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
+          }
           drawMinimap();
         }
         break;
@@ -5788,9 +5789,7 @@ function setupKeypadListeners() {
   const closeKeypad = () => {
     keypadUI.style.display = 'none';
     codeEntered = '';
-    const ptrOverlay = document.getElementById('pointer-lock-overlay');
-    if (ptrOverlay && !window.isMobileDevice) {
-      ptrOverlay.style.display = 'flex';
+    if (!window.isMobileDevice && window.gameReady && !isCaptured) {
       (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
     }
   };
@@ -7363,6 +7362,24 @@ function playEscapeCinematic(callback) {
 // ==========================================
 function playGhostCaptureAnimation(callback) {
   window.isCapturedAnimation = true;
+
+  // Dismiss in-game interactive modals so the capture jumpscare and cinematic are fully visible
+  if (typeof keypadUI !== 'undefined' && keypadUI) {
+    keypadUI.style.display = 'none';
+    codeEntered = '';
+  }
+  if (isMinimapExpanded) {
+    isMinimapExpanded = false;
+    const mapWrap = document.getElementById('minimap-wrapper');
+    const mapCtrl = document.getElementById('minimap-expanded-controls');
+    const topCls = document.getElementById('minimap-top-close-btn');
+    const ttlTxt = document.getElementById('minimap-title-text');
+    if (mapWrap) mapWrap.classList.remove('expanded');
+    if (mapCtrl) mapCtrl.style.display = 'none';
+    if (topCls) topCls.style.display = 'none';
+    if (ttlTxt) ttlTxt.textContent = 'MINIMAP (Press M / Tap)';
+  }
+
   const overlay = document.getElementById('ghost-capture-overlay');
   const vignette = document.getElementById('ghost-capture-vignette');
   const captureText = document.getElementById('ghost-capture-text');
@@ -8461,17 +8478,43 @@ function animate() {
     }
   }
 
-  const isActive = isMobileDevice ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) : (Boolean(document.pointerLockElement) && (!isCaptured || window.isSpectating));
+  const isKeypadOpen = Boolean(typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none');
+  const isMinimapOpen = Boolean(isMinimapExpanded);
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  const isPauseMenuOpen = Boolean(ptrOverlay && ptrOverlay.style.display === 'flex');
 
-  // Solo Offline Matches: Truly PAUSE game simulation when menu/pause is open.
-  // Multiplayer Lobbies: Never freeze match, simulation keeps running live in the background!
+  // Interactive overlays (keypad terminal cipher, tactical minimap) are live in-game actions:
+  // AI ghosts must continue pathfinding, stalking, and attacking even while the player views these overlays!
+  const isInteractiveOverlay = isKeypadOpen || isMinimapOpen;
+
+  // Solo Offline Matches: Truly PAUSE game simulation ONLY when the dedicated pause menu is open.
+  // Never pause for in-game interactive terminals or tactical map, and never in multiplayer!
   const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
-  const isSoloPaused = !isMultiplayer && !isActive && !window.isSpectating && window.gameReady;
+  const isSoloPaused = !isMultiplayer && isPauseMenuOpen && !isInteractiveOverlay && !window.isSpectating && window.gameReady;
 
   if (isSoloPaused) {
     if (activeViewCamera) renderer.render(scene, activeViewCamera);
     else renderer.render(scene, camera);
     return;
+  }
+
+  // Active controls: on desktop, allow movement physics if pointer lock is active OR if interacting with minimap
+  const isActive = isMobileDevice 
+    ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) 
+    : ((Boolean(document.pointerLockElement) || isMinimapOpen) && (!isCaptured || window.isSpectating));
+
+  // Auto-close keypad if player moves away from the terminal station (> 4.0m)
+  if (isKeypadOpen && gateKeypadLed) {
+    const distToKeypad = camera.position.distanceTo(gateKeypadLed.position);
+    if (distToKeypad > 4.0) {
+      if (typeof keypadUI !== 'undefined' && keypadUI) {
+        keypadUI.style.display = 'none';
+        codeEntered = '';
+        if (!window.isMobileDevice && window.gameReady && !isCaptured) {
+          (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
+        }
+      }
+    }
   }
 
   if (isActive) {
@@ -8831,6 +8874,13 @@ function animate() {
         currentHP = Math.max(0, currentHP - delta * 45);
         document.getElementById('hp-value').textContent = `${Math.ceil(currentHP)} HP`;
         document.getElementById('hp-bar').style.width = `${currentHP}%`;
+
+        if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') {
+          if (!window._lastKeypadWarn || performance.now() - window._lastKeypadWarn > 1500) {
+            window._lastKeypadWarn = performance.now();
+            triggerNotification("⚠️ DANGER: HOSTILE ATTACKING! DISENGAGE TERMINAL!");
+          }
+        }
         
         if (currentHP <= 0 && !isCaptured) {
           isCaptured = true;
