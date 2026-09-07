@@ -1297,7 +1297,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   }
 
   const handleEnterGame = (e) => {
-    if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
+    const keypadEl = document.getElementById('keypad-modal-ui');
+    if (keypadEl && keypadEl.style.display !== 'none') return;
     if (isMinimapExpanded) return;
     window.mobileGameActive = true;
     window.gameReady = true;
@@ -1346,7 +1347,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   window.requestGamePointerLock = () => {
     if (isMobileDevice || !window.gameReady || window.isSpectating) return;
     if (document.pointerLockElement) return;
-    if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
+    const keypadEl = document.getElementById('keypad-modal-ui');
+    if (keypadEl && keypadEl.style.display !== 'none') return;
     if (isMinimapExpanded) return;
     const capturedEl = document.getElementById('captured-overlay');
     const endEl = document.getElementById('end-game-overlay');
@@ -1366,12 +1368,16 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
 
   // Global click & pointerdown to relock mouse anytime player clicks during gameplay
   window.addEventListener('click', (e) => {
+    const keypadEl = document.getElementById('keypad-modal-ui');
+    if (keypadEl && keypadEl.style.display !== 'none') return;
     if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel')) return;
     if (ptrOverlay.style.display !== 'flex') {
       window.requestGamePointerLock();
     }
   });
   window.addEventListener('pointerdown', (e) => {
+    const keypadEl = document.getElementById('keypad-modal-ui');
+    if (keypadEl && keypadEl.style.display !== 'none') return;
     if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel')) return;
     if (ptrOverlay.style.display !== 'flex') {
       window.requestGamePointerLock();
@@ -1384,7 +1390,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
       ptrOverlay.style.display = 'none';
     } else {
       // Don't show pause overlay if keypad modal, minimap, or game-over is open
-      if ((typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') || isMinimapExpanded) {
+      const keypadEl = document.getElementById('keypad-modal-ui');
+      const isKeypadOpen = Boolean(keypadEl && keypadEl.style.display !== 'none');
+      if (isKeypadOpen || isMinimapExpanded) {
         ptrOverlay.style.display = 'none';
       } else if (
         (document.getElementById('captured-overlay') && document.getElementById('captured-overlay').style.display === 'flex') ||
@@ -4491,24 +4499,24 @@ function setupControls() {
   const container = document.getElementById('canvas-container');
   const onKeyDown = (event) => {
     // If keypad is open, intercept numeric keys and backspace
-    if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') {
+    const activeKeypad = document.getElementById('keypad-modal-ui');
+    const isKeypadOpen = Boolean(activeKeypad && activeKeypad.style.display !== 'none');
+    if (isKeypadOpen) {
       if (event.code.startsWith('Digit') || event.code.startsWith('Numpad')) {
         const num = event.code.replace('Digit', '').replace('Numpad', '');
         if (num.length === 1 && num >= '0' && num <= '9') {
           if (codeEntered.length < 4) {
             codeEntered += num;
-            if (typeof keypadScreen !== 'undefined') {
-              keypadScreen.textContent = getKeypadDisplayString();
-            }
+            const scr = document.getElementById('keypad-screen-display');
+            if (scr) scr.textContent = getKeypadDisplayString();
           }
           return; // Prevent other actions like changing inventory
         }
       } else if (event.key === 'Backspace') {
         if (codeEntered.length > 0) {
           codeEntered = codeEntered.slice(0, -1);
-          if (typeof keypadScreen !== 'undefined') {
-            keypadScreen.textContent = getKeypadDisplayString();
-          }
+          const scr = document.getElementById('keypad-screen-display');
+          if (scr) scr.textContent = getKeypadDisplayString();
         }
         return;
       } else if (event.key === 'Enter') {
@@ -4516,10 +4524,10 @@ function setupControls() {
           if (typeof triggerNotification === 'function') triggerNotification("Enter all 4 digits first.");
         } else {
           if (typeof socketClient !== 'undefined') socketClient.emit('try_cipher', codeEntered);
-          keypadUI.style.display = 'none';
+          if (activeKeypad) activeKeypad.style.display = 'none';
           codeEntered = '';
-          if (!window.isMobileDevice && window.gameReady && !isCaptured) {
-            (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
+          if (!window.isMobileDevice && window.gameReady && !isCaptured && window.requestGamePointerLock) {
+            window.requestGamePointerLock();
           }
         }
         return;
@@ -4771,6 +4779,13 @@ function setupControls() {
   document.addEventListener('mousedown', (e) => {
     window._lastMouseX = e.clientX;
     window._lastMouseY = e.clientY;
+
+    const keypadModalEl = document.getElementById('keypad-modal-ui');
+    const isKeypadOpen = Boolean(keypadModalEl && keypadModalEl.style.display !== 'none');
+    if (isKeypadOpen || e.target.closest('.keypad-modal')) {
+      return; // Never relock mouse or use inventory items while using the keypad terminal
+    }
+
     if (!document.pointerLockElement && window.gameReady && !isCaptured && window.requestGamePointerLock) {
       window.requestGamePointerLock();
     }
@@ -4795,7 +4810,8 @@ function setupControls() {
     if ((!hasLock && e.buttons !== 1 && !window.gameReady) || (isCaptured && !window.isSpectating)) return;
     const ptrOverlay = document.getElementById('pointer-lock-overlay');
     if (ptrOverlay && ptrOverlay.style.display === 'flex') return;
-    if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') return;
+    const keypadModalEl = document.getElementById('keypad-modal-ui');
+    if (keypadModalEl && keypadModalEl.style.display !== 'none') return;
     if (isMinimapExpanded) return;
 
     let mx = e.movementX;
@@ -5921,20 +5937,24 @@ function openKeypadModal() {
       return;
     }
   }
-  if (!keypadUI) {
-    setupKeypadListeners();
-  }
-  if (!keypadUI) {
-    keypadUI = document.getElementById('keypad-modal-ui');
-    keypadScreen = document.getElementById('keypad-screen-display');
-  }
-  if (!keypadUI) return;
-  keypadUI.style.display = 'flex';
-  if (document.pointerLockElement) {
-    document.exitPointerLock();
-  }
+  const modal = document.getElementById('keypad-modal-ui');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  keypadUI = modal;
+  keypadScreen = document.getElementById('keypad-screen-display');
   codeEntered = "";
   if (keypadScreen) keypadScreen.textContent = getKeypadDisplayString();
+
+  // Hide pause overlay if it happened to be open
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  if (ptrOverlay) ptrOverlay.style.display = 'none';
+
+  // Release pointer lock so desktop player has visible cursor to tap digits
+  if (document.pointerLockElement) {
+    try {
+      document.exitPointerLock();
+    } catch (_) {}
+  }
 }
 
 function setupKeypadListeners() {
@@ -5948,10 +5968,11 @@ function setupKeypadListeners() {
   if (!keypadUI) return; // guard: element not in DOM yet
 
   const closeKeypad = () => {
-    keypadUI.style.display = 'none';
+    const modal = document.getElementById('keypad-modal-ui');
+    if (modal) modal.style.display = 'none';
     codeEntered = '';
-    if (!window.isMobileDevice && window.gameReady && !isCaptured) {
-      (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
+    if (!window.isMobileDevice && window.gameReady && !isCaptured && window.requestGamePointerLock) {
+      window.requestGamePointerLock();
     }
   };
 
@@ -8667,7 +8688,8 @@ function animate() {
     }
   }
 
-  const isKeypadOpen = Boolean(typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none');
+  const keypadModalEl = document.getElementById('keypad-modal-ui');
+  const isKeypadOpen = Boolean(keypadModalEl && keypadModalEl.style.display !== 'none');
   const isMinimapOpen = Boolean(isMinimapExpanded);
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
   const isPauseMenuOpen = Boolean(ptrOverlay && ptrOverlay.style.display === 'flex');
@@ -8692,15 +8714,18 @@ function animate() {
     ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) 
     : ((Boolean(document.pointerLockElement) || isMinimapOpen) && (!isCaptured || window.isSpectating));
 
-  // Auto-close keypad if player moves away from the terminal station (> 4.0m)
-  if (isKeypadOpen && gateKeypadLed) {
-    const distToKeypad = camera.position.distanceTo(gateKeypadLed.position);
-    if (distToKeypad > 4.0) {
-      if (typeof keypadUI !== 'undefined' && keypadUI) {
-        keypadUI.style.display = 'none';
+  // Auto-close keypad if player moves away from the terminal station (> 5.5m)
+  if (isKeypadOpen) {
+    const padTarget = (gateKeypadWorldPos && gateKeypadWorldPos.lengthSq() > 0)
+      ? gateKeypadWorldPos
+      : new THREE.Vector3(gateCoordinates.x, 1.5, gateCoordinates.z);
+    const distToKeypad = camera.position.distanceTo(padTarget);
+    if (distToKeypad > 5.5) {
+      if (keypadModalEl) {
+        keypadModalEl.style.display = 'none';
         codeEntered = '';
-        if (!window.isMobileDevice && window.gameReady && !isCaptured) {
-          (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
+        if (!window.isMobileDevice && window.gameReady && !isCaptured && window.requestGamePointerLock) {
+          window.requestGamePointerLock();
         }
       }
     }
@@ -9064,7 +9089,8 @@ function animate() {
         document.getElementById('hp-value').textContent = `${Math.ceil(currentHP)} HP`;
         document.getElementById('hp-bar').style.width = `${currentHP}%`;
 
-        if (typeof keypadUI !== 'undefined' && keypadUI && keypadUI.style.display !== 'none') {
+        const activeKeypadModal = document.getElementById('keypad-modal-ui');
+        if (activeKeypadModal && activeKeypadModal.style.display !== 'none') {
           if (!window._lastKeypadWarn || performance.now() - window._lastKeypadWarn > 1500) {
             window._lastKeypadWarn = performance.now();
             triggerNotification("⚠️ DANGER: HOSTILE ATTACKING! DISENGAGE TERMINAL!");
