@@ -731,31 +731,33 @@ export function attachForestToVault() {
   trailMesh.receiveShadow = true;
   forestContainer.add(trailMesh);
 
-  // 3. Multi-tiered Conifer Pine Tree Generator
+  // 3. Realistic Cascading Conifer Pine Tree Generator
   function createPineTree(height, radius) {
     const tree = new THREE.Group();
-    const trunkH = height * 0.32;
-    const trunkGeo = new THREE.CylinderGeometry(radius * 0.16, radius * 0.26, trunkH, 7);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x342012, roughness: 0.9 });
+    const trunkH = height * 0.42;
+    const trunkGeo = new THREE.CylinderGeometry(radius * 0.12, radius * 0.22, trunkH, 10);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2716, roughness: 0.95 });
     const trunk = new THREE.Mesh(trunkGeo, trunkMat);
     trunk.position.y = trunkH / 2;
     trunk.castShadow = true;
     tree.add(trunk);
 
-    const tiers = 4;
-    const foliageColors = [0x153b1b, 0x1d4d24, 0x26602e, 0x307539];
+    // 5 cascading conical foliage tiers with natural evergreen slope
+    const tiers = 5;
+    const foliageColors = [0x143818, 0x1a461e, 0x225527, 0x2b6732, 0x35783d];
     for (let t = 0; t < tiers; t++) {
-      const progress = t / (tiers - 1);
-      const coneR = radius * (1.0 - progress * 0.52);
-      const coneH = (height * 0.32) * (1.0 - progress * 0.18);
-      const coneGeo = new THREE.ConeGeometry(coneR, coneH, 7);
+      const p = t / (tiers - 1);
+      const coneR = radius * (1.0 - p * 0.65);
+      const coneH = (height * 0.28) * (1.0 - p * 0.2);
+      const coneGeo = new THREE.ConeGeometry(coneR, coneH, 10);
       const coneMat = new THREE.MeshStandardMaterial({
         color: foliageColors[t],
-        roughness: 0.78,
-        metalness: 0.02
+        roughness: 0.75,
+        metalness: 0.02,
+        flatShading: true // Crisp evergreen facet lighting
       });
       const cone = new THREE.Mesh(coneGeo, coneMat);
-      cone.position.y = trunkH * 0.65 + t * (height * 0.19);
+      cone.position.y = trunkH * 0.45 + t * (height * 0.15) + coneH / 2;
       cone.castShadow = true;
       cone.receiveShadow = true;
       tree.add(cone);
@@ -765,55 +767,63 @@ export function attachForestToVault() {
 
   // 4. Distant Mountain Silhouette Peaks
   function createMountain(width, height, color) {
-    const mGeo = new THREE.ConeGeometry(width / 2, height, 5);
-    const mMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.95 });
+    const mGeo = new THREE.ConeGeometry(width / 2, height, 6);
+    const mMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.95, flatShading: true });
     const mesh = new THREE.Mesh(mGeo, mMat);
     mesh.position.y = height / 2;
     return mesh;
   }
 
-  const m1 = createMountain(65, 45, 0x44617a);
-  m1.position.set(-40, 0, -95);
+  const m1 = createMountain(70, 48, 0x44617a);
+  m1.position.set(-42, 0, -96);
   forestContainer.add(m1);
 
-  const m2 = createMountain(90, 60, 0x385166);
-  m2.position.set(6, 0, -108);
+  const m2 = createMountain(95, 62, 0x385166);
+  m2.position.set(6, 0, -110);
   forestContainer.add(m2);
 
-  const m3 = createMountain(60, 40, 0x44617a);
-  m3.position.set(45, 0, -92);
+  const m3 = createMountain(65, 42, 0x44617a);
+  m3.position.set(46, 0, -94);
   forestContainer.add(m3);
 
-  // 5. Pine Tree Placements
+  // 5. Glowing Sun Orb in the distant sky
+  const sunOrbGeo = new THREE.SphereGeometry(4.2, 16, 16);
+  const sunOrbMat = new THREE.MeshBasicMaterial({ color: 0xfffbe6, fog: false });
+  const sunOrb = new THREE.Mesh(sunOrbGeo, sunOrbMat);
+  sunOrb.position.set(0, 32, -92);
+  forestContainer.add(sunOrb);
+
+  // 6. Pine Tree Placements (Flanking trail with clear center vista)
   const treeSpecs = [
-    // Left side forest
-    { x: -5.5, z: -5.5, h: 9.0, r: 2.5 },
-    { x: -7.8, z: -11.0, h: 11.5, r: 3.1 },
-    { x: -4.8, z: -15.5, h: 10.0, r: 2.7 },
-    { x: -9.2, z: -21.0, h: 13.0, r: 3.4 },
-    { x: -6.2, z: -27.0, h: 11.0, r: 3.0 },
-    { x: -11.8, z: -17.0, h: 14.0, r: 3.8 },
-    { x: -13.5, z: -32.0, h: 15.0, r: 4.0 },
-    { x: -7.5, z: -38.0, h: 12.0, r: 3.3 },
-    { x: -17.5, z: -25.0, h: 16.0, r: 4.2 },
-    { x: -15.5, z: -45.0, h: 17.5, r: 4.5 },
-    // Right side forest
-    { x: 5.8, z: -6.0, h: 9.5, r: 2.6 },
-    { x: 8.2, z: -12.0, h: 12.0, r: 3.2 },
-    { x: 5.0, z: -17.5, h: 10.5, r: 2.8 },
-    { x: 9.8, z: -23.0, h: 13.5, r: 3.5 },
-    { x: 6.4, z: -29.0, h: 11.5, r: 3.1 },
-    { x: 12.5, z: -19.0, h: 14.5, r: 3.9 },
-    { x: 14.5, z: -33.0, h: 15.5, r: 4.2 },
-    { x: 7.8, z: -39.0, h: 12.5, r: 3.4 },
-    { x: 18.5, z: -26.0, h: 16.5, r: 4.3 },
-    { x: 16.5, z: -46.0, h: 18.0, r: 4.6 },
-    // Deep forest canopy horizon
-    { x: -28, z: -56, h: 19, r: 5.0 },
-    { x: -11, z: -60, h: 20, r: 5.2 },
-    { x: 0, z: -64, h: 21, r: 5.5 },
-    { x: 14, z: -58, h: 19, r: 5.0 },
-    { x: 28, z: -55, h: 18, r: 4.8 }
+    // Left side forest grove
+    { x: -6.5, z: -6.0, h: 10.5, r: 2.7 },
+    { x: -9.5, z: -12.0, h: 13.0, r: 3.2 },
+    { x: -6.2, z: -17.5, h: 11.5, r: 2.8 },
+    { x: -10.5, z: -23.0, h: 14.5, r: 3.5 },
+    { x: -7.5, z: -29.0, h: 12.0, r: 3.1 },
+    { x: -13.5, z: -18.0, h: 15.5, r: 3.9 },
+    { x: -15.0, z: -33.0, h: 16.5, r: 4.2 },
+    { x: -8.8, z: -39.0, h: 13.5, r: 3.4 },
+    { x: -19.5, z: -26.0, h: 17.5, r: 4.3 },
+    { x: -17.5, z: -46.0, h: 19.0, r: 4.6 },
+    // Right side forest grove
+    { x: 6.5, z: -6.0, h: 10.5, r: 2.7 },
+    { x: 9.5, z: -12.0, h: 13.0, r: 3.2 },
+    { x: 6.2, z: -17.5, h: 11.5, r: 2.8 },
+    { x: 10.5, z: -23.0, h: 14.5, r: 3.5 },
+    { x: 7.5, z: -29.0, h: 12.0, r: 3.1 },
+    { x: 13.5, z: -19.0, h: 15.5, r: 3.9 },
+    { x: 15.5, z: -34.0, h: 16.5, r: 4.2 },
+    { x: 8.8, z: -40.0, h: 13.5, r: 3.4 },
+    { x: 19.5, z: -26.0, h: 17.5, r: 4.3 },
+    { x: 17.5, z: -46.0, h: 19.0, r: 4.6 },
+    // Deep forest canopy horizon (framing the mountain pass)
+    { x: -28, z: -58, h: 20, r: 5.0 },
+    { x: -14, z: -62, h: 21, r: 5.2 },
+    { x: -8, z: -68, h: 22, r: 5.5 },
+    { x: 8, z: -68, h: 22, r: 5.5 },
+    { x: 14, z: -62, h: 21, r: 5.2 },
+    { x: 28, z: -58, h: 20, r: 5.0 }
   ];
 
   treeSpecs.forEach(s => {
@@ -823,15 +833,15 @@ export function attachForestToVault() {
     forestContainer.add(t);
   });
 
-  // 6. Natural Boulders
+  // 7. Natural Boulders
   const rockMat = new THREE.MeshStandardMaterial({ color: 0x666662, roughness: 0.92 });
   const rockGeo = new THREE.DodecahedronGeometry(0.75, 1);
   const rockPositions = [
-    { x: -3.2, z: -6.5, s: 0.85 },
-    { x: 3.4, z: -9.5, s: 1.15 },
-    { x: -3.8, z: -18.5, s: 1.35 },
-    { x: 3.6, z: -24.5, s: 0.95 },
-    { x: -4.0, z: -33.5, s: 1.45 }
+    { x: -3.4, z: -6.5, s: 0.85 },
+    { x: 3.6, z: -9.5, s: 1.15 },
+    { x: -4.0, z: -18.5, s: 1.35 },
+    { x: 3.8, z: -24.5, s: 0.95 },
+    { x: -4.2, z: -33.5, s: 1.45 }
   ];
   rockPositions.forEach(r => {
     const rock = new THREE.Mesh(rockGeo, rockMat);
@@ -843,15 +853,15 @@ export function attachForestToVault() {
     forestContainer.add(rock);
   });
 
-  // 7. Outdoor Natural Sunlight & Sky Light
-  const outdoorSun = new THREE.DirectionalLight(0xfffae0, 3.2);
+  // 8. Outdoor Natural Sunlight & Sky Light
+  const outdoorSun = new THREE.DirectionalLight(0xfffae0, 3.4);
   outdoorSun.position.set(18, 40, -30);
   outdoorSun.target.position.set(0, 2, -15);
   outdoorSun.visible = false;
   forestContainer.add(outdoorSun);
   forestContainer.add(outdoorSun.target);
 
-  const skyHemisphere = new THREE.HemisphereLight(0xbfe3ff, 0x245229, 2.2);
+  const skyHemisphere = new THREE.HemisphereLight(0xbfe3ff, 0x245229, 2.4);
   skyHemisphere.position.set(0, 40, -20);
   skyHemisphere.visible = false;
   forestContainer.add(skyHemisphere);
@@ -1270,6 +1280,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   isCaptured = false;
   window.isSpectating = false;
   hasEscaped = false;
+  window.isEscaping = false;
+  if (ceilingMesh) ceilingMesh.visible = true;
+  if (floorMesh) floorMesh.visible = true;
   stamina = 100;
   isSprinting = false;
   isSprintExhausted = false;
@@ -7571,6 +7584,25 @@ function playEscapeCinematic(callback) {
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
   if (ptrOverlay) ptrOverlay.style.display = 'none';
 
+  // Hide the giant dungeon ceiling and floor so they do not clip the outdoor forest or block the sky
+  if (ceilingMesh) ceilingMesh.visible = false;
+  if (floorMesh) floorMesh.visible = false;
+
+  // Hide in-game HUD and center reticle during cinematic
+  const hud = document.getElementById('hud-overlay');
+  if (hud) hud.style.display = 'none';
+  const reticle = document.getElementById('crosshair') || document.getElementById('reticle');
+  if (reticle) reticle.style.display = 'none';
+
+  // Instantly establish outdoor sunny sky and soft horizon fog
+  if (scene) {
+    scene.background = new THREE.Color(0x6bb5ea); // Clear azure blue sky!
+    if (scene.fog) {
+      scene.fog.color.setHex(0x9fd2ee); // Soft atmospheric aerial horizon mist
+      scene.fog.density = 0.0035; // Expansive outdoor sightlines
+    }
+  }
+
   // Dismiss any open modals so the cinematic viewport is completely unobstructed
   const keypadEl = document.getElementById('keypad-modal-ui');
   if (keypadEl) keypadEl.style.display = 'none';
@@ -9193,8 +9225,16 @@ function animate() {
       }
     } 
     
-    // Process Thermal Camera regardless of panic (skip if spectating)
-    if (window.isSpectating) {
+    // Process Thermal Camera regardless of panic (skip if spectating or escaping)
+    if (window.isEscaping) {
+      if (scene) {
+        scene.background = new THREE.Color(0x6bb5ea); // Retain clear sky blue
+        if (scene.fog) {
+          scene.fog.color.setHex(0x9fd2ee); // Soft atmospheric aerial perspective
+          scene.fog.density = 0.0035; // Expansive outdoor sightlines
+        }
+      }
+    } else if (window.isSpectating) {
       if (scene && scene.fog) scene.fog = null;
       if (ambientLight) {
         ambientLight.color.setHex(0xffffff);
