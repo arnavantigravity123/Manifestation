@@ -2798,11 +2798,11 @@ function spawnDungeonProps(layout, blockSize) {
   if (layout && layout.length > 0) {
     for (let r = 1; r < layout.length - 1; r++) {
       for (let c = 1; c < layout[r].length - 1; c++) {
-        if (layout[r][c] === 0 || layout[r][c] === 2) {
-          const northOpen = (layout[r - 1] && (layout[r - 1][c] === 0 || layout[r - 1][c] === 2));
-          const southOpen = (layout[r + 1] && (layout[r + 1][c] === 0 || layout[r + 1][c] === 2));
-          const westOpen  = (layout[r][c - 1] === 0 || layout[r][c - 1] === 2);
-          const eastOpen  = (layout[r][c + 1] === 0 || layout[r][c + 1] === 2);
+        if (layout[r][c] === 0) {
+          const northOpen = (layout[r - 1] && layout[r - 1][c] === 0);
+          const southOpen = (layout[r + 1] && layout[r + 1][c] === 0);
+          const westOpen  = (layout[r][c - 1] === 0);
+          const eastOpen  = (layout[r][c + 1] === 0);
 
           const openCount = (northOpen ? 1 : 0) + (southOpen ? 1 : 0) + (westOpen ? 1 : 0) + (eastOpen ? 1 : 0);
           if (openCount === 0) continue;
@@ -3298,6 +3298,47 @@ function generateMaze(keysCount = 8) {
           wallMesh.castShadow = true;
           wallMesh.receiveShadow = true;
         }
+
+        // Distinct 3D Visual Cues: Iron reinforcement crossbeams across sliding door
+        const ironMat = new THREE.MeshStandardMaterial({
+          color: 0x23272e,
+          roughness: 0.4,
+          metalness: 0.85
+        });
+        if (isDungeon && dungeonModules.wall) {
+          // Local space of dungeon wall module: X is width, Y is height, Z is thickness
+          [0.65, 1.35].forEach(by => {
+            const braceGeo = new THREE.BoxGeometry(3.1, 0.11, 0.58);
+            const braceMesh = new THREE.Mesh(braceGeo, ironMat);
+            braceMesh.position.set(0, by, 0);
+            braceMesh.castShadow = true;
+            wallMesh.add(braceMesh);
+          });
+        } else {
+          const bw = isEW ? 0.82 : blockSize;
+          const bd = isEW ? blockSize : 0.82;
+          [1.1, 2.3].forEach(by => {
+            const braceGeo = new THREE.BoxGeometry(bw, 0.18, bd);
+            const braceMesh = new THREE.Mesh(braceGeo, ironMat);
+            braceMesh.position.set(0, by, 0);
+            braceMesh.castShadow = true;
+            wallMesh.add(braceMesh);
+          });
+        }
+
+        // Floor sliding trackway plate embedded in the corridor floor
+        const trackGeo = new THREE.PlaneGeometry(isEW ? 0.9 : (blockSize + 0.1), isEW ? (blockSize + 0.1) : 0.9);
+        const trackMat = new THREE.MeshStandardMaterial({
+          color: 0x181a20,
+          roughness: 0.6,
+          metalness: 0.75
+        });
+        const trackMesh = new THREE.Mesh(trackGeo, trackMat);
+        trackMesh.rotation.x = -Math.PI / 2;
+        trackMesh.position.set(xPos, 0.015, zPos);
+        trackMesh.receiveShadow = true;
+        scene.add(trackMesh);
+        dungeonProps.push(trackMesh);
 
         wallMesh.userData = { 
           isSliding: true, 
@@ -7756,7 +7797,8 @@ function updateMinimapVisibility() {
       
       // Prevent diagonal sight through two adjacent corner walls
       if (Math.abs(n.dc) === 1 && Math.abs(n.dr) === 1) {
-        if (mazeLayout[curr.r] && mazeLayout[nr] && mazeLayout[curr.r][nc] === 1 && mazeLayout[nr][curr.c] === 1) continue; 
+        const isWall = (cell) => cell !== undefined && cell !== 0;
+        if (mazeLayout[curr.r] && mazeLayout[nr] && isWall(mazeLayout[curr.r][nc]) && isWall(mazeLayout[nr][curr.c])) continue; 
       }
       
       currentVisible.add(key);
@@ -7788,11 +7830,29 @@ function drawMinimap() {
       if (myTeam === 'Ghost' || visitedCells.has(`${r},${c}`)) {
         const type = mazeLayout[r][c];
         if (type === 1) {
-          // Wall
+          // Static Wall
           ctx.fillStyle = myTeam === 'Ghost' ? '#1f1330' : '#1e293b'; 
           ctx.fillRect(c * cellSize, r * cellSize, cellSize + 0.5, cellSize + 0.5);
+        } else if (type === 2) {
+          // Closed Sliding Door / Shifting Wall Barrier
+          // Draw wall background
+          ctx.fillStyle = myTeam === 'Ghost' ? '#2a1745' : '#1e293b'; 
+          ctx.fillRect(c * cellSize, r * cellSize, cellSize + 0.5, cellSize + 0.5);
+          
+          // Draw distinctive amber/gold sliding gate barrier across the corridor opening
+          ctx.fillStyle = '#f59e0b';
+          const gateThickness = Math.max(2, cellSize * 0.3);
+          const isEW = (c > 0 && mazeLayout[r] && mazeLayout[r][c - 1] === 0) || 
+                       (c < totalCols - 1 && mazeLayout[r] && mazeLayout[r][c + 1] === 0);
+          if (isEW) {
+            // East-West corridor: gate barrier spans North-South across the opening
+            ctx.fillRect((c + 0.5) * cellSize - gateThickness / 2, r * cellSize + 0.5, gateThickness, cellSize);
+          } else {
+            // North-South corridor: gate barrier spans East-West across the opening
+            ctx.fillRect(c * cellSize + 0.5, (r + 0.5) * cellSize - gateThickness / 2, cellSize, gateThickness);
+          }
         } else {
-          // Floor
+          // Floor (Open corridor)
           ctx.fillStyle = myTeam === 'Ghost' ? '#4c1d95' : '#64748b';
           ctx.fillRect(c * cellSize, r * cellSize, cellSize + 0.5, cellSize + 0.5);
         }
