@@ -4079,7 +4079,7 @@ function disposeItemMesh(mesh) {
   if (!mesh) return;
   scene.remove(mesh);
   mesh.traverse(child => {
-    if (child.isMesh) {
+    if (child.isMesh || child.isSprite) {
       if (child.geometry) child.geometry.dispose();
       if (child.material) {
         if (Array.isArray(child.material)) {
@@ -4101,13 +4101,29 @@ function createItemPickupMesh(id, name, pos) {
 
   const group = new THREE.Group();
   group.name = `pickup_${id}`;
-  // Floating at eye-friendly y = 0.50 ensures it never clips into floor carpets (y = 0.02)
-  group.position.set(pos.x, 0.50, pos.z);
+  // Floating at eye-friendly y = 0.45 ensures it hovers clearly above floor & carpets (y = 0.035)
+  group.position.set(pos.x, 0.45, pos.z);
 
-  // 1. Ground pulsing halo ring on the carpet
+  // 1. High-Clarity 2D Sprite Billboard (matches reference photo with 100% solid, crystal-clear visibility)
+  const tex = getLoadedTexture(conf.tex);
+  const spriteMat = new THREE.SpriteMaterial({
+    map: tex,
+    color: 0xffffff,
+    fog: true,
+    transparent: true,
+    blending: THREE.NormalBlending, // Crisp, solid colors & sharp text, zero washed-out see-through!
+    depthTest: true,
+    depthWrite: false
+  });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.scale.set(0.72, 0.72, 1);
+  sprite.position.set(0, 0, 0);
+  group.add(sprite);
+
+  // 2. Ground illuminated beacon halo ring on floor/carpet
   const ringGeo = new THREE.RingGeometry(0.12, 0.45, 24);
   const ringMat = new THREE.MeshBasicMaterial({
-    color: conf.haloColor,
+    color: conf.haloColor || 0x38bdf8,
     side: THREE.DoubleSide,
     transparent: true,
     opacity: 0.45,
@@ -4116,47 +4132,10 @@ function createItemPickupMesh(id, name, pos) {
   });
   const ring = new THREE.Mesh(ringGeo, ringMat);
   ring.rotation.x = -Math.PI / 2;
-  ring.position.y = -0.47; // Local offset puts ring at world y = 0.03 (above carpet)
+  ring.position.y = -0.415; // Local offset puts ring at world y = 0.035 (resting right on carpet)
   group.add(ring);
 
-  // 2. Floating 3D Item Badge / Cartridge
-  const badgeGroup = new THREE.Group();
-
-  // 2a. Industrial dark titanium frame/casing
-  const frameGeo = new THREE.BoxGeometry(0.52, 0.62, 0.06);
-  const frameMat = new THREE.MeshStandardMaterial({
-    color: 0x1e293b,
-    roughness: 0.35,
-    metalness: 0.8
-  });
-  const frame = new THREE.Mesh(frameGeo, frameMat);
-  badgeGroup.add(frame);
-
-  // 2b. Front and Back textured item display faces
-  const tex = getLoadedTexture(conf.tex);
-  const plateGeo = new THREE.PlaneGeometry(0.48, 0.58);
-  const plateMat = new THREE.MeshStandardMaterial({
-    map: tex,
-    roughness: 0.4,
-    metalness: 0.1,
-    emissive: conf.emissive,
-    emissiveIntensity: 0.30,
-    side: THREE.DoubleSide
-  });
-
-  const frontPlate = new THREE.Mesh(plateGeo, plateMat);
-  frontPlate.position.z = 0.032;
-  badgeGroup.add(frontPlate);
-
-  const backPlate = new THREE.Mesh(plateGeo, plateMat);
-  backPlate.position.z = -0.032;
-  backPlate.rotation.y = Math.PI;
-  badgeGroup.add(backPlate);
-
-  badgeGroup.rotation.y = Math.random() * Math.PI * 2;
-  group.add(badgeGroup);
-
-  group.userData.badge = badgeGroup;
+  group.userData.sprite = sprite;
   group.userData.ring = ring;
   group.userData.bobOffset = Math.random() * Math.PI * 2;
 
@@ -8456,9 +8435,12 @@ function animate() {
     for (let i = 0; i < itemsInMaze.length; i++) {
       const it = itemsInMaze[i];
       if (!it || !it.mesh) continue;
-      if (it.mesh.userData && it.mesh.userData.badge) {
-        it.mesh.userData.badge.rotation.y = time * 0.0018 + i;
-        it.mesh.userData.badge.position.y = Math.sin(t + (it.mesh.userData.bobOffset || i)) * 0.05;
+      if (it.mesh.userData && (it.mesh.userData.sprite || it.mesh.userData.badge)) {
+        const itemObj = it.mesh.userData.sprite || it.mesh.userData.badge;
+        itemObj.position.y = Math.sin(t + (it.mesh.userData.bobOffset || i)) * 0.04;
+        if (it.mesh.userData.badge) {
+          it.mesh.userData.badge.rotation.y = time * 0.0018 + i;
+        }
         if (it.mesh.userData.ring && it.mesh.userData.ring.material) {
           it.mesh.userData.ring.material.opacity = 0.35 + Math.sin(time * 0.004 + i) * 0.15;
         }
