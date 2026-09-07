@@ -2197,11 +2197,11 @@ let dungeonStatueGeo = null;
 let dungeonStatueMat = null;
 let dungeonRugGeo = null;
 let dungeonRugGeoFull = null;
-let dungeonRugGeoHalf = null;
+let dungeonRugGeoArm = null;
+let dungeonRugGeoCenterPure = null;
+let dungeonRugGeoBorder = null;
 let dungeonRugGeoDeadEnd = null;
 let dungeonRugCrestGeo = null;
-let dungeonRugGeoCorner = null;
-let dungeonRugGeoCornerArm = null;
 let dungeonRugMat = null;
 let dungeonProps = [];
 let dungeonPropColliders = []; // Solid collision for pillars (radius 0.60m) and statues (radius 0.80m)
@@ -2225,7 +2225,8 @@ function makeDungeonMat(colorPath, normalPath, roughPath, opts = {}) {
   return mat;
 }
 
-/* ── Seamless Rug Plane Generators (Zero yellow cutoffs or horizontal lines!) ── */
+/* ── Seamless 100% Opaque Rug Plane Generators (Zero black seams, zero border cutoffs) ── */
+// 1. Straight runner with gold borders on left and right, 100% solid opaque (alpha=255)
 function createSeamlessRugGeo(width = 2.0, length = 6.0) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
@@ -2234,37 +2235,61 @@ function createSeamlessRugGeo(width = 2.0, length = 6.0) {
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
     const v = uvAttr.getY(i);
-    // Sample strictly from single seamless velvet runner segment (safe margins, zero border bleed)
-    uvAttr.setXY(i, 0.020 + u * (0.480 - 0.020), 0.770 + v * (0.970 - 0.770));
+    // Samples strictly from the 100% opaque runner with gold side borders (zero border fade or black fringe)
+    uvAttr.setXY(i, 0.0488 + u * (0.4512 - 0.0488), 0.8150 + v * (0.9200 - 0.8150));
   }
   uvAttr.needsUpdate = true;
   return geo;
 }
 
-function createCornerRugGeo(width = 2.0) {
-  const geo = new THREE.PlaneGeometry(width, width);
+// 2. Connecting 2m x 2m arm with gold borders on left and right
+function createArmRugGeo(width = 2.0, length = 2.0) {
+  const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
   geo.translate(0, 0.02, 0);
   const uvAttr = geo.attributes.uv;
-  
-  // Exact UV coordinates from CornerCorridor_Alfombra_0 in dungeon.glb:
-  // Maps the authentic L-turn corner with golden border & frayed outer edges
-  const uMin = 0.632, uMax = 0.994;
-  const vMin = 0.038, vMax = 0.387;
-  
-  // V0: (-w/2, 0, -w/2) -> North connection
-  uvAttr.setXY(0, uMin, vMax);
-  // V1: ( w/2, 0, -w/2) -> Outer North-East corner (turning point with gold trim)
-  uvAttr.setXY(1, uMax, vMax);
-  // V2: (-w/2, 0,  w/2) -> Inner South-West corner
-  uvAttr.setXY(2, uMin, vMin);
-  // V3: ( w/2, 0,  w/2) -> East connection
-  uvAttr.setXY(3, uMax, vMin);
-  
+  for (let i = 0; i < uvAttr.count; i++) {
+    const u = uvAttr.getX(i);
+    const v = uvAttr.getY(i);
+    uvAttr.setXY(i, 0.0488 + u * (0.4512 - 0.0488), 0.8150 + v * (0.9200 - 0.8150));
+  }
   uvAttr.needsUpdate = true;
   return geo;
 }
 
+// 3. Center 2m x 2m pure red velvet base (100% opaque, zero borders, zero black seams)
+function createPureRedTileGeo(width = 2.0, length = 2.0) {
+  const geo = new THREE.PlaneGeometry(width, length);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, 0.02, 0);
+  const uvAttr = geo.attributes.uv;
+  for (let i = 0; i < uvAttr.count; i++) {
+    const u = uvAttr.getX(i);
+    const v = uvAttr.getY(i);
+    // Samples from center of red velvet field (alpha=255, completely seamless)
+    uvAttr.setXY(i, 0.1465 + u * (0.3418 - 0.1465), 0.8242 + v * (0.9218 - 0.8242));
+  }
+  uvAttr.needsUpdate = true;
+  return geo;
+}
+
+// 4. Border strip along wall edges of intersections (length 2m, width 0.20m)
+function createBorderStripGeo(length = 2.0, width = 0.20) {
+  const geo = new THREE.PlaneGeometry(width, length);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, 0.022, 0); // 2mm elevation over red base prevents any z-fighting
+  const uvAttr = geo.attributes.uv;
+  for (let i = 0; i < uvAttr.count; i++) {
+    const u = uvAttr.getX(i);
+    const v = uvAttr.getY(i);
+    // Outer edge (u=0) has the gold line, inner edge (u=1) blends into red velvet
+    uvAttr.setXY(i, 0.0488 + u * (0.0781 - 0.0488), 0.8150 + v * (0.9200 - 0.8150));
+  }
+  uvAttr.needsUpdate = true;
+  return geo;
+}
+
+// 5. Golden Winged Crest rug for shrine cells
 function createCrestRugGeo(width = 2.0, length = 6.0) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
@@ -2273,8 +2298,7 @@ function createCrestRugGeo(width = 2.0, length = 6.0) {
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
     const v = uvAttr.getY(i);
-    // Sample strictly from Panel 4 golden winged crest (exact match to Corridor_X4 in dungeon.glb)
-    uvAttr.setXY(i, 0.020 + u * (0.480 - 0.020), 0.025 + v * (0.230 - 0.025));
+    uvAttr.setXY(i, 0.0488 + u * (0.4512 - 0.0488), 0.0500 + v * (0.1900 - 0.0500));
   }
   uvAttr.needsUpdate = true;
   return geo;
@@ -2506,11 +2530,11 @@ function loadDungeonPackAssets() {
       dungeonStatueGeo.computeVertexNormals();
       dungeonStatueMat = dungeonModules.statue.children[0].material;
     }
-    // Seamless continuous runner rug (Full 6m, Half 3m, Dead-End 4.4m, Corner Turn 2m, Corner Arm 2m)
+    // Seamless continuous runner rugs & modular junction pieces (100% solid opaque)
     dungeonRugGeoFull = createSeamlessRugGeo(2.0, 6.0);
-    dungeonRugGeoHalf = createSeamlessRugGeo(2.0, 3.0);
-    dungeonRugGeoCorner = createCornerRugGeo(2.0);
-    dungeonRugGeoCornerArm = createSeamlessRugGeo(2.0, 2.0);
+    dungeonRugGeoArm = createArmRugGeo(2.0, 2.0);
+    dungeonRugGeoCenterPure = createPureRedTileGeo(2.0, 2.0);
+    dungeonRugGeoBorder = createBorderStripGeo(2.0, 0.20);
     dungeonRugGeoDeadEnd = createSeamlessRugGeo(2.0, 4.4);
     dungeonRugGeo = dungeonRugGeoFull;
     dungeonRugCrestGeo = createCrestRugGeo(2.0, 6.0);
@@ -2523,6 +2547,12 @@ function loadDungeonPackAssets() {
         '/assets/dungeon/textures/RugRoughness.png',
         { roughness: 0.85, emissive: 0x661111, emissiveIntensity: 0.45, doubleSide: true }
       );
+    }
+    if (dungeonRugMat) {
+      dungeonRugMat.transparent = false; // Eliminates black edge blending and floor see-through
+      dungeonRugMat.depthWrite = true;
+      dungeonRugMat.roughness = 0.85;
+      dungeonRugMat.needsUpdate = true;
     }
 
     console.log('[DUNGEON] ✓ All dungeon 3D kit assets extracted successfully!');
@@ -2895,55 +2925,39 @@ function spawnDungeonProps(layout, blockSize) {
             continue;
           }
 
-          // Case B: Corridors, corners, and junctions (openCount >= 2)
-          const isShrine = shrineCells.has(`${r},${c}`);
-          const corridorRugGeo = isShrine ? (dungeonRugCrestGeo || dungeonRugGeoFull) : (dungeonRugGeoFull || dungeonRugGeo);
-          const halfRugGeo = dungeonRugGeoHalf || dungeonRugGeo;
-          const cornerGeo = dungeonRugGeoCorner || dungeonRugGeoHalf;
-          const cornerArmGeo = dungeonRugGeoCornerArm || dungeonRugGeoHalf;
+          // Case B: Straight Corridors (openCount === 2 with opposite openings)
+          const isStraightNS = (openCount === 2 && northOpen && southOpen);
+          const isStraightEW = (openCount === 2 && westOpen && eastOpen);
 
-          // Check if this is a 90-degree Corner Turn (openCount === 2 with perpendicular openings)
-          const isCorner = (openCount === 2) && !(northOpen && southOpen) && !(westOpen && eastOpen);
-
-          if (isCorner) {
-            if (northOpen && eastOpen) {
-              addRugTile(cornerGeo, rx, rz, 0);
-              addRugTile(cornerArmGeo, rx, rz - 2.0, 0);
-              addRugTile(cornerArmGeo, rx + 2.0, rz, Math.PI / 2);
-            } else if (southOpen && eastOpen) {
-              addRugTile(cornerGeo, rx, rz, -Math.PI / 2);
-              addRugTile(cornerArmGeo, rx, rz + 2.0, Math.PI);
-              addRugTile(cornerArmGeo, rx + 2.0, rz, Math.PI / 2);
-            } else if (southOpen && westOpen) {
-              addRugTile(cornerGeo, rx, rz, Math.PI);
-              addRugTile(cornerArmGeo, rx, rz + 2.0, Math.PI);
-              addRugTile(cornerArmGeo, rx - 2.0, rz, -Math.PI / 2);
-            } else if (northOpen && westOpen) {
-              addRugTile(cornerGeo, rx, rz, Math.PI / 2);
-              addRugTile(cornerArmGeo, rx, rz - 2.0, 0);
-              addRugTile(cornerArmGeo, rx - 2.0, rz, -Math.PI / 2);
-            }
+          if (isStraightNS) {
+            const isShrine = shrineCells.has(`${r},${c}`);
+            const geo = isShrine ? (dungeonRugCrestGeo || dungeonRugGeoFull) : dungeonRugGeoFull;
+            addRugTile(geo, rx, rz, 0);
+            continue;
+          }
+          if (isStraightEW) {
+            const isShrine = shrineCells.has(`${r},${c}`);
+            const geo = isShrine ? (dungeonRugCrestGeo || dungeonRugGeoFull) : dungeonRugGeoFull;
+            addRugTile(geo, rx, rz, Math.PI / 2);
             continue;
           }
 
-          // Straight corridors & Multi-branch Junctions (T-junctions & 4-way crosses)
-          // North-South segment
-          if (northOpen && southOpen) {
-            addRugTile(corridorRugGeo, rx, rz, 0);
-          } else if (northOpen) {
-            addRugTile(halfRugGeo, rx, rz - 1.5, 0);
-          } else if (southOpen) {
-            addRugTile(halfRugGeo, rx, rz + 1.5, Math.PI);
-          }
+          // Case C: 90-Degree Corners, T-Junctions, and 4-Way Crossroads (openCount >= 2)
+          // 1. Center 2m x 2m pure red velvet base (zero borders, 100% solid opaque)
+          addRugTile(dungeonRugGeoCenterPure, rx, rz, 0);
 
-          // East-West segment
-          if (westOpen && eastOpen) {
-            addRugTile(corridorRugGeo, rx, rz, Math.PI / 2);
-          } else if (westOpen) {
-            addRugTile(halfRugGeo, rx - 1.5, rz, -Math.PI / 2);
-          } else if (eastOpen) {
-            addRugTile(halfRugGeo, rx + 1.5, rz, Math.PI / 2);
-          }
+          // 2. Add connecting 2m x 2m arms to every open corridor (reaches flush from center hub to cell boundary)
+          if (northOpen) addRugTile(dungeonRugGeoArm, rx, rz - 2.0, 0);
+          if (southOpen) addRugTile(dungeonRugGeoArm, rx, rz + 2.0, Math.PI);
+          if (westOpen)  addRugTile(dungeonRugGeoArm, rx - 2.0, rz, -Math.PI / 2);
+          if (eastOpen)  addRugTile(dungeonRugGeoArm, rx + 2.0, rz, Math.PI / 2);
+
+          // 3. Add gold border strips along the WALL sides of the center 2m x 2m hub
+          // (Wall sides have borders; OPEN corridor sides have ZERO borders so walking path is 100% seamless!)
+          if (!northOpen) addRugTile(dungeonRugGeoBorder, rx, rz - 0.90, Math.PI / 2);
+          if (!southOpen) addRugTile(dungeonRugGeoBorder, rx, rz + 0.90, -Math.PI / 2);
+          if (!westOpen)  addRugTile(dungeonRugGeoBorder, rx - 0.90, rz, 0);
+          if (!eastOpen)  addRugTile(dungeonRugGeoBorder, rx + 0.90, rz, Math.PI);
         }
       }
     }
