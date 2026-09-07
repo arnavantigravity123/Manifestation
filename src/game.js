@@ -718,6 +718,7 @@ loadGhostGLBAsset();
 
 let scene, camera, renderer;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+let mobileSprintLocked = false;
 let velocity = new THREE.Vector3();
 let direction = new THREE.Vector3();
 let prevTime = performance.now();
@@ -4813,10 +4814,12 @@ function setupControls() {
       moveBackward = false;
       moveLeft = false;
       moveRight = false;
-      isSprinting = false;
+      if (!mobileSprintLocked) {
+        isSprinting = false;
+        joystickBase.classList.remove('sprinting');
+        joystickKnob.classList.remove('sprinting');
+      }
       joystickKnob.style.transform = `translate(0px, 0px)`;
-      joystickBase.classList.remove('sprinting');
-      joystickKnob.classList.remove('sprinting');
       joystickTouchId = null;
     };
 
@@ -4866,8 +4869,8 @@ function setupControls() {
       const dx = clientX - joyCenterX;
       const dy = clientY - joyCenterY;
       const dist = Math.hypot(dx, dy);
-      const maxRadius = 45;
-      const sprintThreshold = 34; // Extended past 34px activates AUTO-SPRINT!
+      const maxRadius = 48; // Max physical travel radius
+      const sprintThreshold = 44; // Outer threshold (92% of max travel) required to activate auto-sprint!
       
       const angle = Math.atan2(dy, dx);
       const clampDist = Math.min(dist, maxRadius);
@@ -4885,9 +4888,12 @@ function setupControls() {
       moveLeft = joyX < -0.2;
       moveRight = joyX > 0.2;
 
-      // Auto-sprint when extending joystick extra far into the outer sprint zone
+      // Auto-sprint when extending joystick extra far into the outer sprint zone OR when SPRINT button is locked ON
       const isMoving = moveForward || moveBackward || moveLeft || moveRight;
-      if (isMoving && dist >= sprintThreshold && myTeam === 'Human' && !isSprintExhausted && stamina >= SPRINT_RECOVERY_THRESHOLD) {
+      const inSprintZone = dist >= sprintThreshold;
+      const canSprint = myTeam === 'Human' && !isSprintExhausted && stamina >= SPRINT_RECOVERY_THRESHOLD;
+
+      if (isMoving && (mobileSprintLocked || inSprintZone) && canSprint) {
         isSprinting = true;
         joystickBase.classList.add('sprinting');
         joystickKnob.classList.add('sprinting');
@@ -4902,16 +4908,52 @@ function setupControls() {
     function addTapListener(el, callback) {
       if (!el) return;
       let lastTrigger = 0;
-      const trigger = (e) => {
+      let touchActive = false;
+      let startX = 0;
+      let startY = 0;
+
+      const fire = (e) => {
         const now = performance.now();
-        if (now - lastTrigger < 250) return; // Prevent double-trigger from touchstart + click
+        if (now - lastTrigger < 200) return; // Prevent double-fire
         lastTrigger = now;
-        if (e.cancelable) e.preventDefault();
-        e.stopPropagation();
         callback(e);
       };
-      el.addEventListener('touchstart', trigger, { passive: false });
-      el.addEventListener('click', trigger);
+
+      el.addEventListener('touchstart', (e) => {
+        touchActive = true;
+        el.classList.add('btn-pressed');
+        if (e.touches && e.touches[0]) {
+          startX = e.touches[0].clientX;
+          startY = e.touches[0].clientY;
+        }
+      }, { passive: true });
+
+      el.addEventListener('touchend', (e) => {
+        el.classList.remove('btn-pressed');
+        if (!touchActive) return;
+        touchActive = false;
+
+        // Ensure finger didn't drag off the button
+        if (e.changedTouches && e.changedTouches[0]) {
+          const dx = Math.abs(e.changedTouches[0].clientX - startX);
+          const dy = Math.abs(e.changedTouches[0].clientY - startY);
+          if (dx > 35 || dy > 35) return;
+        }
+
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        fire(e);
+      }, { passive: false });
+
+      el.addEventListener('touchcancel', () => {
+        touchActive = false;
+        el.classList.remove('btn-pressed');
+      }, { passive: true });
+
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fire(e);
+      });
     }
 
     // Action button bindings using addTapListener for 100% reliable mobile response
@@ -4945,8 +4987,10 @@ function setupControls() {
           triggerNotification("Stamina exhausted! Recovering (need 20%)...");
           return;
         }
-        isSprinting = !isSprinting;
-        sprintBtn.classList.toggle('sprinting', isSprinting);
+        mobileSprintLocked = !mobileSprintLocked;
+        isSprinting = mobileSprintLocked;
+        sprintBtn.classList.toggle('sprinting', mobileSprintLocked);
+        triggerNotification(mobileSprintLocked ? "⚡ SPRINT LOCKED ON" : "🚶 WALK MODE RESTORED");
       });
     }
 
@@ -5422,9 +5466,12 @@ function checkInteractions() {
       } else {
         triggerNotification("Inventory full! Drop an item first.");
       }
-      break;
+      return;
     }
   }
+
+  // Fallback feedback when tapping interact in an empty hallway
+  triggerNotification("Nothing nearby to interact with.");
 }
 
 function collectClueLocal(digitIndex) {
@@ -5478,7 +5525,10 @@ function collectClueLocal(digitIndex) {
 function useActiveItem() {
   if (window.isSpectating) return;
   const item = inventory[activeSlot];
-  if (!item) return;
+  if (!item || item === "") {
+    triggerNotification("No usable item in active slot.");
+    return;
+  }
 
   if (myTeam === 'Ghost' && window.ghostsFrozen) {
     triggerNotification("You are frozen by a Breaker Remote!");
@@ -8509,6 +8559,7 @@ function animate() {
           if (stamina <= 0) {
             stamina = 0;
             isSprinting = false;
+            mobileSprintLocked = false;
             isSprintExhausted = true; // Lock sprint until 20% recovered
             const jb = document.getElementById('joystick-base');
             const jk = document.getElementById('joystick-knob');
