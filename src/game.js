@@ -970,6 +970,7 @@ let audioDataArray = null;
 let visitedCells = new Set();
 let mapMarks = [];
 let isMinimapExpanded = false;
+let lastMinimapX = -9999, lastMinimapZ = -9999, lastMinimapRot = -9999, lastMinimapTime = 0;
 
 // Persistent Dead Bodies tracking
 let deadBodies = [];
@@ -1468,7 +1469,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     powerPreference: "high-performance",
     precision: isMobileDevice ? "mediump" : "highp"
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileDevice ? 1.0 : 1.5));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileDevice ? 1.0 : 1.25));
   renderer.setSize(w, h);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -2167,6 +2168,7 @@ let dungeonRugCrestGeo = null;
 let dungeonRugMat = null;
 let dungeonProps = [];
 let dungeonPropColliders = []; // Solid collision for pillars (radius 0.60m) and statues (radius 0.80m)
+let dungeonPropGrid = new Map(); // Spatial partition for O(1) collision queries
 let pendingDungeonPropsFn = null;
 
 /* ── Helper: create PBR material from separate texture PNGs ── */
@@ -2500,9 +2502,27 @@ function spawnDungeonProps(layout, blockSize) {
 
   console.log('[DUNGEON-SPAWN] Placing dungeon props throughout the entire labyrinth...');
   dungeonPropColliders = [];
+  dungeonPropGrid.clear();
   let placedPillars = 0;
   let placedStatues = 0;
   let placedRugs = 0;
+
+  const pillarTransforms = [];
+  const statueTransforms = [];
+  const rugGeometries = [];
+
+  const totalCols = (layout && layout[0] && layout[0].length) ? layout[0].length : (layout ? layout.length : 21);
+  const totalRows = layout ? layout.length : 21;
+
+  function addPropCollider(px, pz, radius) {
+    const col = { x: px, z: pz, radius };
+    dungeonPropColliders.push(col);
+    const c = Math.floor((px / blockSize) + (totalCols / 2));
+    const r = Math.floor((pz / blockSize) + (totalRows / 2));
+    const key = `${r},${c}`;
+    if (!dungeonPropGrid.has(key)) dungeonPropGrid.set(key, []);
+    dungeonPropGrid.get(key).push(col);
+  }
 
   // Helper: prevent spawning any dungeon prop on top of or within collision radius of a circuit breaker
   function isBlockedByBreaker(x, z, radius = 1.8) {
@@ -2511,7 +2531,11 @@ function spawnDungeonProps(layout, blockSize) {
 
   // Helper: prevent spawning any column within collision radius of a statue
   function isNearStatue(x, z, minDist = 2.8) {
-    return dungeonProps.some(p => p.userData && p.userData.isStatue && Math.hypot(p.position.x - x, p.position.z - z) < minDist);
+    return statueTransforms.some(s => Math.hypot(s.x - x, s.z - z) < minDist);
+  }
+
+  function isNearPillar(x, z, minDist = 1.8) {
+    return pillarTransforms.some(p => Math.hypot(p.x - x, p.z - z) < minDist);
   }
 
   // Helper: prevent spawning props inside or within collision radius of player spawn hub
@@ -2521,34 +2545,34 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   function spawnPillarMesh(px, pz) {
-    if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz)) return null;
-    const pMesh = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
-    pMesh.scale.set(1.5, 1.68, 1.5);
-    pMesh.position.set(px, 0, pz);
-    pMesh.castShadow = true;
-    pMesh.receiveShadow = true;
-    pMesh.userData = { isDungeonProp: true, isPillar: true };
-    scene.add(pMesh);
-    dungeonProps.push(pMesh);
-    dungeonPropColliders.push({ x: px, z: pz, radius: 0.60 });
+    if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz)) return false;
+    if (isNearPillar(px, pz, 1.8)) return false;
+    pillarTransforms.push({ x: px, z: pz });
+    addPropCollider(px, pz, 0.60);
     placedPillars++;
-    return pMesh;
+    return true;
   }
 
   function spawnStatueMesh(sx, sz, rotY = 0) {
-    if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz)) return null;
-    const sMesh = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
-    sMesh.scale.set(1.3, 1.45, 1.3);
-    sMesh.position.set(sx, 0, sz);
-    sMesh.rotation.y = rotY;
-    sMesh.castShadow = true;
-    sMesh.receiveShadow = true;
-    sMesh.userData = { isDungeonProp: true, isStatue: true };
-    scene.add(sMesh);
-    dungeonProps.push(sMesh);
-    dungeonPropColliders.push({ x: sx, z: sz, radius: 0.80 });
+    if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz)) return false;
+    if (isNearStatue(sx, sz, 2.5)) return false;
+    statueTransforms.push({ x: sx, z: sz, rotY });
+    addPropCollider(sx, sz, 0.80);
     placedStatues++;
-    return sMesh;
+    return true;
+  }
+
+  function addRugTile(geo, rx, rz, rotY = 0) {
+    const baseGeo = geo || dungeonRugGeo;
+    if (!baseGeo) return;
+    const g = baseGeo.clone();
+    _scratchDummy.position.set(rx, 0.02, rz);
+    _scratchDummy.rotation.set(0, rotY, 0);
+    _scratchDummy.scale.set(1, 1, 1);
+    _scratchDummy.updateMatrix();
+    g.applyMatrix4(_scratchDummy.matrix);
+    rugGeometries.push(g);
+    placedRugs++;
   }
 
   // 1. Master Vault Gate Flanking (Pillars + Statues + Entrance Grand Runner Rug)
@@ -2577,18 +2601,14 @@ function spawnDungeonProps(layout, blockSize) {
       spawnStatueMesh(sx, sz, rotY);
     });
 
-    const rugMesh = new THREE.Mesh(dungeonRugCrestGeo || dungeonRugGeo, dungeonRugMat);
     let rugX = gateCoordinates.x;
     let rugZ = gateCoordinates.z;
-    if (edge === 'N') { rugZ += 2.8; rugMesh.rotation.y = 0; }
-    else if (edge === 'S') { rugZ -= 2.8; rugMesh.rotation.y = Math.PI; }
-    else if (edge === 'E') { rugX -= 2.8; rugMesh.rotation.y = Math.PI / 2; }
-    else if (edge === 'W') { rugX += 2.8; rugMesh.rotation.y = -Math.PI / 2; }
-    rugMesh.position.set(rugX, 0, rugZ);
-    rugMesh.receiveShadow = true;
-    scene.add(rugMesh);
-    dungeonProps.push(rugMesh);
-    placedRugs++;
+    let rugRot = 0;
+    if (edge === 'N') { rugZ += 2.8; rugRot = 0; }
+    else if (edge === 'S') { rugZ -= 2.8; rugRot = Math.PI; }
+    else if (edge === 'E') { rugX -= 2.8; rugRot = Math.PI / 2; }
+    else if (edge === 'W') { rugX += 2.8; rugRot = -Math.PI / 2; }
+    addRugTile(dungeonRugCrestGeo || dungeonRugGeo, rugX, rugZ, rugRot);
   }
 
   // 2. Pillars around Light Sanctuaries (Sanctuary Shrines)
@@ -2739,7 +2759,7 @@ function spawnDungeonProps(layout, blockSize) {
     }
   }
 
-  // 5. Ornate Columns Lining Corridor Walls (Every cell with a wall is columned!)
+  // 5. Ornate Columns Lining Corridor Walls (Architectural cadence at junctions, corners, and spaced intervals)
   if (layout && layout.length > 0) {
     const wallOffset = 2.45; // Snug against wall in 6.0m wide corridor
     for (let r = 1; r < layout.length - 1; r++) {
@@ -2753,40 +2773,30 @@ function spawnDungeonProps(layout, blockSize) {
           if (layout[r][c + 1] === 0) openNeighbors++;
           if (openNeighbors <= 1) continue;
 
+          // Architectural cadence: place columns at junctions (openNeighbors >= 3)
+          // or at corners (openNeighbors === 2 with perpendicular turn)
+          // or spaced every 3 cells on straight corridors
+          const isStraight = (openNeighbors === 2 && ((layout[r - 1] && layout[r - 1][c] === 0 && layout[r + 1] && layout[r + 1][c] === 0) || (layout[r][c - 1] === 0 && layout[r][c + 1] === 0)));
+          if (isStraight && ((r + c) % 3 !== 0)) continue;
+
           const cx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
           const cz = (r - layout.length / 2) * blockSize + blockSize / 2;
 
           // West wall
           if (layout[r][c - 1] === 1) {
-            const px = cx - wallOffset;
-            const pz = cz;
-            if (!isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
-              spawnPillarMesh(px, pz);
-            }
+            spawnPillarMesh(cx - wallOffset, cz);
           }
           // East wall
           if (layout[r][c + 1] === 1) {
-            const px = cx + wallOffset;
-            const pz = cz;
-            if (!isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
-              spawnPillarMesh(px, pz);
-            }
+            spawnPillarMesh(cx + wallOffset, cz);
           }
           // North wall
           if (layout[r - 1] && layout[r - 1][c] === 1) {
-            const px = cx;
-            const pz = cz - wallOffset;
-            if (!isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
-              spawnPillarMesh(px, pz);
-            }
+            spawnPillarMesh(cx, cz - wallOffset);
           }
           // South wall
           if (layout[r + 1] && layout[r + 1][c] === 1) {
-            const px = cx;
-            const pz = cz + wallOffset;
-            if (!isNearStatue(px, pz, 2.5) && !isNearPillar(px, pz, 2.0)) {
-              spawnPillarMesh(px, pz);
-            }
+            spawnPillarMesh(cx, cz + wallOffset);
           }
         }
       }
@@ -2812,90 +2822,97 @@ function spawnDungeonProps(layout, blockSize) {
 
           // Case A: Dead End (exactly 1 open neighbor) -> rug leads up to statue, stopping cleanly 0.8m before pedestal
           if (openCount === 1) {
-            const rugMesh = new THREE.Mesh(dungeonRugGeoDeadEnd || dungeonRugGeo, dungeonRugMat);
-            rugMesh.receiveShadow = true;
+            const deadEndGeo = dungeonRugGeoDeadEnd || dungeonRugGeo;
             if (northOpen) {
-              rugMesh.position.set(rx, 0, rz - 0.8);
-              rugMesh.rotation.y = 0;
+              addRugTile(deadEndGeo, rx, rz - 0.8, 0);
             } else if (southOpen) {
-              rugMesh.position.set(rx, 0, rz + 0.8);
-              rugMesh.rotation.y = Math.PI;
+              addRugTile(deadEndGeo, rx, rz + 0.8, Math.PI);
             } else if (westOpen) {
-              rugMesh.position.set(rx - 0.8, 0, rz);
-              rugMesh.rotation.y = -Math.PI / 2;
+              addRugTile(deadEndGeo, rx - 0.8, rz, -Math.PI / 2);
             } else if (eastOpen) {
-              rugMesh.position.set(rx + 0.8, 0, rz);
-              rugMesh.rotation.y = Math.PI / 2;
+              addRugTile(deadEndGeo, rx + 0.8, rz, Math.PI / 2);
             }
-            scene.add(rugMesh);
-            dungeonProps.push(rugMesh);
-            placedRugs++;
             continue;
           }
 
           // Case B: Corridors, corners, and junctions (openCount >= 2)
           const isShrine = shrineCells.has(`${r},${c}`);
           const corridorRugGeo = isShrine ? (dungeonRugCrestGeo || dungeonRugGeoFull) : (dungeonRugGeoFull || dungeonRugGeo);
+          const halfRugGeo = dungeonRugGeoHalf || dungeonRugGeo;
 
           // North-South segment
           if (northOpen && southOpen) {
-            const rugMesh = new THREE.Mesh(corridorRugGeo, dungeonRugMat);
-            rugMesh.position.set(rx, 0, rz);
-            rugMesh.rotation.y = 0;
-            rugMesh.receiveShadow = true;
-            scene.add(rugMesh);
-            dungeonProps.push(rugMesh);
-            placedRugs++;
+            addRugTile(corridorRugGeo, rx, rz, 0);
           } else if (northOpen) {
-            const rugMesh = new THREE.Mesh(dungeonRugGeoHalf || dungeonRugGeo, dungeonRugMat);
-            rugMesh.position.set(rx, 0, rz - 1.5);
-            rugMesh.rotation.y = 0;
-            rugMesh.receiveShadow = true;
-            scene.add(rugMesh);
-            dungeonProps.push(rugMesh);
-            placedRugs++;
+            addRugTile(halfRugGeo, rx, rz - 1.5, 0);
           } else if (southOpen) {
-            const rugMesh = new THREE.Mesh(dungeonRugGeoHalf || dungeonRugGeo, dungeonRugMat);
-            rugMesh.position.set(rx, 0, rz + 1.5);
-            rugMesh.rotation.y = Math.PI;
-            rugMesh.receiveShadow = true;
-            scene.add(rugMesh);
-            dungeonProps.push(rugMesh);
-            placedRugs++;
+            addRugTile(halfRugGeo, rx, rz + 1.5, Math.PI);
           }
 
           // East-West segment
           if (westOpen && eastOpen) {
-            const rugMesh = new THREE.Mesh(corridorRugGeo, dungeonRugMat);
-            rugMesh.position.set(rx, 0, rz);
-            rugMesh.rotation.y = Math.PI / 2;
-            rugMesh.receiveShadow = true;
-            scene.add(rugMesh);
-            dungeonProps.push(rugMesh);
-            placedRugs++;
+            addRugTile(corridorRugGeo, rx, rz, Math.PI / 2);
           } else if (westOpen) {
-            const rugMesh = new THREE.Mesh(dungeonRugGeoHalf || dungeonRugGeo, dungeonRugMat);
-            rugMesh.position.set(rx - 1.5, 0, rz);
-            rugMesh.rotation.y = -Math.PI / 2;
-            rugMesh.receiveShadow = true;
-            scene.add(rugMesh);
-            dungeonProps.push(rugMesh);
-            placedRugs++;
+            addRugTile(halfRugGeo, rx - 1.5, rz, -Math.PI / 2);
           } else if (eastOpen) {
-            const rugMesh = new THREE.Mesh(dungeonRugGeoHalf || dungeonRugGeo, dungeonRugMat);
-            rugMesh.position.set(rx + 1.5, 0, rz);
-            rugMesh.rotation.y = Math.PI / 2;
-            rugMesh.receiveShadow = true;
-            scene.add(rugMesh);
-            dungeonProps.push(rugMesh);
-            placedRugs++;
+            addRugTile(halfRugGeo, rx + 1.5, rz, Math.PI / 2);
           }
         }
       }
     }
   }
 
-  console.log(`[DUNGEON-SPAWN] Successfully placed throughout labyrinth: ${placedPillars} Pillars, ${placedStatues} Statues, ${placedRugs} Red Runner Rugs!`);
+  // 7. Hardware Instancing & Geometry Merging (Consolidates 1,200+ draw calls into 3 single calls!)
+  // A. All Floor Runner Rugs -> 1 Single Merged Mesh Draw Call
+  if (rugGeometries.length > 0) {
+    const mergedRugGeo = BufferGeometryUtils.mergeGeometries(rugGeometries, false);
+    const mergedRugMesh = new THREE.Mesh(mergedRugGeo, dungeonRugMat);
+    mergedRugMesh.receiveShadow = true;
+    mergedRugMesh.userData = { isDungeonProp: true, isRug: true };
+    scene.add(mergedRugMesh);
+    dungeonProps.push(mergedRugMesh);
+    rugGeometries.forEach(g => g.dispose());
+  }
+
+  // B. All Ornate Columns -> 1 Single InstancedMesh Draw Call
+  if (pillarTransforms.length > 0 && dungeonPillarGeo && dungeonPillarMat) {
+    const instancedPillars = new THREE.InstancedMesh(dungeonPillarGeo, dungeonPillarMat, pillarTransforms.length);
+    for (let i = 0; i < pillarTransforms.length; i++) {
+      const p = pillarTransforms[i];
+      _scratchDummy.position.set(p.x, 0, p.z);
+      _scratchDummy.rotation.set(0, 0, 0);
+      _scratchDummy.scale.set(1.5, 1.68, 1.5);
+      _scratchDummy.updateMatrix();
+      instancedPillars.setMatrixAt(i, _scratchDummy.matrix);
+    }
+    instancedPillars.instanceMatrix.needsUpdate = true;
+    instancedPillars.castShadow = true;
+    instancedPillars.receiveShadow = true;
+    instancedPillars.userData = { isDungeonProp: true, isPillar: true };
+    scene.add(instancedPillars);
+    dungeonProps.push(instancedPillars);
+  }
+
+  // C. All Monk Statues -> 1 Single InstancedMesh Draw Call
+  if (statueTransforms.length > 0 && dungeonStatueGeo && dungeonStatueMat) {
+    const instancedStatues = new THREE.InstancedMesh(dungeonStatueGeo, dungeonStatueMat, statueTransforms.length);
+    for (let i = 0; i < statueTransforms.length; i++) {
+      const s = statueTransforms[i];
+      _scratchDummy.position.set(s.x, 0, s.z);
+      _scratchDummy.rotation.set(0, s.rotY, 0);
+      _scratchDummy.scale.set(1.3, 1.45, 1.3);
+      _scratchDummy.updateMatrix();
+      instancedStatues.setMatrixAt(i, _scratchDummy.matrix);
+    }
+    instancedStatues.instanceMatrix.needsUpdate = true;
+    instancedStatues.castShadow = true;
+    instancedStatues.receiveShadow = true;
+    instancedStatues.userData = { isDungeonProp: true, isStatue: true };
+    scene.add(instancedStatues);
+    dungeonProps.push(instancedStatues);
+  }
+
+  console.log(`[DUNGEON-SPAWN] Successfully placed throughout labyrinth: ${placedPillars} Pillars (Instanced), ${placedStatues} Statues (Instanced), ${placedRugs} Red Runner Rugs (Merged into 1 draw call)!`);
 }
 
 // Reusable scratch objects to eliminate Garbage Collection allocations in render loops
@@ -3419,6 +3436,26 @@ function generateMaze(keysCount = 8) {
   gateMesh.rotation.y = gateRotY;
   gateMeshRef = gateMesh;
   scene.add(gateMesh);
+  
+  // Overhead glowing extraction beacon & illuminated EXIT sign above Master Vault Gate
+  const exitBeacon = new THREE.PointLight(0x06b6d4, 3.2, 16);
+  exitBeacon.position.set(gateCoordinates.x, 3.8, gateCoordinates.z);
+  scene.add(exitBeacon);
+  dungeonProps.push(exitBeacon);
+
+  const exitSignGeo = new THREE.BoxGeometry(1.8, 0.45, 0.2);
+  const exitSignMat = new THREE.MeshStandardMaterial({
+    color: 0x082f49,
+    emissive: 0x06b6d4,
+    emissiveIntensity: 0.9,
+    roughness: 0.2,
+    metalness: 0.8
+  });
+  const exitSignMesh = new THREE.Mesh(exitSignGeo, exitSignMat);
+  exitSignMesh.position.set(gateCoordinates.x, 3.7, gateCoordinates.z);
+  exitSignMesh.rotation.y = gateRotY;
+  scene.add(exitSignMesh);
+  dungeonProps.push(exitSignMesh);
   
   // Create an invisible blocking volume so player can't walk through the door
   let blockerSizeX = 4.5, blockerSizeZ = 1;
@@ -7868,6 +7905,50 @@ function drawMinimap() {
     ctx.fill();
   }
 
+  // Draw Master Gate (Vault) Extraction Point
+  if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
+    const gc = (gateCoordinates.x / blockSize) + (totalCols / 2);
+    const gr = (gateCoordinates.z / blockSize) + (totalRows / 2);
+    
+    ctx.save();
+    ctx.translate(gc * cellSize, gr * cellSize);
+    
+    // Pulsing cyan radar beacon
+    const pulse = 0.8 + 0.25 * Math.sin(performance.now() * 0.004);
+    ctx.fillStyle = 'rgba(6, 182, 212, 0.35)';
+    ctx.beginPath();
+    ctx.arc(0, 0, cellSize * 1.15 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Gold perimeter vault ring
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = Math.max(1.5, cellSize * 0.15);
+    ctx.beginPath();
+    ctx.arc(0, 0, cellSize * 0.65, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Solid cyan vault door disk
+    ctx.fillStyle = '#06b6d4';
+    ctx.beginPath();
+    ctx.arc(0, 0, cellSize * 0.52, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner vault lock core
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(0, 0, cellSize * 0.22, 0, Math.PI * 2);
+    ctx.fill();
+
+    // "EXIT" label badge
+    ctx.fillStyle = '#e0f2fe';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('EXIT', 0, -cellSize * 0.95);
+    
+    ctx.restore();
+  }
+
   // Draw Light Sanctuaries (Feature 4: Warm Gold Lantern markers)
   if (typeof sanctuaryZones !== 'undefined') {
     sanctuaryZones.forEach(s => {
@@ -8258,19 +8339,27 @@ function animate() {
           }
         }
 
-        // 3. Solid Dungeon Props Collision (Pillars & Statues - prevents phasing through)
+        // 3. Solid Dungeon Props Collision (Spatial grid check - O(1))
         const playerBodyRadius = 0.45;
-        for (let i = 0; i < dungeonPropColliders.length; i++) {
-          const prop = dungeonPropColliders[i];
-          const dx = camera.position.x - prop.x;
-          const dz = camera.position.z - prop.z;
-          const maxD = prop.radius + playerBodyRadius;
-          if (Math.abs(dx) > maxD || Math.abs(dz) > maxD) continue; // Fast AABB prune
-          const dist = Math.hypot(dx, dz);
-          if (dist < maxD && dist > 0.0001) {
-            const overlap = maxD - dist;
-            camera.position.x += (dx / dist) * overlap;
-            camera.position.z += (dz / dist) * overlap;
+        if (dungeonPropGrid && dungeonPropGrid.size > 0) {
+          for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+              const bucket = dungeonPropGrid.get(`${pGridR + dr},${pGridC + dc}`);
+              if (!bucket) continue;
+              for (let i = 0; i < bucket.length; i++) {
+                const prop = bucket[i];
+                const dx = camera.position.x - prop.x;
+                const dz = camera.position.z - prop.z;
+                const maxD = prop.radius + playerBodyRadius;
+                if (Math.abs(dx) > maxD || Math.abs(dz) > maxD) continue; // Fast AABB prune
+                const dist = Math.hypot(dx, dz);
+                if (dist < maxD && dist > 0.0001) {
+                  const overlap = maxD - dist;
+                  camera.position.x += (dx / dist) * overlap;
+                  camera.position.z += (dz / dist) * overlap;
+                }
+              }
+            }
           }
         }
       }
@@ -8925,12 +9014,61 @@ function animate() {
     }
   }
 
-  // Update and draw Minimap & Cooldown Timers
-  if (window.gameReady) {
-    if (myTeam === 'Human') {
-      updateMinimapVisibility();
+  // Dynamic HUD Vault Waypoint Tracker
+  if (window.gameReady && typeof gateCoordinates !== 'undefined' && gateCoordinates && myTeam === 'Human') {
+    let vaultTrackerEl = document.getElementById('hud-vault-tracker');
+    if (!vaultTrackerEl) {
+      const statsBar = document.querySelector('.objective-inline-stats');
+      if (statsBar) {
+        vaultTrackerEl = document.createElement('span');
+        vaultTrackerEl.id = 'hud-vault-tracker';
+        vaultTrackerEl.style.cssText = 'color: #38bdf8; font-weight: bold; margin-left: 0.5rem; text-shadow: 0 0 6px rgba(56, 189, 248, 0.6);';
+        statsBar.appendChild(vaultTrackerEl);
+      }
     }
-    drawMinimap();
+    if (vaultTrackerEl) {
+      const dx = gateCoordinates.x - camera.position.x;
+      const dz = gateCoordinates.z - camera.position.z;
+      const dist = Math.round(Math.hypot(dx, dz));
+      
+      if (dist <= 6) {
+        vaultTrackerEl.textContent = '📍 AT VAULT!';
+        vaultTrackerEl.style.color = '#10b981';
+      } else {
+        // Angle to vault relative to player's facing direction
+        const angleToVault = Math.atan2(dx, dz);
+        let diffAngle = angleToVault - camera.rotation.y;
+        while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
+        while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
+        
+        // Select 8-way arrow
+        const octant = Math.round(diffAngle / (Math.PI / 4));
+        const arrows = ['⬇', '↘', '➡', '↗', '⬆', '↖', '⬅', '↙'];
+        const arrow = arrows[(octant + 4) % 8];
+        
+        vaultTrackerEl.textContent = `📍 VAULT: ${dist}m ${arrow}`;
+        vaultTrackerEl.style.color = '#38bdf8';
+      }
+    }
+  }
+
+  // Throttled Minimap & Cooldown Timers (60-144Hz canvas overdraw optimization)
+  if (window.gameReady) {
+    const dx = Math.abs(camera.position.x - lastMinimapX);
+    const dz = Math.abs(camera.position.z - lastMinimapZ);
+    const dRot = Math.abs(camera.rotation.y - lastMinimapRot);
+    const dt = time - lastMinimapTime;
+
+    if (dx > 0.15 || dz > 0.15 || dRot > 0.04 || dt > 150) {
+      lastMinimapX = camera.position.x;
+      lastMinimapZ = camera.position.z;
+      lastMinimapRot = camera.rotation.y;
+      lastMinimapTime = time;
+      if (myTeam === 'Human') {
+        updateMinimapVisibility();
+      }
+      drawMinimap();
+    }
     updateCooldownHUD();
   }
 
