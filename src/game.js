@@ -2321,9 +2321,9 @@ function createBorderStripGeo(length = 2.0, width = 0.20) {
 
 // 5. Golden Winged Crest rug for shrine cells (proportional center emblem + seamless runner ends)
 function createCrestRugGeo(width = 2.0, length = 6.0) {
-  // Center crest emblem panel is 1.12m long (aspect ratio ~1.78, matching texture 0.4024 / 0.2321 = 1.73)
-  const crestLen = 1.12;
-  const runnerLen = (length - crestLen) / 2; // 2.44m on each side
+  // Center crest emblem panel is 0.95m long (aspect ratio 2.0 / 0.95 = 2.10, exact match to texture 522/238 = 2.19)
+  const crestLen = 0.95;
+  const runnerLen = (length - crestLen) / 2; // ~2.525m on each side
 
   const geos = [];
 
@@ -2340,7 +2340,7 @@ function createCrestRugGeo(width = 2.0, length = 6.0) {
   southUV.needsUpdate = true;
   geos.push(southGeo);
 
-  // 2. Center crest panel (authentic golden winged crest from panel 4)
+  // 2. Center crest panel (authentic golden winged crest from panel 4, head facing forward down corridor)
   const crestGeo = new THREE.PlaneGeometry(width, crestLen);
   crestGeo.rotateX(-Math.PI / 2);
   crestGeo.translate(0, 0.022, 0);
@@ -2348,7 +2348,7 @@ function createCrestRugGeo(width = 2.0, length = 6.0) {
   for (let i = 0; i < crestUV.count; i++) {
     const u = crestUV.getX(i);
     const v = crestUV.getY(i);
-    crestUV.setXY(i, 0.0488 + u * (0.4512 - 0.0488), 0.0195 + v * (0.2516 - 0.0195));
+    crestUV.setXY(i, 0.0488 + u * (0.4590 - 0.0488), 0.2516 - v * (0.2516 - 0.0195));
   }
   crestUV.needsUpdate = true;
   geos.push(crestGeo);
