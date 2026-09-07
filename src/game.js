@@ -683,12 +683,20 @@ export function attachForestToVault() {
 
   const forestContainer = new THREE.Group();
   forestContainer.name = 'forest_outdoor_world';
+  // Kept strictly 100% hidden during normal maze gameplay — only revealed when escaping through the vault!
+  forestContainer.visible = false;
 
   const forestClone = preloadedForestModel.clone(true);
-  const scale = 0.028; // Standard metric normalization (~103m span)
+  const scale = 0.025; // Clean metric normalization
   forestClone.scale.set(scale, scale, scale);
-  // Center X, align terrain floor around Y = 830 to Y = 0, place center around -16m in local Z
-  forestClone.position.set(-1200 * scale, -830 * scale, -300 * scale);
+
+  // Compute exact bounding box and strictly anchor the forest behind the door in negative Z (Z <= -2.0m)
+  // This mathematically guarantees ZERO vertices ever enter the labyrinth or clip through the ceiling!
+  const rawBox = new THREE.Box3().setFromObject(forestClone);
+  const centerX = (rawBox.min.x + rawBox.max.x) / 2;
+  const groundY = 830 * scale; // Align terrain floor to Y=0
+  const offsetZ = -rawBox.max.z - 2.0; // Strictly outside the doorway in -Z
+  forestClone.position.set(-centerX, -groundY, offsetZ);
   forestContainer.add(forestClone);
 
   // Clearing apron leading from vault threshold into the woods
@@ -700,7 +708,7 @@ export function attachForestToVault() {
   });
   const clearingMesh = new THREE.Mesh(clearingGeo, clearingMat);
   clearingMesh.rotation.x = -Math.PI / 2;
-  clearingMesh.position.set(0, 0.005, -12);
+  clearingMesh.position.set(0, 0.005, -14);
   clearingMesh.receiveShadow = true;
   forestContainer.add(clearingMesh);
 
@@ -708,12 +716,14 @@ export function attachForestToVault() {
   const outdoorSun = new THREE.DirectionalLight(0xfffae8, 3.5);
   outdoorSun.position.set(6, 26, -24);
   outdoorSun.target.position.set(0, 1.5, 0);
+  outdoorSun.visible = false;
   forestContainer.add(outdoorSun);
   forestContainer.add(outdoorSun.target);
 
   // Forest canopy ambient sky reflection
   const skyHemisphere = new THREE.HemisphereLight(0x88ccff, 0x1a3320, 1.6);
   skyHemisphere.position.set(0, 30, -18);
+  skyHemisphere.visible = false;
   forestContainer.add(skyHemisphere);
 
   // Soft atmospheric sun shaft through trees into the open doorway
@@ -740,6 +750,9 @@ export function attachForestToVault() {
   const skyDome = new THREE.Mesh(skyDomeGeo, skyDomeMat);
   skyDome.position.set(0, -6, -25);
   forestContainer.add(skyDome);
+
+  forestContainer.userData.outdoorSun = outdoorSun;
+  forestContainer.userData.skyHemisphere = skyHemisphere;
 
   vaultGroupRef.add(forestContainer);
   forestSceneInstance = forestContainer;
@@ -3187,6 +3200,13 @@ function generateMaze(keysCount = 8) {
   });
   dungeonProps = [];
   dungeonPropColliders = [];
+
+  // Hide the 3D forest environment so it never appears inside the maze
+  if (forestSceneInstance) {
+    forestSceneInstance.visible = false;
+    if (forestSceneInstance.userData.outdoorSun) forestSceneInstance.userData.outdoorSun.visible = false;
+    if (forestSceneInstance.userData.skyHemisphere) forestSceneInstance.userData.skyHemisphere.visible = false;
+  }
 
   // Cleanup old floor and ceiling
   if (floorMesh) {
@@ -7368,6 +7388,13 @@ function playEscapeCinematic(callback) {
     const targetY = startY + 5.2;
     const startTime = performance.now();
     const duration = 2200;
+
+    // REVEAL 3D FOREST: The forest ONLY appears now as the vault door opens to escape!
+    if (forestSceneInstance) {
+      forestSceneInstance.visible = true;
+      if (forestSceneInstance.userData.outdoorSun) forestSceneInstance.userData.outdoorSun.visible = true;
+      if (forestSceneInstance.userData.skyHemisphere) forestSceneInstance.userData.skyHemisphere.visible = true;
+    }
 
     // Atmospheric transition: dark dungeon fog opens into lush outdoor forest atmosphere
     if (scene.fog) {
