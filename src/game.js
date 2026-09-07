@@ -3552,102 +3552,140 @@ function generateCodeClues() {
 
 function generateCircuitBreakers() {
   circuitBreakers.forEach(b => {
-    scene.remove(b.mesh);
-    if (b.mesh.geometry) b.mesh.geometry.dispose();
-    if (b.mesh.material) b.mesh.material.dispose();
+    if (b.mesh) {
+      scene.remove(b.mesh);
+      b.mesh.traverse(child => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      });
+    }
   });
   circuitBreakers = [];
   fixedBreakersCount = 0;
 
-  const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
-  const breakerGeo = new THREE.BoxGeometry(0.8, 1.2, 0.15);
+  const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
+  const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : totalRows;
+  const blockSize = mazeBlockSize || 6.0;
+  const breakerThickness = 0.16;
+  const wallFaceOffset = (blockSize / 2) - (breakerThickness / 2); // 2.92m from center to wall surface
+
+  const breakerGeo = new THREE.BoxGeometry(0.95, 0.95, breakerThickness);
   const breakerTex = getLoadedTexture('/assets/breaker_texture.png');
-  const breakerMat = new THREE.MeshStandardMaterial({ map: breakerTex, color: 0xffaaaa, roughness: 0.4, metalness: 0.8 });
-  
-  for (let i = 0; i < totalBreakersRequired; i++) {
-    const mesh = new THREE.Mesh(breakerGeo, breakerMat.clone());
-    
-    let mounted = false;
-    const shuffledCorridors = shuffleArray(getAvailableCorridors(4.5));
-    
-    for (const corr of shuffledCorridors) {
-      const col = Math.floor(corr.x / mazeBlockSize + mazeSizeGlobal / 2);
-      const row = Math.floor(corr.z / mazeBlockSize + mazeSizeGlobal / 2);
-      
+  const casingMat = new THREE.MeshStandardMaterial({ color: 0x22242a, roughness: 0.6, metalness: 0.7 });
+  const faceMat = new THREE.MeshStandardMaterial({ map: breakerTex, color: 0xffffff, roughness: 0.45, metalness: 0.75 });
+  // BoxGeometry faces: 0 (+X), 1 (-X), 2 (+Y), 3 (-Y), 4 (+Z - Front), 5 (-Z - Back)
+  const breakerMaterials = [casingMat, casingMat, casingMat, casingMat, faceMat, casingMat];
+
+  // Gather all open corridor cells that have at least one adjacent static wall (mazeLayout === 1)
+  const wallCandidates = [];
+  for (let r = 1; r < totalRows - 1; r++) {
+    for (let c = 1; c < totalCols - 1; c++) {
+      if (!mazeLayout[r] || (mazeLayout[r][c] !== 0 && mazeLayout[r][c] !== 2)) continue;
+
+      const corrX = (c - totalCols / 2) * blockSize + blockSize / 2;
+      const corrZ = (r - totalRows / 2) * blockSize + blockSize / 2;
+
       const dirs = [
-        { dc: 0, dr: -1, rx: 0, rz: -mazeBlockSize/2, rotY: 0 },         
-        { dc: 0, dr: 1, rx: 0, rz: mazeBlockSize/2, rotY: Math.PI },     
-        { dc: -1, dr: 0, rx: -mazeBlockSize/2, rz: 0, rotY: Math.PI/2 }, 
-        { dc: 1, dr: 0, rx: mazeBlockSize/2, rz: 0, rotY: -Math.PI/2 }   
+        { dc: 0, dr: -1, candX: corrX, candZ: corrZ - wallFaceOffset, rotY: 0 },          // North wall, faces South (+Z)
+        { dc: 0, dr: 1,  candX: corrX, candZ: corrZ + wallFaceOffset, rotY: Math.PI },      // South wall, faces North (-Z)
+        { dc: -1, dr: 0, candX: corrX - wallFaceOffset, candZ: corrZ, rotY: Math.PI / 2 },  // West wall, faces East (+X)
+        { dc: 1, dr: 0,  candX: corrX + wallFaceOffset, candZ: corrZ, rotY: -Math.PI / 2 }  // East wall, faces West (-X)
       ];
-      
+
       for (const d of dirs) {
-        const nr = row + d.dr;
-        const nc = col + d.dc;
-        if (nr >= 0 && nr < mazeSizeGlobal && nc >= 0 && nc < mazeSizeGlobal && mazeLayout[nr][nc] === 1) {
-          // Never mount on dynamic sliding doors / walls
+        const nr = r + d.dr;
+        const nc = c + d.dc;
+        if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr][nc] === 1) {
+          // Never mount on dynamic sliding doors
           if (mazeLayout[nr][nc] === 2) continue;
 
-          const expandedWallWidth = mazeBlockSize + 0.5;
-          const distToWallFace = mazeBlockSize - (expandedWallWidth / 2);
-          const breakerThickness = 0.15;
-          const offset = distToWallFace - (breakerThickness / 2) - 0.01;
+          // Avoid solid pillars and monk statues
+          const collidesWithSolidProp = dungeonPropColliders.some(p => {
+            return Math.hypot(p.x - d.candX, p.z - d.candZ) < (p.radius + 0.65);
+          });
+          if (collidesWithSolidProp) continue;
 
-          const dirX = Math.sign(d.rx);
-          const dirZ = Math.sign(d.rz);
-          const candX = corr.x + dirX * offset;
-          const candZ = corr.z + dirZ * offset;
-
-          if (isDungeon) {
-            // 1. Strict avoidance: never mount in cells with wall columns ((row + col) % 2 === 0)
-            if ((row + col) % 2 === 0) continue;
-
-            // 2. Strict avoidance: never mount within 2.0m of ANY dungeon prop (pillars, statues, shrines)
-            const collidesWithProp = dungeonProps.some(p => {
-              if (p.userData && p.userData.isDungeonProp) {
-                return Math.hypot(p.position.x - candX, p.position.z - candZ) < 2.0;
-              }
-              return false;
-            });
-            if (collidesWithProp) continue;
-
-            // 3. Never mount near master vault gate entrance
-            if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
-              if (Math.hypot(candX - gateCoordinates.x, candZ - gateCoordinates.z) < 5.0) continue;
-            }
-
-            // 4. Never mount near light sanctuary perimeter pillars
-            if (typeof sanctuaryZones !== 'undefined' && Array.isArray(sanctuaryZones)) {
-              if (sanctuaryZones.some(s => Math.hypot(candX - s.x, candZ - s.z) < 5.0)) continue;
-            }
+          // Avoid Master Vault Gate area
+          if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
+            if (Math.hypot(d.candX - gateCoordinates.x, d.candZ - gateCoordinates.z) < 6.0) continue;
           }
 
-          mesh.position.set(candX, 1.5, candZ);
-          mesh.rotation.y = d.rotY;
-          mounted = true;
+          // Avoid Human spawn center
+          const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+          const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+          if (Math.hypot(d.candX - sx, d.candZ - sz) < 5.0) continue;
 
-          claimSpawnLocation(corr.x, corr.z, 4.5, `Breaker_${i}`);
-          break;
+          // Avoid Light Sanctuary centers
+          if (typeof sanctuaryZones !== 'undefined' && Array.isArray(sanctuaryZones)) {
+            if (sanctuaryZones.some(s => Math.hypot(d.candX - s.x, d.candZ - s.z) < 5.0)) continue;
+          }
+
+          wallCandidates.push({
+            x: d.candX,
+            z: d.candZ,
+            rotY: d.rotY,
+            corrX,
+            corrZ
+          });
         }
       }
-      if (mounted) break;
     }
-    
-    if (!mounted) {
-      const available = shuffleArray(getAvailableCorridors(4.5));
-      const fallbackCorr = available.find(c => {
-        const cCol = Math.floor(c.x / mazeBlockSize + mazeSizeGlobal / 2);
-        const cRow = Math.floor(c.z / mazeBlockSize + mazeSizeGlobal / 2);
-        if (isDungeon && (cRow + cCol) % 2 === 0) return false;
-        return !dungeonProps.some(p => Math.hypot(p.position.x - c.x, p.position.z - c.z) < 2.0);
-      }) || (available.length > 0 ? available[0] : { x: (seededRandom() - 0.5) * 40, z: (seededRandom() - 0.5) * 40 });
-      mesh.position.set(fallbackCorr.x, 1.5, fallbackCorr.z);
-      claimSpawnLocation(fallbackCorr.x, fallbackCorr.z, 4.5, `Breaker_${i}`);
+  }
+
+  const shuffledCandidates = shuffleArray(wallCandidates);
+
+  for (let i = 0; i < totalBreakersRequired; i++) {
+    // Attempt spacing with 10m threshold, then 6m, then any candidate
+    let chosen = null;
+    for (const minSpacing of [10.0, 6.0, 0.0]) {
+      chosen = shuffledCandidates.find(cand => {
+        return !circuitBreakers.some(b => Math.hypot(b.mesh.position.x - cand.x, b.mesh.position.z - cand.z) < minSpacing);
+      });
+      if (chosen) break;
     }
-    
+
+    // Failsafe: if no candidates survived prop filter, select any open wall face
+    if (!chosen && shuffledCandidates.length > 0) {
+      chosen = shuffledCandidates[i % shuffledCandidates.length];
+    }
+
+    const mesh = new THREE.Mesh(breakerGeo, breakerMaterials.map(m => m.clone()));
+    const posY = 1.60; // Eye-level flush wall mounting
+
+    if (chosen) {
+      mesh.position.set(chosen.x, posY, chosen.z);
+      mesh.rotation.y = chosen.rotY;
+      claimSpawnLocation(chosen.corrX, chosen.corrZ, 4.0, `Breaker_${i}`);
+    } else {
+      // Last-resort fallback pinned to border wall
+      mesh.position.set((totalCols / 2 - 1) * blockSize, posY, -wallFaceOffset);
+      mesh.rotation.y = 0;
+    }
+
+    // Top Status Indicator LED (Amber/Red when broken, Green when fixed)
+    const ledGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.08, 12);
+    const ledMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 1.5 });
+    const ledMesh = new THREE.Mesh(ledGeo, ledMat);
+    ledMesh.position.set(0, 0.51, 0.04);
+    mesh.add(ledMesh);
+
+    const statusLight = new THREE.PointLight(0xef4444, 1.2, 3.5);
+    statusLight.position.set(0, 0.54, 0.08);
+    mesh.add(statusLight);
+
+    mesh.userData = {
+      id: `breaker_${i}`,
+      ledMesh: ledMesh,
+      statusLight: statusLight
+    };
+
     scene.add(mesh);
-    mesh.userData.id = `breaker_${i}`;
-    
+
     circuitBreakers.push({
       id: `breaker_${i}`,
       mesh: mesh,
@@ -7643,7 +7681,24 @@ function fixBreakerLocal(breakerId) {
   if (!breaker || breaker.isFixed) return;
 
   breaker.isFixed = true;
-  breaker.mesh.material.color.setHex(0x10b981); // Turn green
+  if (breaker.mesh) {
+    if (breaker.mesh.userData && breaker.mesh.userData.ledMesh) {
+      breaker.mesh.userData.ledMesh.material.color.setHex(0x10b981);
+      breaker.mesh.userData.ledMesh.material.emissive.setHex(0x10b981);
+    }
+    if (breaker.mesh.userData && breaker.mesh.userData.statusLight) {
+      breaker.mesh.userData.statusLight.color.setHex(0x10b981);
+    }
+    if (breaker.mesh.material) {
+      if (Array.isArray(breaker.mesh.material)) {
+        breaker.mesh.material.forEach(m => {
+          if (m.map) m.color.setHex(0xdcfce7); // Subtle restore tint on front face
+        });
+      } else {
+        breaker.mesh.material.color.setHex(0x10b981);
+      }
+    }
+  }
   fixedBreakersCount++;
   
   updateEnvironmentLighting();
