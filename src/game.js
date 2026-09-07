@@ -906,6 +906,7 @@ let codeEntered = "";
 let functionalKeysRevealed = [];
 let foundKeysList = [];
 let carriedKeys = [];      // Keys currently carried (max 3)
+let discoveredKeyIds = new Set(); // Tracks unique key IDs discovered to prevent dropped keys from re-triggering maze realignment
 const MAX_CARRIED_KEYS = 3;
 let insertedGateKeys = []; // Keys installed into the Master Gate
 let codeClueNotes = []; // Clue objects in the maze
@@ -3426,21 +3427,16 @@ function generateMaze(keysCount = 8) {
         const halfX = isEW ? 0.35 : (blockSize / 2);
         const halfZ = isEW ? (blockSize / 2) : 0.35;
 
-        if (isDungeon && dungeonModules.wall) {
-          wallMesh = dungeonModules.wall.clone(true);
-          wallMesh.position.set(xPos, 0, zPos);
-          wallMesh.scale.set(1.87, 1.75, 1.5);
-          wallMesh.rotation.y = isEW ? 0 : Math.PI / 2;
-        } else {
-          // Precise doorway thickness matching corridor opening
-          const doorGeo = isDungeon
-            ? createDungeonWallBox(isEW ? 0.7 : blockSize + 0.1, wallHeight, isEW ? blockSize + 0.1 : 0.7)
-            : new THREE.BoxGeometry(isEW ? 0.7 : blockSize + 0.1, wallHeight, isEW ? blockSize + 0.1 : 0.7);
-          wallMesh = new THREE.Mesh(doorGeo, slidingWallMat);
-          wallMesh.position.set(xPos, 0, zPos);
-          wallMesh.castShadow = true;
-          wallMesh.receiveShadow = true;
-        }
+        // Precise doorway thickness matching corridor opening, translated vertically so base rests at Y=0 and top touches ceiling
+        const doorGeo = isDungeon
+          ? createDungeonWallBox(isEW ? 0.7 : blockSize + 0.1, wallHeight, isEW ? blockSize + 0.1 : 0.7)
+          : new THREE.BoxGeometry(isEW ? 0.7 : blockSize + 0.1, wallHeight, isEW ? blockSize + 0.1 : 0.7);
+        doorGeo.translate(0, wallHeight / 2, 0);
+
+        wallMesh = new THREE.Mesh(doorGeo, slidingWallMat);
+        wallMesh.position.set(xPos, 0, zPos);
+        wallMesh.castShadow = true;
+        wallMesh.receiveShadow = true;
 
 
         // Floor sliding trackway plate embedded in the corridor floor
@@ -3872,6 +3868,7 @@ function generateCollectibles(keysCount) {
     });
   });
   keysInMaze = [];
+  discoveredKeyIds.clear();
 
   // Also clear old code clue notes
   codeClueNotes.forEach(n => {
@@ -4300,12 +4297,14 @@ function realignMazeCorridors(realignmentState) {
   const solvedCount = realignmentState.puzzleRoomsSolved;
   
   // Display shifting alert
-  triggerNotification(`maze realignment triggered! walls shifting...`);
+  // Display shifting alert
+  triggerNotification(`⚠️ Labyrinth Realignment Triggered! Corridors Shifting...`);
 
-  // Move sliding wall pieces either completely flush (upY) or completely submerged under the floor (downY)
+  // Move sliding wall pieces either completely flush with ceiling/floor (upY = 0) or completely submerged under the floor (downY)
   const isDungeonTheme = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
-  const upY = isDungeonTheme ? 0 : 2.25;
-  const downY = isDungeonTheme ? -3.5 : -5.0;
+  const wallHeight = isDungeonTheme ? 3.5 : 4.5;
+  const upY = 0;
+  const downY = -wallHeight - 0.2;
   slidingWallSegments.forEach((segment, idx) => {
     // Odd/Even shift patterns: upY blocks passage, downY opens passage
     const targetY = (solvedCount % 2 === 0) ? (idx % 2 === 0 ? upY : downY) : (idx % 2 === 0 ? downY : upY);
@@ -4316,13 +4315,20 @@ function realignMazeCorridors(realignmentState) {
       mazeLayout[row][col] = (targetY < -0.5) ? 0 : 2;
     }
 
+    // Cancel any ongoing animation on this segment
+    if (segment.userData && segment.userData.animId) {
+      cancelAnimationFrame(segment.userData.animId);
+      segment.userData.animId = null;
+    }
+
     // Smooth sliding animation
     const anim = () => {
       if (Math.abs(segment.position.y - targetY) > 0.05) {
         segment.position.y += (targetY - segment.position.y) * 0.1;
-        requestAnimationFrame(anim);
+        segment.userData.animId = requestAnimationFrame(anim);
       } else {
         segment.position.y = targetY;
+        segment.userData.animId = null;
       }
     };
     anim();
@@ -5349,6 +5355,12 @@ function checkInteractions() {
         break;
       }
       // Picked up!
+      const keyId = key.id || ('key_' + key.symbol);
+      const isNewKey = !discoveredKeyIds.has(keyId);
+      if (isNewKey) {
+        discoveredKeyIds.add(keyId);
+      }
+
       scene.remove(key.mesh);
       key.mesh.traverse(child => {
         if (child.isMesh) {
@@ -5356,11 +5368,15 @@ function checkInteractions() {
           if (child.material) child.material.dispose();
         }
       });
-      carriedKeys.push({ symbol: key.symbol, typeName: key.typeName });
+      carriedKeys.push({ id: keyId, symbol: key.symbol, typeName: key.typeName });
       foundKeysList.push(key.symbol);
 
       const isReal = gateSolved && functionalKeysRevealed.includes(key.symbol);
-      triggerNotification(`Picked up [${key.typeName}]${isReal ? ' ★ (Twin Key Verified)' : ''} (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
+      if (isNewKey) {
+        triggerNotification(`Discovered NEW [${key.typeName}]! The labyrinth shifts! (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
+      } else {
+        triggerNotification(`Picked up [${key.typeName}]${isReal ? ' ★ (Twin Key Verified)' : ''} (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
+      }
 
       // Refresh the carried-keys HUD
       renderCarriedKeysHUD();
@@ -5368,9 +5384,13 @@ function checkInteractions() {
       // Check if we retrieved the exact matching real keys
       checkWinCondition();
 
-      // Emit events
-      if (typeof socketClient !== 'undefined') socketClient.emit('key_picked_up', { keyId: key.id });
-      socketClient.emit('solve_puzzle_room');
+      // Emit events — only trigger maze realignment if this key has never been discovered before in this match!
+      if (typeof socketClient !== 'undefined') {
+        socketClient.emit('key_picked_up', { keyId: keyId });
+        if (isNewKey) {
+          socketClient.emit('solve_puzzle_room', { keyId: keyId });
+        }
+      }
       keysInMaze.splice(i, 1);
       break;
     }
@@ -5920,14 +5940,18 @@ function dropKey() {
   mesh.position.set(dropPos.x, 1.0, dropPos.z);
   scene.add(mesh);
 
+  const preservedId = poppedKey.id || ('key_' + poppedKey.symbol);
   keysInMaze.push({
+    id: preservedId,
     mesh: mesh,
     symbol: poppedKey.symbol,
-    typeName: poppedKey.typeName
+    typeName: poppedKey.typeName,
+    isDropped: true
   });
 
   if (socketClient) {
     socketClient.emit('key_dropped', {
+      id: preservedId,
       symbol: poppedKey.symbol,
       typeName: poppedKey.typeName,
       position: { x: dropPos.x, y: 1.0, z: dropPos.z }
@@ -7032,10 +7056,15 @@ function setupSocketListeners() {
     mesh.position.set(data.position.x, data.position.y, data.position.z);
     scene.add(mesh);
 
+    const preservedId = data.id || ('key_' + data.symbol);
+    discoveredKeyIds.add(preservedId);
+
     keysInMaze.push({
+      id: preservedId,
       mesh: mesh,
       symbol: data.symbol,
-      typeName: data.typeName
+      typeName: data.typeName,
+      isDropped: true
     });
   });
 
@@ -8852,7 +8881,9 @@ function animate() {
               }
             });
             carriedKeys.forEach(key => {
+              const preservedId = key.id || ('key_' + key.symbol);
               socketClient.emit('key_dropped', {
+                id: preservedId,
                 typeName: key.typeName,
                 symbol: key.symbol,
                 position: { x: camera.position.x, y: 1.6, z: camera.position.z }

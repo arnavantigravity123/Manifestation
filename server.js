@@ -844,13 +844,25 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('solve_puzzle_room', () => {
+  socket.on('solve_puzzle_room', (data) => {
     const { roomId } = socket;
-    console.log(`[Lobby ${roomId}] Key retrieved! Triggering corridor realignment...`);
     const lobby = lobbies[roomId];
     if (!lobby || !lobby.puzzleState) return;
 
+    if (!lobby.puzzleState.discoveredKeyIds) {
+      lobby.puzzleState.discoveredKeyIds = new Set();
+    }
+    const keyId = data && data.keyId;
+    if (keyId) {
+      if (lobby.puzzleState.discoveredKeyIds.has(keyId)) {
+        console.log(`[Lobby ${roomId}] Key ${keyId} was already discovered previously! Ignoring realignment.`);
+        return;
+      }
+      lobby.puzzleState.discoveredKeyIds.add(keyId);
+    }
+
     lobby.puzzleState.puzzleRoomsSolved++;
+    console.log(`[Lobby ${roomId}] NEW key retrieved (${keyId || 'untracked'})! Total new keys: ${lobby.puzzleState.puzzleRoomsSolved}. Triggering corridor realignment...`);
     io.to(roomId).emit('corridor_realignment', {
       puzzleRoomsSolved: lobby.puzzleState.puzzleRoomsSolved,
       newSeed: Math.random()
