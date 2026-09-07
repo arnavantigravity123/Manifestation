@@ -675,7 +675,7 @@ export function loadForestAsset() {
 }
 
 export function attachForestToVault() {
-  if (!preloadedForestModel || !vaultGroupRef) return;
+  if (!vaultGroupRef) return;
 
   if (forestSceneInstance && forestSceneInstance.parent) {
     forestSceneInstance.parent.remove(forestSceneInstance);
@@ -686,53 +686,173 @@ export function attachForestToVault() {
   // Kept strictly 100% hidden during normal maze gameplay — only revealed when escaping through the vault!
   forestContainer.visible = false;
 
-  const forestClone = preloadedForestModel.clone(true);
-  const scale = 0.025; // Clean metric normalization
-  forestClone.scale.set(scale, scale, scale);
-  // Rotate 180 degrees so the natural foreground trail and lake face directly toward the vault doorway
-  forestClone.rotation.y = Math.PI;
+  // 1. Rolling Summer Forest Terrain
+  const groundGeo = new THREE.PlaneGeometry(120, 120, 48, 48);
+  groundGeo.rotateX(-Math.PI / 2);
+  const pos = groundGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    // Smooth valley trail in the center (|x| < 3.2m), rising into gentle rolling hills on the flanks
+    const distFromTrail = Math.max(0, Math.abs(x) - 3.2);
+    const hillHeight = Math.pow(distFromTrail * 0.18, 1.45) + Math.sin(x * 0.22) * Math.cos(z * 0.22) * 0.6;
+    pos.setY(i, Math.max(-0.08, hillHeight));
+  }
+  groundGeo.computeVertexNormals();
 
-  const rawBox = new THREE.Box3().setFromObject(forestClone);
-  const centerX = (rawBox.min.x + rawBox.max.x) / 2;
-  const groundY = 830 * scale; // Align terrain floor to Y=0
-  // Position foreground right outside the doorway at Z <= -1.5m
-  const offsetZ = -rawBox.max.z - 1.5;
-  forestClone.position.set(-centerX, -groundY, offsetZ);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x2a5925, // Lush vibrant summer grass
+    roughness: 0.88,
+    metalness: 0.02
+  });
+  const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+  groundMesh.position.set(0, 0, -50);
+  groundMesh.receiveShadow = true;
+  forestContainer.add(groundMesh);
 
-  // Optimize and enhance all forest meshes: double-sided foliage, alphaTest for crisp leaves, and proper speculars
-  forestClone.traverse(child => {
-    if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
-      if (child.material) {
-        child.material.side = THREE.DoubleSide;
-        if (child.material.transparent) {
-          child.material.alphaTest = 0.35;
-          child.material.depthWrite = true;
-        }
-        if (child.material.roughness !== undefined) {
-          child.material.roughness = Math.min(child.material.roughness, 0.75);
-        }
-        if (child.material.metalness !== undefined) {
-          child.material.metalness = Math.min(child.material.metalness, 0.05);
-        }
-      }
+  // 2. Natural Winding Forest Trail
+  const trailGeo = new THREE.PlaneGeometry(5.2, 60, 16, 44);
+  trailGeo.rotateX(-Math.PI / 2);
+  const tPos = trailGeo.attributes.position;
+  for (let i = 0; i < tPos.count; i++) {
+    const z = tPos.getZ(i);
+    const curveX = Math.sin(z * 0.09) * 1.6;
+    tPos.setX(i, tPos.getX(i) + curveX);
+    tPos.setY(i, 0.04);
+  }
+  trailGeo.computeVertexNormals();
+  const trailMat = new THREE.MeshStandardMaterial({
+    color: 0x524131, // Woodland trail soil and fine gravel
+    roughness: 0.92,
+    metalness: 0.01
+  });
+  const trailMesh = new THREE.Mesh(trailGeo, trailMat);
+  trailMesh.position.set(0, 0, -28);
+  trailMesh.receiveShadow = true;
+  forestContainer.add(trailMesh);
+
+  // 3. Multi-tiered Conifer Pine Tree Generator
+  function createPineTree(height, radius) {
+    const tree = new THREE.Group();
+    const trunkH = height * 0.32;
+    const trunkGeo = new THREE.CylinderGeometry(radius * 0.16, radius * 0.26, trunkH, 7);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x342012, roughness: 0.9 });
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = trunkH / 2;
+    trunk.castShadow = true;
+    tree.add(trunk);
+
+    const tiers = 4;
+    const foliageColors = [0x153b1b, 0x1d4d24, 0x26602e, 0x307539];
+    for (let t = 0; t < tiers; t++) {
+      const progress = t / (tiers - 1);
+      const coneR = radius * (1.0 - progress * 0.52);
+      const coneH = (height * 0.32) * (1.0 - progress * 0.18);
+      const coneGeo = new THREE.ConeGeometry(coneR, coneH, 7);
+      const coneMat = new THREE.MeshStandardMaterial({
+        color: foliageColors[t],
+        roughness: 0.78,
+        metalness: 0.02
+      });
+      const cone = new THREE.Mesh(coneGeo, coneMat);
+      cone.position.y = trunkH * 0.65 + t * (height * 0.19);
+      cone.castShadow = true;
+      cone.receiveShadow = true;
+      tree.add(cone);
     }
+    return tree;
+  }
+
+  // 4. Distant Mountain Silhouette Peaks
+  function createMountain(width, height, color) {
+    const mGeo = new THREE.ConeGeometry(width / 2, height, 5);
+    const mMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.95 });
+    const mesh = new THREE.Mesh(mGeo, mMat);
+    mesh.position.y = height / 2;
+    return mesh;
+  }
+
+  const m1 = createMountain(65, 45, 0x44617a);
+  m1.position.set(-40, 0, -95);
+  forestContainer.add(m1);
+
+  const m2 = createMountain(90, 60, 0x385166);
+  m2.position.set(6, 0, -108);
+  forestContainer.add(m2);
+
+  const m3 = createMountain(60, 40, 0x44617a);
+  m3.position.set(45, 0, -92);
+  forestContainer.add(m3);
+
+  // 5. Pine Tree Placements
+  const treeSpecs = [
+    // Left side forest
+    { x: -5.5, z: -5.5, h: 9.0, r: 2.5 },
+    { x: -7.8, z: -11.0, h: 11.5, r: 3.1 },
+    { x: -4.8, z: -15.5, h: 10.0, r: 2.7 },
+    { x: -9.2, z: -21.0, h: 13.0, r: 3.4 },
+    { x: -6.2, z: -27.0, h: 11.0, r: 3.0 },
+    { x: -11.8, z: -17.0, h: 14.0, r: 3.8 },
+    { x: -13.5, z: -32.0, h: 15.0, r: 4.0 },
+    { x: -7.5, z: -38.0, h: 12.0, r: 3.3 },
+    { x: -17.5, z: -25.0, h: 16.0, r: 4.2 },
+    { x: -15.5, z: -45.0, h: 17.5, r: 4.5 },
+    // Right side forest
+    { x: 5.8, z: -6.0, h: 9.5, r: 2.6 },
+    { x: 8.2, z: -12.0, h: 12.0, r: 3.2 },
+    { x: 5.0, z: -17.5, h: 10.5, r: 2.8 },
+    { x: 9.8, z: -23.0, h: 13.5, r: 3.5 },
+    { x: 6.4, z: -29.0, h: 11.5, r: 3.1 },
+    { x: 12.5, z: -19.0, h: 14.5, r: 3.9 },
+    { x: 14.5, z: -33.0, h: 15.5, r: 4.2 },
+    { x: 7.8, z: -39.0, h: 12.5, r: 3.4 },
+    { x: 18.5, z: -26.0, h: 16.5, r: 4.3 },
+    { x: 16.5, z: -46.0, h: 18.0, r: 4.6 },
+    // Deep forest canopy horizon
+    { x: -28, z: -56, h: 19, r: 5.0 },
+    { x: -11, z: -60, h: 20, r: 5.2 },
+    { x: 0, z: -64, h: 21, r: 5.5 },
+    { x: 14, z: -58, h: 19, r: 5.0 },
+    { x: 28, z: -55, h: 18, r: 4.8 }
+  ];
+
+  treeSpecs.forEach(s => {
+    const t = createPineTree(s.h, s.r);
+    t.position.set(s.x, 0, s.z);
+    t.rotation.y = Math.sin(s.x * s.z) * 3.14;
+    forestContainer.add(t);
   });
 
-  forestContainer.add(forestClone);
+  // 6. Natural Boulders
+  const rockMat = new THREE.MeshStandardMaterial({ color: 0x666662, roughness: 0.92 });
+  const rockGeo = new THREE.DodecahedronGeometry(0.75, 1);
+  const rockPositions = [
+    { x: -3.2, z: -6.5, s: 0.85 },
+    { x: 3.4, z: -9.5, s: 1.15 },
+    { x: -3.8, z: -18.5, s: 1.35 },
+    { x: 3.6, z: -24.5, s: 0.95 },
+    { x: -4.0, z: -33.5, s: 1.45 }
+  ];
+  rockPositions.forEach(r => {
+    const rock = new THREE.Mesh(rockGeo, rockMat);
+    rock.scale.set(r.s, r.s * 0.7, r.s);
+    rock.position.set(r.x, (r.s * 0.7) / 2, r.z);
+    rock.rotation.set(r.x, r.z, 0);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    forestContainer.add(rock);
+  });
 
-  // Warm, natural sunlight beaming down through the trees
-  const outdoorSun = new THREE.DirectionalLight(0xfffae5, 3.2);
-  outdoorSun.position.set(15, 35, -35);
-  outdoorSun.target.position.set(0, 1.5, -15);
+  // 7. Outdoor Natural Sunlight & Sky Light
+  const outdoorSun = new THREE.DirectionalLight(0xfffae0, 3.2);
+  outdoorSun.position.set(18, 40, -30);
+  outdoorSun.target.position.set(0, 2, -15);
   outdoorSun.visible = false;
   forestContainer.add(outdoorSun);
   forestContainer.add(outdoorSun.target);
 
-  // Soft sky & vegetation ambient fill light
-  const skyHemisphere = new THREE.HemisphereLight(0xbde2ff, 0x2e5c36, 2.4);
-  skyHemisphere.position.set(0, 35, -20);
+  const skyHemisphere = new THREE.HemisphereLight(0xbfe3ff, 0x245229, 2.2);
+  skyHemisphere.position.set(0, 40, -20);
   skyHemisphere.visible = false;
   forestContainer.add(skyHemisphere);
 
@@ -1282,6 +1402,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   }
 
   const handleEnterGame = (e) => {
+    if (window.isEscaping) {
+      ptrOverlay.style.display = 'none';
+      return;
+    }
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
     if (isMinimapExpanded) return;
@@ -1330,7 +1454,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
 
   // Global helper to request pointer lock during active gameplay
   window.requestGamePointerLock = () => {
-    if (isMobileDevice || !window.gameReady || window.isSpectating) return;
+    if (isMobileDevice || !window.gameReady || window.isSpectating || window.isEscaping) return;
     if (document.pointerLockElement) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
@@ -1353,6 +1477,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
 
   // Global click & pointerdown to relock mouse anytime player clicks during gameplay
   window.addEventListener('click', (e) => {
+    if (window.isEscaping) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
     if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel')) return;
@@ -1361,6 +1486,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     }
   });
   window.addEventListener('pointerdown', (e) => {
+    if (window.isEscaping) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
     if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel')) return;
@@ -1370,10 +1496,17 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   });
 
   document.addEventListener('pointerlockchange', () => {
-    if (isMobileDevice) return;
+    if (isMobileDevice || window.isEscaping) {
+      ptrOverlay.style.display = 'none';
+      return;
+    }
     if (document.pointerLockElement) {
       ptrOverlay.style.display = 'none';
     } else {
+      if (window.isEscaping) {
+        ptrOverlay.style.display = 'none';
+        return;
+      }
       // Don't show pause overlay if keypad modal, minimap, or game-over is open
       const keypadEl = document.getElementById('keypad-modal-ui');
       const isKeypadOpen = Boolean(keypadEl && keypadEl.style.display !== 'none');
@@ -5475,6 +5608,18 @@ function checkInteractions() {
         document.getElementById('hud-overlay').style.display = 'none';
         if (document.pointerLockElement) document.exitPointerLock();
         window.mobileGameActive = false;
+        const endOverlay = document.getElementById('end-game-overlay');
+        if (endOverlay && endOverlay.style.display !== 'flex') {
+          const title = document.getElementById('end-game-title');
+          const details = document.getElementById('end-game-details');
+          if (title && details) {
+            endOverlay.style.display = 'flex';
+            title.textContent = "ESCAPED!";
+            title.style.color = "#10b981";
+            title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
+            details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>`;
+          }
+        }
       });
       return;
     } else {
@@ -7417,6 +7562,30 @@ function playWrongCodeAnimation() {
 let gateBlockerRef = null; // Will be set during maze building
 
 function playEscapeCinematic(callback) {
+  window.isEscaping = true;
+
+  // Suppress pointer lock and pause overlay immediately
+  if (document.pointerLockElement) {
+    document.exitPointerLock();
+  }
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  if (ptrOverlay) ptrOverlay.style.display = 'none';
+
+  // Dismiss any open modals so the cinematic viewport is completely unobstructed
+  const keypadEl = document.getElementById('keypad-modal-ui');
+  if (keypadEl) keypadEl.style.display = 'none';
+  if (isMinimapExpanded) {
+    isMinimapExpanded = false;
+    const mapWrap = document.getElementById('minimap-wrapper');
+    const mapCtrl = document.getElementById('minimap-expanded-controls');
+    const topCls = document.getElementById('minimap-top-close-btn');
+    const ttlTxt = document.getElementById('minimap-title-text');
+    if (mapWrap) mapWrap.classList.remove('expanded');
+    if (mapCtrl) mapCtrl.style.display = 'none';
+    if (topCls) topCls.style.display = 'none';
+    if (ttlTxt) ttlTxt.textContent = 'MINIMAP (Press M / Tap)';
+  }
+
   const overlay = document.getElementById('escape-cinematic-overlay');
   const lbTop = document.getElementById('escape-letterbox-top');
   const lbBottom = document.getElementById('escape-letterbox-bottom');
@@ -7464,13 +7633,16 @@ function playEscapeCinematic(callback) {
       if (forestSceneInstance.userData.skyHemisphere) forestSceneInstance.userData.skyHemisphere.visible = true;
     }
 
-    // Atmospheric transition: dark dungeon fog opens into crisp, expansive outdoor forest air
-    if (scene.fog) {
-      scene.fog.color.setHex(0xb2d8c0); // Soft natural sky horizon mist
-      scene.fog.density = 0.0018; // Wide, expansive sightlines
+    // Atmospheric transition: dark dungeon fog opens into crisp, expansive outdoor forest air and vibrant sky
+    if (scene) {
+      scene.background = new THREE.Color(0x6bb5ea); // Clear azure blue sky!
+      if (scene.fog) {
+        scene.fog.color.setHex(0x9fd2ee); // Soft atmospheric aerial horizon mist
+        scene.fog.density = 0.005; // Expansive outdoor sightlines
+      }
     }
     if (ambientLight) {
-      ambientLight.intensity = Math.max(ambientLight.intensity, 1.8);
+      ambientLight.intensity = Math.max(ambientLight.intensity, 2.2);
     }
     
     const animateGate = (now) => {
