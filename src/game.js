@@ -534,6 +534,86 @@ export function loadSoldierAsset() {
 }
 export const loadSoldierFBXAssets = loadSoldierAsset;
 
+function attachGhostHoodedHead(model) {
+  if (!model || model.getObjectByName('ghostHoodedHead')) return;
+
+  const headGroup = new THREE.Group();
+  headGroup.name = 'ghostHoodedHead';
+
+  // Inherit robe cloth map if available
+  let baseMat = null;
+  model.traverse(c => {
+    if (c.isMesh && c.material && !baseMat) baseMat = c.material;
+  });
+
+  const cowlMat = new THREE.MeshStandardMaterial({
+    color: 0x9898a4, // Silvery-ash specter silk matching the ghost model
+    roughness: 0.65,
+    metalness: 0.15,
+    transparent: true,
+    opacity: 0.95,
+    side: THREE.DoubleSide
+  });
+  if (baseMat && baseMat.map) {
+    cowlMat.map = baseMat.map;
+  }
+
+  const voidMat = new THREE.MeshBasicMaterial({
+    color: 0x020204, // Deep consuming shadow void inside the hood
+    side: THREE.DoubleSide
+  });
+
+  // 1. Neck Mantle Drape (covers and wraps the hollow neck collar)
+  const collarGeo = new THREE.CylinderGeometry(0.22, 0.32, 0.20, 16, 1, true);
+  const collarMesh = new THREE.Mesh(collarGeo, cowlMat);
+  collarMesh.position.set(0, 0.93, 0.01);
+  headGroup.add(collarMesh);
+
+  // 2. Main Hood Dome
+  const domeGeo = new THREE.SphereGeometry(0.26, 18, 16, 0, Math.PI * 2, 0, Math.PI * 0.78);
+  const domeMesh = new THREE.Mesh(domeGeo, cowlMat);
+  domeMesh.position.set(0, 1.07, -0.04);
+  headGroup.add(domeMesh);
+
+  // 3. Menacing Pointed Cowl Peak trailing back
+  const peakGeo = new THREE.ConeGeometry(0.18, 0.36, 16);
+  const peakMesh = new THREE.Mesh(peakGeo, cowlMat);
+  peakMesh.position.set(0, 1.22, -0.10);
+  peakMesh.rotation.x = -0.40;
+  headGroup.add(peakMesh);
+
+  // 4. Shadow Void Cavity inside the hood
+  const voidGeo = new THREE.SphereGeometry(0.19, 16, 14);
+  const voidMesh = new THREE.Mesh(voidGeo, voidMat);
+  voidMesh.position.set(0, 1.05, 0.04);
+  voidMesh.scale.set(0.95, 1.05, 0.65);
+  headGroup.add(voidMesh);
+
+  // 5. Piercing Supernatural Glowing Eyes (Embers of Hatred)
+  const eyeMat = new THREE.MeshBasicMaterial({
+    color: 0xff2200,
+    fog: false
+  });
+  const eyeGeo = new THREE.SphereGeometry(0.024, 12, 12);
+
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.075, 1.07, 0.16);
+  leftEye.scale.set(1.4, 0.75, 1.0); // Narrowed sinister slit
+  headGroup.add(leftEye);
+
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.075, 1.07, 0.16);
+  rightEye.scale.set(1.4, 0.75, 1.0);
+  headGroup.add(rightEye);
+
+  // 6. Eerie Crimson Point Light illuminating the inner cowl
+  const eyeGlow = new THREE.PointLight(0xff1100, 1.8, 3.5);
+  eyeGlow.position.set(0, 1.07, 0.18);
+  headGroup.add(eyeGlow);
+
+  model.add(headGroup);
+}
+
 export function loadGhostGLBAsset() {
   if (preloadedGhostModel || isGhostGLBLoading) return;
   isGhostGLBLoading = true;
@@ -541,11 +621,14 @@ export function loadGhostGLBAsset() {
   gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
     preloadedGhostModel = gltf.scene;
     preloadedGhostModel.scale.set(2.0, 2.0, 2.0);
-    
+
+    // Attach menacing hooded cowl with glowing supernatural eyes over the hollow collar
+    attachGhostHoodedHead(preloadedGhostModel);
+
     // Center the model's pivot point so it rotates in place instead of sweeping
     const box = new THREE.Box3().setFromObject(preloadedGhostModel);
     const center = box.getCenter(new THREE.Vector3());
-    
+
     preloadedGhostModel.position.x = -center.x;
     preloadedGhostModel.position.z = -center.z;
     preloadedGhostModel.position.y = -box.min.y + 0.2; // Hover slightly above ground
