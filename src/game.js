@@ -564,114 +564,14 @@ export function loadSoldierAsset() {
 }
 export const loadSoldierFBXAssets = loadSoldierAsset;
 
-function attachGhostHoodedHead(model) {
-  if (!model || model.getObjectByName('ghostHoodedHead')) return;
-
-  const headGroup = new THREE.Group();
-  headGroup.name = 'ghostHoodedHead';
-
-  // 1. Weathered obsidian specter cloth material for the cowl (matte, non-metallic)
-  const cowlMat = new THREE.MeshStandardMaterial({
-    color: 0x181822, // Deep charcoal obsidian specter cloth
-    roughness: 0.85,
-    metalness: 0.05,
-    side: THREE.DoubleSide
-  });
-
-  const voidMat = new THREE.MeshBasicMaterial({
-    color: 0x010103, // Pitch black shadow void inside the cowl
-    side: THREE.DoubleSide
-  });
-
-  // 1. Neck Collar Mantle (wraps and bridges the open collar hole of the robe)
-  const collarGeo = new THREE.CylinderGeometry(0.28, 0.38, 0.26, 20, 1, true);
-  const collarMesh = new THREE.Mesh(collarGeo, cowlMat);
-  collarMesh.position.set(0, 0.94, 0.02);
-  headGroup.add(collarMesh);
-
-  // 2. Main Outer Hood Dome (arches over the head and shoulders)
-  const domeGeo = new THREE.SphereGeometry(0.34, 24, 20, -Math.PI * 0.45, Math.PI * 1.9, 0, Math.PI * 0.75);
-  const domeMesh = new THREE.Mesh(domeGeo, cowlMat);
-  domeMesh.position.set(0, 1.26, 0.02);
-  domeMesh.scale.set(0.95, 1.15, 1.05);
-  headGroup.add(domeMesh);
-
-  // 3. Menacing Pointed Cowl Peak trailing backward and upward
-  const peakGeo = new THREE.ConeGeometry(0.18, 0.48, 16);
-  const peakMesh = new THREE.Mesh(peakGeo, cowlMat);
-  peakMesh.position.set(0, 1.48, -0.16);
-  peakMesh.rotation.x = -0.55;
-  headGroup.add(peakMesh);
-
-  // 4. Forehead Brow Overhang (casts deep shadows over the face cavity)
-  const browGeo = new THREE.CylinderGeometry(0.32, 0.34, 0.14, 20, 1, false, -Math.PI * 0.4, Math.PI * 0.8);
-  const browMesh = new THREE.Mesh(browGeo, cowlMat);
-  browMesh.position.set(0, 1.34, 0.12);
-  browMesh.rotation.x = 0.35;
-  headGroup.add(browMesh);
-
-  // 5. Deep Shadow Void Cavity inside the hood
-  const voidGeo = new THREE.SphereGeometry(0.25, 18, 16);
-  const voidMesh = new THREE.Mesh(voidGeo, voidMat);
-  voidMesh.position.set(0, 1.22, 0.0);
-  voidMesh.scale.set(0.9, 1.05, 0.7);
-  headGroup.add(voidMesh);
-
-  // 6. Sinister Floating Spectral Skull Visage (faint ethereal bone outline inside the void)
-  const skullMat = new THREE.MeshStandardMaterial({
-    color: 0x3b1d54, // Eerie necrotic purple-bone tint
-    roughness: 0.65,
-    metalness: 0.08,
-    emissive: 0x1f0b33,
-    emissiveIntensity: 0.5
-  });
-  const craniumGeo = new THREE.SphereGeometry(0.15, 16, 14);
-  const craniumMesh = new THREE.Mesh(craniumGeo, skullMat);
-  craniumMesh.position.set(0, 1.25, 0.04);
-  craniumMesh.scale.set(0.9, 1.0, 0.85);
-  headGroup.add(craniumMesh);
-
-  const jawGeo = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-  const jawMesh = new THREE.Mesh(jawGeo, skullMat);
-  jawMesh.position.set(0, 1.13, 0.08);
-  headGroup.add(jawMesh);
-
-  // 7. Piercing Supernatural Glowing Eyes (Fiery Embers of Hatred)
-  const eyeMat = new THREE.MeshBasicMaterial({
-    color: 0xff1e00, // Fiery demonic ember red
-    fog: false
-  });
-  const eyeGeo = new THREE.SphereGeometry(0.026, 12, 12);
-
-  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-  leftEye.position.set(-0.065, 1.24, 0.165);
-  leftEye.scale.set(1.6, 0.6, 1.0); // Sinister horizontal slit
-  headGroup.add(leftEye);
-
-  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-  rightEye.position.set(0.065, 1.24, 0.165);
-  rightEye.scale.set(1.6, 0.6, 1.0);
-  headGroup.add(rightEye);
-
-  // 8. Eerie Crimson Supernatural Point Light illuminating out from the hood
-  const eyeGlow = new THREE.PointLight(0xff2200, 2.8, 6.0);
-  eyeGlow.position.set(0, 1.24, 0.22);
-  headGroup.add(eyeGlow);
-
-  model.add(headGroup);
-}
-
 export function loadGhostGLBAsset() {
   if (preloadedGhostModel || isGhostGLBLoading) return;
   isGhostGLBLoading = true;
 
   gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
     preloadedGhostModel = gltf.scene;
-    // Imposing, proportional specter scale (~2.7m tall, fits corridor comfortably)
-    preloadedGhostModel.scale.set(1.55, 1.55, 1.55);
-
-    // Attach menacing hooded cowl with glowing supernatural eyes over the hollow collar
-    attachGhostHoodedHead(preloadedGhostModel);
+    // Scale 1.2 ensures ghost is imposing (~2.4m tall) but fits comfortably inside corridors without clipping through walls or pillars
+    preloadedGhostModel.scale.set(1.2, 1.2, 1.2);
 
     // Center the model's pivot point so it rotates in place instead of sweeping
     const box = new THREE.Box3().setFromObject(preloadedGhostModel);
@@ -679,18 +579,14 @@ export function loadGhostGLBAsset() {
 
     preloadedGhostModel.position.x = -center.x;
     preloadedGhostModel.position.z = -center.z;
-    preloadedGhostModel.position.y = -box.min.y + 0.15; // Hover slightly above ground
+    preloadedGhostModel.position.y = -box.min.y + 0.2; // Hover slightly above ground
     
     preloadedGhostModel.traverse((child) => {
-      if (child.isMesh && child.material) {
-        // Authentic supernatural specter silk: eliminate shiny tinfoil / liquid mercury look!
-        child.material.metalness = 0.06;
-        child.material.roughness = 0.82;
-        child.material.transparent = true;
-        child.material.opacity = 0.92;
-        // Subtle eerie void aura
-        child.material.emissive = new THREE.Color(0x280d3d);
-        child.material.emissiveIntensity = 0.45;
+      if (child.isMesh) {
+        if (child.material) {
+          child.material.transparent = true;
+          child.material.opacity = 0.95;
+        }
       }
     });
 
