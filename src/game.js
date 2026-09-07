@@ -166,21 +166,51 @@ function upgradeMeshGroupToFBX(group) {
   }
 }
 
-// Strip root motion (Hips position tracks) from animation clips so the game controls position
-function stripRootMotion(clip) {
+// Strip root motion and stabilize locomotion clips
+function stripRootMotion(clip, animName) {
   if (!clip || !clip.tracks) return clip;
   clip.tracks = clip.tracks.filter(track => {
-    // Remove position tracks on the root bone (Hips) — keeps rotation for natural hip sway
-    // Mixamo root bone is usually 'mixamorigHips'
+    // Remove position tracks on the root bone (Hips) so game controls translation
     const isRootPosition = track.name.match(/Hips\.position/) || track.name.match(/^position/);
     return !isRootPosition;
   });
+
+  // For strafe clips: neutralize unnatural pitch (X) and roll (Z) tilts
+  // on root hips, spine chain, neck, and head bones so character stays 100% upright without tilting into walls
+  if (animName === 'strafeLeft' || animName === 'strafeRight') {
+    clip.tracks.forEach(track => {
+      if (
+        track.name.match(/Hips\.quaternion/) ||
+        track.name.match(/Spine.*\.quaternion/) ||
+        track.name.match(/Neck\.quaternion/) ||
+        track.name.match(/Head\.quaternion/)
+      ) {
+        for (let i = 0; i < track.times.length; i++) {
+          const q = new THREE.Quaternion(
+            track.values[i * 4],
+            track.values[i * 4 + 1],
+            track.values[i * 4 + 2],
+            track.values[i * 4 + 3]
+          );
+          const e = new THREE.Euler().setFromQuaternion(q, 'YXZ');
+          e.x = 0; // Neutralize pitch hunch/lean
+          e.z = 0; // Neutralize sideways roll tilt
+          const nq = new THREE.Quaternion().setFromEuler(e);
+          track.values[i * 4] = nq.x;
+          track.values[i * 4 + 1] = nq.y;
+          track.values[i * 4 + 2] = nq.z;
+          track.values[i * 4 + 3] = nq.w;
+        }
+      }
+    });
+  }
+
   return clip;
 }
 
 function registerAnimationToActiveMixers(animName, clip) {
   if (!clip) return;
-  stripRootMotion(clip);
+  stripRootMotion(clip, animName);
   humanAnimClips[animName] = clip;
   clip.name = animName;
 
@@ -2289,19 +2319,54 @@ function createBorderStripGeo(length = 2.0, width = 0.20) {
   return geo;
 }
 
-// 5. Golden Winged Crest rug for shrine cells
+// 5. Golden Winged Crest rug for shrine cells (proportional center emblem + seamless runner ends)
 function createCrestRugGeo(width = 2.0, length = 6.0) {
-  const geo = new THREE.PlaneGeometry(width, length);
-  geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0.025, 0);
-  const uvAttr = geo.attributes.uv;
-  for (let i = 0; i < uvAttr.count; i++) {
-    const u = uvAttr.getX(i);
-    const v = uvAttr.getY(i);
-    uvAttr.setXY(i, 0.0488 + u * (0.4512 - 0.0488), 0.0500 + v * (0.1900 - 0.0500));
+  // Center crest emblem panel is 1.12m long (aspect ratio ~1.78, matching texture 0.4024 / 0.2321 = 1.73)
+  const crestLen = 1.12;
+  const runnerLen = (length - crestLen) / 2; // 2.44m on each side
+
+  const geos = [];
+
+  // 1. South runner arm
+  const southGeo = new THREE.PlaneGeometry(width, runnerLen);
+  southGeo.rotateX(-Math.PI / 2);
+  southGeo.translate(0, 0.02, (crestLen + runnerLen) / 2);
+  const southUV = southGeo.attributes.uv;
+  for (let i = 0; i < southUV.count; i++) {
+    const u = southUV.getX(i);
+    const v = southUV.getY(i);
+    southUV.setXY(i, 0.0488 + u * (0.4512 - 0.0488), 0.8150 + v * (0.9200 - 0.8150));
   }
-  uvAttr.needsUpdate = true;
-  return geo;
+  southUV.needsUpdate = true;
+  geos.push(southGeo);
+
+  // 2. Center crest panel (authentic golden winged crest from panel 4)
+  const crestGeo = new THREE.PlaneGeometry(width, crestLen);
+  crestGeo.rotateX(-Math.PI / 2);
+  crestGeo.translate(0, 0.022, 0);
+  const crestUV = crestGeo.attributes.uv;
+  for (let i = 0; i < crestUV.count; i++) {
+    const u = crestUV.getX(i);
+    const v = crestUV.getY(i);
+    crestUV.setXY(i, 0.0488 + u * (0.4512 - 0.0488), 0.0195 + v * (0.2516 - 0.0195));
+  }
+  crestUV.needsUpdate = true;
+  geos.push(crestGeo);
+
+  // 3. North runner arm
+  const northGeo = new THREE.PlaneGeometry(width, runnerLen);
+  northGeo.rotateX(-Math.PI / 2);
+  northGeo.translate(0, 0.02, -(crestLen + runnerLen) / 2);
+  const northUV = northGeo.attributes.uv;
+  for (let i = 0; i < northUV.count; i++) {
+    const u = northUV.getX(i);
+    const v = northUV.getY(i);
+    northUV.setXY(i, 0.0488 + u * (0.4512 - 0.0488), 0.8150 + v * (0.9200 - 0.8150));
+  }
+  northUV.needsUpdate = true;
+  geos.push(northGeo);
+
+  return BufferGeometryUtils.mergeGeometries(geos);
 }
 
 /* ── Authentic Stone Brick Wall Box Generator (100% stone masonry, zero black cutouts or panels) ── */
@@ -8551,6 +8616,7 @@ function animate() {
           }
         }
         setHumanLocomotionAction(localPlayerVisual, desired, 0.15);
+        localPlayerVisual.rotation.z = 0;
       } else if (localPlayerVisual) {
         // Procedural stride bob and sway for static 3D meshes (Standard Issue GLB)
         const isMoving = moveForward || moveBackward || moveLeft || moveRight || (Math.hypot(velocity.x, velocity.z) > 0.4);
