@@ -1370,7 +1370,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   const w = container.clientWidth || window.innerWidth;
   const h = container.clientHeight || window.innerHeight;
   
-  camera = new THREE.PerspectiveCamera(75, w / h, 0.1, 1000);
+  camera = new THREE.PerspectiveCamera(75, w / h, 0.2, 350);
   camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
   camera.position.set(0, 1.6, 0); // Eye level
 
@@ -1439,7 +1439,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   renderer = new THREE.WebGLRenderer({ 
     antialias: !isMobileDevice,
     powerPreference: "high-performance",
-    precision: isMobileDevice ? "mediump" : "highp"
+    precision: "highp"
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileDevice ? 1.0 : 1.25));
   renderer.setSize(w, h);
@@ -2179,7 +2179,7 @@ function makeDungeonMat(colorPath, normalPath, roughPath, opts = {}) {
 function createSeamlessRugGeo(width = 2.0, length = 6.0) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0.02, 0);
+  geo.translate(0, 0.035, 0);
   const uvAttr = geo.attributes.uv;
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
@@ -2195,7 +2195,7 @@ function createSeamlessRugGeo(width = 2.0, length = 6.0) {
 function createArmRugGeo(width = 2.0, length = 2.0) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0.02, 0);
+  geo.translate(0, 0.035, 0);
   const uvAttr = geo.attributes.uv;
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
@@ -2210,7 +2210,7 @@ function createArmRugGeo(width = 2.0, length = 2.0) {
 function createPureRedTileGeo(width = 2.0, length = 2.0) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0.02, 0);
+  geo.translate(0, 0.035, 0);
   const uvAttr = geo.attributes.uv;
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
@@ -2226,7 +2226,7 @@ function createPureRedTileGeo(width = 2.0, length = 2.0) {
 function createBorderStripGeo(length = 2.0, width = 0.20) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0.022, 0); // 2mm elevation over red base prevents any z-fighting
+  geo.translate(0, 0.039, 0); // Elevated over red base prevents any z-fighting
   const uvAttr = geo.attributes.uv;
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
@@ -2249,7 +2249,7 @@ function createCrestRugGeo(width = 2.0, length = 6.0) {
   // 1. South runner arm
   const southGeo = new THREE.PlaneGeometry(width, runnerLen);
   southGeo.rotateX(-Math.PI / 2);
-  southGeo.translate(0, 0.02, (crestLen + runnerLen) / 2);
+  southGeo.translate(0, 0.035, (crestLen + runnerLen) / 2);
   const southUV = southGeo.attributes.uv;
   for (let i = 0; i < southUV.count; i++) {
     const u = southUV.getX(i);
@@ -2262,7 +2262,7 @@ function createCrestRugGeo(width = 2.0, length = 6.0) {
   // 2. Center crest panel (authentic golden winged crest from panel 4, head facing forward down corridor)
   const crestGeo = new THREE.PlaneGeometry(width, crestLen);
   crestGeo.rotateX(-Math.PI / 2);
-  crestGeo.translate(0, 0.022, 0);
+  crestGeo.translate(0, 0.039, 0);
   const crestUV = crestGeo.attributes.uv;
   for (let i = 0; i < crestUV.count; i++) {
     const u = crestUV.getX(i);
@@ -2275,7 +2275,7 @@ function createCrestRugGeo(width = 2.0, length = 6.0) {
   // 3. North runner arm
   const northGeo = new THREE.PlaneGeometry(width, runnerLen);
   northGeo.rotateX(-Math.PI / 2);
-  northGeo.translate(0, 0.02, -(crestLen + runnerLen) / 2);
+  northGeo.translate(0, 0.035, -(crestLen + runnerLen) / 2);
   const northUV = northGeo.attributes.uv;
   for (let i = 0; i < northUV.count; i++) {
     const u = northUV.getX(i);
@@ -2371,6 +2371,10 @@ function createProceduralDungeonAssets() {
     '/assets/dungeon/textures/RugRoughness.png',
     { roughness: 0.85, emissive: 0x220505, emissiveIntensity: 0.15, doubleSide: true }
   );
+  dungeonRugMat.polygonOffset = true;
+  dungeonRugMat.polygonOffsetFactor = -2;
+  dungeonRugMat.polygonOffsetUnits = -2;
+  dungeonRugMat.needsUpdate = true;
 
   dungeonAssetsLoaded = true;
   console.log('[DUNGEON] Procedural dungeon assets created');
@@ -2537,6 +2541,9 @@ function loadDungeonPackAssets() {
       dungeonRugMat.depthWrite = true;
       dungeonRugMat.roughness = 0.85;
       dungeonRugMat.side = THREE.DoubleSide; // Ensure visibility from all camera angles
+      dungeonRugMat.polygonOffset = true;
+      dungeonRugMat.polygonOffsetFactor = -2;
+      dungeonRugMat.polygonOffsetUnits = -2;
       dungeonRugMat.needsUpdate = true;
     }
 
@@ -4802,48 +4809,49 @@ function setupControls() {
     function addTapListener(el, callback) {
       if (!el) return;
       let lastTrigger = 0;
-      let touchActive = false;
-      let startX = 0;
-      let startY = 0;
 
       const fire = (e) => {
         const now = performance.now();
-        if (now - lastTrigger < 200) return; // Prevent double-fire
+        if (now - lastTrigger < 120) return; // Prevent duplicate triggers within 120ms
         lastTrigger = now;
         callback(e);
       };
 
+      // 1. Instant touchstart for mobile devices (fires on contact with zero latency)
       el.addEventListener('touchstart', (e) => {
-        touchActive = true;
-        el.classList.add('btn-pressed');
-        if (e.touches && e.touches[0]) {
-          startX = e.touches[0].clientX;
-          startY = e.touches[0].clientY;
-        }
-      }, { passive: true });
-
-      el.addEventListener('touchend', (e) => {
-        el.classList.remove('btn-pressed');
-        if (!touchActive) return;
-        touchActive = false;
-
-        // Ensure finger didn't drag off the button
-        if (e.changedTouches && e.changedTouches[0]) {
-          const dx = Math.abs(e.changedTouches[0].clientX - startX);
-          const dy = Math.abs(e.changedTouches[0].clientY - startY);
-          if (dx > 35 || dy > 35) return;
-        }
-
         if (e.cancelable) e.preventDefault();
         e.stopPropagation();
+        el.classList.add('btn-pressed');
         fire(e);
       }, { passive: false });
 
+      el.addEventListener('touchend', (e) => {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        el.classList.remove('btn-pressed');
+      }, { passive: false });
+
       el.addEventListener('touchcancel', () => {
-        touchActive = false;
         el.classList.remove('btn-pressed');
       }, { passive: true });
 
+      // 2. Pointer down for devices using Pointer Events (mouse, stylus)
+      el.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch') return; // Handled by touchstart
+        e.stopPropagation();
+        el.classList.add('btn-pressed');
+        fire(e);
+      });
+
+      el.addEventListener('pointerup', () => {
+        el.classList.remove('btn-pressed');
+      });
+
+      el.addEventListener('pointercancel', () => {
+        el.classList.remove('btn-pressed');
+      });
+
+      // 3. Fallback click for desktop
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         fire(e);
