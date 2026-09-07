@@ -949,6 +949,8 @@ let flashlightBattery = 100;
 let gateCoordinates = { x: 0, z: -35 };
 let gateMeshRef = null;  // Global ref so we can toggle visibility
 let padMeshRef = null;   // Global ref for the keypad
+let vaultObjects = [];   // Global tracker for all 3D vault portal components
+let gateKeypadLed = null; // Status LED on the 3D keypad terminal
 let gateSolved = false;
 let hasEscaped = false;
 let codeEntered = "";
@@ -2595,7 +2597,7 @@ function spawnDungeonProps(layout, blockSize) {
     const isNorthSouth = (edge === 'N' || edge === 'S');
 
     // Pillars flanking gate door frame
-    [-2.2, 2.2].forEach(offset => {
+    [-2.5, 2.5].forEach(offset => {
       const px = isNorthSouth ? (gateCoordinates.x + offset) : gateCoordinates.x;
       const pz = isNorthSouth ? gateCoordinates.z : (gateCoordinates.z + offset);
       spawnPillarMesh(px, pz);
@@ -3301,6 +3303,12 @@ function generateMaze(keysCount = 8) {
       const zPos = (r - layout.length / 2) * blockSize + blockSize/2;
 
       if (type === 1) {
+        if (r === window.vaultR && c === window.vaultC) {
+          // Master Vault doorway location: skip generating solid wall cube here
+          // so the corridor opening is completely unobstructed. The 3D Vault portal,
+          // reinforced frame, door, and extraction chamber are built below.
+          continue;
+        }
         // Static wall: create transformed geometry for single merged mesh
         const singleGeo = isDungeon 
           ? createDungeonWallBox(blockSize + 0.1, wallHeight, blockSize + 0.1) 
@@ -3399,101 +3407,234 @@ function generateMaze(keysCount = 8) {
     wallGeometries.forEach(g => g.dispose());
   }
 
-  // Draw the Master Gate — Photorealistic Vault Door
+  // Draw the Master Gate — Robust 3D Vault Portal & Extraction Gateway
   const vaultXPos = (window.vaultC - layout[0].length / 2) * blockSize + blockSize/2;
   const vaultZPos = (window.vaultR - layout.length / 2) * blockSize + blockSize/2;
 
-  // Offset slightly from the boundary wall so it's visible and doesn't z-fight
-  let offsetZ = 0, offsetX = 0, padOffsetZ = 0, padOffsetX = 0, blockOffsetZ = 0, blockOffsetX = 0;
+  let offsetX = 0, offsetZ = 0;
   let gateRotY = 0;
   
-  // Use 2.6 to firmly place it 0.1 units outside the 2.5 radius wall
+  // Outer perimeter boundary offset: blockSize is 6.0, half-width is 3.0.
+  // The corridor is inside the maze. The door faces inward towards the corridor.
   if (window.vaultEdge === 'N') {
-    // North wall: faces South (+Z).
-    offsetZ = 2.6; padOffsetX = 1.2; padOffsetZ = 0.05; blockOffsetZ = 1.75; gateRotY = 0;
+    // North wall: corridor is South (+Z). Door faces South (+Z).
+    offsetZ = 3.0; gateRotY = 0;
   } else if (window.vaultEdge === 'S') {
-    // South wall: faces North (-Z).
-    offsetZ = -2.6; padOffsetX = -1.2; padOffsetZ = -0.05; blockOffsetZ = -1.75; gateRotY = Math.PI;
+    // South wall: corridor is North (-Z). Door faces North (-Z).
+    offsetZ = -3.0; gateRotY = Math.PI;
   } else if (window.vaultEdge === 'E') {
-    // East wall: faces West (-X).
-    offsetX = -2.6; padOffsetZ = -1.2; padOffsetX = -0.05; blockOffsetX = -1.75; gateRotY = -Math.PI / 2;
+    // East wall: corridor is West (-X). Door faces West (-X).
+    offsetX = -3.0; gateRotY = -Math.PI / 2;
   } else if (window.vaultEdge === 'W') {
-    // West wall: faces East (+X).
-    offsetX = 2.6; padOffsetZ = 1.2; padOffsetX = 0.05; blockOffsetX = 1.75; gateRotY = Math.PI / 2;
+    // West wall: corridor is East (+X). Door faces East (+X).
+    offsetX = 3.0; gateRotY = Math.PI / 2;
   }
 
   gateCoordinates = { x: vaultXPos + offsetX, z: vaultZPos + offsetZ };
   
-  if (gateMeshRef) { 
-    scene.remove(gateMeshRef); 
-    if (gateMeshRef.geometry) gateMeshRef.geometry.dispose();
-    if (gateMeshRef.material) gateMeshRef.material.dispose();
-    gateMeshRef = null; 
+  // Clean up any previously created vault portal elements
+  if (Array.isArray(vaultObjects)) {
+    vaultObjects.forEach(obj => {
+      scene.remove(obj);
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+        else obj.material.dispose();
+      }
+    });
   }
-  if (padMeshRef) { 
-    scene.remove(padMeshRef); 
-    if (padMeshRef.geometry) padMeshRef.geometry.dispose();
-    if (padMeshRef.material) padMeshRef.material.dispose();
-    padMeshRef = null; 
+  vaultObjects = [];
+  if (gateBlockerRef) {
+    const idx = walls.indexOf(gateBlockerRef);
+    if (idx !== -1) walls.splice(idx, 1);
+    scene.remove(gateBlockerRef);
+    gateBlockerRef = null;
   }
-  
-  const gateGeo = new THREE.PlaneGeometry(4.5, 4); // Match corridor width
-  const vaultTex = getLoadedTexture('/assets/vault_door.png');
-  const gateMat = new THREE.MeshStandardMaterial({ 
-    map: vaultTex,
-    color: 0x8899aa,
-    metalness: 0.8,
-    roughness: 0.3
-  });
-  const gateMesh = new THREE.Mesh(gateGeo, gateMat);
-  gateMesh.position.set(gateCoordinates.x, 2, gateCoordinates.z);
-  gateMesh.rotation.y = gateRotY;
-  gateMeshRef = gateMesh;
-  scene.add(gateMesh);
-  
-  // Overhead glowing extraction beacon & illuminated EXIT sign above Master Vault Gate
-  const exitBeacon = new THREE.PointLight(0x06b6d4, 3.2, 16);
-  exitBeacon.position.set(gateCoordinates.x, 3.8, gateCoordinates.z);
-  scene.add(exitBeacon);
-  dungeonProps.push(exitBeacon);
+  gateMeshRef = null;
+  padMeshRef = null;
+  gateKeypadLed = null;
 
-  const exitSignGeo = new THREE.BoxGeometry(1.8, 0.45, 0.2);
-  const exitSignMat = new THREE.MeshStandardMaterial({
-    color: 0x082f49,
+  // Unified Master Vault Group positioned right at the corridor opening
+  const vaultGroup = new THREE.Group();
+  vaultGroup.position.set(gateCoordinates.x, 0, gateCoordinates.z);
+  vaultGroup.rotation.y = gateRotY;
+  scene.add(vaultGroup);
+  vaultObjects.push(vaultGroup);
+
+  // 1. Heavy Reinforced Steel Architrave Frame
+  const frameMat = new THREE.MeshStandardMaterial({
+    color: 0x1a202c,
+    metalness: 0.85,
+    roughness: 0.35
+  });
+
+  // Top header lintel beam
+  const lintelGeo = new THREE.BoxGeometry(4.6, 0.45, 0.42);
+  const lintelMesh = new THREE.Mesh(lintelGeo, frameMat);
+  lintelMesh.position.set(0, 3.42, 0);
+  lintelMesh.castShadow = true;
+  lintelMesh.receiveShadow = true;
+  vaultGroup.add(lintelMesh);
+
+  // Left jamb post
+  const leftJambGeo = new THREE.BoxGeometry(0.35, 3.4, 0.42);
+  const leftJambMesh = new THREE.Mesh(leftJambGeo, frameMat);
+  leftJambMesh.position.set(-2.15, 1.7, 0);
+  leftJambMesh.castShadow = true;
+  leftJambMesh.receiveShadow = true;
+  vaultGroup.add(leftJambMesh);
+
+  // Right jamb post
+  const rightJambGeo = new THREE.BoxGeometry(0.35, 3.4, 0.42);
+  const rightJambMesh = new THREE.Mesh(rightJambGeo, frameMat);
+  rightJambMesh.position.set(2.15, 1.7, 0);
+  rightJambMesh.castShadow = true;
+  rightJambMesh.receiveShadow = true;
+  vaultGroup.add(rightJambMesh);
+
+  // Floor threshold plate
+  const threshGeo = new THREE.BoxGeometry(4.6, 0.08, 0.42);
+  const threshMesh = new THREE.Mesh(threshGeo, frameMat);
+  threshMesh.position.set(0, 0.04, 0);
+  threshMesh.receiveShadow = true;
+  vaultGroup.add(threshMesh);
+
+  // Warning hazard stripe accent beam under lintel
+  const hazardGeo = new THREE.BoxGeometry(4.0, 0.12, 0.46);
+  const hazardMat = new THREE.MeshStandardMaterial({
+    color: 0xf59e0b,
+    metalness: 0.3,
+    roughness: 0.4,
+    emissive: 0xb45309,
+    emissiveIntensity: 0.35
+  });
+  const hazardMesh = new THREE.Mesh(hazardGeo, hazardMat);
+  hazardMesh.position.set(0, 3.15, 0);
+  vaultGroup.add(hazardMesh);
+
+  // 2. The Massive Reinforced 3D Vault Door (gateMeshRef)
+  const vaultTex = getLoadedTexture('/assets/vault_door.png', null, true);
+  const doorFrontMat = new THREE.MeshStandardMaterial({
+    map: vaultTex,
+    color: 0xffffff,
+    metalness: 0.85,
+    roughness: 0.25,
     emissive: 0x06b6d4,
-    emissiveIntensity: 0.9,
+    emissiveIntensity: 0.08
+  });
+  const doorBackMat = new THREE.MeshStandardMaterial({
+    color: 0x1e2430,
+    metalness: 0.85,
+    roughness: 0.35
+  });
+  // BoxGeometry faces: 0(+X), 1(-X), 2(+Y), 3(-Y), 4(+Z, front), 5(-Z, back)
+  const doorMaterials = [
+    doorBackMat,
+    doorBackMat,
+    doorBackMat,
+    doorBackMat,
+    doorFrontMat,
+    doorBackMat
+  ];
+  const doorGeo = new THREE.BoxGeometry(3.9, 3.16, 0.2);
+  const gateMesh = new THREE.Mesh(doorGeo, doorMaterials);
+  gateMesh.position.set(0, 1.6, 0);
+  gateMesh.castShadow = true;
+  gateMesh.receiveShadow = true;
+  vaultGroup.add(gateMesh);
+  gateMeshRef = gateMesh;
+
+  // 3. Overhead Illuminated EXIT / EXTRACTION Bulkhead Sign
+  const exitSignGeo = new THREE.BoxGeometry(2.0, 0.45, 0.25);
+  const exitSignMat = new THREE.MeshStandardMaterial({
+    color: 0x042f2e,
+    emissive: 0x06b6d4,
+    emissiveIntensity: 1.2,
     roughness: 0.2,
     metalness: 0.8
   });
   const exitSignMesh = new THREE.Mesh(exitSignGeo, exitSignMat);
-  exitSignMesh.position.set(gateCoordinates.x, 3.7, gateCoordinates.z);
-  exitSignMesh.rotation.y = gateRotY;
-  scene.add(exitSignMesh);
-  dungeonProps.push(exitSignMesh);
-  
-  // Create an invisible blocking volume so player can't walk through the door
-  let blockerSizeX = 4.5, blockerSizeZ = 1;
+  exitSignMesh.position.set(0, 3.68, 0.15);
+  vaultGroup.add(exitSignMesh);
+
+  // Cyan extraction beacon PointLight casting real-time cyan illumination across corridor
+  const exitBeacon = new THREE.PointLight(0x06b6d4, 3.5, 18);
+  exitBeacon.position.set(0, 3.8, 0.6);
+  vaultGroup.add(exitBeacon);
+
+  // 4. 3D Keypad Terminal (padMeshRef) mounted on the right frame post
+  const padMountGeo = new THREE.BoxGeometry(0.42, 0.72, 0.14);
+  const padMountMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.8, roughness: 0.3 });
+  const padMountMesh = new THREE.Mesh(padMountGeo, padMountMat);
+  padMountMesh.position.set(2.15, 1.5, 0.22);
+  vaultGroup.add(padMountMesh);
+
+  const padGeo = new THREE.PlaneGeometry(0.38, 0.66);
+  const padTex = getLoadedTexture('/assets/keypad.png', null, true);
+  const padMat = new THREE.MeshStandardMaterial({
+    map: padTex,
+    metalness: 0.5,
+    roughness: 0.4,
+    emissive: 0x0284c7,
+    emissiveIntensity: 0.3
+  });
+  const padMesh = new THREE.Mesh(padGeo, padMat);
+  padMesh.position.set(2.15, 1.5, 0.30);
+  vaultGroup.add(padMesh);
+  padMeshRef = padMesh;
+
+  // Keypad LED Status Light on top of the mount
+  const ledGeo = new THREE.SphereGeometry(0.04, 12, 12);
+  const ledMat = new THREE.MeshStandardMaterial({
+    color: 0xef4444,
+    emissive: 0xef4444,
+    emissiveIntensity: 1.5
+  });
+  const ledMesh = new THREE.Mesh(ledGeo, ledMat);
+  ledMesh.position.set(2.15, 1.83, 0.28);
+  vaultGroup.add(ledMesh);
+  gateKeypadLed = ledMesh;
+
+  // 5. Extraction Chamber (Behind the Door in local -Z)
+  const chamberWallMat = (isDungeon && typeof dungeonWallMat !== 'undefined' && dungeonWallMat) ? dungeonWallMat : frameMat;
+  const chamberBackGeo = new THREE.BoxGeometry(6.0, 3.6, 0.4);
+  const chamberBackMesh = new THREE.Mesh(chamberBackGeo, chamberWallMat);
+  chamberBackMesh.position.set(0, 1.8, -2.8);
+  vaultGroup.add(chamberBackMesh);
+
+  const chamberSideGeo = new THREE.BoxGeometry(0.4, 3.6, 2.8);
+  const chamberLeftMesh = new THREE.Mesh(chamberSideGeo, chamberWallMat);
+  chamberLeftMesh.position.set(-2.8, 1.8, -1.4);
+  vaultGroup.add(chamberLeftMesh);
+
+  const chamberRightMesh = new THREE.Mesh(chamberSideGeo, chamberWallMat);
+  chamberRightMesh.position.set(2.8, 1.8, -1.4);
+  vaultGroup.add(chamberRightMesh);
+
+  // Radiant Escape Portal Light behind the door (shines brilliantly when door opens)
+  const escapePortalLight = new THREE.PointLight(0xffffff, 5.0, 14);
+  escapePortalLight.position.set(0, 2.0, -2.2);
+  vaultGroup.add(escapePortalLight);
+
+  const escapePortalGeo = new THREE.PlaneGeometry(3.6, 3.0);
+  const escapePortalMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const escapePortalMesh = new THREE.Mesh(escapePortalGeo, escapePortalMat);
+  escapePortalMesh.position.set(0, 1.6, -2.55);
+  vaultGroup.add(escapePortalMesh);
+
+  // 6. Invisible Collision Blocker volume preventing players from walking through the closed door
+  let blockerSizeX = 4.5, blockerSizeZ = 0.8;
   if (window.vaultEdge === 'E' || window.vaultEdge === 'W') {
-    blockerSizeX = 1; blockerSizeZ = 4.5;
+    blockerSizeX = 0.8; blockerSizeZ = 4.5;
   }
   const gateBlockerGeo = new THREE.BoxGeometry(blockerSizeX, 4, blockerSizeZ);
   const gateBlockerMat = new THREE.MeshBasicMaterial({ visible: false });
   const gateBlocker = new THREE.Mesh(gateBlockerGeo, gateBlockerMat);
-  gateBlocker.position.set(vaultXPos + blockOffsetX, 2, vaultZPos + blockOffsetZ);
+  gateBlocker.position.set(gateCoordinates.x, 2, gateCoordinates.z);
   gateBlocker.userData = { halfSizeX: blockerSizeX / 2, halfSizeZ: blockerSizeZ / 2 };
   scene.add(gateBlocker);
   walls.push(gateBlocker);
   gateBlockerRef = gateBlocker;
-
-  // Add a photorealistic keypad to the wall next to the door
-  const padGeo = new THREE.PlaneGeometry(0.6, 0.9);
-  const padTex = getLoadedTexture('/assets/keypad.png');
-  const padMat = new THREE.MeshStandardMaterial({ map: padTex, metalness: 0.5, roughness: 0.5 });
-  const padMesh = new THREE.Mesh(padGeo, padMat);
-  padMesh.position.set(gateCoordinates.x + padOffsetX, 1.5, gateCoordinates.z + padOffsetZ);
-  padMesh.rotation.y = gateRotY;
-  padMeshRef = padMesh;
-  scene.add(padMesh);
 
   // Initialize dedicated spawn placement tracker with entrance & exit gate protection
   resetSpawnLocations();
@@ -5385,12 +5526,32 @@ let keypadUI, keypadScreen, keypadBtns, keypadClearBtn, keypadSubmitBtn, keypadC
 function showExitGate() {
   if (!gateMeshRef) return;
   // Flash the gate into unlocked state with a green emissive glow
-  gateMeshRef.material.color.setHex(0x10b981);
-  gateMeshRef.material.emissive = new THREE.Color(0x10b981);
-  gateMeshRef.material.emissiveIntensity = 1.0;
+  if (Array.isArray(gateMeshRef.material)) {
+    gateMeshRef.material.forEach(m => {
+      if (m.color) m.color.setHex(0x10b981);
+      if (m.emissive) {
+        m.emissive.setHex(0x10b981);
+        m.emissiveIntensity = 1.0;
+      }
+    });
+  } else if (gateMeshRef.material) {
+    if (gateMeshRef.material.color) gateMeshRef.material.color.setHex(0x10b981);
+    if (gateMeshRef.material.emissive) {
+      gateMeshRef.material.emissive.setHex(0x10b981);
+      gateMeshRef.material.emissiveIntensity = 1.0;
+    }
+  }
+  if (gateKeypadLed && gateKeypadLed.material) {
+    gateKeypadLed.material.color.setHex(0x10b981);
+    if (gateKeypadLed.material.emissive) gateKeypadLed.material.emissive.setHex(0x10b981);
+  }
   setTimeout(() => {
     if (gateMeshRef) {
-      gateMeshRef.material.emissiveIntensity = 0.3;
+      if (Array.isArray(gateMeshRef.material)) {
+        gateMeshRef.material.forEach(m => { if (m.emissive) m.emissiveIntensity = 0.3; });
+      } else if (gateMeshRef.material && gateMeshRef.material.emissive) {
+        gateMeshRef.material.emissiveIntensity = 0.3;
+      }
     }
   }, 1500);
   triggerNotification("⚠️ EXIT GATE UNLOCKED — Race to the Gate!");
@@ -6194,7 +6355,8 @@ function setupSocketListeners() {
 
     // Remove the 3D keypad terminal mesh from the wall now that code is cracked
     if (padMeshRef) {
-      scene.remove(padMeshRef);
+      if (padMeshRef.parent) padMeshRef.parent.remove(padMeshRef);
+      else scene.remove(padMeshRef);
       if (padMeshRef.geometry) padMeshRef.geometry.dispose();
       if (padMeshRef.material) padMeshRef.material.dispose();
       padMeshRef = null;
