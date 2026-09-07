@@ -2357,11 +2357,11 @@ function createProceduralDungeonAssets() {
     { roughness: 0.8, metalness: 0.04, color: 0x888888, emissive: 0x000000, emissiveIntensity: 0.0 }
   );
 
-  // Seamless continuous velvet runner rugs (Full 6m, Half 3m, Dead-End 4.4m, Corner Turn 2m, Corner Arm 2m)
+  // Seamless continuous velvet runner rugs (Full 6m, Modular 2m Hub, 2m Extension Arms, Perimeter Borders, Dead-End 4.4m, Crest 6m)
   dungeonRugGeoFull = createSeamlessRugGeo(2.0, 6.0);
-  dungeonRugGeoHalf = createSeamlessRugGeo(2.0, 3.0);
-  dungeonRugGeoCorner = createCornerRugGeo(2.0);
-  dungeonRugGeoCornerArm = createSeamlessRugGeo(2.0, 2.0);
+  dungeonRugGeoArm = createArmRugGeo(2.0, 2.0);
+  dungeonRugGeoCenterPure = createPureRedTileGeo(2.0, 2.0);
+  dungeonRugGeoBorder = createBorderStripGeo(2.0, 0.20);
   dungeonRugGeoDeadEnd = createSeamlessRugGeo(2.0, 4.4);
   dungeonRugGeo = dungeonRugGeoFull;
   dungeonRugCrestGeo = createCrestRugGeo(2.0, 6.0);
@@ -2886,15 +2886,20 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   // 6. Seamless Continuous Red Velvet Runner Carpets
-  // Connects strictly along open pathways, never clipping into statues, dead-end pedestals, or wall columns!
+  // Connects strictly along all open pathways (open floors & sliding doorways), never clipping into statues, dead-end pedestals, or wall columns!
   if (layout && layout.length > 0) {
-    for (let r = 1; r < layout.length - 1; r++) {
-      for (let c = 1; c < layout[r].length - 1; c++) {
-        if (layout[r][c] === 0) {
-          const northOpen = (layout[r - 1] && layout[r - 1][c] === 0);
-          const southOpen = (layout[r + 1] && layout[r + 1][c] === 0);
-          const westOpen  = (layout[r][c - 1] === 0);
-          const eastOpen  = (layout[r][c + 1] === 0);
+    const isPassable = (row, col) => {
+      if (!layout[row] || layout[row][col] === undefined) return false;
+      return layout[row][col] === 0 || layout[row][col] === 2;
+    };
+
+    for (let r = 0; r < layout.length; r++) {
+      for (let c = 0; c < layout[r].length; c++) {
+        if (isPassable(r, c)) {
+          const northOpen = isPassable(r - 1, c);
+          const southOpen = isPassable(r + 1, c);
+          const westOpen  = isPassable(r, c - 1);
+          const eastOpen  = isPassable(r, c + 1);
 
           const openCount = (northOpen ? 1 : 0) + (southOpen ? 1 : 0) + (westOpen ? 1 : 0) + (eastOpen ? 1 : 0);
           if (openCount === 0) continue;
