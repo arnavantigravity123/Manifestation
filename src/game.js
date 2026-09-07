@@ -8325,13 +8325,6 @@ function drawMinimap() {
     ctx.arc(0, 0, cellSize * 0.22, 0, Math.PI * 2);
     ctx.fill();
 
-    // "EXIT" label badge
-    ctx.fillStyle = '#e0f2fe';
-    ctx.font = 'bold 8px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('EXIT', 0, -cellSize * 0.95);
-    
     ctx.restore();
   }
 
