@@ -768,7 +768,11 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
 
   if (activeAdInterval) clearInterval(activeAdInterval);
 
-  if (gameAdBackdrop) gameAdBackdrop.style.display = 'flex';
+  if (gameAdBackdrop) {
+    gameAdBackdrop.style.display = 'flex';
+    gameAdBackdrop.style.backdropFilter = 'blur(14px)';
+    gameAdBackdrop.style.webkitBackdropFilter = 'blur(14px)';
+  }
   gameAdModal.style.display = 'block';
   if (adRewardLabel) {
     adRewardLabel.textContent = isRewarded 
@@ -790,7 +794,7 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
     if (adProgressBar) adProgressBar.style.width = `${progress}%`;
 
     const secondsLeft = Math.max(0, Math.ceil((totalMs - elapsed) / 1000));
-    if (adTimerCountdown) adTimerCountdown.textContent = `Closing in ${secondsLeft}s...`;
+    if (adTimerCountdown) adTimerCountdown.textContent = `Entering in ${secondsLeft}s...`;
 
     // Allow skipping interstitial ads after 3 seconds
     if (!isRewarded && elapsed >= 3000 && adSkipBtn) {
@@ -800,7 +804,11 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
     if (elapsed >= totalMs) {
       clearInterval(activeAdInterval);
       activeAdInterval = null;
-      if (gameAdBackdrop) gameAdBackdrop.style.display = 'none';
+      if (gameAdBackdrop) {
+        gameAdBackdrop.style.display = 'none';
+        gameAdBackdrop.style.backdropFilter = 'none';
+        gameAdBackdrop.style.webkitBackdropFilter = 'none';
+      }
       gameAdModal.style.display = 'none';
       if (isRewarded && onReward) onReward();
       if (onComplete) onComplete();
@@ -811,7 +819,11 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
     adSkipBtn.onclick = () => {
       if (activeAdInterval) clearInterval(activeAdInterval);
       activeAdInterval = null;
-      if (gameAdBackdrop) gameAdBackdrop.style.display = 'none';
+      if (gameAdBackdrop) {
+        gameAdBackdrop.style.display = 'none';
+        gameAdBackdrop.style.backdropFilter = 'none';
+        gameAdBackdrop.style.webkitBackdropFilter = 'none';
+      }
       gameAdModal.style.display = 'none';
       if (onComplete) onComplete();
     };
@@ -821,7 +833,11 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
     adVipPromoBtn.onclick = () => {
       if (activeAdInterval) clearInterval(activeAdInterval);
       activeAdInterval = null;
-      if (gameAdBackdrop) gameAdBackdrop.style.display = 'none';
+      if (gameAdBackdrop) {
+        gameAdBackdrop.style.display = 'none';
+        gameAdBackdrop.style.backdropFilter = 'none';
+        gameAdBackdrop.style.webkitBackdropFilter = 'none';
+      }
       gameAdModal.style.display = 'none';
       if (!currentUser) {
         promptGuestToCreateAccount('VIP Pass via RevenueCat');

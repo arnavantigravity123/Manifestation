@@ -1374,7 +1374,11 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
       clearInterval(roleCountdownInterval);
       roleCountdownInterval = null;
     }
-    if (roleSplash) roleSplash.style.display = 'none';
+    if (roleSplash) {
+      roleSplash.style.display = 'none';
+      roleSplash.style.backdropFilter = 'none';
+      roleSplash.style.webkitBackdropFilter = 'none';
+    }
     const hud = document.getElementById('hud-overlay');
     if (hud) hud.style.display = 'flex';
     window.gameReady = true;
@@ -1465,7 +1469,24 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     }
   };
 
-  // 3. Renderer setup
+  // 3. Renderer cleanup & setup
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+  if (renderer) {
+    if (renderer.domElement && renderer.domElement.parentNode) {
+      renderer.domElement.parentNode.removeChild(renderer.domElement);
+    }
+    renderer.dispose();
+    renderer = null;
+  }
+  if (container) {
+    container.innerHTML = '';
+  }
+
+  prevTime = performance.now();
+
   renderer = new THREE.WebGLRenderer({ 
     antialias: !isMobileDevice,
     powerPreference: "high-performance",
@@ -1473,8 +1494,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileDevice ? 1.0 : 1.25));
   renderer.setSize(w, h);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.enabled = !isMobileDevice; // Disable heavy dynamic shadow maps on mobile
+  if (!isMobileDevice) {
+    renderer.shadowMap.type = THREE.PCFShadowMap;
+  }
   container.appendChild(renderer.domElement);
 
   // Setup Audio Context for procedural EMF sound
@@ -1618,6 +1641,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
       depthWrite: false 
     });
 
+    window.ariadneOrbs = [];
+
     for (let i = 0; i < path.length - 1; i++) {
       const p1 = path[i];
       const p2 = path[i + 1];
@@ -1634,17 +1659,11 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
       segMesh.position.set((p1.x + p2.x) / 2, 0.08, (p1.z + p2.z) / 2);
       threadGroup.add(segMesh);
 
-      // Glowing waypoint orb
+      // Glowing waypoint orb (MeshBasicMaterial glows without any lights)
       const orb = new THREE.Mesh(orbGeo, orbMat);
       orb.position.set(p1.x, 0.35, p1.z);
       threadGroup.add(orb);
-
-      // Guiding cyan point lights every 2 segments
-      if (i % 2 === 0) {
-        const pLight = new THREE.PointLight(0x00ffff, 5.0, 8.0);
-        pLight.position.set(p1.x, 0.6, p1.z);
-        threadGroup.add(pLight);
-      }
+      window.ariadneOrbs.push(orb);
     }
 
     // Final guide beacon hovering at the top arch of the vault door
@@ -2730,11 +2749,6 @@ function spawnDungeonProps(layout, blockSize) {
   // Set to track cells with statue shrines so the carpet uses the golden crest emblem
   const shrineCells = new Set();
 
-  // Helper: prevent spawning columns too close to other pillars
-  function isNearPillar(x, z, minDist = 2.0) {
-    return dungeonProps.some(p => p.userData && p.userData.isPillar && Math.hypot(p.position.x - x, p.position.z - z) < minDist);
-  }
-
   // 4. Side-Wall Statue Shrines along Straight Corridors (Nestled against side wall, flanked by two pillars!)
   // Exactly matches reference photo media_1788720114228.png (Corridor_X4 in dungeon.glb)
   if (layout && layout.length > 0) {
@@ -2959,7 +2973,7 @@ function spawnDungeonProps(layout, blockSize) {
       instancedPillars.setMatrixAt(i, _scratchDummy.matrix);
     }
     instancedPillars.instanceMatrix.needsUpdate = true;
-    instancedPillars.castShadow = true;
+    instancedPillars.castShadow = false; // Massively reduces shadow map pass overhead
     instancedPillars.receiveShadow = true;
     instancedPillars.userData = { isDungeonProp: true, isPillar: true };
     scene.add(instancedPillars);
@@ -2978,7 +2992,7 @@ function spawnDungeonProps(layout, blockSize) {
       instancedStatues.setMatrixAt(i, _scratchDummy.matrix);
     }
     instancedStatues.instanceMatrix.needsUpdate = true;
-    instancedStatues.castShadow = true;
+    instancedStatues.castShadow = false; // Massively reduces shadow map pass overhead
     instancedStatues.receiveShadow = true;
     instancedStatues.userData = { isDungeonProp: true, isStatue: true };
     scene.add(instancedStatues);
@@ -8324,8 +8338,9 @@ function animate() {
   }
 
   const time = performance.now();
-  const delta = (time - prevTime) / 1000;
+  const rawDelta = (time - prevTime) / 1000;
   prevTime = time;
+  const delta = Math.min(0.05, Math.max(0.0001, rawDelta)); // Clamp delta to prevent time jumps
 
   // Update active 3D character animation mixers (e.g. Breathing Idle)
   if (activeAnimationMixers.length > 0) {
@@ -8335,15 +8350,13 @@ function animate() {
     }
   }
 
-  // Floating bob animation for Ariadne's thread orbs
-  const ariadneGroup = scene.getObjectByName('ariadneThreadGroup');
-  if (ariadneGroup) {
+  // Floating bob animation for Ariadne's thread orbs (O(1) cached list, zero scene traversal)
+  const ariadneOrbs = window.ariadneOrbs;
+  if (ariadneOrbs && ariadneOrbs.length > 0) {
     const t = time * 0.003;
-    ariadneGroup.children.forEach((child, idx) => {
-      if (child.isMesh && child.geometry && child.geometry.type === 'SphereGeometry') {
-        child.position.y = 0.35 + Math.sin(t + idx * 0.4) * 0.08;
-      }
-    });
+    for (let oIdx = 0; oIdx < ariadneOrbs.length; oIdx++) {
+      ariadneOrbs[oIdx].position.y = 0.35 + Math.sin(t + oIdx * 0.4) * 0.08;
+    }
   }
 
   // Floating hover & smooth rotation for 3D maze items (EMF, batteries, cameras, etc.)
@@ -9099,19 +9112,28 @@ function animate() {
         ghost.lookAt(path[pathIdx].x, ghost.position.y, path[pathIdx].z);
       }
 
-      // Wall collision — push ghost out if clipping
-      walls.forEach(wall => {
-        if (wall.position.y < -0.5) return; // Skip walls shifted below floor level (open sliding gates)
-        const dx = ghost.position.x - wall.position.x;
-        const dz = ghost.position.z - wall.position.z;
-        const dist2D = Math.sqrt(dx*dx + dz*dz);
-        if (dist2D < 2.5) {
-          const pushForce = (2.5 - dist2D);
-          const pushDir = new THREE.Vector2(dx, dz).normalize();
-          ghost.position.x += pushDir.x * pushForce;
-          ghost.position.z += pushDir.y * pushForce;
+      // High-performance 3x3 spatial grid wall collision for ghost AI (O(1) vs O(N))
+      const blockSize = mazeBlockSize || 4.5;
+      const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : mazeSizeGlobal;
+      const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
+      const gGridC = Math.floor((ghost.position.x / blockSize) + totalCols / 2);
+      const gGridR = Math.floor((ghost.position.z / blockSize) + totalRows / 2);
+      for (let r = Math.max(0, gGridR - 1); r <= Math.min(totalRows - 1, gGridR + 1); r++) {
+        for (let c = Math.max(0, gGridC - 1); c <= Math.min(totalCols - 1, gGridC + 1); c++) {
+          if (mazeLayout && mazeLayout[r] && mazeLayout[r][c] === 1) {
+            const wx = (c - totalCols / 2) * blockSize + blockSize / 2;
+            const wz = (r - totalRows / 2) * blockSize + blockSize / 2;
+            const dx = ghost.position.x - wx;
+            const dz = ghost.position.z - wz;
+            const dist = Math.hypot(dx, dz);
+            if (dist < 2.5 && dist > 0.0001) {
+              const pushForce = (2.5 - dist);
+              ghost.position.x += (dx / dist) * pushForce;
+              ghost.position.z += (dz / dist) * pushForce;
+            }
+          }
         }
-      });
+      }
     });
 
 
