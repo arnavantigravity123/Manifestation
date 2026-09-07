@@ -2617,6 +2617,7 @@ function loadDungeonPackAssets() {
       dungeonRugMat.transparent = false; // Eliminates black edge blending and floor see-through
       dungeonRugMat.depthWrite = true;
       dungeonRugMat.roughness = 0.85;
+      dungeonRugMat.side = THREE.DoubleSide; // Ensure visibility from all camera angles
       dungeonRugMat.needsUpdate = true;
     }
 
@@ -3034,6 +3035,7 @@ function spawnDungeonProps(layout, blockSize) {
     const mergedRugGeo = BufferGeometryUtils.mergeGeometries(rugGeometries, false);
     const mergedRugMesh = new THREE.Mesh(mergedRugGeo, dungeonRugMat);
     mergedRugMesh.receiveShadow = true;
+    mergedRugMesh.frustumCulled = false; // Always render floor rugs across whole labyrinth, never cull when looking horizontally
     mergedRugMesh.userData = { isDungeonProp: true, isRug: true };
     scene.add(mergedRugMesh);
     dungeonProps.push(mergedRugMesh);
@@ -3054,6 +3056,7 @@ function spawnDungeonProps(layout, blockSize) {
     instancedPillars.instanceMatrix.needsUpdate = true;
     instancedPillars.castShadow = false; // Massively reduces shadow map pass overhead
     instancedPillars.receiveShadow = true;
+    instancedPillars.frustumCulled = false; // Ensure pillars remain visible throughout the maze
     instancedPillars.userData = { isDungeonProp: true, isPillar: true };
     scene.add(instancedPillars);
     dungeonProps.push(instancedPillars);
@@ -3073,6 +3076,7 @@ function spawnDungeonProps(layout, blockSize) {
     instancedStatues.instanceMatrix.needsUpdate = true;
     instancedStatues.castShadow = false; // Massively reduces shadow map pass overhead
     instancedStatues.receiveShadow = true;
+    instancedStatues.frustumCulled = false; // Ensure statues remain visible throughout the maze
     instancedStatues.userData = { isDungeonProp: true, isStatue: true };
     scene.add(instancedStatues);
     dungeonProps.push(instancedStatues);
@@ -3551,6 +3555,7 @@ function generateMaze(keysCount = 8) {
     staticWallsMesh = new THREE.Mesh(mergedGeo, wallMat);
     staticWallsMesh.castShadow = true;
     staticWallsMesh.receiveShadow = true;
+    staticWallsMesh.frustumCulled = false;
     scene.add(staticWallsMesh);
     
     // Dispose intermediate individual geometries to free memory
