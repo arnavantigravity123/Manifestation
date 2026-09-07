@@ -2273,19 +2273,43 @@ body.is-mobile .lobby-chat {
 /* ==========================================================================
    REWARDED & INTERSTITIAL AD MODAL
    ========================================================================== */
+#game-ad-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  width: 100dvw;
+  height: 100vh;
+  height: 100dvh;
+  background: rgba(3, 7, 18, 0.96);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 25000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  padding: env(safe-area-inset-top, 16px) env(safe-area-inset-right, 16px) env(safe-area-inset-bottom, 16px) env(safe-area-inset-left, 16px);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
 .ad-modal {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 20000;
-  width: min(500px, 94vw);
+  position: relative;
+  top: auto;
+  left: auto;
+  transform: none;
+  margin: auto;
+  z-index: 25001;
+  width: min(480px, 94vw);
+  max-height: min(90vh, 90dvh);
+  overflow-y: auto;
   background: rgba(8, 12, 22, 0.98);
   border: 2px solid #10b981;
   border-radius: 14px;
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.98), 0 0 30px rgba(16, 185, 129, 0.4);
-  padding: clamp(1.2rem, 3vw, 1.8rem);
+  padding: clamp(1rem, 2.5vw, 1.6rem);
   text-align: center;
+  box-sizing: border-box;
 }
 
 .ad-header {
@@ -2377,5 +2401,45 @@ body.is-mobile .lobby-chat {
   width: 0%;
   background: linear-gradient(90deg, #10b981, #38bdf8);
   transition: width 0.1s linear;
+}
+
+@media (max-height: 750px), (max-width: 480px) {
+  .ad-modal {
+    padding: 0.85rem 1rem;
+    max-height: 94dvh;
+  }
+  .ad-header {
+    margin-bottom: 0.5rem;
+  }
+  .ad-video-container {
+    padding: 0.8rem 0.6rem;
+    margin-bottom: 0.6rem;
+  }
+  .ad-fake-video {
+    min-height: 80px;
+  }
+  .ad-brand-logo {
+    font-size: 1.1rem;
+    margin-bottom: 0.2rem;
+  }
+  .ad-brand-slogan {
+    font-size: 0.75rem;
+    margin-bottom: 0.4rem;
+  }
+  .ad-pulse-circle {
+    width: 30px;
+    height: 30px;
+  }
+  .ad-progress-bar-wrap {
+    margin-top: 0.5rem;
+  }
+  .ad-footer p {
+    font-size: 0.75rem !important;
+    margin-bottom: 0.4rem !important;
+  }
+  .ad-footer .action-btn {
+    font-size: 0.78rem !important;
+    padding: 0.45rem 0.8rem !important;
+  }
 }
 
