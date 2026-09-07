@@ -2997,14 +2997,16 @@ function spawnDungeonProps(layout, blockSize) {
           const isStraightEW = (openCount === 2 && westOpen && eastOpen);
 
           if (isStraightNS) {
-            const isShrine = shrineCells.has(`${r},${c}`);
-            const geo = isShrine ? (dungeonRugCrestGeo || dungeonRugGeoFull) : dungeonRugGeoFull;
+            // Featured at statue shrines and spaced evenly every 4th straight cell (25% frequency - rhythmic, never cluttered)
+            const hasCrest = shrineCells.has(`${r},${c}`) || ((r * 13 + c * 17) % 4 === 0);
+            const geo = hasCrest ? (dungeonRugCrestGeo || dungeonRugGeoFull) : dungeonRugGeoFull;
             addRugTile(geo, rx, rz, 0);
             continue;
           }
           if (isStraightEW) {
-            const isShrine = shrineCells.has(`${r},${c}`);
-            const geo = isShrine ? (dungeonRugCrestGeo || dungeonRugGeoFull) : dungeonRugGeoFull;
+            // Featured at statue shrines and spaced evenly every 4th straight cell (25% frequency - rhythmic, never cluttered)
+            const hasCrest = shrineCells.has(`${r},${c}`) || ((r * 13 + c * 17) % 4 === 0);
+            const geo = hasCrest ? (dungeonRugCrestGeo || dungeonRugGeoFull) : dungeonRugGeoFull;
             addRugTile(geo, rx, rz, Math.PI / 2);
             continue;
           }
