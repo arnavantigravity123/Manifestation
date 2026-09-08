@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>MANIFESTATION - The Labyrinth Escape</title>
     <meta name="description" content="A 3D browser-based multiplayer survival horror game. Work together to escape the shifting maze before the ghosts consume you." />
+    <link rel="icon" type="image/jpeg" href="/assets/manifestation_logo.jpg" />
+    <link rel="apple-touch-icon" href="/assets/manifestation_logo.jpg" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -20,7 +22,8 @@
       <!-- 1. Authentication / Main Menu View -->
       <div id="auth-view" class="glass-panel" style="position: relative;">
         <button id="auth-settings-btn" class="settings-gear-btn" title="System Settings">⚙️</button>
-        <div class="logo-container">
+        <div class="logo-container" style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <img src="/assets/manifestation_logo.jpg" alt="Manifestation Logo" style="width: 88px; height: 88px; border-radius: 20px; box-shadow: 0 0 30px rgba(56, 189, 248, 0.45), 0 8px 16px rgba(0,0,0,0.8); border: 2px solid rgba(56, 189, 248, 0.5); object-fit: cover; margin-bottom: 2px;">
           <h1>Manifestation</h1>
           <p>Labyrinth Escape Protocol</p>
         </div>
