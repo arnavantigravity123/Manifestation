@@ -66,6 +66,14 @@ npx cap sync android
 
 ---
 
+## 🎨 3D Assets & Attributions
+- **"Forest"** ([https://skfb.ly/pBE8Y](https://skfb.ly/pBE8Y)) by **Pasha** is licensed under [Creative Commons Attribution (CC-BY 4.0)](http://creativecommons.org/licenses/by/4.0/).
+- **"Soldier"** ([https://skfb.ly/6WpYT](https://skfb.ly/6WpYT)) by **Unlimited Studio** is licensed under [Creative Commons Attribution (CC-BY 4.0)](http://creativecommons.org/licenses/by/4.0/).
+- **Biohazard Hazmat Suit & Ghost 3D Models**: Sourced via Sketchfab under Creative Commons Attribution ([CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) / [CC-BY-SA](https://creativecommons.org/licenses/by-sa/4.0/)).
+- **Character Skeletal Rigging & Animations**: Powered by Mixamo / Adobe Systems.
+
+---
+
 ## 📜 Repository Rules & Contributor Guide
 For full agent and developer guidelines, refer to:
 - [`AGENTS.md`](./AGENTS.md)
