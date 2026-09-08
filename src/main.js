@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import { initGame, setMobileMode } from './game.js';
+import { initGame, setMobileMode, detectMobileDevice } from './game.js';
 import { Purchases } from '@revenuecat/purchases-capacitor';
 import { Capacitor } from '@capacitor/core';
 
@@ -22,9 +22,11 @@ let currentLobby = null;
 let myId = null;
 let isSoloMode = false;
 
-const isTouchCapable = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const isTouchCapable = detectMobileDevice();
 if (isTouchCapable) {
   document.body.classList.add('is-mobile');
+} else {
+  document.body.classList.remove('is-mobile');
 }
 
 // DOM Elements

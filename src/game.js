@@ -744,10 +744,41 @@ let mobileSprintLocked = false;
 let velocity = new THREE.Vector3();
 let direction = new THREE.Vector3();
 let prevTime = performance.now();
-const defaultMobileDetect = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-export let isMobileDevice = defaultMobileDetect;
+export function detectMobileDevice() {
+  const isNative = Boolean(
+    window.Capacitor &&
+    typeof window.Capacitor.isNativePlatform === 'function' &&
+    window.Capacitor.isNativePlatform()
+  );
+  if (isNative) return true;
+
+  const ua = navigator.userAgent || '';
+  const isMobileUA = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  if (isMobileUA) return true;
+
+  // Desktop PCs and laptops (Windows, macOS, Linux) with keyboards and mice
+  // must NEVER default to mobile touch mode just because the screen has touch sensors!
+  // (e.g. Windows touchscreen laptops like Surface, Lenovo Yoga, Dell XPS, HP Spectre, etc.)
+  if (/Windows NT|X11; Linux/i.test(ua) && !/Android/i.test(ua)) {
+    return false;
+  }
+
+  // macOS (differentiate real Mac desktop from iPadOS Safari requesting desktop site)
+  if (/Macintosh|Mac OS X/i.test(ua) && (!navigator.maxTouchPoints || navigator.maxTouchPoints <= 1)) {
+    return false;
+  }
+
+  // Fallback for mobile devices / tablets
+  return ('ontouchstart' in window) && (navigator.maxTouchPoints > 1);
+}
+
+export let isMobileDevice = detectMobileDevice();
+window.isMobileDevice = isMobileDevice;
+
 if (isMobileDevice) {
   document.body.classList.add('is-mobile');
+} else {
+  document.body.classList.remove('is-mobile');
 }
 
 export function setMobileMode(mode) {
@@ -756,13 +787,18 @@ export function setMobileMode(mode) {
   } else if (mode === 'keyboard') {
     isMobileDevice = false;
   } else {
-    isMobileDevice = defaultMobileDetect;
+    isMobileDevice = detectMobileDevice();
   }
+  window.isMobileDevice = isMobileDevice;
   
+  const mobileCtrl = document.getElementById('mobile-controls-container');
   if (isMobileDevice) {
     document.body.classList.add('is-mobile');
     if (document.pointerLockElement) {
-      if (document.pointerLockElement) document.exitPointerLock();
+      document.exitPointerLock();
+    }
+    if (mobileCtrl && (window.mobileGameActive || window.gameReady)) {
+      mobileCtrl.style.display = 'flex';
     }
     const resumeTarget = document.getElementById('resume-click-target');
     if (resumeTarget) resumeTarget.textContent = 'TAP TO ENTER LABYRINTH';
@@ -770,6 +806,9 @@ export function setMobileMode(mode) {
     if (subtext) subtext.textContent = '(Drag Screen to Look | Joystick to Move | Tap UI to Act)';
   } else {
     document.body.classList.remove('is-mobile');
+    if (mobileCtrl) {
+      mobileCtrl.style.display = 'none';
+    }
     const resumeTarget = document.getElementById('resume-click-target');
     if (resumeTarget) resumeTarget.textContent = 'CLICK TO RESUME LABYRINTH';
     const subtext = document.querySelector('#pointer-lock-overlay p');
@@ -1267,13 +1306,17 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   // Hide cursor and handle pointer lock overlay
   const container = document.getElementById('canvas-container');
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
-  ptrOverlay.style.display = 'flex';
-  
-  if (isMobileDevice) {
+  if (ptrOverlay) {
+    ptrOverlay.style.display = 'none';
     const resumeTarget = document.getElementById('resume-click-target');
-    if (resumeTarget) resumeTarget.textContent = 'TAP TO ENTER LABYRINTH';
     const subtext = document.querySelector('#pointer-lock-overlay p');
-    if (subtext) subtext.textContent = '(Drag Screen to Look | Joystick to Move | Tap UI to Act)';
+    if (isMobileDevice) {
+      if (resumeTarget) resumeTarget.textContent = 'TAP TO ENTER LABYRINTH';
+      if (subtext) subtext.textContent = '(Drag Screen to Look | Joystick to Move | Tap UI to Act)';
+    } else {
+      if (resumeTarget) resumeTarget.textContent = 'CLICK TO RESUME LABYRINTH';
+      if (subtext) subtext.textContent = '(Press ESC to Pause | WASD to Move | Mouse to Look)';
+    }
   }
 
   const handleEnterGame = (e) => {
@@ -1458,6 +1501,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
       roleSplash.style.backdropFilter = 'none';
       roleSplash.style.webkitBackdropFilter = 'none';
     }
+    const ptrOverlay = document.getElementById('pointer-lock-overlay');
+    if (ptrOverlay) ptrOverlay.style.display = 'none';
+
     const hud = document.getElementById('hud-overlay');
     if (hud) hud.style.display = 'flex';
     window.gameReady = true;
@@ -1468,9 +1514,15 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
       const mobileCtrl = document.getElementById('mobile-controls-container');
       if (mobileCtrl) mobileCtrl.style.display = 'flex';
     } else {
-      const lockTarget = (renderer && renderer.domElement) || container;
-      if (lockTarget && lockTarget.requestPointerLock && !document.pointerLockElement) {
-        lockTarget.requestPointerLock();
+      const mobileCtrl = document.getElementById('mobile-controls-container');
+      if (mobileCtrl) mobileCtrl.style.display = 'none';
+      if (window.requestGamePointerLock) {
+        window.requestGamePointerLock();
+      } else {
+        const lockTarget = (renderer && renderer.domElement) || container;
+        if (lockTarget && lockTarget.requestPointerLock && !document.pointerLockElement) {
+          try { lockTarget.requestPointerLock(); } catch (_) {}
+        }
       }
     }
   };
@@ -1480,6 +1532,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     roleEnterBtn.onclick = (e) => {
       e.stopPropagation();
       dismissSplash();
+      if (!isMobileDevice && window.requestGamePointerLock) {
+        window.requestGamePointerLock();
+      }
     };
   }
 
@@ -8775,10 +8830,10 @@ function animate() {
     return;
   }
 
-  // Active controls: on desktop, allow movement physics if pointer lock is active OR if interacting with minimap
+  // Active controls: on desktop, allow movement physics if pointer lock is active OR if interacting with minimap OR unpaused in-game
   const isActive = isMobileDevice 
     ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) 
-    : ((Boolean(document.pointerLockElement) || isMinimapOpen) && (!isCaptured || window.isSpectating));
+    : ((Boolean(document.pointerLockElement) || isMinimapOpen || (!isPauseMenuOpen && window.gameReady)) && (!isCaptured || window.isSpectating));
 
   // Auto-close keypad if player moves away from the terminal station (> 5.5m)
   if (isKeypadOpen) {
@@ -9691,8 +9746,8 @@ function animate() {
       }
     }
   });
-  // Handle ghost initial spawning — only after splash screen and pointer lock / active game
-  const readyToSpawn = isMobileDevice ? (window.gameReady && window.mobileGameActive) : (window.gameReady && Boolean(document.pointerLockElement));
+  // Handle ghost initial spawning — only after splash screen and active unpaused game
+  const readyToSpawn = isMobileDevice ? (window.gameReady && window.mobileGameActive) : (window.gameReady && (!isPauseMenuOpen || Boolean(document.pointerLockElement)));
   if (!window.ghostsSpawned && currentLobby && readyToSpawn) {
     window.ghostsSpawned = true;
     
