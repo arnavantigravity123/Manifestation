@@ -686,174 +686,36 @@ export function attachForestToVault() {
   // Kept strictly 100% hidden during normal maze gameplay — only revealed when escaping through the vault!
   forestContainer.visible = false;
 
-  // 1. Rolling Summer Forest Terrain
-  const groundGeo = new THREE.PlaneGeometry(120, 120, 48, 48);
-  groundGeo.rotateX(-Math.PI / 2);
-  const pos = groundGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const z = pos.getZ(i);
-    // Smooth valley trail in the center (|x| < 3.2m), rising into gentle rolling hills on the flanks
-    const distFromTrail = Math.max(0, Math.abs(x) - 3.2);
-    const hillHeight = Math.pow(distFromTrail * 0.18, 1.45) + Math.sin(x * 0.22) * Math.cos(z * 0.22) * 0.6;
-    pos.setY(i, Math.max(-0.08, hillHeight));
-  }
-  groundGeo.computeVertexNormals();
+  if (preloadedForestModel) {
+    const forestCloneWrapper = new THREE.Group();
+    forestCloneWrapper.name = 'forest_glb_wrapper';
+    forestCloneWrapper.rotation.y = Math.PI; // Face forward down the corridor into -Z
+    const scale = 0.016; // Accurately scales trail to 4.8m width and trees to 13m height
+    forestCloneWrapper.scale.set(scale, scale, scale);
 
-  const groundMat = new THREE.MeshStandardMaterial({
-    color: 0x2a5925, // Lush vibrant summer grass
-    roughness: 0.88,
-    metalness: 0.02
-  });
-  const groundMesh = new THREE.Mesh(groundGeo, groundMat);
-  groundMesh.position.set(0, 0, -50);
-  groundMesh.receiveShadow = true;
-  forestContainer.add(groundMesh);
+    const forestClone = preloadedForestModel.clone(true);
+    // Align trail entrance directly to the vault doorway threshold (model coordinates: X=1565, Y=917.58, Z=-1550)
+    forestClone.position.set(-1565, -917.58, 1550);
 
-  // 2. Natural Winding Forest Trail
-  const trailGeo = new THREE.PlaneGeometry(5.2, 60, 16, 44);
-  trailGeo.rotateX(-Math.PI / 2);
-  const tPos = trailGeo.attributes.position;
-  for (let i = 0; i < tPos.count; i++) {
-    const z = tPos.getZ(i);
-    const curveX = Math.sin(z * 0.09) * 1.6;
-    tPos.setX(i, tPos.getX(i) + curveX);
-    tPos.setY(i, 0.04);
-  }
-  trailGeo.computeVertexNormals();
-  const trailMat = new THREE.MeshStandardMaterial({
-    color: 0x524131, // Woodland trail soil and fine gravel
-    roughness: 0.92,
-    metalness: 0.01
-  });
-  const trailMesh = new THREE.Mesh(trailGeo, trailMat);
-  trailMesh.position.set(0, 0, -28);
-  trailMesh.receiveShadow = true;
-  forestContainer.add(trailMesh);
+    forestClone.traverse(child => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        if (child.material) {
+          child.material.side = THREE.DoubleSide;
+          if (child.material.transparent) {
+            child.material.alphaTest = 0.35;
+            child.material.depthWrite = true;
+          }
+        }
+      }
+    });
 
-  // 3. Realistic Cascading Conifer Pine Tree Generator
-  function createPineTree(height, radius) {
-    const tree = new THREE.Group();
-    const trunkH = height * 0.42;
-    const trunkGeo = new THREE.CylinderGeometry(radius * 0.12, radius * 0.22, trunkH, 10);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2716, roughness: 0.95 });
-    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    trunk.position.y = trunkH / 2;
-    trunk.castShadow = true;
-    tree.add(trunk);
-
-    // 5 cascading conical foliage tiers with natural evergreen slope
-    const tiers = 5;
-    const foliageColors = [0x143818, 0x1a461e, 0x225527, 0x2b6732, 0x35783d];
-    for (let t = 0; t < tiers; t++) {
-      const p = t / (tiers - 1);
-      const coneR = radius * (1.0 - p * 0.65);
-      const coneH = (height * 0.28) * (1.0 - p * 0.2);
-      const coneGeo = new THREE.ConeGeometry(coneR, coneH, 10);
-      const coneMat = new THREE.MeshStandardMaterial({
-        color: foliageColors[t],
-        roughness: 0.75,
-        metalness: 0.02,
-        flatShading: true // Crisp evergreen facet lighting
-      });
-      const cone = new THREE.Mesh(coneGeo, coneMat);
-      cone.position.y = trunkH * 0.45 + t * (height * 0.15) + coneH / 2;
-      cone.castShadow = true;
-      cone.receiveShadow = true;
-      tree.add(cone);
-    }
-    return tree;
+    forestCloneWrapper.add(forestClone);
+    forestContainer.add(forestCloneWrapper);
   }
 
-  // 4. Distant Mountain Silhouette Peaks
-  function createMountain(width, height, color) {
-    const mGeo = new THREE.ConeGeometry(width / 2, height, 6);
-    const mMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.95, flatShading: true });
-    const mesh = new THREE.Mesh(mGeo, mMat);
-    mesh.position.y = height / 2;
-    return mesh;
-  }
-
-  const m1 = createMountain(70, 48, 0x44617a);
-  m1.position.set(-42, 0, -96);
-  forestContainer.add(m1);
-
-  const m2 = createMountain(95, 62, 0x385166);
-  m2.position.set(6, 0, -110);
-  forestContainer.add(m2);
-
-  const m3 = createMountain(65, 42, 0x44617a);
-  m3.position.set(46, 0, -94);
-  forestContainer.add(m3);
-
-  // 5. Glowing Sun Orb in the distant sky
-  const sunOrbGeo = new THREE.SphereGeometry(4.2, 16, 16);
-  const sunOrbMat = new THREE.MeshBasicMaterial({ color: 0xfffbe6, fog: false });
-  const sunOrb = new THREE.Mesh(sunOrbGeo, sunOrbMat);
-  sunOrb.position.set(0, 32, -92);
-  forestContainer.add(sunOrb);
-
-  // 6. Pine Tree Placements (Flanking trail with clear center vista)
-  const treeSpecs = [
-    // Left side forest grove
-    { x: -6.5, z: -6.0, h: 10.5, r: 2.7 },
-    { x: -9.5, z: -12.0, h: 13.0, r: 3.2 },
-    { x: -6.2, z: -17.5, h: 11.5, r: 2.8 },
-    { x: -10.5, z: -23.0, h: 14.5, r: 3.5 },
-    { x: -7.5, z: -29.0, h: 12.0, r: 3.1 },
-    { x: -13.5, z: -18.0, h: 15.5, r: 3.9 },
-    { x: -15.0, z: -33.0, h: 16.5, r: 4.2 },
-    { x: -8.8, z: -39.0, h: 13.5, r: 3.4 },
-    { x: -19.5, z: -26.0, h: 17.5, r: 4.3 },
-    { x: -17.5, z: -46.0, h: 19.0, r: 4.6 },
-    // Right side forest grove
-    { x: 6.5, z: -6.0, h: 10.5, r: 2.7 },
-    { x: 9.5, z: -12.0, h: 13.0, r: 3.2 },
-    { x: 6.2, z: -17.5, h: 11.5, r: 2.8 },
-    { x: 10.5, z: -23.0, h: 14.5, r: 3.5 },
-    { x: 7.5, z: -29.0, h: 12.0, r: 3.1 },
-    { x: 13.5, z: -19.0, h: 15.5, r: 3.9 },
-    { x: 15.5, z: -34.0, h: 16.5, r: 4.2 },
-    { x: 8.8, z: -40.0, h: 13.5, r: 3.4 },
-    { x: 19.5, z: -26.0, h: 17.5, r: 4.3 },
-    { x: 17.5, z: -46.0, h: 19.0, r: 4.6 },
-    // Deep forest canopy horizon (framing the mountain pass)
-    { x: -28, z: -58, h: 20, r: 5.0 },
-    { x: -14, z: -62, h: 21, r: 5.2 },
-    { x: -8, z: -68, h: 22, r: 5.5 },
-    { x: 8, z: -68, h: 22, r: 5.5 },
-    { x: 14, z: -62, h: 21, r: 5.2 },
-    { x: 28, z: -58, h: 20, r: 5.0 }
-  ];
-
-  treeSpecs.forEach(s => {
-    const t = createPineTree(s.h, s.r);
-    t.position.set(s.x, 0, s.z);
-    t.rotation.y = Math.sin(s.x * s.z) * 3.14;
-    forestContainer.add(t);
-  });
-
-  // 7. Natural Boulders
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x666662, roughness: 0.92 });
-  const rockGeo = new THREE.DodecahedronGeometry(0.75, 1);
-  const rockPositions = [
-    { x: -3.4, z: -6.5, s: 0.85 },
-    { x: 3.6, z: -9.5, s: 1.15 },
-    { x: -4.0, z: -18.5, s: 1.35 },
-    { x: 3.8, z: -24.5, s: 0.95 },
-    { x: -4.2, z: -33.5, s: 1.45 }
-  ];
-  rockPositions.forEach(r => {
-    const rock = new THREE.Mesh(rockGeo, rockMat);
-    rock.scale.set(r.s, r.s * 0.7, r.s);
-    rock.position.set(r.x, (r.s * 0.7) / 2, r.z);
-    rock.rotation.set(r.x, r.z, 0);
-    rock.castShadow = true;
-    rock.receiveShadow = true;
-    forestContainer.add(rock);
-  });
-
-  // 8. Outdoor Natural Sunlight & Sky Light
+  // Outdoor Natural Sunlight & Sky Light
   const outdoorSun = new THREE.DirectionalLight(0xfffae0, 3.4);
   outdoorSun.position.set(18, 40, -30);
   outdoorSun.target.position.set(0, 2, -15);
