@@ -2448,3 +2448,16 @@ body.is-mobile .lobby-chat {
   }
 }
 
+/* UI Filter Protection: Ensure game pause screens and modals are NEVER affected by in-game sanity or scramble filters */
+#pointer-lock-overlay,
+.settings-modal,
+.keypad-modal,
+#role-splash-screen,
+#end-game-overlay,
+#captured-overlay,
+#hud-overlay,
+.glass-panel {
+  filter: none !important;
+}
+
+

@@ -1580,6 +1580,9 @@ window.addEventListener('DOMContentLoaded', () => {
       }
       vipGlowToggle.disabled = !active;
     }
+    const canvasContainer = document.getElementById('canvas-container');
+    if (canvasContainer) canvasContainer.style.filter = 'none';
+    document.body.style.filter = 'none';
     settingsModal.style.display = 'flex';
   };
 

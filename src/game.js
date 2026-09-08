@@ -1444,6 +1444,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
         if (resumeTarget) {
           resumeTarget.textContent = window.isSpectating ? '▶ CLICK TO RESUME SPECTATING' : '▶ CLICK TO RESUME LABYRINTH';
         }
+        const canvasContainer = document.getElementById('canvas-container');
+        if (canvasContainer) canvasContainer.style.filter = 'none';
+        document.body.style.filter = 'none';
         ptrOverlay.style.display = 'flex';
       }
     }
@@ -5185,6 +5188,10 @@ function setupControls() {
         resumeTarget.textContent = isMobileDevice ? '▶ TAP TO RESUME LABYRINTH' : '▶ CLICK TO RESUME LABYRINTH';
       }
 
+      const canvasContainer = document.getElementById('canvas-container');
+      if (canvasContainer) canvasContainer.style.filter = 'none';
+      document.body.style.filter = 'none';
+
       if (ptrOverlay) ptrOverlay.style.display = 'flex';
       if (document.exitPointerLock && document.pointerLockElement) {
         document.exitPointerLock();
@@ -6540,8 +6547,14 @@ function dissolveMirageItem(mirage) {
 
 // Proximity micro-vibrations and sanity regression
 function processSanity(delta) {
-  if (myTeam !== 'Human' || window.isSpectating) {
-    if (window.isSpectating) document.body.style.filter = 'none';
+  const canvasContainer = document.getElementById('canvas-container');
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  const isPauseActive = Boolean(ptrOverlay && ptrOverlay.style.display === 'flex');
+
+  // Immediately clear any visual filters if paused, spectating, or dead/captured
+  if (myTeam !== 'Human' || window.isSpectating || isPauseActive || isCaptured) {
+    if (canvasContainer) canvasContainer.style.filter = 'none';
+    document.body.style.filter = 'none';
     return;
   }
 
@@ -6594,17 +6607,22 @@ function processSanity(delta) {
   }
 
   // Update HUD
-  document.getElementById('sanity-value').textContent = `${Math.floor(currentSanity)}%`;
-  document.getElementById('sanity-bar').style.width = `${currentSanity}%`;
+  const sanityVal = document.getElementById('sanity-value');
+  const sanityBar = document.getElementById('sanity-bar');
+  if (sanityVal) sanityVal.textContent = `${Math.floor(currentSanity)}%`;
+  if (sanityBar) sanityBar.style.width = `${currentSanity}%`;
 
-  if (window.sensorsScrambled) {
-    document.body.style.filter = "invert(1) hue-rotate(180deg)";
-  } else if (currentSanity < 30) {
-    // Hallucinations overlay
-    document.body.style.filter = `hue-rotate(${Math.sin(performance.now() * 0.01) * 30}deg) contrast(1.2)`;
+  // Apply visual distortion ONLY to the 3D canvas viewport, NEVER to document.body!
+  // This ensures the pause menu, UI overlays, inventory hotbar, and settings dialog stay 100% clean.
+  if (window.sensorsScrambled && !isPauseActive) {
+    if (canvasContainer) canvasContainer.style.filter = "invert(1) hue-rotate(180deg)";
+  } else if (currentSanity < 30 && !isPauseActive) {
+    // Hallucinations overlay on 3D canvas
+    if (canvasContainer) canvasContainer.style.filter = `hue-rotate(${Math.sin(performance.now() * 0.01) * 30}deg) contrast(1.2)`;
   } else {
-    document.body.style.filter = 'none';
+    if (canvasContainer) canvasContainer.style.filter = 'none';
   }
+  document.body.style.filter = 'none';
 }
 
 function getVisionMultiplier() {
@@ -8822,6 +8840,10 @@ function animate() {
   const isSoloPaused = !isMultiplayer && isPauseMenuOpen && !isInteractiveOverlay && !window.isSpectating && window.gameReady;
 
   if (isSoloPaused) {
+    const canvasContainer = document.getElementById('canvas-container');
+    if (canvasContainer) canvasContainer.style.filter = 'none';
+    document.body.style.filter = 'none';
+
     if (activeViewCamera) renderer.render(scene, activeViewCamera);
     else renderer.render(scene, camera);
     return;
