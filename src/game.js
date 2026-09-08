@@ -7276,7 +7276,7 @@ function setupSocketListeners() {
     }
 
     if (window.isEscaping) {
-      setTimeout(renderOverlay, 6500);
+      setTimeout(renderOverlay, 3500);
     } else if (window.isCapturedAnimation) {
       setTimeout(renderOverlay, 3500);
     } else {
@@ -7570,25 +7570,31 @@ function playEscapeCinematic(callback) {
   }
 
   // Phase 1: Letterbox bars slide in (cinematic framing)
+  lbTop.style.transition = 'top 0.4s ease';
+  lbBottom.style.transition = 'bottom 0.4s ease';
   setTimeout(() => {
     lbTop.style.top = '0';
     lbBottom.style.bottom = '0';
-  }, 100);
+  }, 50);
 
   // Position camera directly in front of the vault door facing straight at it
+  let startLocalZ = 3.4;
   if (vaultGroupRef) {
-    const camStart = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, 3.4));
+    const currentLocal = vaultGroupRef.worldToLocal(camera.position.clone());
+    // Don't snap the player backwards if they are already standing close to the gate
+    startLocalZ = Math.min(3.4, Math.max(1.8, currentLocal.z));
+    const camStart = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, startLocalZ));
     const camLookAt = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, -10.0));
     camera.position.copy(camStart);
     camera.lookAt(camLookAt);
   }
 
-  // Phase 2: Gate opens — slide the heavy door mesh up over 2.2 seconds
+  // Phase 2: Gate opens — slide the heavy door mesh up dynamically over 1100ms
   if (gateMeshRef) {
     const startY = gateMeshRef.position.y;
     const targetY = startY + 5.2;
     const startTime = performance.now();
-    const duration = 2200;
+    const duration = 1100;
 
     // REVEAL 3D FOREST: The forest appears as the vault door opens to escape!
     if (forestSceneInstance) {
@@ -7615,15 +7621,10 @@ function playEscapeCinematic(callback) {
       // Ease out cubic
       const eased = 1 - Math.pow(1 - progress, 3);
       gateMeshRef.position.y = startY + (targetY - startY) * eased;
-      
-      // Keep camera oriented straight through the opening doorway
-      if (vaultGroupRef) {
-        camera.lookAt(vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, -10.0)));
-      }
 
       // Rumble effect during opening
       if (progress < 1) {
-        const rumble = (1 - progress) * 2.5;
+        const rumble = (1 - progress) * 2.0;
         const rX = (Math.random() - 0.5) * rumble;
         const rY = (Math.random() - 0.5) * rumble;
         document.getElementById('canvas-container').style.transform = `translate(${rX}px, ${rY}px)`;
@@ -7634,36 +7635,34 @@ function playEscapeCinematic(callback) {
     };
     requestAnimationFrame(animateGate);
 
-    // Remove the collision blocker
+    // Remove the collision blocker immediately so the camera glides through seamlessly
     if (gateBlockerRef) {
-      setTimeout(() => {
-        const idx = walls.indexOf(gateBlockerRef);
-        if (idx !== -1) walls.splice(idx, 1);
-        scene.remove(gateBlockerRef);
-      }, 1500);
+      const idx = walls.indexOf(gateBlockerRef);
+      if (idx !== -1) walls.splice(idx, 1);
+      scene.remove(gateBlockerRef);
     }
   }
 
-  // Phase 3: Camera smoothly steps forward out of the dungeon directly into the 3D Forest!
+  // Phase 3: Immediate forward momentum — camera steps forward under the rising gate directly into the 3D Forest!
   setTimeout(() => {
-    const walkDuration = 3400;
+    const walkDuration = 2200;
     const walkStart = performance.now();
 
     const walkAnim = (now) => {
       const elapsed = now - walkStart;
       const progress = Math.min(elapsed / walkDuration, 1);
-      // Smooth ease in-out
-      const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+      // Confident, smooth forward stride into the open sunlight
+      const eased = 1 - Math.pow(1 - progress, 2.5);
 
       if (vaultGroupRef) {
-        // Walk from local Z = 3.4 through threshold Z = 0 out to Z = -14.0 in the open woods
-        const localZ = 3.4 + (-14.0 - 3.4) * eased;
-        const localY = 1.65 + Math.sin(progress * Math.PI * 3.5) * 0.05; // Gentle natural footsteps
+        // Walk from startLocalZ through doorway threshold out to Z = -14.0 in the open woods
+        const localZ = startLocalZ + (-14.0 - startLocalZ) * eased;
+        const localY = 1.65 + Math.sin(progress * Math.PI * 4.0) * 0.04; // Gentle natural footsteps
         const localCamPos = new THREE.Vector3(0, localY, localZ);
         
         // Look ahead into the trees and gently tilt up toward towering canopy
         const lookZ = localZ - 18.0;
-        const lookY = 1.65 + eased * 2.0;
+        const lookY = 1.65 + eased * 2.2;
         const localLookTarget = new THREE.Vector3(0, lookY, lookZ);
 
         camera.position.copy(vaultGroupRef.localToWorld(localCamPos));
@@ -7673,26 +7672,26 @@ function playEscapeCinematic(callback) {
       if (progress < 1) requestAnimationFrame(walkAnim);
     };
     requestAnimationFrame(walkAnim);
-  }, 2200);
+  }, 150);
 
-  // Phase 4: Soft warm sunlight flare at 4.6s (translucent so forest stays visible)
+  // Phase 4: Soft warm sunlight flare at 1.0s as player crosses into the outdoor glade
   setTimeout(() => {
     flash.style.background = 'radial-gradient(circle, rgba(255,250,225,0.45) 0%, rgba(255,255,255,0.15) 70%, transparent 100%)';
     flash.style.opacity = '0.45';
     setTimeout(() => {
-      flash.style.transition = 'opacity 1.5s ease';
+      flash.style.transition = 'opacity 1.0s ease';
       flash.style.opacity = '0.08';
-    }, 400);
-  }, 4600);
+    }, 300);
+  }, 1000);
 
-  // Phase 5: "ESCAPED" & "YOU EMERGED INTO THE FOREST" text appears at 5.0s
+  // Phase 5: "ESCAPED" & "YOU EMERGED INTO THE FOREST" text appears at 1.2s
   setTimeout(() => {
-    escText.style.transition = 'opacity 1.0s ease, transform 1.0s ease';
+    escText.style.transition = 'opacity 0.6s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
     escText.style.opacity = '1';
     escText.style.transform = 'translate(-50%, -50%) scale(1)';
-  }, 5000);
+  }, 1200);
 
-  // Phase 6: Clean up and show end screen at 8.0s
+  // Phase 6: Clean up and show end screen at 3.4s
   setTimeout(() => {
     overlay.style.display = 'none';
     lbTop.style.top = '-15%';
@@ -7700,7 +7699,7 @@ function playEscapeCinematic(callback) {
     flash.style.opacity = '0';
     escText.style.opacity = '0';
     if (callback) callback();
-  }, 8000);
+  }, 3400);
 }
 
 // ==========================================
