@@ -2869,13 +2869,10 @@ function spawnDungeonProps(layout, blockSize) {
       const sx = isNorthSouth ? (gateCoordinates.x + offset) : gateCoordinates.x;
       const sz = isNorthSouth ? gateCoordinates.z : (gateCoordinates.z + offset);
       let rotY = 0;
-      if (isNorthSouth) {
-        rotY = (offset < 0) ? Math.PI * 0.35 : -Math.PI * 0.35;
-        if (edge === 'S') rotY += Math.PI;
-      } else {
-        rotY = (offset < 0) ? -Math.PI * 0.15 : Math.PI * 0.85;
-        if (edge === 'W') rotY += Math.PI;
-      }
+      if (edge === 'N') rotY = 0;
+      else if (edge === 'S') rotY = Math.PI;
+      else if (edge === 'E') rotY = -Math.PI / 2;
+      else if (edge === 'W') rotY = Math.PI / 2;
       spawnStatueMesh(sx, sz, rotY);
     });
 
