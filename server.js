@@ -23,6 +23,11 @@ app.use(cors());
 // Serve static files from the Vite build directory when available
 app.use(express.static(join(__dirname, 'dist')));
 
+// Privacy Policy endpoints for Google Play & App Store Compliance
+app.get(['/privacy', '/privacy-policy', '/privacy.html'], (req, res) => {
+  res.sendFile(join(__dirname, 'dist', 'privacy.html'));
+});
+
 app.get('/api/db-status', async (req, res) => {
   const mongoStatus = mongoose.connection.readyState;
   const statusNames = ['disconnected', 'connected', 'connecting', 'disconnecting'];
