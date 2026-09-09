@@ -1,0 +1,43 @@
+{
+  "googletest": {
+    "username": "googletest",
+    "lookupKey": "googletest",
+    "passwordHash": "2c280cc1d791411e1aac2a92601d38287ec343e13b29be32a92e8a61e81d3c96115bc62699fe091d41ace4a214e9ba68b70f09b1464a56ebf6f33adc07dabf41",
+    "salt": "5fd55c17eca4a4215cde7ead72e59a21",
+    "isVip": true,
+    "credits": 500,
+    "unlockedSkins": [
+      "skin_default",
+      "skin_soldier",
+      "skin_hazmat"
+    ],
+    "equippedSkin": "skin_soldier",
+    "preferredClass": "Random",
+    "stats": {
+      "matchesPlayed": 10,
+      "escapes": 8,
+      "captures": 2
+    },
+    "createdAt": "2026-09-09T23:23:54.053Z"
+  },
+  "fahh": {
+    "username": "fahh",
+    "lookupKey": "fahh",
+    "passwordHash": "575d66ea5c7be9e559b33cd33e80e7b224133a95c01c3919b1913cc016ac265eb4bd7617a3dbde63ce6f8d1a400623a0c5ac7bae2ee0214128614e197f663b92",
+    "salt": "2f7aa967698caf732ede51a4932eba06",
+    "isVip": true,
+    "credits": 250,
+    "unlockedSkins": [
+      "skin_default",
+      "skin_soldier"
+    ],
+    "equippedSkin": "skin_default",
+    "preferredClass": "Random",
+    "stats": {
+      "matchesPlayed": 5,
+      "escapes": 3,
+      "captures": 2
+    },
+    "createdAt": "2026-09-09T23:23:54.054Z"
+  }
+}

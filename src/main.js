@@ -1097,10 +1097,8 @@ buySkinBtns.forEach(btn => {
 // Socket Initialization Wrapper
 function initializeSocketConnection() {
   if (socket) return socket;
-  // Dedicated multiplayer & accounts backend server (Cloudflare domain)
-  const socketUrl = (typeof window !== 'undefined' && window.location && window.location.hostname && window.location.hostname !== 'localhost' && !window.location.hostname.includes('127.0.0.1'))
-    ? window.location.origin
-    : 'https://manifestationgame.com';
+  // Dedicated multiplayer & accounts backend server
+  const socketUrl = 'https://manifestation-e53w.onrender.com/';
   socket = io(socketUrl, {
     transports: ['websocket', 'polling'],
     timeout: 10000,
