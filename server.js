@@ -189,9 +189,7 @@ async function tryMongoConnect() {
   } catch (e) {}
 
   let uri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
-  // If Render env has the deleted s7eou cluster, automatically override to active bwyipxp cluster!
   if (!uri || uri.includes('s7eou.mongodb.net')) {
-    console.log("⚡ [MongoDB Atlas] Overriding stale s7eou cluster to active bwyipxp cluster!");
     uri = DEFAULT_MONGODB_URI;
   }
   try {
