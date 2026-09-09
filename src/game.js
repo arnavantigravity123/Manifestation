@@ -4849,6 +4849,11 @@ function setupControls() {
         const distToPad = camera.position.distanceTo(gateKeypadWorldPos);
         const { looking } = isLookingAtTarget(gateKeypadWorldPos, 5.0, 0.95);
         if (looking || distToPad < 2.8) {
+          const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+          if (!breakersFixed) {
+            triggerNotification(`⚡ KEYPAD UNPOWERED: Repair circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to restore power!`);
+            return;
+          }
           openKeypadModal();
           return;
         }
@@ -5337,7 +5342,12 @@ function updateInteractionPrompt() {
     minDistance = closestDist;
 
     if (!gateSolved) {
-      if (window.securityLockoutActive) {
+      const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+      if (!breakersFixed) {
+        promptText = isMobileDevice 
+          ? `⚡ KEYPAD UNPOWERED (${fixedBreakersCount}/${totalBreakersRequired} Breakers)` 
+          : `⚡ KEYPAD UNPOWERED: Repair all breakers (${fixedBreakersCount}/${totalBreakersRequired}) to restore power`;
+      } else if (window.securityLockoutActive) {
         const diff = window.securityLockoutEndTime - performance.now();
         if (diff <= 0) {
           window.securityLockoutActive = false;
@@ -5485,6 +5495,11 @@ function checkInteractions() {
 
   if (nearGateOrPad) {
     if (!gateSolved) {
+      const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+      if (!breakersFixed) {
+        triggerNotification(`⚡ KEYPAD UNPOWERED: Repair all circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to restore power!`);
+        return;
+      }
       if (window.securityLockoutActive) {
         const diff = window.securityLockoutEndTime - performance.now();
         if (diff <= 0) {
@@ -5994,6 +6009,11 @@ function getKeypadDisplayString() {
 function openKeypadModal() {
   if (gateSolved) {
     triggerNotification("Master Gate cipher already bypassed.");
+    return;
+  }
+  const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+  if (!breakersFixed) {
+    triggerNotification(`⚡ KEYPAD UNPOWERED: Repair all circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to restore power!`);
     return;
   }
   if (window.securityLockoutActive) {
@@ -8540,7 +8560,15 @@ function fixBreakerLocal(breakerId) {
     }
   }
 
-  triggerNotification(`circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
+  if (fixedBreakersCount >= totalBreakersRequired) {
+    triggerNotification(`⚡ ALL BREAKERS REPAIRED! Keypad terminal is now powered online.`);
+    if (gateKeypadLed && gateKeypadLed.material) {
+      gateKeypadLed.material.color.setHex(0x0284c7);
+      if (gateKeypadLed.material.emissive) gateKeypadLed.material.emissive.setHex(0x0284c7);
+    }
+  } else {
+    triggerNotification(`Circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
+  }
   checkWinCondition();
 }
 
