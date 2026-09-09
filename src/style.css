@@ -529,7 +529,7 @@ input[type="text"]:focus {
   overflow-x: hidden;
   height: 100%;
   pointer-events: none; /* Let canvas get clicks */
-  z-index: 5;
+  z-index: 100; /* Elevated above pre-game layers */
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1116,7 +1116,8 @@ input[type="text"]:focus {
   gap: 6px;
   align-items: center;
   justify-content: center;
-  pointer-events: auto;
+  pointer-events: auto !important;
+  z-index: 250 !important;
 }
 
 .unified-pause-btn,
@@ -1137,7 +1138,7 @@ input[type="text"]:focus {
   -webkit-backdrop-filter: blur(6px);
   user-select: none;
   pointer-events: auto !important;
-  touch-action: manipulation;
+  touch-action: none !important;
 }
 
 .unified-cam-btn {
@@ -1160,7 +1161,7 @@ body.is-mobile #mobile-controls-container {
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 25;
+  z-index: 150;
 }
 
 /* Touch controls interactive children */
@@ -1168,7 +1169,8 @@ body.is-mobile #mobile-joystick,
 body.is-mobile #mobile-actions,
 #mobile-joystick,
 #mobile-actions {
-  pointer-events: auto;
+  pointer-events: auto !important;
+  touch-action: none !important;
 }
 
 /* Left joystick positioning - placed strictly in bottom-left corner */
@@ -1178,7 +1180,8 @@ body.is-mobile #mobile-actions,
   left: max(12px, env(safe-area-inset-left));
   width: 85px;
   height: 85px;
-  z-index: 30;
+  z-index: 180;
+  touch-action: none !important;
 }
 
 #joystick-base {
@@ -1192,6 +1195,7 @@ body.is-mobile #mobile-actions,
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  touch-action: none !important;
 }
 
 #joystick-base.sprinting {
@@ -1209,6 +1213,7 @@ body.is-mobile #mobile-actions,
   left: 25px;
   box-shadow: 0 0 10px var(--primary-accent);
   transition: background 0.15s ease, box-shadow 0.15s ease;
+  touch-action: none !important;
 }
 
 #joystick-knob.sprinting {
@@ -1223,16 +1228,17 @@ body.is-mobile #mobile-actions,
   right: max(12px, env(safe-area-inset-right));
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.3rem;
-  width: clamp(140px, 32vw, 175px);
-  z-index: 30;
+  gap: 0.35rem;
+  width: clamp(145px, 34vw, 185px);
+  z-index: 200 !important;
   pointer-events: auto !important;
+  touch-action: none !important;
 }
 
 .mobile-action-btn {
-  padding: clamp(0.45rem, 1.2vw, 0.65rem) 0;
+  padding: clamp(0.5rem, 1.3vw, 0.7rem) 0;
   font-family: 'Orbitron', sans-serif;
-  font-size: clamp(0.55rem, 1.3vw, 0.72rem);
+  font-size: clamp(0.58rem, 1.4vw, 0.74rem);
   font-weight: 800;
   color: white;
   border-radius: 6px;
@@ -1243,7 +1249,7 @@ body.is-mobile #mobile-actions,
   transition: transform 0.08s ease, filter 0.08s ease;
   user-select: none;
   -webkit-user-select: none;
-  touch-action: manipulation;
+  touch-action: none !important;
   pointer-events: auto !important;
 }
 

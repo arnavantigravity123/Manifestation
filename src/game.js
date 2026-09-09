@@ -1393,21 +1393,21 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     }
   };
 
-  // Global click & pointerdown to relock mouse anytime player clicks during gameplay
+  // Global click & pointerdown to relock mouse anytime desktop player clicks during gameplay
   window.addEventListener('click', (e) => {
-    if (window.isEscaping) return;
+    if (isMobileDevice || window.isEscaping) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
-    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel')) return;
+    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions')) return;
     if (ptrOverlay.style.display !== 'flex') {
       window.requestGamePointerLock();
     }
   });
   window.addEventListener('pointerdown', (e) => {
-    if (window.isEscaping) return;
+    if (isMobileDevice || window.isEscaping) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
-    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel')) return;
+    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions')) return;
     if (ptrOverlay.style.display !== 'flex') {
       window.requestGamePointerLock();
     }
@@ -1963,6 +1963,7 @@ function renderHUDInventory() {
     };
     slot.addEventListener('click', selectSlot);
     slot.addEventListener('touchstart', selectSlot, { passive: true });
+    slot.addEventListener('pointerdown', selectSlot);
     
     const idxSpan = document.createElement('span');
     idxSpan.className = 'inventory-slot-index';
@@ -5079,12 +5080,32 @@ function setupControls() {
 
       const fire = (e) => {
         const now = performance.now();
-        if (now - lastTrigger < 120) return; // Prevent duplicate triggers within 120ms
+        if (now - lastTrigger < 90) return; // Prevent duplicate triggers within 90ms
         lastTrigger = now;
-        callback(e);
+        try {
+          callback(e);
+        } catch (err) {
+          console.error('[TAP] Error executing callback for element:', el.id, err);
+        }
       };
 
-      // 1. Instant touchstart for mobile devices (fires on contact with zero latency)
+      // 1. Pointer Down (Universal modern standard across mobile touch and desktop click)
+      el.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        el.classList.add('btn-pressed');
+        fire(e);
+      });
+
+      el.addEventListener('pointerup', (e) => {
+        e.stopPropagation();
+        el.classList.remove('btn-pressed');
+      });
+
+      el.addEventListener('pointercancel', () => {
+        el.classList.remove('btn-pressed');
+      });
+
+      // 2. Direct touchstart for mobile WebViews (zero latency, fires immediately on contact)
       el.addEventListener('touchstart', (e) => {
         if (e.cancelable) e.preventDefault();
         e.stopPropagation();
@@ -5101,22 +5122,6 @@ function setupControls() {
       el.addEventListener('touchcancel', () => {
         el.classList.remove('btn-pressed');
       }, { passive: true });
-
-      // 2. Pointer down for devices using Pointer Events (mouse, stylus)
-      el.addEventListener('pointerdown', (e) => {
-        if (e.pointerType === 'touch') return; // Handled by touchstart
-        e.stopPropagation();
-        el.classList.add('btn-pressed');
-        fire(e);
-      });
-
-      el.addEventListener('pointerup', () => {
-        el.classList.remove('btn-pressed');
-      });
-
-      el.addEventListener('pointercancel', () => {
-        el.classList.remove('btn-pressed');
-      });
 
       // 3. Fallback click for desktop
       el.addEventListener('click', (e) => {
@@ -5139,7 +5144,14 @@ function setupControls() {
 
     if (useBtn) {
       addTapListener(useBtn, () => {
-        if (!isCaptured) useActiveItem();
+        if (!isCaptured) {
+          const item = inventory[activeSlot];
+          if (!item || item === "") {
+            triggerNotification("No usable item in active slot. Tap a hotbar slot to select.");
+          } else {
+            useActiveItem();
+          }
+        }
       });
     }
 
@@ -5165,7 +5177,12 @@ function setupControls() {
 
     if (specialBtn) {
       addTapListener(specialBtn, () => {
-        if (!isCaptured) triggerPanicHide();
+        if (isCaptured) return;
+        if (isPanicked) {
+          triggerNotification("Ability active: Invisibility engaged!");
+          return;
+        }
+        triggerPanicHide();
       });
     }
 
@@ -5264,6 +5281,12 @@ function isLookingAtTarget(targetPos, maxDist = 4.5, maxAngle = 0.7) {
   // Proximity pickup: If the player character is standing right next to the item (within 2.6m horizontally and 2.5m vertically),
   // they can ALWAYS grab or interact with it in ANY camera mode (especially Top-Down and Third-Person)!
   if (horizDist <= 2.6 && vertDist <= 2.6) {
+    return { looking: true, dist };
+  }
+
+  // Mobile Proximity Boost: On touch devices, players navigate using virtual joysticks and lack a fine-grained mouse reticle.
+  // Within 4.8m horizontal distance, tapping INTERACT immediately picks up keys, repairs breakers, or reads clues!
+  if (isMobileDevice && horizDist <= 4.8 && vertDist <= 3.5) {
     return { looking: true, dist };
   }
 

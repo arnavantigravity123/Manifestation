@@ -1123,6 +1123,11 @@ function initializeSocketConnection() {
     logSystemMessage("Breach sequence authorized. Entering Labyrinth...");
     authView.style.display = 'none';
     lobbyView.style.display = 'none';
+    const uiOverlay = document.getElementById('ui-overlay');
+    if (uiOverlay) {
+      uiOverlay.style.display = 'none';
+      uiOverlay.style.pointerEvents = 'none';
+    }
 
     // Step 1: Interstitial Ad (VIP bypasses instantly)
     window.showInterstitialAd(() => {
