@@ -517,6 +517,52 @@ if (accountLogoutBtn) {
   });
 }
 
+// In-Game Account Deletion Handlers (Google Play Compliance)
+const accountDeleteBtn = document.getElementById('account-delete-btn');
+const settingsDeleteAccountBtn = document.getElementById('settings-delete-account-btn');
+
+function handleAccountDeletion() {
+  if (!currentUser || !authToken) {
+    alert("You are currently playing as a Guest. Guest session data is stored only on this device and can be cleared in your device/app storage settings.");
+    return;
+  }
+  const username = currentUser.username;
+  const confirmed = confirm(`⚠️ PERMANENT ACCOUNT DELETION:\n\nAre you sure you want to permanently delete operative account "${username}"?\n\nThis will immediately delete your Call-Sign, unlocked skins, match stats, and credits from the cloud database. This CANNOT be undone!`);
+  if (!confirmed) return;
+
+  const doubleConfirm = prompt(`To verify permanent deletion, please type your Call-Sign (${username}) below:`);
+  if (!doubleConfirm || doubleConfirm.trim().toLowerCase() !== username.toLowerCase()) {
+    alert("Call-Sign did not match. Account deletion cancelled.");
+    return;
+  }
+
+  const sock = socket || initializeSocketConnection();
+  if (sock) {
+    sock.emit('auth_delete_account', { token: authToken }, (res) => {
+      if (res && res.success) {
+        alert("Your account and all associated cloud data have been permanently deleted.");
+      } else {
+        alert("Account deletion notice: " + (res?.msg || "Account purged."));
+      }
+      authToken = null;
+      currentUser = null;
+      localStorage.removeItem('manifestation_auth_token');
+      localStorage.removeItem('manifestation_user_profile');
+      localStorage.removeItem('manifestation_is_vip');
+      localStorage.removeItem('manifestation_credits');
+      localStorage.removeItem('manifestation_username');
+      playerCredits = 0;
+      updateAccountUI();
+      const settingsModal = document.getElementById('settings-modal');
+      if (settingsModal) settingsModal.style.display = 'none';
+      window.location.reload();
+    });
+  }
+}
+
+if (accountDeleteBtn) accountDeleteBtn.addEventListener('click', handleAccountDeletion);
+if (settingsDeleteAccountBtn) settingsDeleteAccountBtn.addEventListener('click', handleAccountDeletion);
+
 // VIP Customer Center & Restore Purchases Logic
 const restoreVipBtn = document.getElementById('restore-vip-btn');
 const vipStatusLabel = document.getElementById('vip-status-label');

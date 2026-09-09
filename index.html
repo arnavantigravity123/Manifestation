@@ -41,7 +41,10 @@
               <span id="account-vip-badge" class="account-badge vip-badge" style="display: none;">👑 VIP</span>
               <span id="account-credits-display" class="account-credits">💰 0</span>
             </div>
-            <button id="account-logout-btn" class="account-logout-btn" title="Log Out">LOGOUT</button>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <button id="account-logout-btn" class="account-logout-btn" title="Log Out">LOGOUT</button>
+              <button id="account-delete-btn" class="account-logout-btn" title="Permanently Delete Account" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5;">DELETE</button>
+            </div>
           </div>
         </div>
         
@@ -734,6 +737,10 @@
         
         <div style="margin-top: 1.2rem; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 0.8rem; display: flex; justify-content: center; gap: 0.8rem; font-size: 0.8rem;">
           <a href="#" class="open-credits-trigger" style="color: #38bdf8; text-decoration: underline; font-weight: bold; cursor: pointer;">📜 View Game & 3D Asset Credits</a>
+        </div>
+
+        <div class="settings-option" style="margin-top: 0.8rem; border-top: 1px dashed rgba(239, 68, 68, 0.3); padding-top: 0.8rem;">
+          <button id="settings-delete-account-btn" type="button" class="action-btn" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; font-size: 0.8rem; padding: 0.5rem; width: 100%;">🗑️ Delete Account & Data</button>
         </div>
 
         <button id="close-settings-btn" class="action-btn" style="margin-top: 1rem; background: linear-gradient(135deg, #10b981, #047857);">Save & Apply</button>

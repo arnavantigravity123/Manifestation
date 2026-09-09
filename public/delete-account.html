@@ -1,0 +1,264 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delete Account & Data - Manifestation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0b0f19;
+      --card-bg: rgba(17, 24, 39, 0.85);
+      --border-color: rgba(255, 255, 255, 0.1);
+      --danger-color: #ef4444;
+      --secondary-accent: #38bdf8;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      line-height: 1.65;
+      padding: 2rem 1rem;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      max-width: 760px;
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2.5rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    header {
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 2rem;
+      color: var(--danger-color);
+      letter-spacing: 1px;
+      margin-bottom: 0.5rem;
+    }
+    .meta {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    h2 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.15rem;
+      color: var(--secondary-accent);
+      margin-top: 1.8rem;
+      margin-bottom: 0.6rem;
+    }
+    p, ul {
+      margin-bottom: 1rem;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+    ul {
+      padding-left: 1.5rem;
+    }
+    li {
+      margin-bottom: 0.4rem;
+    }
+    strong {
+      color: var(--text-main);
+    }
+    .danger-box {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: 10px;
+      padding: 1.2rem;
+      margin: 1.5rem 0;
+    }
+    .form-group {
+      margin-bottom: 1rem;
+      text-align: left;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--text-main);
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      color: white;
+      font-size: 0.95rem;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--danger-color);
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+    }
+    button.delete-btn {
+      width: 100%;
+      padding: 0.85rem;
+      background: linear-gradient(135deg, #ef4444, #991b1b);
+      border: 1px solid #f87171;
+      border-radius: 8px;
+      color: white;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 800;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 0.5rem;
+      transition: all 0.2s ease;
+    }
+    button.delete-btn:hover {
+      background: linear-gradient(135deg, #dc2626, #7f1d1d);
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+    }
+    #status-message {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      padding: 0.75rem;
+      border-radius: 6px;
+      display: none;
+    }
+    .success {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10b981;
+      color: #a7f3d0;
+    }
+    .error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+    }
+    footer {
+      margin-top: 2.5rem;
+      border-top: 1px solid var(--border-color);
+      padding-top: 1.5rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    a {
+      color: var(--secondary-accent);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>MANIFESTATION</h1>
+      <p class="meta">Account & Data Deletion Request &mdash; Developer: Arnav</p>
+    </header>
+
+    <section>
+      <h2>Google Play Account Deletion Disclosure</h2>
+      <p>
+        In compliance with Google Play Developer Policies, users of <strong>Manifestation</strong> can permanently delete their player account and all associated cloud data at any time.
+      </p>
+    </section>
+
+    <section>
+      <h2>How to Delete Your Account</h2>
+      <p>You can delete your account using any of the following three methods:</p>
+      <ul>
+        <li><strong>Method 1 (In-Game):</strong> Launch the game, tap your <strong>Call-Sign</strong> in the top header or open <strong>⚙️ Settings &rarr; Account Management</strong>, and click <strong>"PERMANENTLY DELETE ACCOUNT"</strong>.</li>
+        <li><strong>Method 2 (Online Form Below):</strong> Enter your registered Call-Sign and password into the verified self-service deletion form below.</li>
+        <li><strong>Method 3 (Email Support):</strong> Send an email from your contact address to <a href="mailto:support@manifestationgame.com">support@manifestationgame.com</a> with the subject <em>"Account Deletion Request"</em> and your Call-Sign. Your account will be purged within 48 hours.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Types of Data Deleted & Retention Period</h2>
+      <ul>
+        <li><strong>Data Deleted:</strong> Call-Sign (Username), salted password hash, total credits, inventory, unlocked operative skins, match stats (escapes/captures), and temporary server session tokens.</li>
+        <li><strong>Retention Period:</strong> <strong>Zero days (immediate deletion)</strong>. Once confirmed, all user records are permanently and irreversibly purged from our MongoDB database and server storage.</li>
+      </ul>
+    </section>
+
+    <div class="danger-box">
+      <h2 style="color: var(--danger-color); margin-top: 0;">Online Deletion Form</h2>
+      <p style="margin-bottom: 1.2rem;">Verify your Call-Sign and password below to immediately delete your account:</p>
+      
+      <form id="delete-form">
+        <div class="form-group">
+          <label for="del-username">Operative Call-Sign</label>
+          <input type="text" id="del-username" placeholder="e.g., Locksmith_01" required autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="del-password">Account Password</label>
+          <input type="password" id="del-password" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="delete-btn" id="del-btn">🗑️ CONFIRM PERMANENT DELETION</button>
+      </form>
+      <div id="status-message"></div>
+    </div>
+
+    <footer>
+      <p>&copy; 2026 Manifestation. Back to <a href="https://manifestationgame.com">Official Game Website</a> | <a href="/privacy">Privacy Policy</a></p>
+    </footer>
+  </div>
+
+  <script>
+    const form = document.getElementById('delete-form');
+    const statusMsg = document.getElementById('status-message');
+    const delBtn = document.getElementById('del-btn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('del-username').value.trim();
+      const password = document.getElementById('del-password').value;
+
+      if (!confirm(`Are you sure you want to permanently delete operative account "${username}"? This cannot be undone.`)) {
+        return;
+      }
+
+      delBtn.disabled = true;
+      delBtn.textContent = "PURGING DATA...";
+      statusMsg.style.display = 'none';
+
+      try {
+        const res = await fetch('/api/delete-account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        statusMsg.style.display = 'block';
+        if (data.success) {
+          statusMsg.className = 'success';
+          statusMsg.textContent = "SUCCESS: " + data.msg;
+          form.reset();
+        } else {
+          statusMsg.className = 'error';
+          statusMsg.textContent = "ERROR: " + (data.msg || 'Failed to delete account.');
+        }
+      } catch (err) {
+        statusMsg.style.display = 'block';
+        statusMsg.className = 'error';
+        statusMsg.textContent = "Network error. Please contact support@manifestationgame.com.";
+      } finally {
+        delBtn.disabled = false;
+        delBtn.textContent = "🗑️ CONFIRM PERMANENT DELETION";
+      }
+    });
+  </script>
+</body>
+</html>

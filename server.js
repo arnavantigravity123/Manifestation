@@ -28,6 +28,48 @@ app.get(['/privacy', '/privacy-policy', '/privacy.html'], (req, res) => {
   res.sendFile(join(__dirname, 'dist', 'privacy.html'));
 });
 
+// Account Deletion page for Google Play compliance
+app.get(['/delete-account', '/delete-account.html', '/account-deletion'], (req, res) => {
+  res.sendFile(join(__dirname, 'dist', 'delete-account.html'));
+});
+
+// REST API for direct account deletion from web page
+app.post('/api/delete-account', express.json(), async (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ success: false, msg: 'Call-sign and password are required.' });
+  }
+  const cleanUsername = username.trim();
+  const lookupKey = cleanUsername.toLowerCase();
+  const user = await findUser(lookupKey);
+  if (!user) {
+    return res.status(404).json({ success: false, msg: 'Call-sign not found.' });
+  }
+  const inputHash = hashPassword(password, user.salt);
+  if (inputHash !== user.passwordHash) {
+    return res.status(401).json({ success: false, msg: 'Invalid password. Account deletion aborted.' });
+  }
+
+  // 1. Delete from MongoDB
+  if (mongoose.connection.readyState === 1) {
+    try {
+      await UserModel.deleteOne({ lookupKey }).exec();
+      console.log(`[AUTH] Web API deleted user from MongoDB: ${lookupKey}`);
+    } catch (e) {
+      console.warn("MongoDB delete error:", e.message);
+    }
+  }
+
+  // 2. Delete from local JSON fallback
+  const local = loadUsersLocal();
+  if (local[lookupKey]) {
+    delete local[lookupKey];
+    saveUsersLocal(local);
+  }
+
+  return res.json({ success: true, msg: `Account "${cleanUsername}" and all associated data permanently deleted.` });
+});
+
 app.get('/api/db-status', async (req, res) => {
   const mongoStatus = mongoose.connection.readyState;
   const statusNames = ['disconnected', 'connected', 'connecting', 'disconnecting'];
@@ -566,6 +608,41 @@ io.on('connection', (socket) => {
     user.lookupKey = newLookupKey;
     console.log(`[AUTH] Operative call-sign updated: ${cleanUsername}`);
     return callback && callback({ success: true, user: sanitizeUser(user) });
+  });
+
+  socket.on('auth_delete_account', async ({ token }, callback) => {
+    if (!token || !activeSessions.has(token)) {
+      return callback && callback({ success: false, msg: 'Unauthorized or expired session.' });
+    }
+    const lookupKey = activeSessions.get(token);
+    const user = await findUser(lookupKey);
+    if (!user) {
+      return callback && callback({ success: false, msg: 'Account profile not found.' });
+    }
+
+    // 1. Delete from MongoDB
+    if (mongoose.connection.readyState === 1) {
+      try {
+        await UserModel.deleteOne({ lookupKey }).exec();
+        console.log(`[AUTH] Socket deleted user from MongoDB: ${lookupKey}`);
+      } catch (e) {
+        console.warn("MongoDB delete error:", e.message);
+      }
+    }
+
+    // 2. Delete from local JSON fallback
+    const local = loadUsersLocal();
+    if (local[lookupKey]) {
+      delete local[lookupKey];
+      saveUsersLocal(local);
+    }
+
+    // 3. Purge session
+    activeSessions.delete(token);
+    saveSessionsLocal(activeSessions);
+
+    console.log(`[AUTH] Account permanently deleted: ${lookupKey}`);
+    return callback && callback({ success: true, msg: 'Account and associated data permanently deleted.' });
   });
 
   socket.on('join_public_matchmaking', ({ username, skinId, isVip }) => {
