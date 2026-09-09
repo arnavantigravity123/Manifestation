@@ -1484,6 +1484,107 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   } catch (e) {}
 
+  // 2. Settings UI Integration (must initialize before any early returns!)
+  const settingsModal = document.getElementById('settings-modal');
+  const controlSelect = document.getElementById('control-scheme-select');
+  const sensitivitySlider = document.getElementById('sensitivity-slider');
+  const sensitivityValue = document.getElementById('sensitivity-value');
+  const vipGlowToggle = document.getElementById('vip-glow-toggle');
+  const vipGlowStatusTag = document.getElementById('vip-glow-status-tag');
+  
+  if (vipGlowToggle) {
+    vipGlowToggle.checked = isVipGlowEnabled();
+    vipGlowToggle.addEventListener('change', (e) => {
+      localStorage.setItem('manifestation_vip_glow_enabled', e.target.checked ? 'true' : 'false');
+      if (window.updateAllVipGlows) window.updateAllVipGlows(e.target.checked);
+    });
+  }
+
+  if (controlSelect) {
+    const savedControlMode = localStorage.getItem('control_mode') || 'auto';
+    controlSelect.value = savedControlMode;
+    setMobileMode(savedControlMode);
+  }
+  
+  const savedSensitivity = localStorage.getItem('look_sensitivity') || '1.0';
+  if (sensitivitySlider) sensitivitySlider.value = savedSensitivity;
+  if (sensitivityValue) sensitivityValue.textContent = savedSensitivity;
+  window.lookSensitivity = parseFloat(savedSensitivity);
+  
+  if (sensitivitySlider) {
+    sensitivitySlider.addEventListener('input', (e) => {
+      if (sensitivityValue) sensitivityValue.textContent = e.target.value;
+    });
+  }
+
+  const themeSelect = document.getElementById('theme-select');
+  const savedTheme = localStorage.getItem('manifestation_maze_theme') || 'dungeon';
+  if (themeSelect) {
+    themeSelect.value = savedTheme;
+    themeSelect.addEventListener('change', (e) => {
+      localStorage.setItem('manifestation_maze_theme', e.target.value);
+    });
+  }
+
+  const showSettings = (e) => {
+    if (e) {
+      if (e.preventDefault) e.preventDefault();
+      if (e.stopPropagation) e.stopPropagation();
+    }
+    if (vipGlowToggle) {
+      vipGlowToggle.checked = isVipGlowEnabled();
+      const active = isVipActive();
+      if (vipGlowStatusTag) {
+        vipGlowStatusTag.textContent = active ? "(VIP Active)" : "(Requires VIP Pass)";
+        vipGlowStatusTag.style.color = active ? "#fde047" : "#94a3b8";
+      }
+      vipGlowToggle.disabled = !active;
+    }
+    const canvasContainer = document.getElementById('canvas-container');
+    if (canvasContainer) canvasContainer.style.filter = 'none';
+    document.body.style.filter = 'none';
+    if (settingsModal) settingsModal.style.display = 'flex';
+  };
+  window.showSettings = showSettings;
+
+  const hideSettings = () => {
+    if (settingsModal) settingsModal.style.display = 'none';
+    if (controlSelect) {
+      const selectedMode = controlSelect.value;
+      localStorage.setItem('control_mode', selectedMode);
+      setMobileMode(selectedMode);
+    }
+    
+    if (sensitivitySlider) {
+      localStorage.setItem('look_sensitivity', sensitivitySlider.value);
+      window.lookSensitivity = parseFloat(sensitivitySlider.value);
+    }
+
+    if (themeSelect) {
+      localStorage.setItem('manifestation_maze_theme', themeSelect.value);
+    }
+
+    if (vipGlowToggle) {
+      localStorage.setItem('manifestation_vip_glow_enabled', vipGlowToggle.checked ? 'true' : 'false');
+      if (window.updateAllVipGlows) window.updateAllVipGlows(vipGlowToggle.checked);
+    }
+  };
+  window.hideSettings = hideSettings;
+
+  const authSetBtn = document.getElementById('auth-settings-btn');
+  const lobbySetBtn = document.getElementById('lobby-settings-btn');
+  const pauseSetBtn = document.getElementById('pause-settings-btn');
+  const closeSetBtn = document.getElementById('close-settings-btn');
+
+  if (authSetBtn) authSetBtn.addEventListener('click', showSettings);
+  if (lobbySetBtn) lobbySetBtn.addEventListener('click', showSettings);
+  if (pauseSetBtn) {
+    pauseSetBtn.addEventListener('click', showSettings);
+    pauseSetBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); showSettings(e); });
+    pauseSetBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); showSettings(e); }, { passive: true });
+  }
+  if (closeSetBtn) closeSetBtn.addEventListener('click', hideSettings);
+
   const rejoinRetrySoloStr = sessionStorage.getItem('rejoinRetrySolo');
   if (rejoinRetrySoloStr === 'true') {
     sessionStorage.removeItem('rejoinRetrySolo');
@@ -1530,90 +1631,4 @@ window.addEventListener('DOMContentLoaded', () => {
     // Connect to server on startup to verify authentication token / load account state
     initializeSocketConnection();
   }
-
-  // Settings UI Integration
-  const settingsModal = document.getElementById('settings-modal');
-  const controlSelect = document.getElementById('control-scheme-select');
-  const sensitivitySlider = document.getElementById('sensitivity-slider');
-  const sensitivityValue = document.getElementById('sensitivity-value');
-  const vipGlowToggle = document.getElementById('vip-glow-toggle');
-  const vipGlowStatusTag = document.getElementById('vip-glow-status-tag');
-  
-  if (vipGlowToggle) {
-    vipGlowToggle.checked = isVipGlowEnabled();
-    vipGlowToggle.addEventListener('change', (e) => {
-      localStorage.setItem('manifestation_vip_glow_enabled', e.target.checked ? 'true' : 'false');
-      if (window.updateAllVipGlows) window.updateAllVipGlows(e.target.checked);
-    });
-  }
-
-  const savedControlMode = localStorage.getItem('control_mode') || 'auto';
-  controlSelect.value = savedControlMode;
-  setMobileMode(savedControlMode);
-  
-  const savedSensitivity = localStorage.getItem('look_sensitivity') || '1.0';
-  if (sensitivitySlider) sensitivitySlider.value = savedSensitivity;
-  if (sensitivityValue) sensitivityValue.textContent = savedSensitivity;
-  window.lookSensitivity = parseFloat(savedSensitivity);
-  
-  if (sensitivitySlider) {
-    sensitivitySlider.addEventListener('input', (e) => {
-      sensitivityValue.textContent = e.target.value;
-    });
-  }
-
-  const themeSelect = document.getElementById('theme-select');
-  const savedTheme = localStorage.getItem('manifestation_maze_theme') || 'dungeon';
-  if (themeSelect) {
-    themeSelect.value = savedTheme;
-    themeSelect.addEventListener('change', (e) => {
-      localStorage.setItem('manifestation_maze_theme', e.target.value);
-    });
-  }
-
-  const showSettings = (e) => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    if (vipGlowToggle) {
-      vipGlowToggle.checked = isVipGlowEnabled();
-      const active = isVipActive();
-      if (vipGlowStatusTag) {
-        vipGlowStatusTag.textContent = active ? "(VIP Active)" : "(Requires VIP Pass)";
-        vipGlowStatusTag.style.color = active ? "#fde047" : "#94a3b8";
-      }
-      vipGlowToggle.disabled = !active;
-    }
-    const canvasContainer = document.getElementById('canvas-container');
-    if (canvasContainer) canvasContainer.style.filter = 'none';
-    document.body.style.filter = 'none';
-    settingsModal.style.display = 'flex';
-  };
-
-  const hideSettings = () => {
-    settingsModal.style.display = 'none';
-    const selectedMode = controlSelect.value;
-    localStorage.setItem('control_mode', selectedMode);
-    setMobileMode(selectedMode);
-    
-    if (sensitivitySlider) {
-      localStorage.setItem('look_sensitivity', sensitivitySlider.value);
-      window.lookSensitivity = parseFloat(sensitivitySlider.value);
-    }
-
-    if (themeSelect) {
-      localStorage.setItem('manifestation_maze_theme', themeSelect.value);
-    }
-
-    if (vipGlowToggle) {
-      localStorage.setItem('manifestation_vip_glow_enabled', vipGlowToggle.checked ? 'true' : 'false');
-      if (window.updateAllVipGlows) window.updateAllVipGlows(vipGlowToggle.checked);
-    }
-  };
-
-  document.getElementById('auth-settings-btn').addEventListener('click', showSettings);
-  document.getElementById('lobby-settings-btn').addEventListener('click', showSettings);
-  document.getElementById('pause-settings-btn').addEventListener('click', showSettings);
-  document.getElementById('close-settings-btn').addEventListener('click', hideSettings);
 });

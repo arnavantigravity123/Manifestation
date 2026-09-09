@@ -5223,6 +5223,18 @@ function setupControls() {
     if (pauseBtn) addTapListener(pauseBtn, handlePause);
     if (globalPauseBtn) addTapListener(globalPauseBtn, handlePause);
 
+    const pauseSettingsBtn = document.getElementById('pause-settings-btn');
+    if (pauseSettingsBtn) {
+      addTapListener(pauseSettingsBtn, (e) => {
+        if (window.showSettings) {
+          window.showSettings(e);
+        } else {
+          const sModal = document.getElementById('settings-modal');
+          if (sModal) sModal.style.display = 'flex';
+        }
+      });
+    }
+
     const pauseAbortBtn = document.getElementById('pause-abort-btn');
     if (pauseAbortBtn) {
       addTapListener(pauseAbortBtn, () => {
