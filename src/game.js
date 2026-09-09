@@ -1374,6 +1374,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   window.requestGamePointerLock = () => {
     if (isMobileDevice || !window.gameReady || window.isSpectating || window.isEscaping) return;
     if (document.pointerLockElement) return;
+    if (ptrOverlay && ptrOverlay.style.display === 'flex') return;
+    const settingsModal = document.getElementById('settings-modal');
+    if (settingsModal && settingsModal.style.display === 'flex') return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
     if (isMinimapExpanded) return;
@@ -1425,10 +1428,12 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
         ptrOverlay.style.display = 'none';
         return;
       }
-      // Don't show pause overlay if keypad modal, minimap, or game-over is open
+      // Don't show pause overlay if keypad modal, minimap, settings modal, or game-over is open
       const keypadEl = document.getElementById('keypad-modal-ui');
       const isKeypadOpen = Boolean(keypadEl && keypadEl.style.display !== 'none');
-      if (isKeypadOpen || isMinimapExpanded) {
+      const settingsModal = document.getElementById('settings-modal');
+      const isSettingsOpen = Boolean(settingsModal && settingsModal.style.display === 'flex');
+      if (isKeypadOpen || isMinimapExpanded || isSettingsOpen) {
         ptrOverlay.style.display = 'none';
       } else if (
         (document.getElementById('captured-overlay') && document.getElementById('captured-overlay').style.display === 'flex') ||
@@ -4834,10 +4839,15 @@ function setupControls() {
     window._lastMouseX = e.clientX;
     window._lastMouseY = e.clientY;
 
+    const ptrOverlay = document.getElementById('pointer-lock-overlay');
+    const isPaused = Boolean(ptrOverlay && ptrOverlay.style.display === 'flex');
+    const settingsModal = document.getElementById('settings-modal');
+    const isSettingsOpen = Boolean(settingsModal && settingsModal.style.display === 'flex');
     const keypadModalEl = document.getElementById('keypad-modal-ui');
     const isKeypadOpen = Boolean(keypadModalEl && keypadModalEl.style.display !== 'none');
-    if (isKeypadOpen || e.target.closest('.keypad-modal')) {
-      return; // Never relock mouse or use inventory items while using the keypad terminal
+
+    if (isPaused || isSettingsOpen || isKeypadOpen || e.target.closest('#pointer-lock-overlay') || e.target.closest('#settings-modal') || e.target.closest('.settings-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel')) {
+      return; // Never relock mouse, capture clicks, or use items while in pause menu, settings, or modals!
     }
 
     if (!document.pointerLockElement && window.gameReady && !isCaptured && window.requestGamePointerLock) {
