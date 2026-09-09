@@ -90,7 +90,7 @@ app.get('/api/db-status', async (req, res) => {
     mongo: {
       status: statusNames[mongoStatus] || mongoStatus,
       readyState: mongoStatus,
-      error: mongoError,
+      error: mongoError || lastMongoError,
       usersCount: mongoUsers.length,
       users: mongoUsers
     },
@@ -180,6 +180,7 @@ const DEFAULT_MONGODB_URI = 'mongodb+srv://arnavantigravity_db_user:Gcnemt5r4WAa
 
 let isMongoConnected = false;
 let isConnecting = false;
+let lastMongoError = null;
 
 async function tryMongoConnect() {
   if (isMongoConnected || isConnecting) return;
@@ -187,8 +188,12 @@ async function tryMongoConnect() {
     dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4']);
   } catch (e) {}
 
-  const uri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
-  if (!uri) return;
+  let uri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
+  // If Render env has the deleted s7eou cluster, automatically override to active bwyipxp cluster!
+  if (!uri || uri.includes('s7eou.mongodb.net')) {
+    console.log("⚡ [MongoDB Atlas] Overriding stale s7eou cluster to active bwyipxp cluster!");
+    uri = DEFAULT_MONGODB_URI;
+  }
   try {
     isConnecting = true;
     await mongoose.connect(uri, { 
@@ -197,8 +202,10 @@ async function tryMongoConnect() {
     });
     isMongoConnected = true;
     isConnecting = false;
+    lastMongoError = null;
     console.log("🚀 [MongoDB Atlas] Connected successfully to cloud database!");
   } catch (err) {
+    lastMongoError = err.message;
     isMongoConnected = false;
     isConnecting = false;
     console.warn("⚠️ [MongoDB Atlas] Cloud database connection attempt:", err.message);
@@ -240,6 +247,15 @@ function saveUsersLocal(users) {
 }
 
 async function findUser(lookupKey) {
+  // If MongoDB is actively connecting, await up to 3.5s for readyState to become 1
+  if (mongoose.connection.readyState === 2) {
+    let waits = 0;
+    while (mongoose.connection.readyState === 2 && waits < 35) {
+      await new Promise(r => setTimeout(r, 100));
+      waits++;
+    }
+  }
+
   if (mongoose.connection.readyState === 1) {
     try {
       const doc = await UserModel.findOne({ lookupKey }).exec();
