@@ -1330,7 +1330,15 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     window.mobileGameActive = true;
     window.gameReady = true;
     ptrOverlay.style.display = 'none';
-    if (roleSplash) roleSplash.style.display = 'none';
+    if (roleSplash) {
+      roleSplash.style.display = 'none';
+      roleSplash.style.backdropFilter = 'none';
+      roleSplash.style.webkitBackdropFilter = 'none';
+    }
+    const hud = document.getElementById('hud-overlay');
+    if (hud) hud.style.display = 'flex';
+    const reticle = document.getElementById('crosshair') || document.getElementById('reticle');
+    if (reticle) reticle.style.display = 'block';
 
     if (!isMobileDevice) {
       if (document.activeElement && document.activeElement.blur) {
@@ -1514,6 +1522,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
 
     const hud = document.getElementById('hud-overlay');
     if (hud) hud.style.display = 'flex';
+    const reticle = document.getElementById('crosshair') || document.getElementById('reticle');
+    if (reticle) reticle.style.display = 'block';
     window.gameReady = true;
 
     // Relink pointer lock or mobile joystick controls

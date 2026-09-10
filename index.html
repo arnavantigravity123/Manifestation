@@ -440,8 +440,10 @@
 
       </div>
 
-      <!-- 3. Active Game HUD Overlay -->
-      <div id="hud-overlay" style="display: none;">
+    </div> <!-- End ui-overlay -->
+
+    <!-- 3. Active Game HUD Overlay -->
+    <div id="hud-overlay" style="display: none;">
         
         <!-- Top row: Vitals, Pause, and Map -->
         <!-- Top row: Vitals, Pause/Cam, and Map -->
@@ -538,7 +540,7 @@
         </div>
 
         <!-- Center: Interactive Crosshair -->
-        <div class="crosshair"></div>
+        <div id="crosshair" class="crosshair"></div>
         <div id="interaction-prompt"></div>
 
         <!-- Bottom row: Ultra-Sleek Hotbar & Carried Keys Bar -->
@@ -601,7 +603,7 @@
       </div>
 
       <!-- 5. Pointer Lock & Pause / In-Game Menu Overlay -->
-      <div id="pointer-lock-overlay" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); z-index: 1000; flex-direction: column; justify-content: center; align-items: center; color: white; padding: 20px; box-sizing: border-box; backdrop-filter: blur(8px);">
+      <div id="pointer-lock-overlay" style="display: none; position: fixed; inset: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 20000; flex-direction: column; justify-content: center; align-items: center; color: white; padding: 20px; box-sizing: border-box; backdrop-filter: blur(8px);">
         <h2 id="resume-click-target" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: var(--primary-accent); text-shadow: 0 0 12px var(--primary-accent); cursor: pointer; padding: 10px 24px; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; background: rgba(239, 68, 68, 0.1); transition: all 0.2s ease;">
           ▶ CLICK TO RESUME LABYRINTH
         </h2>
@@ -669,8 +671,6 @@
           <button id="end-game-lobby-btn" class="action-btn" style="padding: 1rem 2.5rem; font-size: 1.2rem; cursor: pointer; pointer-events: auto; background: var(--primary-gradient); box-shadow: 0 0 15px rgba(244,63,94,0.4); font-family: 'Orbitron', sans-serif; font-weight: 800;">Return to Lobby</button>
         </div>
       </div>
-
-    </div>
 
     <!-- Alert triggers -->
     <div id="alarm-flash" class="fullscreen-alarm-overlay"></div>
