@@ -2783,9 +2783,9 @@ function loadDungeonPackAssets() {
     if (dungeonModules.statue && dungeonModules.statue.children[0]) {
       dungeonStatueGeo = dungeonModules.statue.children[0].geometry;
       // In dungeon.glb, IndAssetStatue's intrinsic front faces +X.
-      // Rotate by +Math.PI / 2 around Y so its front faces away from the back wall
+      // Rotate by -Math.PI / 2 around Y so its front faces away from the back wall
       // and directly down the corridor towards the approaching player and red runner rug.
-      dungeonStatueGeo.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI / 2));
+      dungeonStatueGeo.applyMatrix4(new THREE.Matrix4().makeRotationY(-Math.PI / 2));
       dungeonStatueGeo.computeBoundingBox();
       dungeonStatueGeo.computeVertexNormals();
       dungeonStatueMat = dungeonModules.statue.children[0].material;
