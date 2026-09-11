@@ -5431,11 +5431,397 @@ function getKeyIdentifier(k) {
   return k.typeName || k.symbol;
 }
 
+// Interaction Candidate Evaluator: Determines the best object under player's crosshair or immediate reach
+const _interactCamDir = new THREE.Vector3();
+const _interactToTarget = new THREE.Vector3();
+
+function evalInteractionCandidate(targetPos, maxDist = 5.5, maxAngle = 0.85) {
+  if (!targetPos) return { eligible: false, score: Infinity, dist: Infinity };
+
+  const renderCam = (typeof activeViewCamera !== 'undefined' && activeViewCamera) ? activeViewCamera : camera;
+  const camPos = renderCam.position;
+  const dist = camPos.distanceTo(targetPos);
+  if (dist < 0.001) return { eligible: true, score: 0, dist: 0, dot: 1, horizDist: 0 };
+  if (dist > maxDist) return { eligible: false, score: Infinity, dist };
+
+  _interactToTarget.subVectors(targetPos, camPos).normalize();
+  renderCam.getWorldDirection(_interactCamDir);
+
+  const dot = _interactCamDir.dot(_interactToTarget);
+  const angle = _interactCamDir.angleTo(_interactToTarget);
+
+  const playerX = camera.position.x;
+  const playerZ = camera.position.z;
+  const horizDist = Math.hypot(playerX - targetPos.x, playerZ - targetPos.z);
+  const vertDist = Math.abs(camera.position.y - targetPos.y);
+
+  const isTopDown = (typeof viewModes !== 'undefined' && viewModes[currentViewIndex] === 'top_down');
+  const isDirectAim = dot > 0.70; // within ~45° of reticle
+  const isInViewCone = dot > 0.35 && angle < maxAngle; // within view cone
+  const isCloseTouch = horizDist <= 1.8 && vertDist <= 2.2;
+  const isMobileClose = isMobileDevice && horizDist <= 3.8 && dot > 0.15;
+
+  if (!isDirectAim && !isInViewCone && !isCloseTouch && !isTopDown && !isMobileClose) {
+    return { eligible: false, score: Infinity, dist };
+  }
+
+  // Scoring function: Smaller is better!
+  // Direct crosshair aim heavily prioritized over peripheral objects
+  let aimFactor = 1.0;
+  if (dot >= 0.95) {
+    aimFactor = 0.45; // Dead center: 55% discount
+  } else if (dot >= 0.82) {
+    aimFactor = 0.65;
+  } else if (dot >= 0.60) {
+    aimFactor = 0.90;
+  } else if (dot >= 0.35) {
+    aimFactor = 1.35;
+  } else {
+    aimFactor = 2.40;
+  }
+
+  const score = dist * aimFactor;
+  return { eligible: true, score, dist, dot, horizDist };
+}
+
+function getBestInteractionTarget() {
+  let bestCandidate = null;
+  let bestScore = Infinity;
+
+  // 1. Mirage Loot
+  if (typeof mirageItems !== 'undefined' && mirageItems.length > 0) {
+    for (let i = 0; i < mirageItems.length; i++) {
+      const mItem = mirageItems[i];
+      if (!mItem || !mItem.mesh || mItem.dissolving) continue;
+      const res = evalInteractionCandidate(mItem.mesh.position, 5.5);
+      if (res.eligible && res.score < bestScore) {
+        bestScore = res.score;
+        bestCandidate = {
+          type: 'mirage',
+          item: mItem,
+          promptText: isMobileDevice ? `Tap INTERACT to pick up ${mItem.name}` : `Press <kbd>E</kbd> to pick up ${mItem.name}`,
+          action: () => dissolveMirageItem(mItem)
+        };
+      }
+    }
+  }
+
+  // 2. Ground Dropped Items
+  if (typeof itemsInMaze !== 'undefined' && itemsInMaze.length > 0) {
+    for (let i = 0; i < itemsInMaze.length; i++) {
+      const item = itemsInMaze[i];
+      if (!item || !item.mesh) continue;
+      const res = evalInteractionCandidate(item.mesh.position, 5.5);
+      if (res.eligible && res.score < bestScore) {
+        bestScore = res.score;
+        const itemName = item.name || 'Item';
+        bestCandidate = {
+          type: 'item',
+          item: item,
+          promptText: isMobileDevice ? `Tap INTERACT to pick up ${itemName}` : `Press <kbd>E</kbd> to pick up ${itemName}`,
+          action: () => {
+            const uniqueEquipment = ["EMF Radar", "Thermal Camera", "Breaker Remote"];
+            if (uniqueEquipment.includes(item.name) && inventory.includes(item.name)) {
+              triggerNotification(`You already have a ${item.name}!`);
+              return;
+            }
+            const emptyIndex = inventory.indexOf('');
+            if (emptyIndex !== -1) {
+              inventory[emptyIndex] = item.name;
+              disposeItemMesh(item.mesh);
+              const idx = itemsInMaze.indexOf(item);
+              if (idx !== -1) itemsInMaze.splice(idx, 1);
+              if (window.socket) window.socket.emit('item_picked_up', { id: item.id });
+              triggerNotification(`Picked up ${item.name}`);
+              renderHUDInventory();
+            } else {
+              triggerNotification("Inventory full! Drop an item first.");
+            }
+          }
+        };
+      }
+    }
+  }
+
+  // 3. Keys in Maze
+  if (typeof keysInMaze !== 'undefined' && keysInMaze.length > 0) {
+    for (let i = 0; i < keysInMaze.length; i++) {
+      const key = keysInMaze[i];
+      if (!key || !key.mesh) continue;
+      const res = evalInteractionCandidate(key.mesh.position, 6.0);
+      if (res.eligible && res.score < bestScore) {
+        bestScore = res.score;
+        const hasKeySpace = carriedKeys.length < MAX_CARRIED_KEYS;
+        const prompt = hasKeySpace
+          ? (isMobileDevice ? `Tap INTERACT to collect ${key.typeName}` : `Press <kbd>E</kbd> to collect ${key.typeName}`)
+          : (isMobileDevice ? `Hands Full! Tap DROP KEY to replace` : `Hands Full! Press <kbd>G</kbd> to drop a key first`);
+        bestCandidate = {
+          type: 'key',
+          key: key,
+          promptText: prompt,
+          action: () => {
+            if (carriedKeys.length >= MAX_CARRIED_KEYS) {
+              triggerNotification(`Cannot carry more than ${MAX_CARRIED_KEYS} keys. Press G to drop one.`);
+              return;
+            }
+            const keyId = key.id || ('key_' + key.symbol);
+            const isNewKey = !discoveredKeyIds.has(keyId);
+            if (isNewKey) {
+              discoveredKeyIds.add(keyId);
+            }
+
+            scene.remove(key.mesh);
+            key.mesh.traverse(child => {
+              if (child.isMesh) {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+              }
+            });
+            carriedKeys.push({ id: keyId, symbol: key.symbol, typeName: key.typeName });
+            foundKeysList.push(key.symbol);
+
+            const isReal = gateSolved && functionalKeysRevealed.includes(key.symbol);
+            if (isNewKey) {
+              triggerNotification(`Discovered NEW [${key.typeName}]! The labyrinth shifts! (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
+            } else {
+              triggerNotification(`Picked up [${key.typeName}]${isReal ? ' ★ (Twin Key Verified)' : ''} (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
+            }
+
+            renderCarriedKeysHUD();
+            checkWinCondition();
+
+            if (typeof socketClient !== 'undefined') {
+              socketClient.emit('key_picked_up', { keyId: keyId });
+              if (isNewKey) {
+                socketClient.emit('solve_puzzle_room', { keyId: keyId });
+              }
+            }
+            const idx = keysInMaze.indexOf(key);
+            if (idx !== -1) keysInMaze.splice(idx, 1);
+          }
+        };
+      }
+    }
+  }
+
+  // 4. Circuit Breakers
+  if (typeof circuitBreakers !== 'undefined' && circuitBreakers.length > 0) {
+    for (let i = 0; i < circuitBreakers.length; i++) {
+      const breaker = circuitBreakers[i];
+      if (!breaker || !breaker.mesh || breaker.isFixed) continue;
+      const res = evalInteractionCandidate(breaker.mesh.position, 5.5);
+      if (res.eligible && res.score < bestScore) {
+        bestScore = res.score;
+        bestCandidate = {
+          type: 'breaker',
+          breaker: breaker,
+          promptText: isMobileDevice ? "Tap INTERACT to repair breaker" : "Press <kbd>E</kbd> to repair breaker",
+          action: () => {
+            if (typeof socketClient !== 'undefined') socketClient.emit('breaker_fixed', { breakerId: breaker.id });
+            fixBreakerLocal(breaker.id);
+          }
+        };
+      }
+    }
+  }
+
+  // 5. Code Clue Notes
+  if (typeof codeClueNotes !== 'undefined' && codeClueNotes.length > 0) {
+    for (let i = 0; i < codeClueNotes.length; i++) {
+      const clue = codeClueNotes[i];
+      if (!clue || !clue.mesh) continue;
+      const res = evalInteractionCandidate(clue.mesh.position, 5.5);
+      if (res.eligible && res.score < bestScore) {
+        bestScore = res.score;
+        let prompt = "";
+        if (clue.collected) {
+          const digits = window.cipherCodeDigits || [];
+          const revealedDigit = digits[clue.digitIndex] !== undefined ? digits[clue.digitIndex] : '?';
+          prompt = `Cipher Clue #${clue.digitIndex + 1}: [ ${revealedDigit} ] (Code Already Read)`;
+        } else {
+          prompt = isMobileDevice ? `Tap INTERACT to inspect Cipher Clue #${clue.digitIndex + 1}` : `Press <kbd>E</kbd> to inspect Cipher Clue #${clue.digitIndex + 1}`;
+        }
+        bestCandidate = {
+          type: 'clue',
+          clue: clue,
+          promptText: prompt,
+          action: () => {
+            if (clue.collected) {
+              const digitNames = ['1ST', '2ND', '3RD', '4TH'];
+              const digits = window.cipherCodeDigits || [];
+              const revealedDigit = digits[clue.digitIndex] !== undefined ? digits[clue.digitIndex] : '?';
+              triggerNotification(`Code already read! ${digitNames[clue.digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
+            } else {
+              if (typeof socketClient !== 'undefined') {
+                socketClient.emit('clue_collected', { digitIndex: clue.digitIndex });
+              }
+              collectClueLocal(clue.digitIndex);
+            }
+          }
+        };
+      }
+    }
+  }
+
+  // 6. Master Gate & Keypad Terminal
+  if (typeof gateCoordinates !== 'undefined') {
+    const gateVec = new THREE.Vector3(gateCoordinates.x, 1.8, gateCoordinates.z);
+    const padVec = (gateKeypadWorldPos && gateKeypadWorldPos.lengthSq() > 0) ? gateKeypadWorldPos : gateVec;
+
+    const resPad = evalInteractionCandidate(padVec, 5.0, 0.95);
+    const resGate = evalInteractionCandidate(gateVec, 5.5, 0.95);
+
+    let bestVaultRes = (resPad.eligible && resPad.score <= resGate.score) ? resPad : (resGate.eligible ? resGate : null);
+
+    // Proximity fallback: If close to keypad/gate (dist < 2.5m) and facing toward it (dot > 0.1)
+    if (!bestVaultRes) {
+      const pDistPad = camera.position.distanceTo(padVec);
+      const pDistGate = camera.position.distanceTo(gateVec);
+      const minPDist = Math.min(pDistPad, pDistGate);
+      if (minPDist <= 2.5) {
+        const checkPos = (pDistPad <= pDistGate) ? padVec : gateVec;
+        const resNear = evalInteractionCandidate(checkPos, 3.5, 1.5);
+        if (resNear.eligible) bestVaultRes = resNear;
+      }
+    }
+
+    if (bestVaultRes && bestVaultRes.eligible && bestVaultRes.score < bestScore) {
+      bestScore = bestVaultRes.score;
+
+      let prompt = "";
+      if (!gateSolved) {
+        const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+        if (!breakersFixed) {
+          prompt = isMobileDevice 
+            ? `⚡ KEYPAD UNPOWERED (${fixedBreakersCount}/${totalBreakersRequired} Breakers)` 
+            : `⚡ KEYPAD UNPOWERED: Repair all breakers (${fixedBreakersCount}/${totalBreakersRequired}) to restore power`;
+        } else if (window.securityLockoutActive) {
+          const diff = window.securityLockoutEndTime - performance.now();
+          if (diff <= 0) {
+            window.securityLockoutActive = false;
+            prompt = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
+          } else {
+            const remaining = Math.max(1, Math.ceil(diff / 1000));
+            prompt = `ACCESS DENIED: Security Lockout (${remaining}s remaining)`;
+          }
+        } else {
+          prompt = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
+        }
+      } else {
+        const uninsertedKeyIndex = carriedKeys.findIndex(k => 
+          isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
+        );
+
+        if (uninsertedKeyIndex !== -1) {
+          const keyToInsert = carriedKeys[uninsertedKeyIndex];
+          const keyId = getKeyIdentifier(keyToInsert);
+          prompt = isMobileDevice ? `Tap INTERACT to Insert [${keyId}]` : `Press <kbd>E</kbd> to Insert [${keyId}]`;
+        } else if (insertedGateKeys.length >= 2) {
+          const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+          if (!breakersFixed) {
+            prompt = `MASTER GATE LOCKED: Need ${totalBreakersRequired} Breakers to Power Door (${fixedBreakersCount}/${totalBreakersRequired})`;
+          } else {
+            prompt = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
+          }
+        } else {
+          prompt = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
+        }
+      }
+
+      bestCandidate = {
+        type: 'keypad_or_gate',
+        promptText: prompt,
+        action: () => {
+          if (!gateSolved) {
+            const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+            if (!breakersFixed) {
+              triggerNotification(`⚡ KEYPAD UNPOWERED: Repair all circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to restore power!`);
+              return;
+            }
+            if (window.securityLockoutActive) {
+              const diff = window.securityLockoutEndTime - performance.now();
+              if (diff <= 0) {
+                window.securityLockoutActive = false;
+              } else {
+                const remaining = Math.max(1, Math.ceil(diff / 1000));
+                triggerNotification(`ACCESS DENIED: Keypad locked out for ${remaining} more seconds!`);
+                return;
+              }
+            }
+            openKeypadModal();
+            return;
+          }
+
+          const uninsertedKeyIndex = carriedKeys.findIndex(k => 
+            isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
+          );
+
+          if (uninsertedKeyIndex !== -1) {
+            const poppedKey = carriedKeys.splice(uninsertedKeyIndex, 1)[0];
+            const keyId = getKeyIdentifier(poppedKey);
+            if (!insertedGateKeys.includes(keyId)) {
+              insertedGateKeys.push(keyId);
+            }
+            renderCarriedKeysHUD();
+            updateGateHUD();
+            if (typeof socketClient !== 'undefined') {
+              socketClient.emit('insert_gate_key', { symbol: keyId });
+            }
+            triggerNotification(`🔑 Inserted [${keyId}] into Master Gate! (${insertedGateKeys.length}/2 installed)`);
+            checkWinCondition();
+            return;
+          }
+
+          if (carriedKeys.length > 0 && insertedGateKeys.length < 2) {
+            triggerNotification(`Key does not fit! [${carriedKeys[0].typeName || 'Key'}] is not one of the twin gate keys.`);
+            return;
+          }
+
+          const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
+          if (insertedGateKeys.length >= 2) {
+            if (!breakersFixed) {
+              triggerNotification(`Master Gate needs power! Fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to open door`);
+              return;
+            }
+            if (socketClient) {
+              socketClient.emit('human_escaped', { id: socketClient.id });
+            }
+            isCaptured = true;
+            window.isEscaping = true;
+            playEscapeCinematic(() => {
+              document.getElementById('hud-overlay').style.display = 'none';
+              if (document.pointerLockElement) document.exitPointerLock();
+              window.mobileGameActive = false;
+              const endOverlay = document.getElementById('end-game-overlay');
+              if (endOverlay && endOverlay.style.display !== 'flex') {
+                const title = document.getElementById('end-game-title');
+                const details = document.getElementById('end-game-details');
+                if (title && details) {
+                  endOverlay.style.display = 'flex';
+                  title.textContent = "ESCAPED!";
+                  title.style.color = "#10b981";
+                  title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
+                  details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>`;
+                }
+              }
+            });
+            return;
+          } else {
+            triggerNotification(`Master Gate requires remaining twin key! (${insertedGateKeys.length}/2 installed: [${insertedGateKeys.join(', ') || 'None'}])`);
+          }
+        }
+      };
+    }
+  }
+
+  return bestCandidate;
+}
+
 // Dynamically render on-screen keys/breaker/item interaction prompts in HUD
 function updateInteractionPrompt() {
   const promptEl = document.getElementById('interaction-prompt');
   if (myTeam === 'Ghost') {
-    if (promptEl) promptEl.style.display = 'none';
+    if (promptEl && promptEl.style.display !== 'none') promptEl.style.display = 'none';
     return;
   }
   if (!promptEl) return;
@@ -5446,149 +5832,22 @@ function updateInteractionPrompt() {
   const isPauseOpen = ptrOverlay && ptrOverlay.style.display !== 'none';
 
   if (myTeam !== 'Human' || isCaptured || !window.gameReady || isMinimapExpanded || isKeypadOpen || isPauseOpen || window.isEscaping) {
-    promptEl.style.display = 'none';
+    if (promptEl.style.display !== 'none') promptEl.style.display = 'none';
     return;
   }
 
-  let minDistance = Infinity;
-  let promptText = "";
-
-  // 1. Check Master Gate & Keypad Terminal
-  const gateVec = new THREE.Vector3(gateCoordinates.x, 1.8, gateCoordinates.z);
-  const padVec = (gateKeypadWorldPos && gateKeypadWorldPos.lengthSq() > 0) ? gateKeypadWorldPos : gateVec;
-
-  const { looking: lookingAtPad, dist: distToPad } = isLookingAtTarget(padVec, 6.0, 0.95);
-  const { looking: lookingAtGate, dist: distToGate } = isLookingAtTarget(gateVec, 6.5, 0.95);
-  const distPlayerToPad = camera.position.distanceTo(padVec);
-  const distPlayerToGate = camera.position.distanceTo(gateVec);
-
-  const nearTerminal = lookingAtPad || lookingAtGate || distPlayerToPad < 3.5 || distPlayerToGate < 3.5;
-  const closestDist = Math.min(distToPad, distToGate, distPlayerToPad, distPlayerToGate);
-
-  if (nearTerminal && closestDist < minDistance) {
-    minDistance = closestDist;
-
-    if (!gateSolved) {
-      const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
-      if (!breakersFixed) {
-        promptText = isMobileDevice 
-          ? `⚡ KEYPAD UNPOWERED (${fixedBreakersCount}/${totalBreakersRequired} Breakers)` 
-          : `⚡ KEYPAD UNPOWERED: Repair all breakers (${fixedBreakersCount}/${totalBreakersRequired}) to restore power`;
-      } else if (window.securityLockoutActive) {
-        const diff = window.securityLockoutEndTime - performance.now();
-        if (diff <= 0) {
-          window.securityLockoutActive = false;
-          promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
-        } else {
-          const remaining = Math.max(1, Math.ceil(diff / 1000));
-          promptText = `ACCESS DENIED: Security Lockout (${remaining}s remaining)`;
-        }
-      } else {
-        promptText = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
-      }
-    } else {
-      // Gate keypad cipher is cracked!
-      const uninsertedKeyIndex = carriedKeys.findIndex(k => 
-        isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
-      );
-
-      if (uninsertedKeyIndex !== -1) {
-        const keyToInsert = carriedKeys[uninsertedKeyIndex];
-        const keyId = getKeyIdentifier(keyToInsert);
-        promptText = isMobileDevice ? `Tap INTERACT to Insert [${keyId}]` : `Press <kbd>E</kbd> to Insert [${keyId}]`;
-      } else if (insertedGateKeys.length >= 2) {
-        const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
-        if (!breakersFixed) {
-          promptText = `MASTER GATE LOCKED: Need ${totalBreakersRequired} Breakers to Power Door (${fixedBreakersCount}/${totalBreakersRequired})`;
-        } else {
-          promptText = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
-        }
-      } else {
-        promptText = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
-      }
+  const bestTarget = getBestInteractionTarget();
+  if (bestTarget && bestTarget.promptText) {
+    if (promptEl.innerHTML !== bestTarget.promptText) {
+      promptEl.innerHTML = bestTarget.promptText;
     }
-  }
-
-  // 2. Check Keys in Maze
-  for (let i = 0; i < keysInMaze.length; i++) {
-    const key = keysInMaze[i];
-    const { looking: lookingAtKey, dist: distToKey } = isLookingAtTarget(key.mesh.position, 6.5);
-    if (lookingAtKey) {
-      if (distToKey < minDistance) {
-        minDistance = distToKey;
-        if (carriedKeys.length < MAX_CARRIED_KEYS) {
-          promptText = isMobileDevice ? `Tap INTERACT to collect ${key.typeName}` : `Press <kbd>E</kbd> to collect ${key.typeName}`;
-        } else {
-          promptText = isMobileDevice ? `Hands Full! Tap DROP KEY to replace` : `Hands Full! Press <kbd>G</kbd> to drop a key first`;
-        }
-      }
+    if (promptEl.style.display !== 'block') {
+      promptEl.style.display = 'block';
     }
-  }
-
-  // 3. Check Circuit Breakers
-  for (let i = 0; i < circuitBreakers.length; i++) {
-    const breaker = circuitBreakers[i];
-    if (breaker.isFixed) continue;
-    const { looking: lookingAtBreaker, dist: distToBreaker } = isLookingAtTarget(breaker.mesh.position, 6.0);
-    if (lookingAtBreaker) {
-      if (distToBreaker < minDistance) {
-        minDistance = distToBreaker;
-        promptText = isMobileDevice ? "Tap INTERACT to repair breaker" : "Press <kbd>E</kbd> to repair breaker";
-      }
-    }
-  }
-
-  // 4. Check Code Clue Notes (Glowing Cipher Pages)
-  for (let i = 0; i < codeClueNotes.length; i++) {
-    const clue = codeClueNotes[i];
-    const { looking: lookingAtClue, dist: distToClue } = isLookingAtTarget(clue.mesh.position, 6.0);
-    if (lookingAtClue) {
-      if (distToClue < minDistance) {
-        minDistance = distToClue;
-        if (clue.collected) {
-          const digits = window.cipherCodeDigits || [];
-          const revealedDigit = digits[clue.digitIndex] !== undefined ? digits[clue.digitIndex] : '?';
-          promptText = `Cipher Clue #${clue.digitIndex + 1}: [ ${revealedDigit} ] (Code Already Read)`;
-        } else {
-          promptText = isMobileDevice ? `Tap INTERACT to inspect Cipher Clue #${clue.digitIndex + 1}` : `Press <kbd>E</kbd> to inspect Cipher Clue #${clue.digitIndex + 1}`;
-        }
-      }
-    }
-  }
-
-  // 5. Check Ground Dropped Items
-  for (let i = 0; i < itemsInMaze.length; i++) {
-    const dItem = itemsInMaze[i];
-    if (!dItem || !dItem.mesh) continue;
-    const { looking: lookingAtItem, dist: distToItem } = isLookingAtTarget(dItem.mesh.position, 5.5);
-    if (lookingAtItem) {
-      if (distToItem < minDistance) {
-        minDistance = distToItem;
-        promptText = isMobileDevice ? `Tap INTERACT to pick up ${dItem.name || 'Item'}` : `Press <kbd>E</kbd> to pick up ${dItem.name || 'Item'}`;
-      }
-    }
-  }
-
-  // 6. Check Mirage Loot (Feature 2)
-  if (typeof mirageItems !== 'undefined') {
-    for (let i = 0; i < mirageItems.length; i++) {
-      const mItem = mirageItems[i];
-      if (!mItem || !mItem.mesh || mItem.dissolving) continue;
-      const { looking: lookingAtMirage, dist: distToMirage } = isLookingAtTarget(mItem.mesh.position, 5.5);
-      if (lookingAtMirage) {
-        if (distToMirage < minDistance) {
-          minDistance = distToMirage;
-          promptText = isMobileDevice ? `Tap INTERACT to pick up ${mItem.name}` : `Press <kbd>E</kbd> to pick up ${mItem.name}`;
-        }
-      }
-    }
-  }
-
-  if (promptText) {
-    promptEl.innerHTML = promptText;
-    promptEl.style.display = 'block';
   } else {
-    promptEl.style.display = 'none';
+    if (promptEl.style.display !== 'none') {
+      promptEl.style.display = 'none';
+    }
   }
 }
 
@@ -5599,228 +5858,10 @@ function checkInteractions() {
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
   if (ptrOverlay && ptrOverlay.style.display !== 'none') return;
 
-  // 0. Check Mirage Loot FIRST (Prevents picking up real items / overriding)
-  if (typeof mirageItems !== 'undefined' && mirageItems.length > 0) {
-    for (let i = 0; i < mirageItems.length; i++) {
-      const mItem = mirageItems[i];
-      if (!mItem || !mItem.mesh || mItem.dissolving) continue;
-      const { looking: lookingAtMirage } = isLookingAtTarget(mItem.mesh.position, 4.8);
-      const playerDist = camera.position.distanceTo(mItem.mesh.position);
-      if (lookingAtMirage || playerDist < 2.5) {
-        dissolveMirageItem(mItem);
-        return; // Intercepted mirage! Do NOT proceed to pick up real items
-      }
-    }
-  }
-
-  // 1. Check proximity to Keypad Terminal & Master Gate
-  const gateVec = new THREE.Vector3(gateCoordinates.x, 1.8, gateCoordinates.z);
-  const padVec = (gateKeypadWorldPos && gateKeypadWorldPos.lengthSq() > 0) ? gateKeypadWorldPos : gateVec;
-
-  const { looking: lookingAtPad } = isLookingAtTarget(padVec, 6.0, 0.95);
-  const { looking: lookingAtGate } = isLookingAtTarget(gateVec, 6.5, 0.95);
-  const distPlayerToPad = camera.position.distanceTo(padVec);
-  const distPlayerToGate = camera.position.distanceTo(gateVec);
-
-  const nearGateOrPad = lookingAtPad || lookingAtGate || distPlayerToPad < 3.5 || distPlayerToGate < 3.5;
-
-  if (nearGateOrPad) {
-    if (!gateSolved) {
-      const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
-      if (!breakersFixed) {
-        triggerNotification(`⚡ KEYPAD UNPOWERED: Repair all circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to restore power!`);
-        return;
-      }
-      if (window.securityLockoutActive) {
-        const diff = window.securityLockoutEndTime - performance.now();
-        if (diff <= 0) {
-          window.securityLockoutActive = false;
-        } else {
-          const remaining = Math.max(1, Math.ceil(diff / 1000));
-          triggerNotification(`ACCESS DENIED: Keypad locked out for ${remaining} more seconds!`);
-          return;
-        }
-      }
-      openKeypadModal();
-      return;
-    }
-
-    // Gate cipher is solved! Now players can insert twin keys or escape
-    const uninsertedKeyIndex = carriedKeys.findIndex(k => 
-      isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
-    );
-
-    if (uninsertedKeyIndex !== -1) {
-      const poppedKey = carriedKeys.splice(uninsertedKeyIndex, 1)[0];
-      const keyId = getKeyIdentifier(poppedKey);
-      if (!insertedGateKeys.includes(keyId)) {
-        insertedGateKeys.push(keyId);
-      }
-      renderCarriedKeysHUD();
-      updateGateHUD();
-      if (typeof socketClient !== 'undefined') {
-        socketClient.emit('insert_gate_key', { symbol: keyId });
-      }
-      triggerNotification(`🔑 Inserted [${keyId}] into Master Gate! (${insertedGateKeys.length}/2 installed)`);
-      checkWinCondition();
-      return;
-    }
-
-    // Check if player is carrying a decoy key
-    if (carriedKeys.length > 0 && insertedGateKeys.length < 2) {
-      triggerNotification(`Key does not fit! [${carriedKeys[0].typeName || 'Key'}] is not one of the twin gate keys.`);
-      return;
-    }
-
-    const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
-    if (insertedGateKeys.length >= 2) {
-      if (!breakersFixed) {
-        triggerNotification(`Master Gate needs power! Fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to open door`);
-        return;
-      }
-      // All conditions satisfied -> Escape victory!
-      if (socketClient) {
-        socketClient.emit('human_escaped', { id: socketClient.id });
-      }
-      isCaptured = true; // Lock controls during cinematic
-      window.isEscaping = true;
-      playEscapeCinematic(() => {
-        document.getElementById('hud-overlay').style.display = 'none';
-        if (document.pointerLockElement) document.exitPointerLock();
-        window.mobileGameActive = false;
-        const endOverlay = document.getElementById('end-game-overlay');
-        if (endOverlay && endOverlay.style.display !== 'flex') {
-          const title = document.getElementById('end-game-title');
-          const details = document.getElementById('end-game-details');
-          if (title && details) {
-            endOverlay.style.display = 'flex';
-            title.textContent = "ESCAPED!";
-            title.style.color = "#10b981";
-            title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
-            details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>`;
-          }
-        }
-      });
-      return;
-    } else {
-      triggerNotification(`Master Gate requires remaining twin key! (${insertedGateKeys.length}/2 installed: [${insertedGateKeys.join(', ') || 'None'}])`);
-    }
-  }
-
-  // 2. Check Key Interactions
-  for (let i = 0; i < keysInMaze.length; i++) {
-    const key = keysInMaze[i];
-    const { looking: lookingAtKey } = isLookingAtTarget(key.mesh.position, 5.0);
-    if (lookingAtKey) {
-      // Enforce carry limit
-      if (carriedKeys.length >= MAX_CARRIED_KEYS) {
-        triggerNotification(`Cannot carry more than ${MAX_CARRIED_KEYS} keys. Press G to drop one.`);
-        break;
-      }
-      // Picked up!
-      const keyId = key.id || ('key_' + key.symbol);
-      const isNewKey = !discoveredKeyIds.has(keyId);
-      if (isNewKey) {
-        discoveredKeyIds.add(keyId);
-      }
-
-      scene.remove(key.mesh);
-      key.mesh.traverse(child => {
-        if (child.isMesh) {
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) child.material.dispose();
-        }
-      });
-      carriedKeys.push({ id: keyId, symbol: key.symbol, typeName: key.typeName });
-      foundKeysList.push(key.symbol);
-
-      const isReal = gateSolved && functionalKeysRevealed.includes(key.symbol);
-      if (isNewKey) {
-        triggerNotification(`Discovered NEW [${key.typeName}]! The labyrinth shifts! (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
-      } else {
-        triggerNotification(`Picked up [${key.typeName}]${isReal ? ' ★ (Twin Key Verified)' : ''} (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
-      }
-
-      // Refresh the carried-keys HUD
-      renderCarriedKeysHUD();
-
-      // Check if we retrieved the exact matching real keys
-      checkWinCondition();
-
-      // Emit events — only trigger maze realignment if this key has never been discovered before in this match!
-      if (typeof socketClient !== 'undefined') {
-        socketClient.emit('key_picked_up', { keyId: keyId });
-        if (isNewKey) {
-          socketClient.emit('solve_puzzle_room', { keyId: keyId });
-        }
-      }
-      keysInMaze.splice(i, 1);
-      break;
-    }
-  }
-
-  // 3. Check proximity to Circuit Breakers
-  for (let i = 0; i < circuitBreakers.length; i++) {
-    const breaker = circuitBreakers[i];
-    if (breaker.isFixed) continue;
-    
-    const distToBreaker = camera.position.distanceTo(breaker.mesh.position);
-    if (distToBreaker < 4.5) {
-      if (typeof socketClient !== 'undefined') socketClient.emit('breaker_fixed', { breakerId: breaker.id });
-      fixBreakerLocal(breaker.id);
-      break;
-    }
-  }
-
-  // 4. Check proximity to Code Clue Notes (yellow glowing slabs)
-  for (let i = 0; i < codeClueNotes.length; i++) {
-    const note = codeClueNotes[i];
-    const distToNote = camera.position.distanceTo(note.mesh.position);
-    if (distToNote < 4.5) {
-      const { looking: lookingAtNote } = isLookingAtTarget(note.mesh.position, 4.5);
-      if (lookingAtNote) {
-        if (note.collected) {
-          const digitNames = ['1ST', '2ND', '3RD', '4TH'];
-          const digits = window.cipherCodeDigits || [];
-          const revealedDigit = digits[note.digitIndex] !== undefined ? digits[note.digitIndex] : '?';
-          triggerNotification(`Code already read! ${digitNames[note.digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
-        } else {
-          if (typeof socketClient !== 'undefined') {
-            socketClient.emit('clue_collected', { digitIndex: note.digitIndex });
-          }
-          collectClueLocal(note.digitIndex);
-        }
-        break;
-      }
-    }
-  }
-
-  // 5. Check proximity to Pick-up Items (find empty slot & check unique items)
-  for (let i = 0; i < itemsInMaze.length; i++) {
-    const item = itemsInMaze[i];
-    const { looking: lookingAtItem } = isLookingAtTarget(item.mesh.position, 4.5);
-    if (lookingAtItem) {
-      // UNIQUE EQUIPMENT CHECK: Prevent carrying duplicates of passive/reusable items
-      const uniqueEquipment = ["EMF Radar", "Thermal Camera", "Breaker Remote"];
-      if (uniqueEquipment.includes(item.name) && inventory.includes(item.name)) {
-        triggerNotification(`You already have a ${item.name}!`);
-        break;
-      }
-
-      // Look for the first empty slot to place the item
-      const emptyIndex = inventory.indexOf('');
-      if (emptyIndex !== -1) {
-        inventory[emptyIndex] = item.name;
-        disposeItemMesh(item.mesh);
-        itemsInMaze.splice(i, 1);
-        if (window.socket) window.socket.emit('item_picked_up', { id: item.id });
-        triggerNotification(`Picked up ${item.name}`);
-        renderHUDInventory();
-      } else {
-        triggerNotification("Inventory full! Drop an item first.");
-      }
-      return;
-    }
+  const bestTarget = getBestInteractionTarget();
+  if (bestTarget && typeof bestTarget.action === 'function') {
+    bestTarget.action();
+    return;
   }
 
   // Fallback feedback when tapping interact in an empty hallway
