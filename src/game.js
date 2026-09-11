@@ -1877,6 +1877,88 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   // Setup keypad button listeners now that the game DOM is visible
   setupKeypadListeners();
 
+  // Pre-spawn 3D character meshes for all other lobby peers so teammates & ghosts are physically visible in person and on the minimap from frame 1
+  if (matchConfig && matchConfig.players) {
+    let peerSpawnIndex = 1;
+    const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+    const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+
+    Object.entries(matchConfig.players).forEach(([pId, pData]) => {
+      if (!pId || pId === myId) return;
+
+      const pTeam = pData.team || 'Human';
+      const isGhost = pTeam === 'Ghost';
+      const pSkinId = pData.skinId || (isGhost ? 'skin_ghost' : 'skin_hazmat');
+      const pUsername = pData.username || (isGhost ? 'Phantom' : 'Operative');
+      const isVipPlayer = Boolean(pData.isVip);
+
+      let spawnX = sx;
+      let spawnZ = sz;
+      if (isGhost) {
+        const farCorridors = openCorridors.filter(c => Math.hypot(c.x - sx, c.z - sz) > 15);
+        if (farCorridors.length > 0) {
+          const spawnNode = farCorridors[0];
+          spawnX = spawnNode.x;
+          spawnZ = spawnNode.z;
+        } else {
+          spawnX = sx + 20;
+          spawnZ = sz + 20;
+        }
+      } else {
+        const angle = (peerSpawnIndex * Math.PI * 2) / Math.max(2, Object.keys(matchConfig.players).length);
+        spawnX = sx + Math.cos(angle) * 1.2;
+        spawnZ = sz + Math.sin(angle) * 1.2;
+        peerSpawnIndex++;
+      }
+
+      const pMesh = isGhost ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername, isVipPlayer);
+      pMesh.userData.isVip = isVipPlayer;
+      const glowPref = window.isVipGlowEnabled ? window.isVipGlowEnabled() : true;
+      if (isVipPlayer && glowPref) {
+        applyVipGlow(pMesh, true);
+      }
+
+      // Setup thermal camera support (Cyan for teammates, Red for ghosts)
+      const meshThermalMat = new THREE.MeshBasicMaterial({ 
+        color: isGhost ? 0xff5555 : 0x38bdf8, 
+        fog: false, 
+        depthTest: false, 
+        side: THREE.DoubleSide 
+      });
+      pMesh.traverse(c => {
+        if (c.isMesh) {
+          c.userData.normalMat = c.material;
+          c.userData.thermalMat = meshThermalMat;
+        } else if (c.isSprite) {
+          c.userData.normalMat = c.material;
+          c.userData.thermalMat = new THREE.SpriteMaterial({
+            map: c.material.map,
+            color: isGhost ? 0xff5555 : 0x38bdf8,
+            fog: false,
+            depthTest: false,
+            transparent: true,
+            blending: THREE.AdditiveBlending
+          });
+        }
+      });
+
+      pMesh.position.set(spawnX, isGhost ? 0.35 : 0, spawnZ);
+      scene.add(pMesh);
+      players3D[pId] = pMesh;
+    });
+  }
+
+  // Broadcast initial spawn position immediately so peers know our location from t=0
+  if (socketClient && !window.isSpectating) {
+    socketClient.emit('player_movement', {
+      position: { x: camera.position.x, z: camera.position.z },
+      rotation: { y: camera.rotation.y },
+      team: myTeam,
+      characterClass: myClass,
+      isVip: window.isVipActive ? window.isVipActive() : false
+    });
+  }
+
   // Window Resize
   window.addEventListener('resize', () => {
     const container = document.getElementById('canvas-container');
@@ -6801,8 +6883,11 @@ function checkWinCondition() {
   updateGateHUD();
 }
 
+let socketListenersSetup = false;
 // Setup network synchronization
 function setupSocketListeners() {
+  if (socketListenersSetup) return;
+  socketListenersSetup = true;
   socketClient.on('player_moved', ({ id, position, rotation, team, characterClass, isVip: isVipMove }) => {
     // Ignore local player position broadcasts so we don't spawn a clone on ourselves
     if (!id || id === myId) return;
@@ -7986,10 +8071,10 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
 }
 
 function createHumanMeshGroup(skinId, username, isVip) {
-  // Default to either skin_soldier (Mech) or skin_hazmat (Biohazard Suit) — never default!
+  const group = new THREE.Group();
   let effectiveSkin = skinId;
-  if (!effectiveSkin || effectiveSkin === 'skin_default' || effectiveSkin === 'skin_ghost') {
-    effectiveSkin = (Math.random() < 0.5 ? 'skin_soldier' : 'skin_hazmat');
+  if (!effectiveSkin || effectiveSkin === 'skin_ghost') {
+    effectiveSkin = (localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat');
   }
   const vipActive = isVip !== undefined ? Boolean(isVip) : (window.isVipActive ? window.isVipActive() : false);
   group.userData = group.userData || {};
