@@ -184,8 +184,8 @@ function registerAnimationToActiveMixers(animName, clip) {
   humanAnimClips[animName] = clip;
   clip.name = animName;
 
-  // Dynamically bind to localPlayerVisual if already spawned with skin_hazmat or skin_soldier
-  if (localPlayerVisual && localPlayerVisual.userData && (localPlayerVisual.userData.skinId === 'skin_hazmat' || localPlayerVisual.userData.skinId === 'skin_soldier') && localPlayerVisual.userData.animMixer) {
+  // Dynamically bind to localPlayerVisual if already spawned with skin_hazmat
+  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_hazmat' && localPlayerVisual.userData.animMixer) {
     const mixer = localPlayerVisual.userData.animMixer;
     localPlayerVisual.userData.animActions = localPlayerVisual.userData.animActions || {};
     localPlayerVisual.userData.animActions[animName] = mixer.clipAction(clip);
@@ -197,7 +197,7 @@ function registerAnimationToActiveMixers(animName, clip) {
 
   // Dynamically bind to remote players in lobby
   Object.values(players3D).forEach(p => {
-    if (p && p.userData && (p.userData.skinId === 'skin_hazmat' || p.userData.skinId === 'skin_soldier') && p.userData.animMixer) {
+    if (p && p.userData && p.userData.skinId === 'skin_hazmat' && p.userData.animMixer) {
       const mixer = p.userData.animMixer;
       p.userData.animActions = p.userData.animActions || {};
       p.userData.animActions[animName] = mixer.clipAction(clip);
@@ -234,21 +234,22 @@ function upgradeMeshGroupToSoldier(group) {
   if (soldierAnimClips.walk) actions.walk = mixer.clipAction(soldierAnimClips.walk);
   if (soldierAnimClips.sprint) actions.sprint = mixer.clipAction(soldierAnimClips.sprint);
 
-  // Bind strafe and backward clips from humanAnimClips if loaded, else fallback to walk
-  if (humanAnimClips.walkBack) {
-    actions.walkBack = mixer.clipAction(humanAnimClips.walkBack);
+  // GLB Soldier uses native GLTF animations only (FBX clips are incompatible with GLB skeleton rig)
+  if (soldierAnimClips.walkBack) {
+    actions.walkBack = mixer.clipAction(soldierAnimClips.walkBack);
+    actions.walkBack.setEffectiveTimeScale(-1.0);
   } else if (soldierAnimClips.walk) {
     actions.walkBack = mixer.clipAction(soldierAnimClips.walk);
   }
 
-  if (humanAnimClips.strafeLeft) {
-    actions.strafeLeft = mixer.clipAction(humanAnimClips.strafeLeft);
+  if (soldierAnimClips.strafeLeft) {
+    actions.strafeLeft = mixer.clipAction(soldierAnimClips.strafeLeft);
   } else if (soldierAnimClips.walk) {
     actions.strafeLeft = mixer.clipAction(soldierAnimClips.walk);
   }
 
-  if (humanAnimClips.strafeRight) {
-    actions.strafeRight = mixer.clipAction(humanAnimClips.strafeRight);
+  if (soldierAnimClips.strafeRight) {
+    actions.strafeRight = mixer.clipAction(soldierAnimClips.strafeRight);
   } else if (soldierAnimClips.walk) {
     actions.strafeRight = mixer.clipAction(soldierAnimClips.walk);
   }
@@ -476,7 +477,6 @@ export function loadHumanGLBAsset() {
 }
 
 export function loadSoldierAsset() {
-  loadLocomotionFBXClips();
   if (preloadedSoldierModel || isSoldierLoading) return;
   isSoldierLoading = true;
 
@@ -509,7 +509,20 @@ export function loadSoldierAsset() {
     if (gltf.animations) {
       gltf.animations.forEach(clip => {
         if (clip.name === 'Idle') soldierAnimClips.idle = clip;
-        if (clip.name === 'Walk') soldierAnimClips.walk = clip;
+        if (clip.name === 'Walk') {
+          soldierAnimClips.walk = clip;
+          const walkBackClip = clip.clone();
+          walkBackClip.name = 'WalkBack';
+          soldierAnimClips.walkBack = walkBackClip;
+
+          const strafeLClip = clip.clone();
+          strafeLClip.name = 'StrafeLeft';
+          soldierAnimClips.strafeLeft = strafeLClip;
+
+          const strafeRClip = clip.clone();
+          strafeRClip.name = 'StrafeRight';
+          soldierAnimClips.strafeRight = strafeRClip;
+        }
         if (clip.name === 'Run') soldierAnimClips.sprint = clip;
       });
     }
@@ -8021,21 +8034,23 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   }
   const actions = humanGroup.userData.animActions;
 
-  // On-demand action instantiation if clip finished loading after mesh creation (Hazmat & Soldier)
-  if (humanGroup.userData.skinId === 'skin_hazmat' || humanGroup.userData.skinId === 'skin_soldier') {
-    if (humanAnimClips[targetActionName]) {
-      const existingAct = actions[targetActionName];
-      // Rebind if action is missing or if it was assigned to fallback walk clip
-      if (!existingAct || (existingAct._clip && existingAct._clip.name === 'Walk' && targetActionName !== 'walk')) {
-        actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
+  // On-demand action instantiation if clip finished loading after mesh creation (Hazmat uses FBX, Soldier uses GLB)
+  if (humanGroup.userData.skinId === 'skin_hazmat') {
+    if (humanAnimClips[targetActionName] && !actions[targetActionName]) {
+      actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
+    }
+    if (!actions.idle && humanAnimClips.idle) {
+      actions.idle = mixer.clipAction(humanAnimClips.idle);
+    }
+  } else if (humanGroup.userData.skinId === 'skin_soldier') {
+    if (soldierAnimClips[targetActionName] && !actions[targetActionName]) {
+      actions[targetActionName] = mixer.clipAction(soldierAnimClips[targetActionName]);
+      if (targetActionName === 'walkBack') {
+        actions[targetActionName].setEffectiveTimeScale(-1.0);
       }
     }
-    if (!actions.idle) {
-      if (soldierAnimClips.idle && humanGroup.userData.skinId === 'skin_soldier') {
-        actions.idle = mixer.clipAction(soldierAnimClips.idle);
-      } else if (humanAnimClips.idle) {
-        actions.idle = mixer.clipAction(humanAnimClips.idle);
-      }
+    if (!actions.idle && soldierAnimClips.idle) {
+      actions.idle = mixer.clipAction(soldierAnimClips.idle);
     }
   }
 
@@ -8045,9 +8060,9 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
 
   const currentAction = actions[currentActionName] || actions.idle;
 
-  // Direction timeScale: only reverse walk clip if dedicated backwards clip is not present
-  const isFallbackWalkBack = targetActionName === 'walkBack' && humanGroup.userData.skinId === 'skin_soldier' && (!targetAction._clip || targetAction._clip.name === 'Walk');
-  const desiredTimeScale = isFallbackWalkBack ? -1.0 : 1.0;
+  // Direction timeScale: Soldier plays walk backwards for walkBack; Hazmat uses dedicated FBX
+  const isBackwards = targetActionName === 'walkBack' && humanGroup.userData.skinId === 'skin_soldier';
+  const desiredTimeScale = isBackwards ? -1.0 : 1.0;
 
   // If already playing the EXACT same AnimationAction instance, do not reset or crossfade
   if (currentAction === targetAction) {
@@ -8177,21 +8192,22 @@ function createHumanMeshGroup(skinId, username, isVip) {
       if (soldierAnimClips.walk) actions.walk = mixer.clipAction(soldierAnimClips.walk);
       if (soldierAnimClips.sprint) actions.sprint = mixer.clipAction(soldierAnimClips.sprint);
 
-      // Bind dedicated strafe and backwards clips if available, else fallback to walk
-      if (humanAnimClips.walkBack) {
-        actions.walkBack = mixer.clipAction(humanAnimClips.walkBack);
+      // GLB Soldier uses native GLTF animations only (FBX clips are incompatible with GLB skeleton rig)
+      if (soldierAnimClips.walkBack) {
+        actions.walkBack = mixer.clipAction(soldierAnimClips.walkBack);
+        actions.walkBack.setEffectiveTimeScale(-1.0);
       } else if (soldierAnimClips.walk) {
         actions.walkBack = mixer.clipAction(soldierAnimClips.walk);
       }
 
-      if (humanAnimClips.strafeLeft) {
-        actions.strafeLeft = mixer.clipAction(humanAnimClips.strafeLeft);
+      if (soldierAnimClips.strafeLeft) {
+        actions.strafeLeft = mixer.clipAction(soldierAnimClips.strafeLeft);
       } else if (soldierAnimClips.walk) {
         actions.strafeLeft = mixer.clipAction(soldierAnimClips.walk);
       }
 
-      if (humanAnimClips.strafeRight) {
-        actions.strafeRight = mixer.clipAction(humanAnimClips.strafeRight);
+      if (soldierAnimClips.strafeRight) {
+        actions.strafeRight = mixer.clipAction(soldierAnimClips.strafeRight);
       } else if (soldierAnimClips.walk) {
         actions.strafeRight = mixer.clipAction(soldierAnimClips.walk);
       }
