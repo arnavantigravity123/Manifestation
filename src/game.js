@@ -4861,21 +4861,7 @@ function setupControls() {
       window.requestGamePointerLock();
     }
     if ((!document.pointerLockElement && e.target.id !== 'canvas-container') || (isCaptured && !window.isSpectating)) return;
-    if (e.button === 0 && !window.isSpectating) { // Left click
-      // If player clicked while looking at or standing near the Keypad Terminal, open keypad!
-      if (!gateSolved && typeof gateKeypadWorldPos !== 'undefined' && gateKeypadWorldPos) {
-        const distToPad = camera.position.distanceTo(gateKeypadWorldPos);
-        const { looking } = isLookingAtTarget(gateKeypadWorldPos, 5.0, 0.95);
-        if (looking || distToPad < 2.8) {
-          const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
-          if (!breakersFixed) {
-            triggerNotification(`⚡ KEYPAD UNPOWERED: Repair circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to restore power!`);
-            return;
-          }
-          openKeypadModal();
-          return;
-        }
-      }
+    if (e.button === 0 && !window.isSpectating) { // Left click: use active inventory item
       useActiveItem();
     }
   });
