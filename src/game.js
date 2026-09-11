@@ -1157,6 +1157,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
       }
     });
     players3D = {};
+    activeAnimationMixers.length = 0;
   }
 
   // Remove any stale ghost bots from previous matches
@@ -1624,14 +1625,11 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   renderer = new THREE.WebGLRenderer({ 
     antialias: !isMobileDevice,
     powerPreference: "high-performance",
-    precision: "highp"
+    precision: isMobileDevice ? "mediump" : "highp"
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileDevice ? 1.0 : 1.25));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.0));
   renderer.setSize(w, h);
-  renderer.shadowMap.enabled = !isMobileDevice; // Disable heavy dynamic shadow maps on mobile
-  if (!isMobileDevice) {
-    renderer.shadowMap.type = THREE.PCFShadowMap;
-  }
+  renderer.shadowMap.enabled = false; // Disable heavy multi-pass shadow map rendering for smooth 60-144 FPS
   container.appendChild(renderer.domElement);
 
   // Setup Audio Context for procedural EMF sound
@@ -1646,7 +1644,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
     flashLight = new THREE.SpotLight(0xffffff, isDungeon ? 45 : 100, 50, Math.PI / 3, 0.4, 1.2);
     flashLight.position.set(0, 0, 0);
-    flashLight.castShadow = true;
+    flashLight.castShadow = false;
     const shadowRes = isMobileDevice ? 512 : 1024;
     flashLight.shadow.mapSize.set(shadowRes, shadowRes);
     flashLight.shadow.bias = -0.0001;
@@ -3719,7 +3717,7 @@ function generateMaze(keysCount = 8) {
 
         wallMesh = new THREE.Mesh(doorGeo, slidingWallMat);
         wallMesh.position.set(xPos, 0, zPos);
-        wallMesh.castShadow = true;
+        wallMesh.castShadow = false;
         wallMesh.receiveShadow = true;
 
 
@@ -3757,7 +3755,7 @@ function generateMaze(keysCount = 8) {
   if (wallGeometries.length > 0) {
     const mergedGeo = BufferGeometryUtils.mergeGeometries(wallGeometries, false);
     staticWallsMesh = new THREE.Mesh(mergedGeo, wallMat);
-    staticWallsMesh.castShadow = true;
+    staticWallsMesh.castShadow = false; // Disable heavy shadow map depth pass for static walls
     staticWallsMesh.receiveShadow = true;
     staticWallsMesh.frustumCulled = false;
     scene.add(staticWallsMesh);
@@ -4607,6 +4605,10 @@ function toggleCameraView() {
   const pUsername = localStorage.getItem('manifestation_username') || 'Operative';
   
   if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId !== pSkinId) {
+    if (localPlayerVisual.userData.animMixer) {
+      const idx = activeAnimationMixers.indexOf(localPlayerVisual.userData.animMixer);
+      if (idx !== -1) activeAnimationMixers.splice(idx, 1);
+    }
     camera.remove(localPlayerVisual);
     localPlayerVisual = null;
   }
@@ -8978,7 +8980,12 @@ function animate() {
   if (activeAnimationMixers.length > 0) {
     for (let mIdx = activeAnimationMixers.length - 1; mIdx >= 0; mIdx--) {
       const mixer = activeAnimationMixers[mIdx];
-      if (mixer) mixer.update(delta);
+      const root = mixer ? mixer.getRoot() : null;
+      if (!root || !root.parent) {
+        activeAnimationMixers.splice(mIdx, 1);
+      } else {
+        mixer.update(delta);
+      }
     }
   }
 
@@ -9200,12 +9207,6 @@ function animate() {
         } else if (Math.hypot(velocity.x, velocity.z) > 0.4) {
           desired = isSprinting ? 'sprint' : 'walk';
         }
-        if (desired !== 'idle' || !window._locoDebugOnce) {
-          if (desired !== 'idle') {
-            console.log('[ANIMATE] moveF:', moveForward, 'moveB:', moveBackward, 'moveL:', moveLeft, 'moveR:', moveRight, 'desired:', desired, 'vel:', velocity.x.toFixed(2), velocity.z.toFixed(2));
-            window._locoDebugOnce = true;
-          }
-        }
         setHumanLocomotionAction(localPlayerVisual, desired, 0.15);
         localPlayerVisual.rotation.z = 0;
       } else if (localPlayerVisual) {
@@ -9376,54 +9377,57 @@ function animate() {
         ambientLight.intensity = 4.0;
       }
     } else if (myTeam === 'Human') {
-      // Thermal Camera passive effect
-      if (inventory[activeSlot] === "Thermal Camera") {
-        if (!scene.fog) scene.fog = new THREE.FogExp2(0x330000, 0.015);
-        scene.fog.color.setHex(0x330000);
-        scene.fog.density = 0.015; // Red thermal vision
+      const isThermalActive = (inventory[activeSlot] === "Thermal Camera");
+      if (typeof window._lastThermalActive === 'undefined' || window._lastThermalActive !== isThermalActive) {
+        window._lastThermalActive = isThermalActive;
+        if (isThermalActive) {
+          if (!scene.fog) scene.fog = new THREE.FogExp2(0x330000, 0.015);
+          scene.fog.color.setHex(0x330000);
+          scene.fog.density = 0.015; // Red thermal vision
 
-        // Make AI ghosts bright and glowing (red heat signature)
-        ghosts3D.forEach(g => {
-          g.traverse(c => {
-            if ((c.isMesh || c.isSprite) && c.userData.thermalMat && c.material !== c.userData.thermalMat) {
-              c.material = c.userData.thermalMat;
-              c.renderOrder = 999;
-            }
+          // Make AI ghosts bright and glowing (red heat signature)
+          ghosts3D.forEach(g => {
+            g.traverse(c => {
+              if ((c.isMesh || c.isSprite) && c.userData.thermalMat) {
+                c.material = c.userData.thermalMat;
+                c.renderOrder = 999;
+              }
+            });
           });
-        });
-        // Make network players (Ghosts in red, Teammates in cyan) visible through walls
-        Object.values(players3D).forEach(p => {
-          p.traverse(c => {
-            if ((c.isMesh || c.isSprite) && c.userData.thermalMat && c.material !== c.userData.thermalMat) {
-              c.material = c.userData.thermalMat;
-              c.renderOrder = 999;
-            }
+          // Make network players (Ghosts in red, Teammates in cyan) visible through walls
+          Object.values(players3D).forEach(p => {
+            p.traverse(c => {
+              if ((c.isMesh || c.isSprite) && c.userData.thermalMat) {
+                c.material = c.userData.thermalMat;
+                c.renderOrder = 999;
+              }
+            });
           });
-        });
-      } else {
-        const fogDensity = Math.max(0.005, 0.018 - (fixedBreakersCount * 0.004));
-        if (!scene.fog) scene.fog = new THREE.FogExp2(0x000000, fogDensity);
-        scene.fog.color.setHex(0x000000);
-        scene.fog.density = fogDensity;
+        } else {
+          const fogDensity = Math.max(0.005, 0.018 - (fixedBreakersCount * 0.004));
+          if (!scene.fog) scene.fog = new THREE.FogExp2(0x000000, fogDensity);
+          scene.fog.color.setHex(0x000000);
+          scene.fog.density = fogDensity;
 
-        // Disable X-Ray vision for AI ghosts
-        ghosts3D.forEach(g => {
-          g.traverse(c => {
-            if ((c.isMesh || c.isSprite) && c.userData.normalMat && c.material !== c.userData.normalMat) {
-              c.material = c.userData.normalMat;
-              c.renderOrder = 0;
-            }
+          // Restore normal materials for AI ghosts
+          ghosts3D.forEach(g => {
+            g.traverse(c => {
+              if ((c.isMesh || c.isSprite) && c.userData.normalMat) {
+                c.material = c.userData.normalMat;
+                c.renderOrder = 0;
+              }
+            });
           });
-        });
-        // Disable X-Ray vision for network players
-        Object.values(players3D).forEach(p => {
-          p.traverse(c => {
-            if ((c.isMesh || c.isSprite) && c.userData.normalMat && c.material !== c.userData.normalMat) {
-              c.material = c.userData.normalMat;
-              c.renderOrder = 0;
-            }
+          // Restore normal materials for network players
+          Object.values(players3D).forEach(p => {
+            p.traverse(c => {
+              if ((c.isMesh || c.isSprite) && c.userData.normalMat) {
+                c.material = c.userData.normalMat;
+                c.renderOrder = 0;
+              }
+            });
           });
-        });
+        }
       }
     }
 
@@ -9913,16 +9917,16 @@ function animate() {
     if (typeof updateShadowDecoys === 'function') updateShadowDecoys(delta);
     if (typeof updateMirageLoot === 'function') updateMirageLoot(delta);
 
-    // Update on-screen interaction cues
+    // Update on-screen interaction cues (throttled to 10Hz to eliminate raycast/dot-product CPU overhead)
     if (isActive) {
-      updateInteractionPrompt();
+      if (!window._lastPromptTime || (time - window._lastPromptTime > 100)) {
+        window._lastPromptTime = time;
+        updateInteractionPrompt();
+      }
     } else {
       const promptEl = document.getElementById('interaction-prompt');
       if (promptEl) promptEl.style.display = 'none';
     }
-
-    // Check key win triggers
-    checkWinCondition();
   }
 
   // --- Active bobbing and walk cycle limb animations ---
@@ -10024,9 +10028,7 @@ function animate() {
     }
   }
 
-  // Ensure no lingering vault tracker element in HUD objective bar
-  const existingVaultTracker = document.getElementById('hud-vault-tracker');
-  if (existingVaultTracker) existingVaultTracker.remove();
+
 
   // Throttled Minimap & Cooldown Timers (60-144Hz canvas overdraw optimization)
   if (window.gameReady) {
