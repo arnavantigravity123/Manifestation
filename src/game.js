@@ -44,7 +44,7 @@ textureLoader.load('/assets/hazmat_texture.png', (tex) => {
   }
 });
 
-// Golden VIP Aura Visual Cues & PointLight
+// Golden VIP Status & Skin Integrity Preservation
 export function applyVipGlow(object3D, enabled = true, color = 0xffd700) {
   if (!object3D) return;
   object3D.userData = object3D.userData || {};
@@ -52,61 +52,31 @@ export function applyVipGlow(object3D, enabled = true, color = 0xffd700) {
     object3D.userData.isVip = true;
   }
 
-  // 1. Dynamic PointLight for real-time 3D aura
-  let vipLight = object3D.getObjectByName('vipGlowLight');
-  if (enabled) {
-    if (!vipLight) {
-      vipLight = new THREE.PointLight(color, 0.45, 3.2);
-      vipLight.name = 'vipGlowLight';
-      vipLight.position.set(0, 1.2, 0);
-      object3D.add(vipLight);
-    } else {
-      vipLight.color.setHex(color);
-      vipLight.intensity = 0.45;
-      vipLight.visible = true;
-    }
-  } else if (vipLight) {
+  // Remove any internal yellow point light that washes out the character's textures
+  const vipLight = object3D.getObjectByName('vipGlowLight');
+  if (vipLight) {
     vipLight.visible = false;
+    object3D.remove(vipLight);
   }
 
-  // 2. Emissive material tint on 3D avatar meshes and sprites (subtle golden rim)
+  // Restore and maintain authentic mesh textures (NEVER overwrite emissive or diffuse with yellow paint)
   object3D.traverse(c => {
     if (c.userData && c.userData.isUsernameTag) return;
     if (c.isMesh && c.material) {
       const mats = Array.isArray(c.material) ? c.material : [c.material];
       mats.forEach(m => {
         if (!m) return;
-        if (enabled) {
-          if (!m.userData) m.userData = {};
-          if (m.userData.origEmissive === undefined && m.emissive) {
-            m.userData.origEmissive = m.emissive.clone();
-            m.userData.origEmissiveIntensity = m.emissiveIntensity !== undefined ? m.emissiveIntensity : 0;
-          }
-          if (m.emissive) {
-            m.emissive.setHex(color);
-            m.emissiveIntensity = 0.12;
-          }
-        } else {
-          if (m.userData && m.userData.origEmissive && m.emissive) {
-            m.emissive.copy(m.userData.origEmissive);
-            m.emissiveIntensity = m.userData.origEmissiveIntensity;
-          } else if (m.emissive) {
-            m.emissive.setHex(0x000000);
-            m.emissiveIntensity = 0;
-          }
+        if (m.userData && m.userData.origEmissive) {
+          m.emissive.copy(m.userData.origEmissive);
+          m.emissiveIntensity = m.userData.origEmissiveIntensity !== undefined ? m.userData.origEmissiveIntensity : 0;
+        } else if (m.emissive && m.emissive.getHex() === 0xffd700) {
+          m.emissive.setHex(0x000000);
+          m.emissiveIntensity = 0;
         }
       });
     } else if (c.isSprite && c.material && !c.userData?.isUsernameTag) {
-      if (enabled) {
-        if (!c.userData) c.userData = {};
-        if (c.userData.origColor === undefined && c.material.color) {
-          c.userData.origColor = c.material.color.clone();
-        }
-        c.material.color.setHex(color);
-      } else {
-        if (c.userData && c.userData.origColor && c.material.color) {
-          c.material.color.copy(c.userData.origColor);
-        }
+      if (c.userData && c.userData.origColor) {
+        c.material.color.copy(c.userData.origColor);
       }
     }
   });
@@ -8261,10 +8231,11 @@ function createHumanMeshGroup(skinId, username, isVip) {
     
     // Text
     ctx.font = 'bold 36px monospace';
-    ctx.fillStyle = '#10b981'; // Cyber green
+    ctx.fillStyle = vipActive ? '#fde047' : '#10b981'; // Gold for VIP, cyber green for standard
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(username, canvas.width/2, canvas.height/2 + 2);
+    const tagText = vipActive ? `⭐ ${username}` : username;
+    ctx.fillText(tagText, canvas.width/2, canvas.height/2 + 2);
     
     const tex = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, fog: false });
