@@ -2414,11 +2414,15 @@ function createBorderStripGeo(length = 2.0, width = 0.20) {
   geo.rotateX(-Math.PI / 2);
   geo.translate(0, 0.039, 0); // Elevated over red base prevents any z-fighting
   const uvAttr = geo.attributes.uv;
+  // Match the exact texture scale of createSeamlessRugGeo and createArmRugGeo:
+  // In a 2.0m runner, U spans (0.4512 - 0.0488) over 2.0m.
+  // Proportional U span across width:
+  const uSpan = (0.4512 - 0.0488) * (width / 2.0);
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
     const v = uvAttr.getY(i);
-    // Outer edge (u=0) has the gold line, inner edge (u=1) blends into red velvet
-    uvAttr.setXY(i, 0.0488 + u * (0.0781 - 0.0488), 0.8150 + v * (0.9200 - 0.8150));
+    // Outer edge (u=0, local X = -width/2) has the gold line, inner edge (u=1, local X = +width/2) blends into red velvet
+    uvAttr.setXY(i, 0.0488 + u * uSpan, 0.8150 + v * (0.9200 - 0.8150));
   }
   uvAttr.needsUpdate = true;
   return geo;
@@ -3153,10 +3157,10 @@ function spawnDungeonProps(layout, blockSize) {
 
           // 3. Add gold border strips along the WALL sides of the center 2m x 2m hub
           // (Wall sides have borders; OPEN corridor sides have ZERO borders so walking path is 100% seamless!)
-          if (!northOpen) addRugTile(dungeonRugGeoBorder, rx, rz - 0.90, Math.PI / 2);
-          if (!southOpen) addRugTile(dungeonRugGeoBorder, rx, rz + 0.90, -Math.PI / 2);
-          if (!westOpen)  addRugTile(dungeonRugGeoBorder, rx - 0.90, rz, 0);
-          if (!eastOpen)  addRugTile(dungeonRugGeoBorder, rx + 0.90, rz, Math.PI);
+          if (!northOpen) addRugTile(dungeonRugGeoBorder, rx, rz - 0.90, -Math.PI / 2); // Faces North (-Z) flush to perimeter wall
+          if (!southOpen) addRugTile(dungeonRugGeoBorder, rx, rz + 0.90, Math.PI / 2);  // Faces South (+Z) flush to perimeter wall
+          if (!westOpen)  addRugTile(dungeonRugGeoBorder, rx - 0.90, rz, 0);             // Faces West (-X) flush to perimeter wall
+          if (!eastOpen)  addRugTile(dungeonRugGeoBorder, rx + 0.90, rz, Math.PI);        // Faces East (+X) flush to perimeter wall
         }
       }
     }
