@@ -4657,12 +4657,16 @@ function setupControls() {
         const controls = document.getElementById('minimap-expanded-controls');
         const topClose = document.getElementById('minimap-top-close-btn');
         const titleText = document.getElementById('minimap-title-text');
+        const backdrop = document.getElementById('minimap-modal-backdrop');
+        const promptEl = document.getElementById('interaction-prompt');
         if (wrapper && controls && window.gameReady && myTeam === 'Human') {
           if (!isMinimapExpanded) {
             isMinimapExpanded = true;
             wrapper.classList.add('expanded');
             controls.style.display = 'block';
             if (topClose) topClose.style.display = 'flex';
+            if (backdrop) backdrop.style.display = 'block';
+            if (promptEl) promptEl.style.display = 'none';
             if (titleText) titleText.textContent = 'TACTICAL MAP';
             if (document.pointerLockElement) document.exitPointerLock();
             drawMinimap();
@@ -4671,6 +4675,7 @@ function setupControls() {
             wrapper.classList.remove('expanded');
             controls.style.display = 'none';
             if (topClose) topClose.style.display = 'none';
+            if (backdrop) backdrop.style.display = 'none';
             if (titleText) titleText.textContent = 'MINIMAP (Press M / Tap)';
             if (!window.isMobileDevice && window.gameReady && !isCaptured) {
               (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
@@ -4685,10 +4690,12 @@ function setupControls() {
           const mapCtrl = document.getElementById('minimap-expanded-controls');
           const topCls = document.getElementById('minimap-top-close-btn');
           const ttlTxt = document.getElementById('minimap-title-text');
+          const bkdrop = document.getElementById('minimap-modal-backdrop');
           isMinimapExpanded = false;
           if (mapWrap) mapWrap.classList.remove('expanded');
           if (mapCtrl) mapCtrl.style.display = 'none';
           if (topCls) topCls.style.display = 'none';
+          if (bkdrop) bkdrop.style.display = 'none';
           if (ttlTxt) ttlTxt.textContent = 'MINIMAP (Press M / Tap)';
           if (!window.isMobileDevice && window.gameReady && !isCaptured) {
             (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
@@ -5373,7 +5380,12 @@ function updateInteractionPrompt() {
   }
   if (!promptEl) return;
 
-  if (myTeam !== 'Human' || isCaptured || !window.gameReady) {
+  const keypadEl = document.getElementById('keypad-modal-ui');
+  const isKeypadOpen = keypadEl && keypadEl.style.display !== 'none';
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  const isPauseOpen = ptrOverlay && ptrOverlay.style.display !== 'none';
+
+  if (myTeam !== 'Human' || isCaptured || !window.gameReady || isMinimapExpanded || isKeypadOpen || isPauseOpen || window.isEscaping) {
     promptEl.style.display = 'none';
     return;
   }
@@ -5521,7 +5533,11 @@ function updateInteractionPrompt() {
 }
 
 function checkInteractions() {
-  if (myTeam === 'Ghost' || window.isSpectating) return;
+  if (myTeam === 'Ghost' || window.isSpectating || isMinimapExpanded) return;
+  const keypadEl = document.getElementById('keypad-modal-ui');
+  if (keypadEl && keypadEl.style.display !== 'none') return;
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  if (ptrOverlay && ptrOverlay.style.display !== 'none') return;
 
   // 0. Check Mirage Loot FIRST (Prevents picking up real items / overriding)
   if (typeof mirageItems !== 'undefined' && mirageItems.length > 0) {
@@ -6062,6 +6078,22 @@ function getKeypadDisplayString() {
 }
 
 function openKeypadModal() {
+  if (isMinimapExpanded) {
+    isMinimapExpanded = false;
+    const mapWrap = document.getElementById('minimap-wrapper');
+    const mapCtrl = document.getElementById('minimap-expanded-controls');
+    const topCls = document.getElementById('minimap-top-close-btn');
+    const ttlTxt = document.getElementById('minimap-title-text');
+    const bkdrop = document.getElementById('minimap-modal-backdrop');
+    if (mapWrap) mapWrap.classList.remove('expanded');
+    if (mapCtrl) mapCtrl.style.display = 'none';
+    if (topCls) topCls.style.display = 'none';
+    if (bkdrop) bkdrop.style.display = 'none';
+    if (ttlTxt) ttlTxt.textContent = 'MINIMAP (Press M / Tap)';
+  }
+  const promptEl = document.getElementById('interaction-prompt');
+  if (promptEl) promptEl.style.display = 'none';
+
   if (gateSolved) {
     triggerNotification("Master Gate cipher already bypassed.");
     return;
@@ -7619,9 +7651,11 @@ function playEscapeCinematic(callback) {
     const mapCtrl = document.getElementById('minimap-expanded-controls');
     const topCls = document.getElementById('minimap-top-close-btn');
     const ttlTxt = document.getElementById('minimap-title-text');
+    const bkdrop = document.getElementById('minimap-modal-backdrop');
     if (mapWrap) mapWrap.classList.remove('expanded');
     if (mapCtrl) mapCtrl.style.display = 'none';
     if (topCls) topCls.style.display = 'none';
+    if (bkdrop) bkdrop.style.display = 'none';
     if (ttlTxt) ttlTxt.textContent = 'MINIMAP (Press M / Tap)';
   }
 
@@ -7794,9 +7828,11 @@ function playGhostCaptureAnimation(callback) {
     const mapCtrl = document.getElementById('minimap-expanded-controls');
     const topCls = document.getElementById('minimap-top-close-btn');
     const ttlTxt = document.getElementById('minimap-title-text');
+    const bkdrop = document.getElementById('minimap-modal-backdrop');
     if (mapWrap) mapWrap.classList.remove('expanded');
     if (mapCtrl) mapCtrl.style.display = 'none';
     if (topCls) topCls.style.display = 'none';
+    if (bkdrop) bkdrop.style.display = 'none';
     if (ttlTxt) ttlTxt.textContent = 'MINIMAP (Press M / Tap)';
   }
 
@@ -8414,6 +8450,7 @@ function setupMinimap() {
   const btnClose = document.getElementById('minimap-btn-close');
   const btnClear = document.getElementById('minimap-btn-clear');
   const topCloseBtn = document.getElementById('minimap-top-close-btn');
+  const backdrop = document.getElementById('minimap-modal-backdrop');
 
   if (!wrapper || !canvas) return;
   minimapSetupDone = true;
@@ -8427,6 +8464,7 @@ function setupMinimap() {
     wrapper.classList.remove('expanded');
     controls.style.display = 'none';
     if (topCloseBtn) topCloseBtn.style.display = 'none';
+    if (backdrop) backdrop.style.display = 'none';
     const titleText = document.getElementById('minimap-title-text');
     if (titleText) titleText.textContent = 'MINIMAP (Press M / Tap)';
     if (!isMobileDevice && window.gameReady && !isCaptured) {
@@ -8440,6 +8478,9 @@ function setupMinimap() {
     wrapper.classList.add('expanded');
     controls.style.display = 'block';
     if (topCloseBtn) topCloseBtn.style.display = 'flex';
+    if (backdrop) backdrop.style.display = 'block';
+    const promptEl = document.getElementById('interaction-prompt');
+    if (promptEl) promptEl.style.display = 'none';
     const titleText = document.getElementById('minimap-title-text');
     if (titleText) titleText.textContent = 'TACTICAL MAP';
     if (document.pointerLockElement) document.exitPointerLock();
@@ -8501,6 +8542,11 @@ function setupMinimap() {
   if (topCloseBtn) {
     topCloseBtn.addEventListener('click', closeMinimap);
     topCloseBtn.addEventListener('touchstart', closeMinimap, { passive: false });
+  }
+
+  if (backdrop) {
+    backdrop.addEventListener('click', closeMinimap);
+    backdrop.addEventListener('touchstart', closeMinimap, { passive: false });
   }
 
   if (btnClear) {
