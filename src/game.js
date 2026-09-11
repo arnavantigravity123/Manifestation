@@ -56,19 +56,20 @@ export function applyVipGlow(object3D, enabled = true, color = 0xffd700) {
   let vipLight = object3D.getObjectByName('vipGlowLight');
   if (enabled) {
     if (!vipLight) {
-      vipLight = new THREE.PointLight(color, 1.2, 4.0);
+      vipLight = new THREE.PointLight(color, 0.45, 3.2);
       vipLight.name = 'vipGlowLight';
       vipLight.position.set(0, 1.2, 0);
       object3D.add(vipLight);
     } else {
       vipLight.color.setHex(color);
+      vipLight.intensity = 0.45;
       vipLight.visible = true;
     }
   } else if (vipLight) {
     vipLight.visible = false;
   }
 
-  // 2. Emissive material tint on 3D avatar meshes and sprites
+  // 2. Emissive material tint on 3D avatar meshes and sprites (subtle golden rim)
   object3D.traverse(c => {
     if (c.userData && c.userData.isUsernameTag) return;
     if (c.isMesh && c.material) {
@@ -83,7 +84,7 @@ export function applyVipGlow(object3D, enabled = true, color = 0xffd700) {
           }
           if (m.emissive) {
             m.emissive.setHex(color);
-            m.emissiveIntensity = 0.55;
+            m.emissiveIntensity = 0.12;
           }
         } else {
           if (m.userData && m.userData.origEmissive && m.emissive) {
@@ -166,45 +167,14 @@ function upgradeMeshGroupToFBX(group) {
   }
 }
 
-// Strip root motion and stabilize locomotion clips
+// Strip root motion (Hips position tracks) from animation clips so the game physics controls position
 function stripRootMotion(clip, animName) {
   if (!clip || !clip.tracks) return clip;
   clip.tracks = clip.tracks.filter(track => {
-    // Remove position tracks on the root bone (Hips) so game controls translation
+    // Remove position tracks on the root bone (Hips) — keeps natural rotational kinematics intact
     const isRootPosition = track.name.match(/Hips\.position/) || track.name.match(/^position/);
     return !isRootPosition;
   });
-
-  // For strafe clips: neutralize unnatural pitch (X) and roll (Z) tilts
-  // on root hips, spine chain, neck, and head bones so character stays 100% upright without tilting into walls
-  if (animName === 'strafeLeft' || animName === 'strafeRight') {
-    clip.tracks.forEach(track => {
-      if (
-        track.name.match(/Hips\.quaternion/) ||
-        track.name.match(/Spine.*\.quaternion/) ||
-        track.name.match(/Neck\.quaternion/) ||
-        track.name.match(/Head\.quaternion/)
-      ) {
-        for (let i = 0; i < track.times.length; i++) {
-          const q = new THREE.Quaternion(
-            track.values[i * 4],
-            track.values[i * 4 + 1],
-            track.values[i * 4 + 2],
-            track.values[i * 4 + 3]
-          );
-          const e = new THREE.Euler().setFromQuaternion(q, 'YXZ');
-          e.x = 0; // Neutralize pitch hunch/lean
-          e.z = 0; // Neutralize sideways roll tilt
-          const nq = new THREE.Quaternion().setFromEuler(e);
-          track.values[i * 4] = nq.x;
-          track.values[i * 4 + 1] = nq.y;
-          track.values[i * 4 + 2] = nq.z;
-          track.values[i * 4 + 3] = nq.w;
-        }
-      }
-    });
-  }
-
   return clip;
 }
 
@@ -1123,7 +1093,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   currentViewIndex = 0;
   activeViewCamera = null;
   if (localPlayerVisual) {
-    camera.remove(localPlayerVisual);
+    if (localPlayerVisual.parent) localPlayerVisual.parent.remove(localPlayerVisual);
+    else if (scene) scene.remove(localPlayerVisual);
     localPlayerVisual = null;
   }
 
@@ -4609,7 +4580,8 @@ function toggleCameraView() {
       const idx = activeAnimationMixers.indexOf(localPlayerVisual.userData.animMixer);
       if (idx !== -1) activeAnimationMixers.splice(idx, 1);
     }
-    camera.remove(localPlayerVisual);
+    if (localPlayerVisual.parent) localPlayerVisual.parent.remove(localPlayerVisual);
+    else if (scene) scene.remove(localPlayerVisual);
     localPlayerVisual = null;
   }
   
@@ -4621,9 +4593,10 @@ function toggleCameraView() {
     if (isVip && glowPref) {
       applyVipGlow(localPlayerVisual, true);
     }
-    // Align visual downwards slightly since camera is at eye level (1.6)
-    localPlayerVisual.position.set(0, myTeam === 'Ghost' ? -1.25 : -1.6, 0);
-    camera.add(localPlayerVisual);
+    // Place visual firmly on the world floor (y = 0), facing camera horizontal yaw
+    localPlayerVisual.position.set(camera.position.x, myTeam === 'Ghost' ? 0.35 : 0, camera.position.z);
+    localPlayerVisual.rotation.set(0, camera.rotation.y, 0);
+    scene.add(localPlayerVisual);
   }
 
   if (mode === 'fps') {
@@ -8985,7 +8958,12 @@ function animate() {
   animationFrameId = requestAnimationFrame(animate);
 
   if (localPlayerVisual) {
-    localPlayerVisual.rotation.x = -camera.rotation.x;
+    localPlayerVisual.position.x = camera.position.x;
+    localPlayerVisual.position.z = camera.position.z;
+    if (localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
+      localPlayerVisual.position.y = myTeam === 'Ghost' ? 0.35 : 0;
+    }
+    localPlayerVisual.rotation.set(0, camera.rotation.y, 0);
   }
   
   if (activeViewCamera) {
@@ -9257,11 +9235,11 @@ function animate() {
           const moveSpeed = isSprinting ? 12 : 7;
           localPlayerVisual.userData.walkCycle = (localPlayerVisual.userData.walkCycle || 0) + delta * moveSpeed;
           // Natural walking bob
-          localPlayerVisual.position.y = (myTeam === 'Ghost' ? -1.25 : -1.6) + Math.abs(Math.sin(localPlayerVisual.userData.walkCycle)) * 0.06;
+          localPlayerVisual.position.y = (myTeam === 'Ghost' ? 0.35 : 0) + Math.abs(Math.sin(localPlayerVisual.userData.walkCycle)) * 0.06;
           // Subtle lateral sway
           localPlayerVisual.rotation.z = Math.sin(localPlayerVisual.userData.walkCycle * 0.5) * 0.03;
         } else {
-          localPlayerVisual.position.y = myTeam === 'Ghost' ? -1.25 : -1.6;
+          localPlayerVisual.position.y = myTeam === 'Ghost' ? 0.35 : 0;
           localPlayerVisual.rotation.z = 0;
         }
       }
@@ -9729,7 +9707,8 @@ function animate() {
               
               // NEVER default: always pick either the Mech Soldier or the Hazmat Suit
               const chosenSkin = Math.random() < 0.5 ? 'skin_soldier' : 'skin_hazmat';
-              const mimicGroup = createHumanMeshGroup(chosenSkin, 'Operative');
+              const mimicGroup = createHumanMeshGroup(chosenSkin, 'Operative', false);
+              mimicGroup.rotation.y = Math.PI; // Invert to align human model facing forward with ghost movement
               ghost.add(mimicGroup);
               ghost.userData.mimicGroup = mimicGroup;
               
