@@ -2829,6 +2829,7 @@ function spawnDungeonProps(layout, blockSize) {
 
   function spawnPillarMesh(px, pz) {
     if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz) || isNearVaultDoorway(px, pz)) return false;
+    if (isNearStatue(px, pz, 0.75)) return false; // Never spawn pillar inside or overlapping a statue
     if (isNearPillar(px, pz, 1.8)) return false;
     pillarTransforms.push({ x: px, z: pz });
     addPropCollider(px, pz, 0.60);
@@ -2839,6 +2840,7 @@ function spawnDungeonProps(layout, blockSize) {
   function spawnStatueMesh(sx, sz, rotY = 0) {
     if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz) || isNearVaultDoorway(sx, sz)) return false;
     if (isNearStatue(sx, sz, 2.5)) return false;
+    if (isNearPillar(sx, sz, 0.75)) return false; // Never spawn statue inside or overlapping an existing pillar
     statueTransforms.push({ x: sx, z: sz, rotY });
     addPropCollider(sx, sz, 0.80);
     placedStatues++;
@@ -3050,6 +3052,8 @@ function spawnDungeonProps(layout, blockSize) {
           if (layout[r][c - 1] === 0) openNeighbors++;
           if (layout[r][c + 1] === 0) openNeighbors++;
           if (openNeighbors <= 1) continue;
+          // Shrines already have their own statue and flanking columns; skip placing additional columns here
+          if (shrineCells.has(`${r},${c}`)) continue;
 
           // Architectural cadence: place columns at junctions (openNeighbors >= 3)
           // or at corners (openNeighbors === 2 with perpendicular turn)
