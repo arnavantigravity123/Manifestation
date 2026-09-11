@@ -2870,10 +2870,10 @@ function spawnDungeonProps(layout, blockSize) {
       const sx = isNorthSouth ? (gateCoordinates.x + offset) : gateCoordinates.x;
       const sz = isNorthSouth ? gateCoordinates.z : (gateCoordinates.z + offset);
       let rotY = 0;
-      if (edge === 'N') rotY = 0;
-      else if (edge === 'S') rotY = Math.PI;
-      else if (edge === 'E') rotY = -Math.PI / 2;
-      else if (edge === 'W') rotY = Math.PI / 2;
+      if (edge === 'N') rotY = Math.PI;          // Vault on North wall -> faces South (+Z) down corridor
+      else if (edge === 'S') rotY = 0;            // Vault on South wall -> faces North (-Z) down corridor
+      else if (edge === 'E') rotY = Math.PI / 2;  // Vault on East wall -> faces West (-X) down corridor
+      else if (edge === 'W') rotY = -Math.PI / 2; // Vault on West wall -> faces East (+X) down corridor
       spawnStatueMesh(sx, sz, rotY);
     });
 
@@ -2904,10 +2904,10 @@ function spawnDungeonProps(layout, blockSize) {
   if (layout && layout.length > 0) {
     const deadEnds = [];
     const dirs = [
-      { dx: 0, dz: -1, rot: Math.PI },        // Open North (-Z) -> statue against South wall faces North (-Z)
-      { dx: 0, dz: 1, rot: 0 },              // Open South (+Z) -> statue against North wall faces South (+Z)
-      { dx: -1, dz: 0, rot: -Math.PI / 2 },  // Open West (-X) -> statue against East wall faces West (-X)
-      { dx: 1, dz: 0, rot: Math.PI / 2 }     // Open East (+X) -> statue against West wall faces East (+X)
+      { dx: 0, dz: -1, rot: 0 },             // Open North (-Z) -> statue against South wall faces North (-Z) into corridor
+      { dx: 0, dz: 1, rot: Math.PI },        // Open South (+Z) -> statue against North wall faces South (+Z) into corridor
+      { dx: -1, dz: 0, rot: Math.PI / 2 },   // Open West (-X) -> statue against East wall faces West (-X) into corridor
+      { dx: 1, dz: 0, rot: -Math.PI / 2 }    // Open East (+X) -> statue against West wall faces East (+X) into corridor
     ];
 
     for (let r = 1; r < layout.length - 1; r++) {
@@ -2988,15 +2988,15 @@ function spawnDungeonProps(layout, blockSize) {
               const westSolid = (layout[r][c - 1] === 1);
               const eastSolid = (layout[r][c + 1] === 1);
               if (westSolid && !isBlockedByBreaker(cx - wallOffset, cz) && !isNearStatue(cx - wallOffset, cz, 4.0)) {
-                // Statue against West wall facing East (+X)
-                if (spawnStatueMesh(cx - wallOffset, cz, Math.PI / 2)) {
+                // Statue against West wall facing East (+X) into corridor
+                if (spawnStatueMesh(cx - wallOffset, cz, -Math.PI / 2)) {
                   shrineCells.add(`${r},${c}`);
                   // Flanking Pillars (North & South of statue at ±1.85m)
                   [-flankDist, flankDist].forEach(fo => spawnPillarMesh(cx - pillarWallOffset, cz + fo));
                 }
               } else if (eastSolid && !isBlockedByBreaker(cx + wallOffset, cz) && !isNearStatue(cx + wallOffset, cz, 4.0)) {
-                // Statue against East wall facing West (-X)
-                if (spawnStatueMesh(cx + wallOffset, cz, -Math.PI / 2)) {
+                // Statue against East wall facing West (-X) into corridor
+                if (spawnStatueMesh(cx + wallOffset, cz, Math.PI / 2)) {
                   shrineCells.add(`${r},${c}`);
                   // Flanking Pillars (North & South of statue at ±1.85m)
                   [-flankDist, flankDist].forEach(fo => spawnPillarMesh(cx + pillarWallOffset, cz + fo));
@@ -3012,15 +3012,15 @@ function spawnDungeonProps(layout, blockSize) {
               const northSolid = (layout[r - 1] && layout[r - 1][c] === 1);
               const southSolid = (layout[r + 1] && layout[r + 1][c] === 1);
               if (northSolid && !isBlockedByBreaker(cx, cz - wallOffset) && !isNearStatue(cx, cz - wallOffset, 4.0)) {
-                // Statue against North wall facing South (+Z)
-                if (spawnStatueMesh(cx, cz - wallOffset, 0)) {
+                // Statue against North wall facing South (+Z) into corridor
+                if (spawnStatueMesh(cx, cz - wallOffset, Math.PI)) {
                   shrineCells.add(`${r},${c}`);
                   // Flanking Pillars (West & East of statue at ±1.85m)
                   [-flankDist, flankDist].forEach(fo => spawnPillarMesh(cx + fo, cz - pillarWallOffset));
                 }
               } else if (southSolid && !isBlockedByBreaker(cx, cz + wallOffset) && !isNearStatue(cx, cz + wallOffset, 4.0)) {
-                // Statue against South wall facing North (-Z)
-                if (spawnStatueMesh(cx, cz + wallOffset, Math.PI)) {
+                // Statue against South wall facing North (-Z) into corridor
+                if (spawnStatueMesh(cx, cz + wallOffset, 0)) {
                   shrineCells.add(`${r},${c}`);
                   // Flanking Pillars (West & East of statue at ±1.85m)
                   [-flankDist, flankDist].forEach(fo => spawnPillarMesh(cx + fo, cz + pillarWallOffset));
@@ -6771,13 +6771,12 @@ let exitGateShown = false;
 function updateGateHUD() {
   const keysHud = document.getElementById('keys-hud-info');
   if (keysHud) {
-    const realCarried = carriedKeys.filter(k => functionalKeysRevealed.includes(k.symbol)).length;
     if (insertedGateKeys.length >= 2) {
       keysHud.style.color = "#10b981";
-      keysHud.textContent = `GATE KEYS: 2 / 2 INSTALLED (GATE READY!)`;
+      keysHud.textContent = `KEYS: 2/2 INSTALLED (GATE READY)`;
     } else {
       keysHud.style.color = "var(--secondary-accent)";
-      keysHud.textContent = `GATE KEYS: ${insertedGateKeys.length} / 2 INSTALLED (${carriedKeys.length}/${MAX_CARRIED_KEYS} in hand)`;
+      keysHud.textContent = `KEYS: ${insertedGateKeys.length}/2 (${carriedKeys.length}/${MAX_CARRIED_KEYS} IN HAND)`;
     }
   }
   const lockLabel = document.getElementById('terminal-lock-label');
@@ -6786,8 +6785,11 @@ function updateGateHUD() {
       lockLabel.textContent = "GATE UNLOCKED — PRESS E TO ESCAPE";
       lockLabel.style.color = "#10b981";
     } else if (gateSolved) {
-      lockLabel.textContent = `Keys: ${insertedGateKeys.length}/2 Installed`;
-      lockLabel.style.color = "var(--secondary-accent)";
+      lockLabel.textContent = "CIPHER CRACKED — INSTALL 2 GATE KEYS";
+      lockLabel.style.color = "#38bdf8";
+    } else {
+      lockLabel.textContent = "SECURED (3-TIER LOCK)";
+      lockLabel.style.color = "var(--primary-accent)";
     }
   }
 }
@@ -6904,7 +6906,9 @@ function setupSocketListeners() {
 
     const cipherHUD = document.getElementById('hud-cipher-info');
     if (cipherHUD) {
-      cipherHUD.textContent = `Keys: ${realKeySymbols.join(' & ')}`;
+      const cleanSymbols = realKeySymbols.map(s => String(s).replace(/ Key$/i, ''));
+      cipherHUD.textContent = `REQUIRED: ${cleanSymbols.join(' + ')}`;
+      cipherHUD.style.color = '#38bdf8';
     }
     
     updateGateHUD();
@@ -8642,10 +8646,10 @@ function fixBreakerLocal(breakerId) {
 
   const breakersInfo = document.getElementById('hud-breakers-info');
   if (breakersInfo) {
-    breakersInfo.textContent = `POWER: ${fixedBreakersCount} / ${totalBreakersRequired} BREAKERS REPAIRED`;
+    breakersInfo.textContent = `POWER: ${fixedBreakersCount}/${totalBreakersRequired} BREAKERS`;
     if (fixedBreakersCount >= totalBreakersRequired) {
       breakersInfo.style.color = '#10b981';
-      breakersInfo.textContent = 'POWER: FULLY RESTORED';
+      breakersInfo.textContent = 'POWER: RESTORED';
     }
   }
 
