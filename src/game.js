@@ -1266,28 +1266,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   myTeam = me.team;
   myClass = me.characterClass;
 
-  // Trigger On-Demand Asset Loading ONLY for models/skins present in this match
-  if (myTeam === 'Ghost') {
-    loadGhostGLBAsset();
-  }
-  const myEquippedSkin = (me && me.skinId) || localStorage.getItem('manifestation_equipped_skin') || 'skin_default';
-  if (myEquippedSkin === 'skin_hazmat') {
-    loadHazmatFBXAssets();
-  } else if (myEquippedSkin === 'skin_soldier') {
-    loadSoldierFBXAssets();
-  } else if (myEquippedSkin === 'skin_default') {
-    loadHumanGLBAsset();
-  }
-
-  if (matchConfig.players) {
-    Object.values(matchConfig.players).forEach(p => {
-      if (p.team === 'Ghost') loadGhostGLBAsset();
-      const pSkin = p.skinId || 'skin_default';
-      if (pSkin === 'skin_hazmat') loadHazmatFBXAssets();
-      if (pSkin === 'skin_soldier') loadSoldierFBXAssets();
-      if (pSkin === 'skin_default') loadHumanGLBAsset();
-    });
-  }
+  // Preload both Hazmat Suit and Mech Soldier assets so players and Mimic bots always have high-fidelity models
+  loadHazmatFBXAssets();
+  loadSoldierFBXAssets();
+  loadGhostGLBAsset();
 
   // Show/Hide flashlight gauge row based on team
   const flRow = document.getElementById('flashlight-gauge-row');
@@ -7136,9 +7118,12 @@ function setupSocketListeners() {
         }
       });
       
-      // Spawn human mesh in its place
-      const pSkinId = currentLobby && currentLobby.players[id] ? currentLobby.players[id].skinId : null;
-      const pUsername = currentLobby && currentLobby.players[id] ? currentLobby.players[id].username : 'Unknown';
+      // Spawn human mesh in its place (Mech or Hazmat, never default!)
+      let pSkinId = currentLobby && currentLobby.players[id] ? currentLobby.players[id].skinId : null;
+      if (!pSkinId || pSkinId === 'skin_default' || pSkinId === 'skin_ghost') {
+        pSkinId = Math.random() < 0.5 ? 'skin_soldier' : 'skin_hazmat';
+      }
+      const pUsername = currentLobby && currentLobby.players[id] ? currentLobby.players[id].username : 'Operative';
       const humanMesh = createHumanMeshGroup(pSkinId, pUsername);
       humanMesh.position.copy(originalPosition);
       humanMesh.rotation.copy(originalRotation);
@@ -8003,8 +7988,11 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
 }
 
 function createHumanMeshGroup(skinId, username, isVip) {
-  const group = new THREE.Group();
-  const effectiveSkin = skinId || 'skin_default';
+  // Default to either skin_soldier (Mech) or skin_hazmat (Biohazard Suit) — never default!
+  let effectiveSkin = skinId;
+  if (!effectiveSkin || effectiveSkin === 'skin_default' || effectiveSkin === 'skin_ghost') {
+    effectiveSkin = (Math.random() < 0.5 ? 'skin_soldier' : 'skin_hazmat');
+  }
   const vipActive = isVip !== undefined ? Boolean(isVip) : (window.isVipActive ? window.isVipActive() : false);
   group.userData = group.userData || {};
   group.userData.type = 'Human';
@@ -9607,13 +9595,50 @@ function animate() {
             ghost.userData.targetGrid = worldToGrid(targetPos.x, targetPos.z);
             ghost.userData.pathTime = 0;
           } else if (gClass === 'Mimic') {
-            if (myTeam === 'Human') triggerNotification(`A Mimic bot is disguising itself (${Math.round(gParams.cloneDuration / 1000)}s)!`);
-            if (typeof preloadedHumanModel !== 'undefined' && preloadedHumanModel) {
-              const mimicModel = SkeletonUtils.clone(preloadedHumanModel);
-              ghost.add(mimicModel);
-              ghost.children.forEach(c => { if(c !== mimicModel) c.visible = false; });
+            if (!ghost.userData.isMimicDisguised) {
+              ghost.userData.isMimicDisguised = true;
+              if (myTeam === 'Human') triggerNotification(`A Mimic bot is disguising itself (${Math.round(gParams.cloneDuration / 1000)}s)!`);
+              
+              // NEVER default: always pick either the Mech Soldier or the Hazmat Suit
+              const chosenSkin = Math.random() < 0.5 ? 'skin_soldier' : 'skin_hazmat';
+              const mimicGroup = createHumanMeshGroup(chosenSkin, 'Operative');
+              ghost.add(mimicGroup);
+              ghost.userData.mimicGroup = mimicGroup;
+              
+              // Hide the ghost aura lights and phantom meshes
+              ghost.children.forEach(c => {
+                if (c !== mimicGroup) c.visible = false;
+              });
+              
+              // Start locomotion animations
+              if (mimicGroup.userData && mimicGroup.userData.animActions) {
+                if (mimicGroup.userData.animActions.walk) {
+                  mimicGroup.userData.animActions.walk.play();
+                } else if (mimicGroup.userData.animActions.idle) {
+                  mimicGroup.userData.animActions.idle.play();
+                }
+              }
+              
               setTimeout(() => {
-                ghost.remove(mimicModel);
+                if (ghost.userData && ghost.userData.mimicGroup) {
+                  const mg = ghost.userData.mimicGroup;
+                  if (mg.userData && mg.userData.animMixer) {
+                    const idx = activeAnimationMixers.indexOf(mg.userData.animMixer);
+                    if (idx !== -1) activeAnimationMixers.splice(idx, 1);
+                  }
+                  ghost.remove(mg);
+                  mg.traverse(child => {
+                    if (child.isMesh) {
+                      if (child.geometry) child.geometry.dispose();
+                      if (child.material) {
+                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                        else child.material.dispose();
+                      }
+                    }
+                  });
+                  ghost.userData.mimicGroup = null;
+                }
+                if (ghost.userData) ghost.userData.isMimicDisguised = false;
                 ghost.children.forEach(c => { c.visible = true; });
               }, gParams.cloneDuration);
             }
