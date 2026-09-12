@@ -9192,6 +9192,9 @@ function updateMinimapVisibility() {
       
       if (nr < 0 || nr >= totalRows || nc < 0 || nc >= totalCols) continue;
       
+      // Never reveal or see through the vault doorway cell on the minimap (conceals vault entrance)
+      if (typeof window !== 'undefined' && nr === window.vaultR && nc === window.vaultC) continue;
+      
       const key = (nr * 1000) + nc;
       if (currentVisible.has(key)) continue;
       
@@ -9231,7 +9234,9 @@ function drawMinimap() {
     if (!mazeLayout[r]) continue;
     for (let c = 0; c < totalCols; c++) {
       if (myTeam === 'Ghost' || visitedCells.has((r * 1000) + c)) {
-        const type = mazeLayout[r][c];
+        // Conceal vault doorway on minimap as a solid perimeter wall so the map doesn't look like it extends further
+        const isVaultDoor = (typeof window !== 'undefined' && r === window.vaultR && c === window.vaultC);
+        const type = isVaultDoor ? 1 : mazeLayout[r][c];
         if (type === 1) {
           // Static Wall
           ctx.fillStyle = myTeam === 'Ghost' ? '#1f1330' : '#1e293b'; 
