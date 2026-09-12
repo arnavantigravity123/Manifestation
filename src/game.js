@@ -3957,15 +3957,15 @@ function generateMaze(keysCount = 8) {
   wallBracketMesh.castShadow = true;
   padGroup.add(wallBracketMesh);
 
-  // E. Interactive Illuminated Keypad Interface Plane
+  // E. Interactive Keypad Interface Plane (Authentic industrial metal terminal)
   const padGeo = new THREE.PlaneGeometry(0.38, 0.62);
   const padTex = getLoadedTexture('/assets/keypad.png', null, true);
   const padMat = new THREE.MeshStandardMaterial({
     map: padTex,
-    metalness: 0.5,
-    roughness: 0.4,
-    emissive: 0x0284c7,
-    emissiveIntensity: 0.3
+    metalness: 0.3,
+    roughness: 0.6,
+    emissive: 0x000000,
+    emissiveIntensity: 0.0
   });
   const padMesh = new THREE.Mesh(padGeo, padMat);
   padMesh.position.set(0, 1.48, 0.082);
@@ -8733,8 +8733,8 @@ function fixBreakerLocal(breakerId) {
   if (fixedBreakersCount >= totalBreakersRequired) {
     triggerNotification(`⚡ ALL BREAKERS REPAIRED! Keypad terminal is now powered online.`);
     if (gateKeypadLed && gateKeypadLed.material) {
-      gateKeypadLed.material.color.setHex(0x0284c7);
-      if (gateKeypadLed.material.emissive) gateKeypadLed.material.emissive.setHex(0x0284c7);
+      gateKeypadLed.material.color.setHex(0x10b981);
+      if (gateKeypadLed.material.emissive) gateKeypadLed.material.emissive.setHex(0x10b981);
     }
   } else {
     triggerNotification(`Circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
