@@ -48,49 +48,77 @@ function getSoldierLocomotionClip(animName) {
 }
 
 // Authentic Hazmat PBR Textures (4K Albedo with Biohazard logo, gloves, boots + 2K Normal + 4K Roughness + Metallic + AO)
+const HAZMAT_TEX_VER = 'v=2.2';
 let hazmatAlbedoTexture = null;
 let hazmatNormalTexture = null;
 let hazmatRoughnessTexture = null;
 let hazmatMetallicTexture = null;
 let hazmatAOTexture = null;
 
-function loadHazmatTextures() {
-  if (hazmatAlbedoTexture) return;
+let hazmatSuitMaterial = null;
+let hazmatVisorMaterial = null;
 
-  hazmatAlbedoTexture = textureLoader.load('/assets/hazmat/Hazmat_albedo.jpeg', (tex) => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    if (preloadedHumanFBX) applyHazmatMaterials(preloadedHumanFBX);
-    if (typeof localPlayerVisual !== 'undefined' && localPlayerVisual && localPlayerVisual.userData?.skinId === 'skin_hazmat') {
-      applyHazmatMaterials(localPlayerVisual);
-    }
-  });
-  hazmatAlbedoTexture.colorSpace = THREE.SRGBColorSpace;
+export function getHazmatMaterials() {
+  if (!hazmatAlbedoTexture) {
+    hazmatAlbedoTexture = textureLoader.load('/assets/hazmat/Hazmat_albedo.jpeg?' + HAZMAT_TEX_VER, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.needsUpdate = true;
+      if (hazmatSuitMaterial) hazmatSuitMaterial.needsUpdate = true;
+      if (hazmatVisorMaterial) hazmatVisorMaterial.needsUpdate = true;
+    });
+    hazmatAlbedoTexture.colorSpace = THREE.SRGBColorSpace;
 
-  hazmatNormalTexture = textureLoader.load('/assets/hazmat/Hazmat_normal.png', () => {
-    if (preloadedHumanFBX) applyHazmatMaterials(preloadedHumanFBX);
-    if (typeof localPlayerVisual !== 'undefined' && localPlayerVisual && localPlayerVisual.userData?.skinId === 'skin_hazmat') {
-      applyHazmatMaterials(localPlayerVisual);
-    }
-  });
+    hazmatNormalTexture = textureLoader.load('/assets/hazmat/Hazmat_normal.png?' + HAZMAT_TEX_VER, (tex) => {
+      tex.needsUpdate = true;
+      if (hazmatSuitMaterial) hazmatSuitMaterial.needsUpdate = true;
+    });
 
-  hazmatRoughnessTexture = textureLoader.load('/assets/hazmat/Hazmat_roughness.jpeg', () => {
-    if (preloadedHumanFBX) applyHazmatMaterials(preloadedHumanFBX);
-  });
+    hazmatRoughnessTexture = textureLoader.load('/assets/hazmat/Hazmat_roughness.jpeg?' + HAZMAT_TEX_VER, (tex) => {
+      tex.needsUpdate = true;
+      if (hazmatSuitMaterial) hazmatSuitMaterial.needsUpdate = true;
+    });
 
-  hazmatMetallicTexture = textureLoader.load('/assets/hazmat/Hazmat_metallic.jpeg', () => {
-    if (preloadedHumanFBX) applyHazmatMaterials(preloadedHumanFBX);
-  });
+    hazmatMetallicTexture = textureLoader.load('/assets/hazmat/Hazmat_metallic.jpeg?' + HAZMAT_TEX_VER, (tex) => {
+      tex.needsUpdate = true;
+      if (hazmatSuitMaterial) hazmatSuitMaterial.needsUpdate = true;
+    });
 
-  hazmatAOTexture = textureLoader.load('/assets/hazmat/Hazmat_AO.jpeg', () => {
-    if (preloadedHumanFBX) applyHazmatMaterials(preloadedHumanFBX);
-  });
+    hazmatAOTexture = textureLoader.load('/assets/hazmat/Hazmat_AO.jpeg?' + HAZMAT_TEX_VER, (tex) => {
+      tex.needsUpdate = true;
+      if (hazmatSuitMaterial) hazmatSuitMaterial.needsUpdate = true;
+    });
+  }
+
+  if (!hazmatSuitMaterial) {
+    hazmatSuitMaterial = new THREE.MeshStandardMaterial({
+      map: hazmatAlbedoTexture,
+      normalMap: hazmatNormalTexture,
+      roughnessMap: hazmatRoughnessTexture,
+      metalnessMap: hazmatMetallicTexture,
+      aoMap: hazmatAOTexture,
+      roughness: 0.9,
+      metalness: 0.1,
+      side: THREE.DoubleSide
+    });
+  }
+
+  if (!hazmatVisorMaterial) {
+    hazmatVisorMaterial = new THREE.MeshStandardMaterial({
+      map: hazmatAlbedoTexture,
+      color: 0x0f172a,
+      roughness: 0.05,
+      metalness: 0.92,
+      side: THREE.DoubleSide
+    });
+  }
+
+  return { hazmatSuitMaterial, hazmatVisorMaterial };
 }
-loadHazmatTextures();
 
 // Apply dedicated authentic modular PBR materials to Hazmat Operative submeshes
 export function applyHazmatMaterials(root) {
   if (!root) return;
-  loadHazmatTextures();
+  const { hazmatSuitMaterial: suitMat, hazmatVisorMaterial: visorMat } = getHazmatMaterials();
 
   root.traverse((child) => {
     if (child.isMesh) {
@@ -106,26 +134,11 @@ export function applyHazmatMaterials(root) {
       const name = child.name || '';
       if (name.includes('Cube001_Cube')) {
         // Helmet Visor / Face Shield — Deep glossy tinted obsidian polycarbonate shield
-        child.material = new THREE.MeshStandardMaterial({
-          map: hazmatAlbedoTexture || null,
-          color: 0x0f172a,
-          roughness: 0.05,
-          metalness: 0.90,
-          side: THREE.DoubleSide
-        });
+        child.material = visorMat;
       } else {
         // Suit Body, Hood, Arms, Legs, Biohazard Symbol, Gloves, Boots, Belt, and Life Support
         // Powered by authentic 4K Albedo + 2K Normal + 4K Roughness + Metallic + AO maps
-        child.material = new THREE.MeshStandardMaterial({
-          map: hazmatAlbedoTexture || null,
-          normalMap: hazmatNormalTexture || null,
-          roughnessMap: hazmatRoughnessTexture || null,
-          metalnessMap: hazmatMetallicTexture || null,
-          aoMap: hazmatAOTexture || null,
-          roughness: 1.0,
-          metalness: 1.0,
-          side: THREE.DoubleSide
-        });
+        child.material = suitMat;
       }
 
       child.userData.normalMat = child.material;
