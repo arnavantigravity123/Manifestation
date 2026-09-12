@@ -731,6 +731,24 @@ export function detectMobileDevice() {
 export let isMobileDevice = detectMobileDevice();
 window.isMobileDevice = isMobileDevice;
 
+export function detectLowEndOrIntegratedGPU() {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+    if (!gl) return false;
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    if (!debugInfo) return false;
+    const rendererStr = (gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || '').toLowerCase();
+    const isIntegrated = /intel|uhd|hd graphics|iris|radeon\(tm\)|vega|mali|adreno|swiftshader|llvmpipe/i.test(rendererStr);
+    const lowCores = typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4;
+    return isIntegrated || lowCores;
+  } catch (e) {
+    return false;
+  }
+}
+export const isLowEndHardware = detectLowEndOrIntegratedGPU();
+window.isLowEndHardware = isLowEndHardware;
+
 if (isMobileDevice) {
   document.body.classList.add('is-mobile');
 } else {
@@ -1023,6 +1041,7 @@ let visitedCells = new Set();
 let mapMarks = [];
 let isMinimapExpanded = false;
 let lastMinimapX = -9999, lastMinimapZ = -9999, lastMinimapRot = -9999, lastMinimapTime = 0;
+let lastLightCullTime = 0;
 
 // Persistent Dead Bodies tracking
 let deadBodies = [];
@@ -1523,7 +1542,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   const w = container.clientWidth || window.innerWidth;
   const h = container.clientHeight || window.innerHeight;
   
-  camera = new THREE.PerspectiveCamera(75, w / h, 0.2, 350);
+  camera = new THREE.PerspectiveCamera(75, w / h, 0.25, 200);
   camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
   camera.position.set(0, 1.6, 0); // Eye level
 
@@ -1589,12 +1608,15 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
 
   prevTime = performance.now();
 
+  const isLowEnd = isMobileDevice || isLowEndHardware;
+
   renderer = new THREE.WebGLRenderer({ 
-    antialias: !isMobileDevice,
+    antialias: !isLowEnd,
     powerPreference: "high-performance",
-    precision: isMobileDevice ? "mediump" : "highp"
+    precision: isLowEnd ? "mediump" : "highp",
+    depth: true
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.0));
+  renderer.setPixelRatio(isLowEnd ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
   renderer.setSize(w, h);
   renderer.shadowMap.enabled = false; // Disable heavy multi-pass shadow map rendering for smooth 60-144 FPS
   container.appendChild(renderer.domElement);
@@ -2646,11 +2668,14 @@ function createProceduralDungeonAssets() {
     '/assets/dungeon/textures/RugColor.png',
     null,
     '/assets/dungeon/textures/RugRoughness.png',
-    { roughness: 0.85, emissive: 0x220505, emissiveIntensity: 0.15, doubleSide: true }
+    { roughness: 0.85, emissive: 0x330808, emissiveIntensity: 0.25, doubleSide: true }
   );
+  dungeonRugMat.transparent = false;
+  dungeonRugMat.depthWrite = true;
+  dungeonRugMat.depthTest = true;
   dungeonRugMat.polygonOffset = true;
-  dungeonRugMat.polygonOffsetFactor = -2;
-  dungeonRugMat.polygonOffsetUnits = -2;
+  dungeonRugMat.polygonOffsetFactor = -1.0;
+  dungeonRugMat.polygonOffsetUnits = -1.0;
   dungeonRugMat.needsUpdate = true;
 
   dungeonAssetsLoaded = true;
@@ -2803,26 +2828,23 @@ function loadDungeonPackAssets() {
     dungeonRugGeoDeadEnd = createSeamlessRugGeo(2.0, 4.4);
     dungeonRugGeo = dungeonRugGeoFull;
     dungeonRugCrestGeo = createCrestRugGeo(2.0, 6.0);
-    if (dungeonModules.rug && dungeonModules.rug.children[0]) {
-      dungeonRugMat = dungeonModules.rug.children[0].material;
-    } else {
+    if (!dungeonRugMat) {
       dungeonRugMat = makeDungeonMat(
         '/assets/dungeon/textures/RugColor.png',
         null,
         '/assets/dungeon/textures/RugRoughness.png',
-        { roughness: 0.85, emissive: 0x661111, emissiveIntensity: 0.45, doubleSide: true }
+        { roughness: 0.85, emissive: 0x330808, emissiveIntensity: 0.25, doubleSide: true }
       );
     }
-    if (dungeonRugMat) {
-      dungeonRugMat.transparent = false; // Eliminates black edge blending and floor see-through
-      dungeonRugMat.depthWrite = true;
-      dungeonRugMat.roughness = 0.85;
-      dungeonRugMat.side = THREE.DoubleSide; // Ensure visibility from all camera angles
-      dungeonRugMat.polygonOffset = true;
-      dungeonRugMat.polygonOffsetFactor = -2;
-      dungeonRugMat.polygonOffsetUnits = -2;
-      dungeonRugMat.needsUpdate = true;
-    }
+    dungeonRugMat.transparent = false; // Eliminates black edge blending and floor see-through
+    dungeonRugMat.depthWrite = true;
+    dungeonRugMat.depthTest = true;
+    dungeonRugMat.roughness = 0.85;
+    dungeonRugMat.side = THREE.DoubleSide; // Ensure visibility from all camera angles
+    dungeonRugMat.polygonOffset = true;
+    dungeonRugMat.polygonOffsetFactor = -1.0;
+    dungeonRugMat.polygonOffsetUnits = -1.0;
+    dungeonRugMat.needsUpdate = true;
 
     console.log('[DUNGEON] ✓ All dungeon 3D kit assets extracted successfully!');
     dungeonAssetsLoaded = true;
@@ -2842,7 +2864,8 @@ function loadDungeonPackAssets() {
   });
 }
 
-// Preload Dungeon Assets immediately
+// Preload Dungeon Assets immediately: initialize procedural kit synchronously for instant zero-lag frame 1 readiness
+createProceduralDungeonAssets();
 loadDungeonPackAssets();
 
 function spawnDungeonProps(layout, blockSize) {
@@ -2937,11 +2960,11 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   function addRugTile(geo, rx, rz, rotY = 0) {
-    if (placedRugs >= 450) return; // Strict budget cap to prevent memory bloat on large maps
+    if (placedRugs >= 6000) return; // Full labyrinth budget ensures zero corridors are left bare
     const baseGeo = geo || dungeonRugGeo;
     if (!baseGeo) return;
     const g = baseGeo.clone();
-    _scratchDummy.position.set(rx, 0.02, rz);
+    _scratchDummy.position.set(rx, 0, rz);
     _scratchDummy.rotation.set(0, rotY, 0);
     _scratchDummy.scale.set(1, 1, 1);
     _scratchDummy.updateMatrix();
@@ -3264,12 +3287,15 @@ function spawnDungeonProps(layout, blockSize) {
   // A. All Floor Runner Rugs -> 1 Single Merged Mesh Draw Call
   if (rugGeometries.length > 0) {
     const mergedRugGeo = BufferGeometryUtils.mergeGeometries(rugGeometries, false);
-    const mergedRugMesh = new THREE.Mesh(mergedRugGeo, dungeonRugMat);
-    mergedRugMesh.receiveShadow = true;
-    mergedRugMesh.frustumCulled = false; // Always render floor rugs across whole labyrinth, never cull when looking horizontally
-    mergedRugMesh.userData = { isDungeonProp: true, isRug: true };
-    scene.add(mergedRugMesh);
-    dungeonProps.push(mergedRugMesh);
+    if (mergedRugGeo) {
+      const mergedRugMesh = new THREE.Mesh(mergedRugGeo, dungeonRugMat);
+      mergedRugMesh.receiveShadow = false; // Planar rugs don't need expensive multi-pass self-shadowing
+      mergedRugMesh.frustumCulled = false; // Always render floor rugs across whole labyrinth
+      mergedRugMesh.renderOrder = 2; // Guaranteed to render AFTER floorMesh (renderOrder=0) to eliminate any Z-fighting
+      mergedRugMesh.userData = { isDungeonProp: true, isRug: true };
+      scene.add(mergedRugMesh);
+      dungeonProps.push(mergedRugMesh);
+    }
     rugGeometries.forEach(g => g.dispose());
   }
 
@@ -3636,7 +3662,8 @@ function generateMaze(keysCount = 8) {
       metalness: 0.05,
       color: 0x656565,
       emissive: 0x000000,
-      emissiveIntensity: 0.0
+      emissiveIntensity: 0.0,
+      side: THREE.FrontSide // FrontSide enables hardware backface culling, doubling fillrate!
     });
   } else {
     const floorTex = getLoadedTexture('/assets/floor_texture.png', { x: floorRep, y: floorRep });
@@ -3646,7 +3673,8 @@ function generateMaze(keysCount = 8) {
       bumpScale: 0.08,
       color: 0x1a1a2e, 
       roughness: 0.92,
-      metalness: 0.05
+      metalness: 0.05,
+      side: THREE.FrontSide
     });
   }
 
@@ -3655,6 +3683,7 @@ function generateMaze(keysCount = 8) {
   floorMesh.rotation.x = -Math.PI / 2;
   floorMesh.receiveShadow = true;
   floorMesh.frustumCulled = false;
+  floorMesh.renderOrder = 0; // Base ground floor always renders first
   scene.add(floorMesh);
 
   // Ceiling with photorealistic texture scaled to difficulty map size
@@ -3668,7 +3697,7 @@ function generateMaze(keysCount = 8) {
       color: 0x080a0f, 
       roughness: 1.0,
       metalness: 0.0,
-      side: THREE.DoubleSide
+      side: THREE.FrontSide // FrontSide enables hardware backface culling!
     });
   } else {
     const ceilTex = getLoadedTexture('/assets/ceiling_texture.png', { x: ceilRep, y: ceilRep });
@@ -3677,7 +3706,7 @@ function generateMaze(keysCount = 8) {
       color: 0x060a12, 
       roughness: 0.95,
       metalness: 0.0,
-      side: THREE.DoubleSide
+      side: THREE.FrontSide
     });
   }
   
@@ -3686,6 +3715,7 @@ function generateMaze(keysCount = 8) {
   ceilingMesh.rotation.x = Math.PI / 2;
   ceilingMesh.position.y = isDungeon ? 3.5 : 4.5;
   ceilingMesh.frustumCulled = false;
+  ceilingMesh.renderOrder = 0;
   scene.add(ceilingMesh);
 
   // Grid layout for corridors (Procedurally Scaled with Difficulty)
@@ -4825,7 +4855,7 @@ function toggleCameraView() {
   const mode = viewModes[currentViewIndex];
   
   if (!activeViewCamera) {
-    activeViewCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    activeViewCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.25, 200);
     activeViewCamera.rotation.order = 'YXZ';
     scene.add(activeViewCamera);
   } else {
@@ -10216,6 +10246,35 @@ function animate() {
     } else {
       const promptEl = document.getElementById('interaction-prompt');
       if (promptEl) promptEl.style.display = 'none';
+    }
+
+    // Dynamic Point Light distance culling: drops active PBR light evaluation from 15 to 1-3 lights
+    if (time - lastLightCullTime > 150) {
+      lastLightCullTime = time;
+      const pX = camera.position.x;
+      const pZ = camera.position.z;
+
+      if (Array.isArray(circuitBreakers)) {
+        for (let i = 0; i < circuitBreakers.length; i++) {
+          const b = circuitBreakers[i];
+          if (b && b.mesh && b.mesh.userData && b.mesh.userData.statusLight) {
+            const dx = b.mesh.position.x - pX;
+            const dz = b.mesh.position.z - pZ;
+            b.mesh.userData.statusLight.visible = (dx * dx + dz * dz) < 196; // 14m
+          }
+        }
+      }
+
+      if (Array.isArray(sanctuaryZones)) {
+        for (let i = 0; i < sanctuaryZones.length; i++) {
+          const s = sanctuaryZones[i];
+          if (s && s.light) {
+            const dx = s.x - pX;
+            const dz = s.z - pZ;
+            s.light.visible = (dx * dx + dz * dz) < 324; // 18m
+          }
+        }
+      }
     }
   }
 
