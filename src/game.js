@@ -4383,7 +4383,18 @@ function generateCircuitBreakers() {
   const wallCandidates = [];
   for (let r = 1; r < totalRows - 1; r++) {
     for (let c = 1; c < totalCols - 1; c++) {
-      if (!mazeLayout[r] || (mazeLayout[r][c] !== 0 && mazeLayout[r][c] !== 2)) continue;
+      // Strictly ONLY open corridor cells (never sliding door cells or walls)
+      if (!mazeLayout[r] || mazeLayout[r][c] !== 0) continue;
+
+      // Never spawn in a cell that touches a dynamic sliding door trackway/mechanism
+      const touchesSlidingDoor = [
+        [-1, 0], [1, 0], [0, -1], [0, 1]
+      ].some(([dr, dc]) => {
+        const ar = r + dr;
+        const ac = c + dc;
+        return mazeLayout[ar] && mazeLayout[ar][ac] === 2;
+      });
+      if (touchesSlidingDoor) continue;
 
       const corrX = (c - totalCols / 2) * blockSize + blockSize / 2;
       const corrZ = (r - totalRows / 2) * blockSize + blockSize / 2;
@@ -4404,7 +4415,7 @@ function generateCircuitBreakers() {
 
           // Avoid solid pillars and monk statues
           const collidesWithSolidProp = dungeonPropColliders.some(p => {
-            return Math.hypot(p.x - d.candX, p.z - d.candZ) < (p.radius + 0.65);
+            return Math.hypot(p.x - d.candX, p.z - d.candZ) < (p.radius + 0.85);
           });
           if (collidesWithSolidProp) continue;
 
