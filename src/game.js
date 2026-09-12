@@ -39,12 +39,7 @@ function getSoldierLocomotionClip(animName) {
   if (soldierNativeClips[animName]) {
     return soldierNativeClips[animName];
   }
-  const baseClip = humanAnimClips[animName];
-  if (!baseClip) return null;
-  const adapted = baseClip.clone();
-  adapted.name = 'soldier_' + animName;
-  adapted.tracks = adapted.tracks.filter(t => !t.name.includes('Hips'));
-  return adapted;
+  return humanAnimClips[animName] || null;
 }
 
 // Authentic Hazmat PBR Textures (4K Albedo with Biohazard logo, gloves, boots + 2K Normal + 4K Roughness + Metallic + AO)
