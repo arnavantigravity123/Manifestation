@@ -29,6 +29,24 @@ const humanAnimClips = {
   strafeRight: null
 };
 
+const soldierNativeClips = {
+  idle: null,
+  walk: null,
+  sprint: null
+};
+
+function getSoldierLocomotionClip(animName) {
+  if (soldierNativeClips[animName]) {
+    return soldierNativeClips[animName];
+  }
+  const baseClip = humanAnimClips[animName];
+  if (!baseClip) return null;
+  const adapted = baseClip.clone();
+  adapted.name = 'soldier_' + animName;
+  adapted.tracks = adapted.tracks.filter(t => !t.name.includes('Hips'));
+  return adapted;
+}
+
 // Load Hazmat Suit authentic diffuse texture (FBX uses standard UV flipY = false)
 textureLoader.load('/assets/hazmat_texture.png', (tex) => {
   tex.flipY = false;
@@ -140,11 +158,31 @@ function upgradeMeshGroupToFBX(group) {
   toRemove.forEach(c => group.remove(c));
 
   const clone = SkeletonUtils.clone(preloadedHumanFBX);
-  clone.rotation.y = Math.PI; // Face forward direction
   group.add(clone);
 
-  group.userData.animMixer = null;
-  group.userData.walkCycle = 0;
+  // Setup full 8-directional locomotion animation mixer & actions for Hazmat
+  const mixer = new THREE.AnimationMixer(clone);
+  const actions = {};
+
+  Object.keys(humanAnimClips).forEach(key => {
+    const clip = humanAnimClips[key];
+    if (clip) {
+      actions[key] = mixer.clipAction(clip);
+    }
+  });
+
+  if (actions.idle) {
+    actions.idle.play();
+  } else if (preloadedHumanFBX.animations && preloadedHumanFBX.animations.length > 0) {
+    const act = mixer.clipAction(preloadedHumanFBX.animations[0]);
+    act.play();
+    actions.idle = act;
+  }
+
+  activeAnimationMixers.push(mixer);
+  group.userData.animMixer = mixer;
+  group.userData.animActions = actions;
+  group.userData.currentAction = 'idle';
 
   if (group.userData && group.userData.isVip && (window.isVipGlowEnabled ? window.isVipGlowEnabled() : true)) {
     applyVipGlow(group, true);
@@ -159,6 +197,32 @@ function stripRootMotion(clip, animName) {
     const isRootPosition = track.name.match(/Hips\.position/) || track.name.match(/^position/);
     return !isRootPosition;
   });
+
+  // Strafe Stabilization (Mandatory Rule from AGENTS.md / GEMINI.md):
+  // For strafeLeft and strafeRight, lock pitch (X) and roll (Z) rotations on Hips, Spine, Neck, and Head
+  // quaternion tracks to 0 to eliminate sideways torso tilting (45° lean into walls) caused by yaw/pitch coupling.
+  if (animName === 'strafeLeft' || animName === 'strafeRight') {
+    const stabilizedBones = ['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head'];
+    const _q = new THREE.Quaternion();
+    const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
+    clip.tracks.forEach(track => {
+      if (track.name.endsWith('.quaternion')) {
+        const boneName = track.name.split('.')[0];
+        if (stabilizedBones.some(sb => boneName.includes(sb))) {
+          const vals = track.values;
+          for (let i = 0; i < vals.length; i += 4) {
+            _q.fromArray(vals, i);
+            _euler.setFromQuaternion(_q, 'YXZ');
+            _euler.x = 0; // Lock pitch
+            _euler.z = 0; // Lock roll
+            _q.setFromEuler(_euler);
+            _q.toArray(vals, i);
+          }
+        }
+      }
+    });
+  }
+
   return clip;
 }
 
@@ -168,25 +232,25 @@ function registerAnimationToActiveMixers(animName, clip) {
   humanAnimClips[animName] = clip;
   clip.name = animName;
 
-  // Dynamically bind to localPlayerVisual if already spawned with skin_soldier
-  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_soldier' && localPlayerVisual.userData.animMixer) {
-    const mixer = localPlayerVisual.userData.animMixer;
-    localPlayerVisual.userData.animActions = localPlayerVisual.userData.animActions || {};
-    localPlayerVisual.userData.animActions[animName] = mixer.clipAction(clip);
-    // If currently performing this action, seamlessly transition
-    if (localPlayerVisual.userData.currentAction === animName) {
-      setHumanLocomotionAction(localPlayerVisual, animName, 0.15);
-    }
-  }
+  const bindToEntity = (entity) => {
+    if (!entity || !entity.userData || !entity.userData.animMixer) return;
+    const mixer = entity.userData.animMixer;
+    entity.userData.animActions = entity.userData.animActions || {};
 
-  // Dynamically bind to remote players in lobby
-  Object.values(players3D).forEach(p => {
-    if (p && p.userData && p.userData.skinId === 'skin_soldier' && p.userData.animMixer) {
-      const mixer = p.userData.animMixer;
-      p.userData.animActions = p.userData.animActions || {};
-      p.userData.animActions[animName] = mixer.clipAction(clip);
+    const targetClip = (entity.userData.skinId === 'skin_soldier')
+      ? getSoldierLocomotionClip(animName)
+      : clip;
+
+    if (targetClip) {
+      entity.userData.animActions[animName] = mixer.clipAction(targetClip);
+      if (entity.userData.currentAction === animName) {
+        setHumanLocomotionAction(entity, animName, 0.15);
+      }
     }
-  });
+  };
+
+  if (localPlayerVisual) bindToEntity(localPlayerVisual);
+  Object.values(players3D).forEach(p => bindToEntity(p));
 }
 let isHazmatLoading = false;
 let isHumanGLBLoading = false;
@@ -214,8 +278,8 @@ function upgradeMeshGroupToSoldier(group) {
   const mixer = new THREE.AnimationMixer(clone);
   const actions = {};
 
-  Object.keys(humanAnimClips).forEach(key => {
-    const clip = humanAnimClips[key];
+  ['idle', 'walk', 'sprint', 'walkBack', 'strafeLeft', 'strafeRight'].forEach(key => {
+    const clip = getSoldierLocomotionClip(key);
     if (clip) {
       actions[key] = mixer.clipAction(clip);
     }
@@ -260,22 +324,26 @@ export function loadHazmatFBXAssets() {
   isHazmatLoading = true;
 
   if (!hazmatSuitTexture) {
-    hazmatSuitTexture = textureLoader.load('/assets/hazmat_suit/textures/Hazmat_Suit_diffuse.png');
+    hazmatSuitTexture = textureLoader.load('/assets/hazmat_texture.png');
     hazmatSuitTexture.colorSpace = THREE.SRGBColorSpace;
     hazmatSuitTexture.flipY = false;
   }
 
-  // Load authentic Hazmat Suit 3D Model with Biohazard symbol
-  fbxLoader.load('/assets/hazmat_suit/source/Hazmat_Suit.fbx', (fbx) => {
+  // Load authentic Hazmat Suit 3D Model with Breathing Idle animation
+  fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
+    if (fbx.animations && fbx.animations.length > 0) {
+      registerAnimationToActiveMixers('idle', fbx.animations[0]);
+    }
+
     // Compute true bounding box and scale to standard player height (1.85 meters)
     const initialBox = new THREE.Box3().setFromObject(fbx);
     const rawSize = initialBox.getSize(new THREE.Vector3());
-    const rawHeight = rawSize.y || 199.76;
+    const rawHeight = rawSize.y || 180;
     
     const targetHeight = 1.85;
     const scale = targetHeight / rawHeight;
     fbx.scale.set(scale, scale, scale);
-    fbx.rotation.y = Math.PI; // Face forward direction (showing biohazard symbol on back)
+    fbx.rotation.y = Math.PI; // Face forward direction
 
     // Recenter pivot so feet rest perfectly on the floor (y = 0) and centered on X/Z
     const scaledBox = new THREE.Box3().setFromObject(fbx);
@@ -289,12 +357,14 @@ export function loadHazmatFBXAssets() {
         child.castShadow = true;
         child.receiveShadow = true;
         child.frustumCulled = false;
-        child.material = new THREE.MeshStandardMaterial({
-          map: hazmatSuitTexture || null,
-          roughness: 0.40,
-          metalness: 0.10,
-          side: THREE.DoubleSide
-        });
+        if (hazmatSuitTexture) {
+          child.material = new THREE.MeshStandardMaterial({
+            map: hazmatSuitTexture,
+            roughness: 0.40,
+            metalness: 0.10,
+            side: THREE.DoubleSide
+          });
+        }
       }
     });
 
@@ -302,18 +372,18 @@ export function loadHazmatFBXAssets() {
     isHazmatLoading = false;
 
     // Upgrade localPlayerVisual if skin_hazmat was waiting for FBX
-    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_hazmat') {
+    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_hazmat' && !localPlayerVisual.userData.animMixer) {
       upgradeMeshGroupToFBX(localPlayerVisual);
     }
 
     // Upgrade all remote human players with skin_hazmat
     Object.values(players3D).forEach(p => {
-      if (p && p.userData && p.userData.skinId === 'skin_hazmat') {
+      if (p && p.userData && p.userData.skinId === 'skin_hazmat' && !p.userData.animMixer) {
         upgradeMeshGroupToFBX(p);
       }
     });
   }, undefined, (err) => {
-    console.error('[HAZMAT] Failed to load Hazmat_Suit.fbx:', err);
+    console.error('[HAZMAT] Failed to load human_idle.fbx:', err);
     isHazmatLoading = false;
   });
 
@@ -324,6 +394,13 @@ let isLocomotionClipsLoading = false;
 export function loadLocomotionFBXClips() {
   if (isLocomotionClipsLoading) return;
   isLocomotionClipsLoading = true;
+
+  // 0. Load Breathing Idle animation (Mixamo FBX)
+  fbxLoader.load('/assets/Breathing Idle.fbx', (anim) => {
+    if (anim.animations && anim.animations.length > 0) {
+      registerAnimationToActiveMixers('idle', anim.animations[0]);
+    }
+  });
 
   // 1. Load Walk Forward animation (With-Skin FBX)
   fbxLoader.load('/assets/Walking (1).fbx', (anim) => {
@@ -445,39 +522,65 @@ export function loadSoldierAsset() {
   if (preloadedSoldierModel || isSoldierLoading) return;
   isSoldierLoading = true;
 
-  fbxLoader.load('/assets/soldier/source/Soldier.fbx', (fbx) => {
-    // Scale to standard player height (1.85 meters)
-    const initialBox = new THREE.Box3().setFromObject(fbx);
+  gltfLoader.load('/assets/soldier_animated.glb', (gltf) => {
+    const model = gltf.scene;
+    // Scale accurately to standard player height (1.85 meters)
+    const initialBox = new THREE.Box3().setFromObject(model);
     const rawSize = initialBox.getSize(new THREE.Vector3());
-    const rawHeight = rawSize.y || 180;
+    const rawHeight = rawSize.y || 1.832;
     const targetHeight = 1.85;
     const scale = targetHeight / rawHeight;
-    fbx.scale.set(scale, scale, scale);
-    fbx.rotation.y = Math.PI; // Face away from camera (match game forward direction)
+    model.scale.set(scale, scale, scale);
+    model.rotation.y = Math.PI; // Face forward direction
 
     // Center pivot so feet rest cleanly at y = 0
-    const scaledBox = new THREE.Box3().setFromObject(fbx);
+    const scaledBox = new THREE.Box3().setFromObject(model);
     const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-    fbx.position.x = -scaledCenter.x;
-    fbx.position.z = -scaledCenter.z;
-    fbx.position.y = -scaledBox.min.y;
+    model.position.x = -scaledCenter.x;
+    model.position.z = -scaledCenter.z;
+    model.position.y = -scaledBox.min.y;
 
-    fbx.traverse((child) => {
+    model.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
         child.frustumCulled = false;
-        child.material = new THREE.MeshStandardMaterial({
-          map: soldierDiffuseTexture || null,
-          normalMap: soldierNormalTexture || null,
-          roughness: 0.45,
-          metalness: 0.15,
-          side: THREE.DoubleSide
-        });
+        if (child.name === 'vanguard_Mesh') {
+          child.material = new THREE.MeshStandardMaterial({
+            map: soldierDiffuseTexture || null,
+            normalMap: soldierNormalTexture || null,
+            roughness: 0.40,
+            metalness: 0.20,
+            side: THREE.DoubleSide
+          });
+        } else if (child.name === 'vanguard_visor') {
+          child.material = new THREE.MeshStandardMaterial({
+            color: 0x00f5ff,
+            emissive: 0x005577,
+            emissiveIntensity: 0.6,
+            roughness: 0.1,
+            metalness: 0.9,
+            side: THREE.DoubleSide
+          });
+        }
       }
     });
 
-    preloadedSoldierModel = fbx;
+    // Store native GLB clips for soldier
+    if (gltf.animations && gltf.animations.length > 0) {
+      gltf.animations.forEach(clip => {
+        const lowerName = clip.name.toLowerCase();
+        if (lowerName.includes('idle')) {
+          soldierNativeClips.idle = clip;
+        } else if (lowerName.includes('run')) {
+          soldierNativeClips.sprint = clip;
+        } else if (lowerName.includes('walk')) {
+          soldierNativeClips.walk = clip;
+        }
+      });
+    }
+
+    preloadedSoldierModel = model;
     isSoldierLoading = false;
 
     // Upgrade localPlayerVisual if skin_soldier was waiting for model to load
@@ -492,7 +595,7 @@ export function loadSoldierAsset() {
       }
     });
   }, undefined, (err) => {
-    console.error('[SOLDIER] Failed to load Soldier.fbx:', err);
+    console.error('[SOLDIER] Failed to load soldier_animated.glb:', err);
     isSoldierLoading = false;
   });
 }
@@ -8222,13 +8325,23 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   }
   const actions = humanGroup.userData.animActions;
 
-  // On-demand action instantiation if clip finished loading after mesh creation (Hazmat & Soldier use FBX)
-  if (humanGroup.userData.skinId === 'skin_hazmat' || humanGroup.userData.skinId === 'skin_soldier') {
-    if (humanAnimClips[targetActionName] && !actions[targetActionName]) {
-      actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
+  // On-demand action instantiation if clip finished loading after mesh creation
+  const getClipForSkin = (name) => {
+    return (humanGroup.userData.skinId === 'skin_soldier')
+      ? getSoldierLocomotionClip(name)
+      : humanAnimClips[name];
+  };
+
+  if (!actions[targetActionName]) {
+    const targetClip = getClipForSkin(targetActionName);
+    if (targetClip) {
+      actions[targetActionName] = mixer.clipAction(targetClip);
     }
-    if (!actions.idle && humanAnimClips.idle) {
-      actions.idle = mixer.clipAction(humanAnimClips.idle);
+  }
+  if (!actions.idle) {
+    const idleClip = getClipForSkin('idle');
+    if (idleClip) {
+      actions.idle = mixer.clipAction(idleClip);
     }
   }
 
@@ -8316,10 +8429,31 @@ function createHumanMeshGroup(skinId, username, isVip) {
     loadHazmatFBXAssets();
     if (preloadedHumanFBX) {
       const clone = SkeletonUtils.clone(preloadedHumanFBX);
-      clone.rotation.y = Math.PI; // Face forward direction
       group.add(clone);
-      group.userData.animMixer = null;
-      group.userData.walkCycle = 0;
+
+      // Setup full 8-directional locomotion animation mixer & actions
+      const mixer = new THREE.AnimationMixer(clone);
+      const actions = {};
+
+      Object.keys(humanAnimClips).forEach(key => {
+        const clip = humanAnimClips[key];
+        if (clip) {
+          actions[key] = mixer.clipAction(clip);
+        }
+      });
+
+      if (actions.idle) {
+        actions.idle.play();
+      } else if (preloadedHumanFBX.animations && preloadedHumanFBX.animations.length > 0) {
+        const act = mixer.clipAction(preloadedHumanFBX.animations[0]);
+        act.play();
+        actions.idle = act;
+      }
+
+      activeAnimationMixers.push(mixer);
+      group.userData.animMixer = mixer;
+      group.userData.animActions = actions;
+      group.userData.currentAction = 'idle';
     } else {
       const spriteMat = new THREE.SpriteMaterial({ 
         map: getLoadedTexture('/assets/human_sprite.png'), 
@@ -8343,8 +8477,8 @@ function createHumanMeshGroup(skinId, username, isVip) {
       const mixer = new THREE.AnimationMixer(clone);
       const actions = {};
 
-      Object.keys(humanAnimClips).forEach(key => {
-        const clip = humanAnimClips[key];
+      ['idle', 'walk', 'sprint', 'walkBack', 'strafeLeft', 'strafeRight'].forEach(key => {
+        const clip = getSoldierLocomotionClip(key);
         if (clip) {
           actions[key] = mixer.clipAction(clip);
         }
