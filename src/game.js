@@ -120,7 +120,7 @@ textureLoader.load('/assets/soldier/textures/vanguard_diffuse.png', (tex) => {
   soldierDiffuseTexture = tex;
   if (preloadedSoldierModel) {
     preloadedSoldierModel.traverse((child) => {
-      if (child.isMesh && child.material) {
+      if (child.isMesh && child.name === 'vanguard_Mesh' && child.material) {
         child.material.map = soldierDiffuseTexture;
         child.material.needsUpdate = true;
       }
@@ -132,7 +132,7 @@ textureLoader.load('/assets/soldier/textures/vanguard_normal.png', (tex) => {
   soldierNormalTexture = tex;
   if (preloadedSoldierModel) {
     preloadedSoldierModel.traverse((child) => {
-      if (child.isMesh && child.material) {
+      if (child.isMesh && child.name === 'vanguard_Mesh' && child.material) {
         child.material.normalMap = soldierNormalTexture;
         child.material.needsUpdate = true;
       }
@@ -563,7 +563,7 @@ export function loadSoldierAsset() {
     const targetHeight = 1.85;
     const scale = targetHeight / rawHeight;
     model.scale.set(scale, scale, scale);
-    model.rotation.y = Math.PI; // Face forward direction
+    // Note: soldier_animated.glb naturally faces -Z (forward direction), so no Math.PI rotation is applied
 
     // Center pivot so feet rest cleanly at y = 0
     const scaledBox = new THREE.Box3().setFromObject(model);
@@ -587,14 +587,13 @@ export function loadSoldierAsset() {
           });
         } else if (child.name === 'vanguard_visor') {
           child.material = new THREE.MeshStandardMaterial({
-            color: 0x00f5ff,
-            emissive: 0x005577,
-            emissiveIntensity: 0.6,
-            roughness: 0.1,
-            metalness: 0.9,
+            color: 0x111827,
+            roughness: 0.08,
+            metalness: 0.90,
             side: THREE.DoubleSide
           });
         }
+        child.userData.normalMat = child.material;
       }
     });
 
