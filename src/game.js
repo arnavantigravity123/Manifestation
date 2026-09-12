@@ -4647,7 +4647,8 @@ function createItemPickupMesh(id, name, pos) {
     color: 0xffffff,
     fog: true,
     transparent: true,
-    blending: THREE.NormalBlending, // Crisp, solid colors & sharp text, zero washed-out see-through!
+    alphaTest: 0.05, // Discards transparent background fragments cleanly
+    blending: THREE.NormalBlending, // Crisp, solid colors & sharp text, zero black boxes!
     depthTest: true,
     depthWrite: false
   });
@@ -6940,6 +6941,7 @@ function spawnMirageLoot() {
     color: 0xffffff,
     fog: true,
     transparent: true,
+    alphaTest: 0.05,
     opacity: 0.95,
     blending: THREE.AdditiveBlending,
     depthWrite: false
@@ -8470,7 +8472,8 @@ function createHumanMeshGroup(skinId, username, isVip) {
       color: 0xffffff,
       fog: true,
       transparent: true,
-      blending: THREE.AdditiveBlending, // Use additive to hide the black background
+      alphaTest: 0.05,
+      blending: THREE.NormalBlending,
       depthWrite: false
     });
     const sprite = new THREE.Sprite(spriteMat);
@@ -8693,6 +8696,7 @@ function createGhostMeshGroup(skinId) {
       color: 0xffdddd, // slightly tint red
       fog: true,
       transparent: true,
+      alphaTest: 0.05,
       opacity: 0.85,
       blending: THREE.AdditiveBlending, // Hides black background, makes ghost glow
       depthWrite: false
