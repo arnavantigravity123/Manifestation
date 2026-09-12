@@ -2373,14 +2373,18 @@ let mazeSizeGlobal = 35;
 
 // Pathfinding helpers
 function worldToGrid(wx, wz) {
-  const col = Math.round((wx - mazeBlockSize/2) / mazeBlockSize + mazeSizeGlobal / 2);
-  const row = Math.round((wz - mazeBlockSize/2) / mazeBlockSize + mazeSizeGlobal / 2);
-  return { col: Math.max(0, Math.min(mazeSizeGlobal-1, col)), row: Math.max(0, Math.min(mazeSizeGlobal-1, row)) };
+  const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : mazeSizeGlobal;
+  const totalRows = (mazeLayout && mazeLayout.length) ? mazeLayout.length : mazeSizeGlobal;
+  const col = Math.round((wx - mazeBlockSize/2) / mazeBlockSize + totalCols / 2);
+  const row = Math.round((wz - mazeBlockSize/2) / mazeBlockSize + totalRows / 2);
+  return { col: Math.max(0, Math.min(totalCols - 1, col)), row: Math.max(0, Math.min(totalRows - 1, row)) };
 }
 
 function gridToWorld(col, row) {
-  const x = (col - mazeSizeGlobal / 2) * mazeBlockSize + mazeBlockSize/2;
-  const z = (row - mazeSizeGlobal / 2) * mazeBlockSize + mazeBlockSize/2;
+  const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : mazeSizeGlobal;
+  const totalRows = (mazeLayout && mazeLayout.length) ? mazeLayout.length : mazeSizeGlobal;
+  const x = (col - totalCols / 2) * mazeBlockSize + mazeBlockSize/2;
+  const z = (row - totalRows / 2) * mazeBlockSize + mazeBlockSize/2;
   return { x, z };
 }
 
@@ -2391,14 +2395,22 @@ const _bfsParent = new Int32Array(MAX_BFS_NODES);
 const _bfsQueue = new Int32Array(MAX_BFS_NODES);
 let _bfsIterationToken = 1;
 
-function bfsPath(startCol, startRow, endCol, endRow) {
-  if (startCol === endCol && startRow === endRow) return [];
+function bfsPath(startCol, startRow, endCol, endRow, canPassDoors = true) {
+  if (startCol === endCol && startRow === endRow) {
+    return [gridToWorld(endCol, endRow)];
+  }
   if (!mazeLayout || !mazeLayout[0]) return [];
 
   const totalCols = mazeLayout[0].length;
   const totalRows = mazeLayout.length;
   const totalNodes = totalCols * totalRows;
   if (totalNodes > MAX_BFS_NODES) return [];
+
+  // Clamp coordinates safely inside grid bounds
+  const safeEndCol = Math.max(0, Math.min(totalCols - 1, endCol));
+  const safeEndRow = Math.max(0, Math.min(totalRows - 1, endRow));
+  const safeStartCol = Math.max(0, Math.min(totalCols - 1, startCol));
+  const safeStartRow = Math.max(0, Math.min(totalRows - 1, startRow));
 
   // Increment token so we never have to reallocate or zero the visited array (O(1) reset)
   _bfsIterationToken = (_bfsIterationToken + 1) & 0xFF;
@@ -2408,8 +2420,8 @@ function bfsPath(startCol, startRow, endCol, endRow) {
   }
   const token = _bfsIterationToken;
 
-  const startIdx = startRow * totalCols + startCol;
-  const endIdx = endRow * totalCols + endCol;
+  const startIdx = safeStartRow * totalCols + safeStartCol;
+  const endIdx = safeEndRow * totalCols + safeEndCol;
 
   let head = 0;
   let tail = 0;
@@ -2450,7 +2462,9 @@ function bfsPath(startCol, startRow, endCol, endRow) {
       const nc = nbrs[i][1];
       if (nc >= 0 && nc < totalCols && nr >= 0 && nr < totalRows) {
         const nIdx = nr * totalCols + nc;
-        if (_bfsVisited[nIdx] !== token && mazeLayout[nr] && mazeLayout[nr][nc] === 0) {
+        const cellVal = mazeLayout[nr] ? mazeLayout[nr][nc] : 1;
+        const isPassable = (cellVal === 0) || (canPassDoors && cellVal === 2);
+        if (_bfsVisited[nIdx] !== token && isPassable) {
           _bfsVisited[nIdx] = token;
           _bfsParent[nIdx] = currIdx;
           _bfsQueue[tail++] = nIdx;
@@ -10031,10 +10045,15 @@ function animate() {
         ghost.userData.abilityCooldown = gParams.botAbilityCooldownMin + Math.random() * initialSpread;
       }
 
-      // High-Performance Grid-Based Line of Sight (LOS)
+      // High-Performance Grid-Based Line of Sight (LOS) + Spectral Proximity Scent
       let canSeePlayer = false;
       if (targetPos && distToPlayer < gParams.botSightRange) {
-        canSeePlayer = hasGridLineOfSight(ghost.position.x, ghost.position.z, targetPos.x, targetPos.z);
+        // Spectral entities sense human presence within 8.0m (~1.3 blocks) even around corners and into alcoves
+        if (distToPlayer < 8.0) {
+          canSeePlayer = true;
+        } else {
+          canSeePlayer = hasGridLineOfSight(ghost.position.x, ghost.position.z, targetPos.x, targetPos.z);
+        }
       }
 
       // State Transitions
@@ -10045,11 +10064,15 @@ function animate() {
         if (!targetPos) {
           ghost.userData.aiState = 'WANDER';
           ghost.userData.targetGrid = null;
+          ghost.userData.path = null;
+          ghost.userData.pathTime = 0;
         } else {
           ghost.userData.loseSightTimer += delta;
           if (ghost.userData.loseSightTimer > gParams.botLoseSightDuration) {
             ghost.userData.aiState = 'WANDER'; // Lost player
             ghost.userData.targetGrid = null;
+            ghost.userData.path = null;
+            ghost.userData.pathTime = 0;
           }
         }
       }
@@ -10159,12 +10182,17 @@ function animate() {
         ghost.userData.lastSoundTime = latestSoundBeacon.time;
       }
 
-      // BFS Pathfinding — recalculate path every 2 seconds or when target changes
-      if (!ghost.userData.path || !ghost.userData.pathTime || time - ghost.userData.pathTime > 2000) {
+      // BFS Pathfinding — recalculate path periodically, or when waypoint finishes, or when target changes
+      const needsRepath = !ghost.userData.path || 
+                          !ghost.userData.pathTime || 
+                          (ghost.userData.pathIdx && ghost.userData.pathIdx >= ghost.userData.path.length) ||
+                          (time - ghost.userData.pathTime > (ghost.userData.aiState === 'CHASE' ? 1000 : 2500));
+
+      if (needsRepath) {
         ghost.userData.pathTime = time;
         const ghostGrid = worldToGrid(ghost.position.x, ghost.position.z);
         
-        let destGrid;
+        let destGrid = null;
         if (ghost.userData.aiState === 'CHASE' && targetPos) {
           destGrid = worldToGrid(targetPos.x, targetPos.z);
           ghost.userData.targetGrid = destGrid;
@@ -10174,6 +10202,7 @@ function animate() {
           if (ghostGrid.col === destGrid.col && ghostGrid.row === destGrid.row) {
              ghost.userData.aiState = 'WANDER';
              ghost.userData.targetGrid = null;
+             destGrid = null;
           }
         } 
 
@@ -10184,19 +10213,43 @@ function animate() {
             const baseSeed = (currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.mazeGeometrySeed) || 0.12345;
             const seedInt = Math.floor(baseSeed * 2147483647);
             const tempRand = mulberry32(seedInt + idx * 1000 + ghost.userData.wanderCount * 17);
+            const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : mazeSizeGlobal;
+            const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
             do {
-              rx = Math.floor(tempRand() * mazeSizeGlobal);
-              rz = Math.floor(tempRand() * mazeSizeGlobal);
+              rx = Math.floor(tempRand() * totalCols);
+              rz = Math.floor(tempRand() * totalRows);
               attempts++;
-            } while (mazeLayout[rz] && mazeLayout[rz][rx] !== 0 && attempts < 50);
+            } while (mazeLayout[rz] && (mazeLayout[rz][rx] === 1) && attempts < 50);
+
+            // Guaranteed fallback: pick any adjacent open corridor if random sampling picked a wall
+            if (!mazeLayout[rz] || mazeLayout[rz][rx] === 1) {
+              const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+              for (const [dc, dr] of dirs) {
+                const nc = ghostGrid.col + dc;
+                const nr = ghostGrid.row + dr;
+                if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr] && mazeLayout[nr][nc] !== 1) {
+                  rx = nc;
+                  rz = nr;
+                  break;
+                }
+              }
+            }
             ghost.userData.targetGrid = { col: rx, row: rz };
           }
           destGrid = ghost.userData.targetGrid;
         }
         
         if (destGrid) {
-          ghost.userData.path = bfsPath(ghostGrid.col, ghostGrid.row, destGrid.col, destGrid.row);
-          ghost.userData.pathIdx = 1; // Skip first waypoint
+          const generatedPath = bfsPath(ghostGrid.col, ghostGrid.row, destGrid.col, destGrid.row, true);
+          if (generatedPath && generatedPath.length > 0) {
+            ghost.userData.path = generatedPath;
+            ghost.userData.pathIdx = 1; // Skip start cell waypoint
+          } else {
+            // If path could not be found to destGrid, clear targetGrid immediately so it retries rather than locking
+            ghost.userData.targetGrid = null;
+            ghost.userData.path = null;
+            ghost.userData.pathTime = 0;
+          }
         }
       }
 
@@ -10208,19 +10261,30 @@ function animate() {
         const waypoint = path[pathIdx];
         const dx = waypoint.x - ghost.position.x;
         const dz = waypoint.z - ghost.position.z;
-        const distToWaypoint = Math.sqrt(dx*dx + dz*dz);
+        const distToWaypoint = Math.hypot(dx, dz);
 
-        if (distToWaypoint < 1.5) {
+        if (distToWaypoint < 1.2) {
           ghost.userData.pathIdx = pathIdx + 1; // Advance waypoint
         } else if (distToPlayer > 0.5 || ghost.userData.aiState !== 'CHASE') {
           // Move toward current waypoint
           _scratchVec3_1.set(dx, 0, dz).normalize();
           ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
         }
-      } else if (ghost.userData.aiState === 'CHASE' && distToPlayer > 0.5 && targetPos) {
-        // Fallback: Chase direct line of sight to human target
-        _scratchVec3_1.set(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
-        ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
+      } else {
+        // Arrived at final waypoint or navigating inside destination cell
+        if (ghost.userData.aiState === 'CHASE' && distToPlayer > 0.5 && targetPos) {
+          // Final leg: move directly towards human target inside the cell/alcove
+          _scratchVec3_1.set(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
+          ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
+        } else {
+          // Finished patrol / investigate path: clear to repath smoothly
+          ghost.userData.targetGrid = null;
+          ghost.userData.path = null;
+          ghost.userData.pathTime = 0;
+          if (ghost.userData.aiState === 'INVESTIGATE') {
+            ghost.userData.aiState = 'WANDER';
+          }
+        }
       }
       
       // Face the human player if chasing, otherwise face movement direction
@@ -10230,8 +10294,10 @@ function animate() {
         ghost.lookAt(path[pathIdx].x, ghost.position.y, path[pathIdx].z);
       }
 
-      // High-performance 3x3 spatial grid wall collision for ghost AI (O(1) vs O(N))
+      // Smooth AABB sliding wall collision for ghost AI (prevents corner-pinning and vibration)
       const blockSize = mazeBlockSize || 4.5;
+      const ghostRadius = 0.8;
+      const wallHalfSize = blockSize / 2;
       const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : mazeSizeGlobal;
       const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
       const gGridC = Math.floor((ghost.position.x / blockSize) + totalCols / 2);
@@ -10241,13 +10307,14 @@ function animate() {
           if (mazeLayout && mazeLayout[r] && mazeLayout[r][c] === 1) {
             const wx = (c - totalCols / 2) * blockSize + blockSize / 2;
             const wz = (r - totalRows / 2) * blockSize + blockSize / 2;
-            const dx = ghost.position.x - wx;
-            const dz = ghost.position.z - wz;
-            const dist = Math.hypot(dx, dz);
-            if (dist < 2.5 && dist > 0.0001) {
-              const pushForce = (2.5 - dist);
-              ghost.position.x += (dx / dist) * pushForce;
-              ghost.position.z += (dz / dist) * pushForce;
+            const overlapX = (wallHalfSize + ghostRadius) - Math.abs(ghost.position.x - wx);
+            const overlapZ = (wallHalfSize + ghostRadius) - Math.abs(ghost.position.z - wz);
+            if (overlapX > 0 && overlapZ > 0) {
+              if (overlapX < overlapZ) {
+                ghost.position.x += (ghost.position.x > wx ? overlapX : -overlapX);
+              } else {
+                ghost.position.z += (ghost.position.z > wz ? overlapZ : -overlapZ);
+              }
             }
           }
         }
