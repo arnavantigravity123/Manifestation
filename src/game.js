@@ -2559,9 +2559,9 @@ function hasGridLineOfSight(x1, z1, x2, z2) {
 
   while (true) {
     if (currR >= 0 && currR < totalRows && currC >= 0 && currC < totalCols) {
-      if (mazeLayout[currR][currC] === 1) {
+      if (mazeLayout[currR][currC] === 1 || mazeLayout[currR][currC] === 2) {
         if (!(currC === c1 && currR === r1) && !(currC === c2 && currR === r2)) {
-          return false; // Obstructed by wall
+          return false; // Obstructed by wall or closed sliding door
         }
       }
     }
@@ -9164,10 +9164,46 @@ function updateMinimapVisibility() {
   // Calculate current grid cell safely clamped
   const px = camera.position.x;
   const pz = camera.position.z;
-  const c = Math.max(0, Math.min(totalCols - 1, Math.floor((px / blockSize) + (totalCols / 2))));
-  const r = Math.max(0, Math.min(totalRows - 1, Math.floor((pz / blockSize) + (totalRows / 2))));
+  let c = Math.max(0, Math.min(totalCols - 1, Math.floor((px / blockSize) + (totalCols / 2))));
+  let r = Math.max(0, Math.min(totalRows - 1, Math.floor((pz / blockSize) + (totalRows / 2))));
   
-  // Mark cells using a 2-step flood fill to prevent revealing through walls
+  // If the calculated cell lands on a closed sliding door (type === 2), the player is physically
+  // standing in the corridor approaching the door slab. Clamp the origin cell back to the player's corridor!
+  if (mazeLayout[r] && mazeLayout[r][c] === 2) {
+    const wx = (c - totalCols / 2) * blockSize + blockSize / 2;
+    const wz = (r - totalRows / 2) * blockSize + blockSize / 2;
+    const isEW = (c > 0 && mazeLayout[r] && mazeLayout[r][c - 1] === 0) || 
+                 (c < totalCols - 1 && mazeLayout[r] && mazeLayout[r][c + 1] === 0);
+    if (isEW) {
+      c = px < wx ? Math.max(0, c - 1) : Math.min(totalCols - 1, c + 1);
+    } else {
+      r = pz < wz ? Math.max(0, r - 1) : Math.min(totalRows - 1, r + 1);
+    }
+  } else if (mazeLayout[r] && mazeLayout[r][c] === 1) {
+    // If player coordinate lands inside a static wall block, clamp to nearest open corridor neighbor
+    const cardinalDirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+    let bestDist = Infinity;
+    let bestC = c;
+    let bestR = r;
+    for (const [dc, dr] of cardinalDirs) {
+      const nc = c + dc;
+      const nr = r + dr;
+      if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr] && mazeLayout[nr][nc] === 0) {
+        const cellX = (nc - totalCols / 2) * blockSize + blockSize / 2;
+        const cellZ = (nr - totalRows / 2) * blockSize + blockSize / 2;
+        const d = Math.hypot(px - cellX, pz - cellZ);
+        if (d < bestDist) {
+          bestDist = d;
+          bestC = nc;
+          bestR = nr;
+        }
+      }
+    }
+    c = bestC;
+    r = bestR;
+  }
+
+  // Mark cells using a 2-step flood fill to prevent revealing through walls or closed doors
   const queue = [{c, r, dist: 0}];
   const currentVisible = new Set();
   currentVisible.add((r * 1000) + c);
@@ -9176,6 +9212,10 @@ function updateMinimapVisibility() {
     const curr = queue.shift();
     if (curr.dist >= 2) continue; // max 2 steps for radius ~5x5
     
+    // Cannot expand sight past a wall (1) or a closed sliding door (2)
+    const currVal = (mazeLayout[curr.r] ? mazeLayout[curr.r][curr.c] : 1);
+    if (currVal !== 0) continue;
+
     const neighbors = [
       {dc: 0, dr: -1}, {dc: 0, dr: 1}, {dc: -1, dr: 0}, {dc: 1, dr: 0},
       {dc: -1, dr: -1}, {dc: 1, dr: -1}, {dc: -1, dr: 1}, {dc: 1, dr: 1} // Diagonals
@@ -9192,18 +9232,24 @@ function updateMinimapVisibility() {
       
       const key = (nr * 1000) + nc;
       if (currentVisible.has(key)) continue;
-      
-      // If current cell is a wall, we cannot see PAST it
-      if (curr.dist > 0 && mazeLayout[curr.r] && mazeLayout[curr.r][curr.c] !== 0) continue;
-      
-      // Prevent diagonal sight through two adjacent corner walls
+
+      const neighborVal = (mazeLayout[nr] ? mazeLayout[nr][nc] : 1);
+
+      // Prevent diagonal sight through two adjacent corner walls or closed doors
       if (Math.abs(n.dc) === 1 && Math.abs(n.dr) === 1) {
-        const isWall = (cell) => cell !== undefined && cell !== 0;
-        if (mazeLayout[curr.r] && mazeLayout[nr] && isWall(mazeLayout[curr.r][nc]) && isWall(mazeLayout[nr][curr.c])) continue; 
+        const isBlocking = (cell) => cell !== undefined && cell !== 0;
+        const side1 = mazeLayout[curr.r] ? mazeLayout[curr.r][nc] : 1;
+        const side2 = mazeLayout[nr] ? mazeLayout[nr][curr.c] : 1;
+        if (isBlocking(side1) && isBlocking(side2)) continue; 
       }
       
       currentVisible.add(key);
-      queue.push({c: nc, r: nr, dist: curr.dist + 1});
+
+      // Only expand further into open corridors (0).
+      // Walls (1) and closed doors (2) are visible on the map, but line-of-sight NEVER passes through them!
+      if (neighborVal === 0) {
+        queue.push({c: nc, r: nr, dist: curr.dist + 1});
+      }
     }
   }
 
