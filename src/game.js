@@ -47,62 +47,83 @@ function getSoldierLocomotionClip(animName) {
   return adapted;
 }
 
+// Authentic Hazmat PBR Textures (4K Albedo with Biohazard logo, gloves, boots + 2K Normal + 4K Roughness + Metallic + AO)
+let hazmatAlbedoTexture = null;
+let hazmatNormalTexture = null;
+let hazmatRoughnessTexture = null;
+let hazmatMetallicTexture = null;
+let hazmatAOTexture = null;
+
+function loadHazmatTextures() {
+  if (hazmatAlbedoTexture) return;
+
+  hazmatAlbedoTexture = textureLoader.load('/assets/hazmat/Hazmat_albedo.jpeg', (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    if (preloadedHumanFBX) applyHazmatMaterials(preloadedHumanFBX);
+    if (typeof localPlayerVisual !== 'undefined' && localPlayerVisual && localPlayerVisual.userData?.skinId === 'skin_hazmat') {
+      applyHazmatMaterials(localPlayerVisual);
+    }
+  });
+  hazmatAlbedoTexture.colorSpace = THREE.SRGBColorSpace;
+
+  hazmatNormalTexture = textureLoader.load('/assets/hazmat/Hazmat_normal.png', () => {
+    if (preloadedHumanFBX) applyHazmatMaterials(preloadedHumanFBX);
+    if (typeof localPlayerVisual !== 'undefined' && localPlayerVisual && localPlayerVisual.userData?.skinId === 'skin_hazmat') {
+      applyHazmatMaterials(localPlayerVisual);
+    }
+  });
+
+  hazmatRoughnessTexture = textureLoader.load('/assets/hazmat/Hazmat_roughness.jpeg', () => {
+    if (preloadedHumanFBX) applyHazmatMaterials(preloadedHumanFBX);
+  });
+
+  hazmatMetallicTexture = textureLoader.load('/assets/hazmat/Hazmat_metallic.jpeg', () => {
+    if (preloadedHumanFBX) applyHazmatMaterials(preloadedHumanFBX);
+  });
+
+  hazmatAOTexture = textureLoader.load('/assets/hazmat/Hazmat_AO.jpeg', () => {
+    if (preloadedHumanFBX) applyHazmatMaterials(preloadedHumanFBX);
+  });
+}
+loadHazmatTextures();
+
 // Apply dedicated authentic modular PBR materials to Hazmat Operative submeshes
 export function applyHazmatMaterials(root) {
   if (!root) return;
+  loadHazmatTextures();
+
   root.traverse((child) => {
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
       child.frustumCulled = false;
 
+      // Provide uv2 for AO map calculation
+      if (child.geometry && child.geometry.attributes.uv && !child.geometry.attributes.uv2) {
+        child.geometry.attributes.uv2 = child.geometry.attributes.uv;
+      }
+
       const name = child.name || '';
       if (name.includes('Cube001_Cube')) {
         // Helmet Visor / Face Shield — Deep glossy tinted obsidian polycarbonate shield
         child.material = new THREE.MeshStandardMaterial({
-          color: 0x07111e,
+          map: hazmatAlbedoTexture || null,
+          color: 0x0f172a,
           roughness: 0.05,
           metalness: 0.90,
           side: THREE.DoubleSide
         });
-      } else if (name.includes('Cube003_Cube004')) {
-        // Chemical Combat Boots — Vulcanized matte black rubber
-        child.material = new THREE.MeshStandardMaterial({
-          color: 0x141416,
-          roughness: 0.75,
-          metalness: 0.10,
-          side: THREE.DoubleSide
-        });
-      } else if (name.includes('Cube002_Cube003')) {
-        // Heavy Utility Belt — Tactical reinforced dark charcoal
-        child.material = new THREE.MeshStandardMaterial({
-          color: 0x1f1f23,
-          roughness: 0.65,
-          metalness: 0.20,
-          side: THREE.DoubleSide
-        });
-      } else if (name.includes('Cube004_Cube005')) {
-        // Life Support Filter Canister / Oxygen Regulator — Industrial gunmetal stainless steel
-        child.material = new THREE.MeshStandardMaterial({
-          color: 0x475569,
-          roughness: 0.28,
-          metalness: 0.75,
-          side: THREE.DoubleSide
-        });
-      } else if (name === 'Plane') {
-        // Chest Hazard Badge / Buckle Plate — Tactical dark plate
-        child.material = new THREE.MeshStandardMaterial({
-          color: 0x18181b,
-          roughness: 0.40,
-          metalness: 0.35,
-          side: THREE.DoubleSide
-        });
       } else {
-        // Suit Body, Hood, Arms, and Legs — Authentic vibrant biohazard safety yellow
+        // Suit Body, Hood, Arms, Legs, Biohazard Symbol, Gloves, Boots, Belt, and Life Support
+        // Powered by authentic 4K Albedo + 2K Normal + 4K Roughness + Metallic + AO maps
         child.material = new THREE.MeshStandardMaterial({
-          color: 0xf5b800,
-          roughness: 0.36,
-          metalness: 0.05,
+          map: hazmatAlbedoTexture || null,
+          normalMap: hazmatNormalTexture || null,
+          roughnessMap: hazmatRoughnessTexture || null,
+          metalnessMap: hazmatMetallicTexture || null,
+          aoMap: hazmatAOTexture || null,
+          roughness: 1.0,
+          metalness: 1.0,
           side: THREE.DoubleSide
         });
       }
