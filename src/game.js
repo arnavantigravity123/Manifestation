@@ -72,20 +72,6 @@ textureLoader.load('/assets/soldier/textures/vanguard_normal.png', (tex) => {
   }
 });
 
-let rogueDiffuseTexture = null;
-textureLoader.load('/assets/dark_hooded_rogue/textures/Dark_Hooded_Rogue_diffuse.png', (tex) => {
-  tex.flipY = false;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  rogueDiffuseTexture = tex;
-  if (preloadedRogueModel) {
-    preloadedRogueModel.traverse((child) => {
-      if (child.isMesh && child.material && child.userData && child.userData.isRogueMesh) {
-        child.material.map = rogueDiffuseTexture;
-        child.material.needsUpdate = true;
-      }
-    });
-  }
-});
 
 // Golden VIP Status & Skin Integrity Preservation
 export function applyVipGlow(object3D, enabled = true, color = 0xffd700) {
@@ -207,33 +193,7 @@ let isHumanGLBLoading = false;
 let isGhostGLBLoading = false;
 let preloadedSoldierModel = null;
 let isSoldierLoading = false;
-let preloadedRogueModel = null;
-let isRogueLoading = false;
 
-function upgradeMeshGroupToRogue(group) {
-  if (!group || !preloadedRogueModel) return;
-  if (group.userData && group.userData.skinId && group.userData.skinId !== 'skin_rogue') {
-    return; // Preserve other skins
-  }
-  // Remove non-username children
-  const toRemove = [];
-  group.children.forEach(c => {
-    if (c.userData && c.userData.isUsernameTag) return;
-    toRemove.push(c);
-  });
-  toRemove.forEach(c => group.remove(c));
-
-  const clone = SkeletonUtils.clone(preloadedRogueModel);
-  clone.rotation.y = Math.PI; // Face forward direction
-  group.add(clone);
-
-  group.userData.animMixer = null;
-  group.userData.walkCycle = 0;
-
-  if (group.userData && group.userData.isVip && (window.isVipGlowEnabled ? window.isVipGlowEnabled() : true)) {
-    applyVipGlow(group, true);
-  }
-}
 
 function upgradeMeshGroupToSoldier(group) {
   if (!group || !preloadedSoldierModel) return;
@@ -538,67 +498,6 @@ export function loadSoldierAsset() {
 }
 export const loadSoldierFBXAssets = loadSoldierAsset;
 
-export function loadRogueAsset() {
-  if (preloadedRogueModel || isRogueLoading) return;
-  isRogueLoading = true;
-
-  if (!rogueDiffuseTexture) {
-    rogueDiffuseTexture = textureLoader.load('/assets/dark_hooded_rogue/textures/Dark_Hooded_Rogue_diffuse.png');
-    rogueDiffuseTexture.colorSpace = THREE.SRGBColorSpace;
-    rogueDiffuseTexture.flipY = false;
-  }
-
-  fbxLoader.load('/assets/dark_hooded_rogue/source/Dark_Hooded_Rogue.fbx', (fbx) => {
-    // Scale to standard player height (1.85 meters)
-    const initialBox = new THREE.Box3().setFromObject(fbx);
-    const rawSize = initialBox.getSize(new THREE.Vector3());
-    const rawHeight = rawSize.y || 180;
-    const targetHeight = 1.85;
-    const scale = targetHeight / rawHeight;
-    fbx.scale.set(scale, scale, scale);
-    fbx.rotation.y = Math.PI; // Face forward direction
-
-    // Center pivot so feet rest cleanly at y = 0
-    const scaledBox = new THREE.Box3().setFromObject(fbx);
-    const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-    fbx.position.x = -scaledCenter.x;
-    fbx.position.z = -scaledCenter.z;
-    fbx.position.y = -scaledBox.min.y;
-
-    fbx.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        child.frustumCulled = false;
-        child.material = new THREE.MeshStandardMaterial({
-          map: rogueDiffuseTexture || null,
-          roughness: 0.55,
-          metalness: 0.20,
-          side: THREE.DoubleSide
-        });
-      }
-    });
-
-    preloadedRogueModel = fbx;
-    isRogueLoading = false;
-
-    // Upgrade localPlayerVisual if skin_rogue was waiting for model to load
-    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_rogue') {
-      upgradeMeshGroupToRogue(localPlayerVisual);
-    }
-
-    // Upgrade all remote human players with skin_rogue
-    Object.values(players3D).forEach(p => {
-      if (p && p.userData && p.userData.skinId === 'skin_rogue') {
-        upgradeMeshGroupToRogue(p);
-      }
-    });
-  }, undefined, (err) => {
-    console.error('[ROGUE] Failed to load Dark_Hooded_Rogue.fbx:', err);
-    isRogueLoading = false;
-  });
-}
-export const loadRogueFBXAssets = loadRogueAsset;
 
 export function loadGhostGLBAsset() {
   if (preloadedGhostModel || isGhostGLBLoading) return;
@@ -1325,10 +1224,13 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   myTeam = me.team;
   myClass = me.characterClass;
 
-  // Preload Hazmat Suit, Mech Soldier, and Dark Rogue assets so players and Mimic bots always have high-fidelity models
+  if (localStorage.getItem('manifestation_equipped_skin') === 'skin_rogue') {
+    localStorage.setItem('manifestation_equipped_skin', 'skin_hazmat');
+  }
+
+  // Preload Hazmat Suit and Mech Soldier assets so players and Mimic bots always have high-fidelity models
   loadHazmatFBXAssets();
   loadSoldierFBXAssets();
-  loadRogueFBXAssets();
   loadGhostGLBAsset();
 
   // Show/Hide flashlight gauge row based on team
@@ -7580,9 +7482,8 @@ function setupSocketListeners() {
       
       // Spawn human mesh in its place (Mech or Hazmat, never default!)
       let pSkinId = currentLobby && currentLobby.players[id] ? currentLobby.players[id].skinId : null;
-      if (!pSkinId || pSkinId === 'skin_default' || pSkinId === 'skin_ghost') {
-        const rand = Math.random();
-        pSkinId = rand < 0.33 ? 'skin_rogue' : (rand < 0.66 ? 'skin_soldier' : 'skin_hazmat');
+      if (!pSkinId || pSkinId === 'skin_default' || pSkinId === 'skin_ghost' || pSkinId === 'skin_rogue') {
+        pSkinId = Math.random() < 0.5 ? 'skin_soldier' : 'skin_hazmat';
       }
       const pUsername = currentLobby && currentLobby.players[id] ? currentLobby.players[id].username : 'Operative';
       const humanMesh = createHumanMeshGroup(pSkinId, pUsername);
@@ -8440,8 +8341,9 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
 function createHumanMeshGroup(skinId, username, isVip) {
   const group = new THREE.Group();
   let effectiveSkin = skinId;
-  if (!effectiveSkin || effectiveSkin === 'skin_ghost') {
+  if (!effectiveSkin || effectiveSkin === 'skin_ghost' || effectiveSkin === 'skin_rogue') {
     effectiveSkin = (localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat');
+    if (effectiveSkin === 'skin_rogue') effectiveSkin = 'skin_hazmat';
   }
   const vipActive = isVip !== undefined ? Boolean(isVip) : (window.isVipActive ? window.isVipActive() : false);
   group.userData = group.userData || {};
@@ -8522,28 +8424,6 @@ function createHumanMeshGroup(skinId, username, isVip) {
       const spriteMat = new THREE.SpriteMaterial({ 
         map: getLoadedTexture('/assets/human_sprite.png'), 
         color: 0x38bdf8,
-        fog: true,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      });
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.scale.set(1.2, 1.2, 1);
-      sprite.position.y = 0.8;
-      group.add(sprite);
-    }
-  } else if (effectiveSkin === 'skin_rogue') {
-    loadRogueAsset();
-    if (preloadedRogueModel) {
-      const clone = SkeletonUtils.clone(preloadedRogueModel);
-      clone.rotation.y = Math.PI; // Face forward direction
-      group.add(clone);
-      group.userData.animMixer = null;
-      group.userData.walkCycle = 0;
-    } else {
-      const spriteMat = new THREE.SpriteMaterial({ 
-        map: getLoadedTexture('/assets/human_sprite.png'), 
-        color: 0xc084fc,
         fog: true,
         transparent: true,
         blending: THREE.AdditiveBlending,
@@ -9699,7 +9579,7 @@ function animate() {
         setHumanLocomotionAction(localPlayerVisual, desired, 0.15, playbackRate);
         localPlayerVisual.rotation.z = 0;
       } else if (localPlayerVisual) {
-        // Procedural stride bob, sway, forward lean, and idle breathing for static 3D meshes (Standard Issue GLB & Dark Hooded Rogue)
+        // Procedural stride bob, sway, forward lean, and idle breathing for static 3D meshes (Standard Issue GLB & Hazmat Suit)
         if (isEffectivelyMoving) {
           const moveSpeed = (isSprinting ? 12 : 7) * THREE.MathUtils.clamp(localPlayerGroundSpeed / 7.0, 0.5, 1.4);
           localPlayerVisual.userData.walkCycle = (localPlayerVisual.userData.walkCycle || 0) + delta * moveSpeed;
@@ -10095,9 +9975,8 @@ function animate() {
               ghost.userData.isMimicDisguised = true;
               if (myTeam === 'Human') triggerNotification(`A Mimic bot is disguising itself (${Math.round(gParams.cloneDuration / 1000)}s)!`);
               
-              // NEVER default: pick Mech Soldier, Biohazard Hazmat, or Dark Rogue
-              const randSkin = Math.random();
-              const chosenSkin = randSkin < 0.33 ? 'skin_rogue' : (randSkin < 0.66 ? 'skin_soldier' : 'skin_hazmat');
+              // NEVER default: pick Mech Soldier or Biohazard Hazmat
+              const chosenSkin = Math.random() < 0.5 ? 'skin_soldier' : 'skin_hazmat';
               const mimicGroup = createHumanMeshGroup(chosenSkin, 'Operative', false);
               mimicGroup.rotation.y = Math.PI; // Invert to align human model facing forward with ghost movement
               ghost.add(mimicGroup);

@@ -729,7 +729,6 @@ const creditsText = `
   <p><b>🎮 3D Models & Assets Attribution:</b></p>
   <p>• <b>"Forest"</b> (<a href="https://skfb.ly/pBE8Y" target="_blank" style="color: #38bdf8;">https://skfb.ly/pBE8Y</a>) by <b>Pasha</b> is licensed under Creative Commons Attribution (<a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" style="color: #38bdf8;">CC-BY 4.0</a>).</p>
   <p>• <b>"Soldier"</b> (<a href="https://skfb.ly/6WpYT" target="_blank" style="color: #38bdf8;">https://skfb.ly/6WpYT</a>) by <b>Unlimited Studio</b> is licensed under Creative Commons Attribution (<a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" style="color: #38bdf8;">CC-BY 4.0</a>).</p>
-  <p>• <b>"Dark Hooded Rogue"</b>: Sourced via 3D model kit under Creative Commons Attribution (<a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" style="color: #38bdf8;">CC-BY 4.0</a>).</p>
   <p>• <b>Biohazard Hazmat Suit & Ghost 3D Models:</b> Sourced via Sketchfab under Creative Commons Attribution (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" style="color: #38bdf8;">CC-BY 4.0</a> / <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" style="color: #38bdf8;">CC-BY-SA</a>). All respective model artists and 3D creators retain full credit and ownership of their original works.</p>
   <p>• <b>Character Skeletal Rigging & Motion Capture:</b> Powered by Mixamo / Adobe Systems.</p>
   <p>• <b>3D Graphics & Rendering Engine:</b> Three.js (WebGL, MIT License).</p>
@@ -1016,7 +1015,7 @@ buyCreditsBtns.forEach(btn => {
 
 function updateSkinButtons() {
   let equipped = localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
-  if (equipped === 'skin_cyberpunk') {
+  if (equipped === 'skin_cyberpunk' || equipped === 'skin_rogue') {
     equipped = 'skin_hazmat';
     localStorage.setItem('manifestation_equipped_skin', 'skin_hazmat');
   }
