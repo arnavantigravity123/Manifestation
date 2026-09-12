@@ -808,10 +808,10 @@ let totalBreakersRequired = 3;
 window.gameDifficulty = localStorage.getItem('manifestation_difficulty') || 'medium';
 
 function getMazeSizeForDifficulty(difficulty = window.gameDifficulty || 'medium') {
-  if (difficulty === 'easy') return 25;
-  if (difficulty === 'hard') return 45;
-  if (difficulty === 'impossible') return 55;
-  return 35; // medium
+  if (difficulty === 'easy') return 21;
+  if (difficulty === 'hard') return 37;
+  if (difficulty === 'impossible') return 43;
+  return 29; // medium
 }
 window.getMazeSizeForDifficulty = getMazeSizeForDifficulty;
 window.mazeSizeGlobal = getMazeSizeForDifficulty(window.gameDifficulty);
@@ -2270,42 +2270,82 @@ function gridToWorld(col, row) {
   return { x, z };
 }
 
+// Pre-allocated typed arrays for zero-GC, ultra-fast BFS pathfinding (Max 65x65 grid supported)
+const MAX_BFS_NODES = 65 * 65;
+const _bfsVisited = new Uint8Array(MAX_BFS_NODES);
+const _bfsParent = new Int32Array(MAX_BFS_NODES);
+const _bfsQueue = new Int32Array(MAX_BFS_NODES);
+let _bfsIterationToken = 1;
+
 function bfsPath(startCol, startRow, endCol, endRow) {
   if (startCol === endCol && startRow === endRow) return [];
-  
-  const visited = Array(mazeSizeGlobal).fill(0).map(() => Array(mazeSizeGlobal).fill(false));
-  const parent = Array(mazeSizeGlobal).fill(0).map(() => Array(mazeSizeGlobal).fill(null));
-  const queue = [{ col: startCol, row: startRow }];
-  visited[startRow][startCol] = true;
-  
-  const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
-  
-  while (queue.length > 0) {
-    const curr = queue.shift();
-    
-    if (curr.col === endCol && curr.row === endRow) {
-      // Reconstruct path
+  if (!mazeLayout || !mazeLayout[0]) return [];
+
+  const totalCols = mazeLayout[0].length;
+  const totalRows = mazeLayout.length;
+  const totalNodes = totalCols * totalRows;
+  if (totalNodes > MAX_BFS_NODES) return [];
+
+  // Increment token so we never have to reallocate or zero the visited array (O(1) reset)
+  _bfsIterationToken = (_bfsIterationToken + 1) & 0xFF;
+  if (_bfsIterationToken === 0) {
+    _bfsVisited.fill(0);
+    _bfsIterationToken = 1;
+  }
+  const token = _bfsIterationToken;
+
+  const startIdx = startRow * totalCols + startCol;
+  const endIdx = endRow * totalCols + endCol;
+
+  let head = 0;
+  let tail = 0;
+
+  _bfsQueue[tail++] = startIdx;
+  _bfsVisited[startIdx] = token;
+  _bfsParent[startIdx] = -1;
+
+  while (head < tail) {
+    const currIdx = _bfsQueue[head++];
+    if (currIdx === endIdx) {
+      // Reconstruct path backward in O(N), then reverse once
       const path = [];
-      let c = curr;
-      while (c) {
-        path.unshift(gridToWorld(c.col, c.row));
-        c = parent[c.row][c.col];
+      let cIdx = currIdx;
+      while (cIdx !== -1) {
+        const r = Math.floor(cIdx / totalCols);
+        const c = cIdx % totalCols;
+        path.push(gridToWorld(c, r));
+        cIdx = _bfsParent[cIdx];
       }
+      path.reverse();
       return path;
     }
-    
-    for (const [dc, dr] of dirs) {
-      const nc = curr.col + dc, nr = curr.row + dr;
-      if (nc >= 0 && nc < mazeSizeGlobal && nr >= 0 && nr < mazeSizeGlobal 
-          && !visited[nr][nc] && mazeLayout[nr][nc] === 0) {
-        visited[nr][nc] = true;
-        parent[nr][nc] = curr;
-        queue.push({ col: nc, row: nr });
+
+    const currR = Math.floor(currIdx / totalCols);
+    const currC = currIdx % totalCols;
+
+    // Fast 4-way neighbors
+    const nbrs = [
+      [currR + 1, currC],
+      [currR - 1, currC],
+      [currR, currC + 1],
+      [currR, currC - 1]
+    ];
+
+    for (let i = 0; i < 4; i++) {
+      const nr = nbrs[i][0];
+      const nc = nbrs[i][1];
+      if (nc >= 0 && nc < totalCols && nr >= 0 && nr < totalRows) {
+        const nIdx = nr * totalCols + nc;
+        if (_bfsVisited[nIdx] !== token && mazeLayout[nr] && mazeLayout[nr][nc] === 0) {
+          _bfsVisited[nIdx] = token;
+          _bfsParent[nIdx] = currIdx;
+          _bfsQueue[tail++] = nIdx;
+        }
       }
     }
   }
-  
-  return []; // No path found
+
+  return [];
 }
 
 // Ultra-Fast 2D Grid Raymarching for Bot Line of Sight (Zero 3D raycasting overhead)
@@ -2854,7 +2894,7 @@ function spawnDungeonProps(layout, blockSize) {
     dungeonPropColliders.push(col);
     const c = Math.floor((px / blockSize) + (totalCols / 2));
     const r = Math.floor((pz / blockSize) + (totalRows / 2));
-    const key = `${r},${c}`;
+    const key = (r * 1000) + c;
     if (!dungeonPropGrid.has(key)) dungeonPropGrid.set(key, []);
     dungeonPropGrid.get(key).push(col);
   }
@@ -2886,6 +2926,7 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   function spawnPillarMesh(px, pz) {
+    if (placedPillars >= 200) return false; // Strict budget cap to prevent memory bloat on large maps
     if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz) || isNearVaultDoorway(px, pz)) return false;
     if (isNearStatue(px, pz, 0.75)) return false; // Never spawn pillar inside or overlapping a statue
     if (isNearPillar(px, pz, 1.8)) return false;
@@ -2896,6 +2937,7 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   function spawnStatueMesh(sx, sz, rotY = 0) {
+    if (placedStatues >= 60) return false; // Strict budget cap to prevent memory bloat on large maps
     if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz) || isNearVaultDoorway(sx, sz)) return false;
     if (isNearStatue(sx, sz, 2.5)) return false;
     if (isNearPillar(sx, sz, 0.75)) return false; // Never spawn statue inside or overlapping an existing pillar
@@ -2906,6 +2948,7 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   function addRugTile(geo, rx, rz, rotY = 0) {
+    if (placedRugs >= 450) return; // Strict budget cap to prevent memory bloat on large maps
     const baseGeo = geo || dungeonRugGeo;
     if (!baseGeo) return;
     const g = baseGeo.clone();
@@ -3115,9 +3158,9 @@ function spawnDungeonProps(layout, blockSize) {
 
           // Architectural cadence: place columns at junctions (openNeighbors >= 3)
           // or at corners (openNeighbors === 2 with perpendicular turn)
-          // or spaced every 3 cells on straight corridors
+          // or spaced every 5 cells on straight corridors
           const isStraight = (openNeighbors === 2 && ((layout[r - 1] && layout[r - 1][c] === 0 && layout[r + 1] && layout[r + 1][c] === 0) || (layout[r][c - 1] === 0 && layout[r][c + 1] === 0)));
-          if (isStraight && ((r + c) % 3 !== 0)) continue;
+          if (isStraight && ((r + c) % 5 !== 0)) continue;
 
           const cx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
           const cz = (r - layout.length / 2) * blockSize + blockSize / 2;
@@ -3287,6 +3330,7 @@ function spawnDungeonProps(layout, blockSize) {
 // Reusable scratch objects to eliminate Garbage Collection allocations in render loops
 const _scratchVec3_1 = new THREE.Vector3();
 const _scratchVec3_2 = new THREE.Vector3();
+const _scratchNearestHuman = new THREE.Vector3();
 const _scratchEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _scratchDummy = new THREE.Object3D();
 
@@ -3315,12 +3359,21 @@ function generateMaze(keysCount = 8) {
     staticWallsMesh = null;
   }
 
-  // Clear any existing dungeon props
+  // Clear any existing dungeon props and safely dispose their GPU memory
   dungeonProps.forEach(p => {
     scene.remove(p);
+    // Only dispose dynamically generated merged rug geometries, preserving cached shared assets
+    if (p.userData && p.userData.isRug && p.geometry) {
+      p.geometry.dispose();
+    }
+    // Release instanced matrix buffers
+    if (typeof p.dispose === 'function') {
+      p.dispose();
+    }
   });
   dungeonProps = [];
   dungeonPropColliders = [];
+  dungeonPropGrid.clear();
 
   // Hide the 3D forest environment so it never appears inside the maze
   if (forestSceneInstance) {
@@ -8438,29 +8491,34 @@ function createGhostMeshGroup(skinId) {
     group.add(sprite);
   }
 
-  // Eerie purple aura light — bright enough to notice
-  const aura = new THREE.PointLight(0x6b21a8, 3.0, 12);
+  // Eerie purple aura light — optimized single light with distance culling
+  const aura = new THREE.PointLight(0x6b21a8, 1.8, 8.0);
   aura.position.y = 2.0;
   group.add(aura);
-
-  // Secondary dim red under-light
-  const underLight = new THREE.PointLight(0x7f1d1d, 1.2, 6);
-  underLight.position.y = 0.5;
-  group.add(underLight);
 
   group.userData = {
     type: 'Ghost',
     skinId: 'skin_ghost',
     bobAccumulator: Math.random() * 10,
     flickerTimer: Math.random() * 100,
-    lastPosition: new THREE.Vector3()
+    lastPosition: new THREE.Vector3(),
+    auraLight: aura
   };
   
   return group;
 }
 
 function spawnGhostAIs(count) {
-  ghosts3D.forEach(g => scene.remove(g));
+  ghosts3D.forEach(g => {
+    scene.remove(g);
+    g.traverse(c => {
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) {
+        if (Array.isArray(c.material)) c.material.forEach(m => m.dispose());
+        else c.material.dispose();
+      }
+    });
+  });
   ghosts3D = [];
 
   for (let i = 0; i < count; i++) {
@@ -8757,7 +8815,7 @@ function updateMinimapVisibility() {
   // Mark cells using a 2-step flood fill to prevent revealing through walls
   const queue = [{c, r, dist: 0}];
   const currentVisible = new Set();
-  currentVisible.add(`${r},${c}`);
+  currentVisible.add((r * 1000) + c);
   
   while (queue.length > 0) {
     const curr = queue.shift();
@@ -8774,7 +8832,7 @@ function updateMinimapVisibility() {
       
       if (nr < 0 || nr >= totalRows || nc < 0 || nc >= totalCols) continue;
       
-      const key = `${nr},${nc}`;
+      const key = (nr * 1000) + nc;
       if (currentVisible.has(key)) continue;
       
       // If current cell is a wall, we cannot see PAST it
@@ -8812,7 +8870,7 @@ function drawMinimap() {
   for (let r = 0; r < totalRows; r++) {
     if (!mazeLayout[r]) continue;
     for (let c = 0; c < totalCols; c++) {
-      if (myTeam === 'Ghost' || visitedCells.has(`${r},${c}`)) {
+      if (myTeam === 'Ghost' || visitedCells.has((r * 1000) + c)) {
         const type = mazeLayout[r][c];
         if (type === 1) {
           // Static Wall
@@ -9260,7 +9318,7 @@ function animate() {
         if (dungeonPropGrid && dungeonPropGrid.size > 0) {
           for (let dr = -1; dr <= 1; dr++) {
             for (let dc = -1; dc <= 1; dc++) {
-              const bucket = dungeonPropGrid.get(`${pGridR + dr},${pGridC + dc}`);
+              const bucket = dungeonPropGrid.get(((pGridR + dr) * 1000) + (pGridC + dc));
               if (!bucket) continue;
               for (let i = 0; i < bucket.length; i++) {
                 const prop = bucket[i];
@@ -9508,7 +9566,7 @@ function animate() {
     // Helper function to apply damage if human is near a ghost
     const applyGhostDamageToHuman = (ghostPos) => {
       if (window.isSpectating) return;
-      const distToPlayer = ghostPos.distanceTo(new THREE.Vector3(camera.position.x, ghostPos.y, camera.position.z));
+      const distToPlayer = Math.hypot(ghostPos.x - camera.position.x, ghostPos.z - camera.position.z);
       if (distToPlayer < 1.5 && myTeam === 'Human' && !isPanicked) {
         currentHP = Math.max(0, currentHP - delta * 45);
         document.getElementById('hp-value').textContent = `${Math.ceil(currentHP)} HP`;
@@ -9624,17 +9682,30 @@ function animate() {
       
       if (myTeam === 'Human' && !isPanicked && !isCaptured) {
          const d = ghost.position.distanceTo(camera.position);
-         if (d < minDist) { minDist = d; nearestHumanPos = new THREE.Vector3(camera.position.x, ghost.position.y, camera.position.z); }
+         if (d < minDist) {
+           minDist = d;
+           _scratchNearestHuman.set(camera.position.x, ghost.position.y, camera.position.z);
+           nearestHumanPos = _scratchNearestHuman;
+         }
       }
       Object.values(players3D).forEach(p => {
          if (p.userData && p.userData.type === 'Human' && !p.userData.isCaptured && !p.userData.isPanicked) {
             const d = ghost.position.distanceTo(p.position);
-            if (d < minDist) { minDist = d; nearestHumanPos = new THREE.Vector3(p.position.x, ghost.position.y, p.position.z); }
+            if (d < minDist) {
+              minDist = d;
+              _scratchNearestHuman.set(p.position.x, ghost.position.y, p.position.z);
+              nearestHumanPos = _scratchNearestHuman;
+            }
          }
       });
 
       const distToPlayer = minDist !== Infinity ? minDist : 9999;
       const targetPos = nearestHumanPos;
+
+      // Distance culling for ghost dynamic light: prevents 8 simultaneous point lights melting GPU
+      if (ghost.userData && ghost.userData.auraLight) {
+        ghost.userData.auraLight.visible = (distToPlayer < 14.0);
+      }
 
       // Damage check uses actual distance to PLAYER (only damages humans)
       applyGhostDamageToHuman(ghost.position);
@@ -9901,13 +9972,13 @@ function animate() {
           ghost.userData.pathIdx = pathIdx + 1; // Advance waypoint
         } else if (distToPlayer > 0.5 || ghost.userData.aiState !== 'CHASE') {
           // Move toward current waypoint
-          const dir = new THREE.Vector3(dx, 0, dz).normalize();
-          ghost.position.addScaledVector(dir, delta * moveSpeed);
+          _scratchVec3_1.set(dx, 0, dz).normalize();
+          ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
         }
       } else if (ghost.userData.aiState === 'CHASE' && distToPlayer > 0.5 && targetPos) {
         // Fallback: Chase direct line of sight to human target
-        const dir = new THREE.Vector3(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
-        ghost.position.addScaledVector(dir, delta * moveSpeed);
+        _scratchVec3_1.set(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
+        ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
       }
       
       // Face the human player if chasing, otherwise face movement direction
