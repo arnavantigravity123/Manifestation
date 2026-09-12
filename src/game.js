@@ -44,6 +44,34 @@ textureLoader.load('/assets/hazmat_texture.png', (tex) => {
   }
 });
 
+let soldierDiffuseTexture = null;
+let soldierNormalTexture = null;
+textureLoader.load('/assets/soldier/textures/vanguard_diffuse.png', (tex) => {
+  tex.flipY = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  soldierDiffuseTexture = tex;
+  if (preloadedSoldierModel) {
+    preloadedSoldierModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.material.map = soldierDiffuseTexture;
+        child.material.needsUpdate = true;
+      }
+    });
+  }
+});
+textureLoader.load('/assets/soldier/textures/vanguard_normal.png', (tex) => {
+  tex.flipY = false;
+  soldierNormalTexture = tex;
+  if (preloadedSoldierModel) {
+    preloadedSoldierModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.material.normalMap = soldierNormalTexture;
+        child.material.needsUpdate = true;
+      }
+    });
+  }
+});
+
 // Golden VIP Status & Skin Integrity Preservation
 export function applyVipGlow(object3D, enabled = true, color = 0xffd700) {
   if (!object3D) return;
@@ -154,8 +182,8 @@ function registerAnimationToActiveMixers(animName, clip) {
   humanAnimClips[animName] = clip;
   clip.name = animName;
 
-  // Dynamically bind to localPlayerVisual if already spawned with skin_hazmat
-  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_hazmat' && localPlayerVisual.userData.animMixer) {
+  // Dynamically bind to localPlayerVisual if already spawned with skin_hazmat or skin_soldier
+  if (localPlayerVisual && localPlayerVisual.userData && (localPlayerVisual.userData.skinId === 'skin_hazmat' || localPlayerVisual.userData.skinId === 'skin_soldier') && localPlayerVisual.userData.animMixer) {
     const mixer = localPlayerVisual.userData.animMixer;
     localPlayerVisual.userData.animActions = localPlayerVisual.userData.animActions || {};
     localPlayerVisual.userData.animActions[animName] = mixer.clipAction(clip);
@@ -167,7 +195,7 @@ function registerAnimationToActiveMixers(animName, clip) {
 
   // Dynamically bind to remote players in lobby
   Object.values(players3D).forEach(p => {
-    if (p && p.userData && p.userData.skinId === 'skin_hazmat' && p.userData.animMixer) {
+    if (p && p.userData && (p.userData.skinId === 'skin_hazmat' || p.userData.skinId === 'skin_soldier') && p.userData.animMixer) {
       const mixer = p.userData.animMixer;
       p.userData.animActions = p.userData.animActions || {};
       p.userData.animActions[animName] = mixer.clipAction(clip);
@@ -179,7 +207,6 @@ let isHumanGLBLoading = false;
 let isGhostGLBLoading = false;
 let preloadedSoldierModel = null;
 let isSoldierLoading = false;
-const soldierAnimClips = {};
 
 function upgradeMeshGroupToSoldier(group) {
   if (!group || !preloadedSoldierModel) return;
@@ -200,29 +227,12 @@ function upgradeMeshGroupToSoldier(group) {
   const mixer = new THREE.AnimationMixer(clone);
   const actions = {};
 
-  if (soldierAnimClips.idle) actions.idle = mixer.clipAction(soldierAnimClips.idle);
-  if (soldierAnimClips.walk) actions.walk = mixer.clipAction(soldierAnimClips.walk);
-  if (soldierAnimClips.sprint) actions.sprint = mixer.clipAction(soldierAnimClips.sprint);
-
-  // GLB Soldier uses native GLTF animations only (FBX clips are incompatible with GLB skeleton rig)
-  if (soldierAnimClips.walkBack) {
-    actions.walkBack = mixer.clipAction(soldierAnimClips.walkBack);
-    actions.walkBack.setEffectiveTimeScale(-1.0);
-  } else if (soldierAnimClips.walk) {
-    actions.walkBack = mixer.clipAction(soldierAnimClips.walk);
-  }
-
-  if (soldierAnimClips.strafeLeft) {
-    actions.strafeLeft = mixer.clipAction(soldierAnimClips.strafeLeft);
-  } else if (soldierAnimClips.walk) {
-    actions.strafeLeft = mixer.clipAction(soldierAnimClips.walk);
-  }
-
-  if (soldierAnimClips.strafeRight) {
-    actions.strafeRight = mixer.clipAction(soldierAnimClips.strafeRight);
-  } else if (soldierAnimClips.walk) {
-    actions.strafeRight = mixer.clipAction(soldierAnimClips.walk);
-  }
+  Object.keys(humanAnimClips).forEach(key => {
+    const clip = humanAnimClips[key];
+    if (clip) {
+      actions[key] = mixer.clipAction(clip);
+    }
+  });
 
   if (actions.idle) {
     actions.idle.play();
@@ -447,56 +457,43 @@ export function loadHumanGLBAsset() {
 }
 
 export function loadSoldierAsset() {
+  loadLocomotionFBXClips();
   if (preloadedSoldierModel || isSoldierLoading) return;
   isSoldierLoading = true;
 
-  gltfLoader.load('/assets/soldier_animated.glb', (gltf) => {
-    preloadedSoldierModel = gltf.scene;
-
+  fbxLoader.load('/assets/soldier/source/Soldier.fbx', (fbx) => {
     // Scale to standard player height (1.85 meters)
-    const initialBox = new THREE.Box3().setFromObject(preloadedSoldierModel);
+    const initialBox = new THREE.Box3().setFromObject(fbx);
     const rawSize = initialBox.getSize(new THREE.Vector3());
-    const rawHeight = rawSize.y || 1.8;
+    const rawHeight = rawSize.y || 180;
     const targetHeight = 1.85;
     const scale = targetHeight / rawHeight;
-    preloadedSoldierModel.scale.set(scale, scale, scale);
-    preloadedSoldierModel.rotation.y = 0; // Face forward direction (away from camera)
+    fbx.scale.set(scale, scale, scale);
+    fbx.rotation.y = Math.PI; // Face away from camera (match game forward direction)
 
     // Center pivot so feet rest cleanly at y = 0
-    const scaledBox = new THREE.Box3().setFromObject(preloadedSoldierModel);
+    const scaledBox = new THREE.Box3().setFromObject(fbx);
     const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
-    preloadedSoldierModel.position.x = -scaledCenter.x;
-    preloadedSoldierModel.position.z = -scaledCenter.z;
-    preloadedSoldierModel.position.y = -scaledBox.min.y;
+    fbx.position.x = -scaledCenter.x;
+    fbx.position.z = -scaledCenter.z;
+    fbx.position.y = -scaledBox.min.y;
 
-    preloadedSoldierModel.traverse((child) => {
+    fbx.traverse((child) => {
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        child.frustumCulled = false;
+        child.material = new THREE.MeshStandardMaterial({
+          map: soldierDiffuseTexture || null,
+          normalMap: soldierNormalTexture || null,
+          roughness: 0.45,
+          metalness: 0.15,
+          side: THREE.DoubleSide
+        });
       }
     });
 
-    if (gltf.animations) {
-      gltf.animations.forEach(clip => {
-        if (clip.name === 'Idle') soldierAnimClips.idle = clip;
-        if (clip.name === 'Walk') {
-          soldierAnimClips.walk = clip;
-          const walkBackClip = clip.clone();
-          walkBackClip.name = 'WalkBack';
-          soldierAnimClips.walkBack = walkBackClip;
-
-          const strafeLClip = clip.clone();
-          strafeLClip.name = 'StrafeLeft';
-          soldierAnimClips.strafeLeft = strafeLClip;
-
-          const strafeRClip = clip.clone();
-          strafeRClip.name = 'StrafeRight';
-          soldierAnimClips.strafeRight = strafeRClip;
-        }
-        if (clip.name === 'Run') soldierAnimClips.sprint = clip;
-      });
-    }
-
+    preloadedSoldierModel = fbx;
     isSoldierLoading = false;
 
     // Upgrade localPlayerVisual if skin_soldier was waiting for model to load
@@ -511,7 +508,7 @@ export function loadSoldierAsset() {
       }
     });
   }, undefined, (err) => {
-    console.error('[SOLDIER] Failed to load soldier_animated.glb:', err);
+    console.error('[SOLDIER] Failed to load Soldier.fbx:', err);
     isSoldierLoading = false;
   });
 }
@@ -8004,23 +8001,13 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   }
   const actions = humanGroup.userData.animActions;
 
-  // On-demand action instantiation if clip finished loading after mesh creation (Hazmat uses FBX, Soldier uses GLB)
-  if (humanGroup.userData.skinId === 'skin_hazmat') {
+  // On-demand action instantiation if clip finished loading after mesh creation (Hazmat & Soldier use FBX)
+  if (humanGroup.userData.skinId === 'skin_hazmat' || humanGroup.userData.skinId === 'skin_soldier') {
     if (humanAnimClips[targetActionName] && !actions[targetActionName]) {
       actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
     }
     if (!actions.idle && humanAnimClips.idle) {
       actions.idle = mixer.clipAction(humanAnimClips.idle);
-    }
-  } else if (humanGroup.userData.skinId === 'skin_soldier') {
-    if (soldierAnimClips[targetActionName] && !actions[targetActionName]) {
-      actions[targetActionName] = mixer.clipAction(soldierAnimClips[targetActionName]);
-      if (targetActionName === 'walkBack') {
-        actions[targetActionName].setEffectiveTimeScale(-1.0);
-      }
-    }
-    if (!actions.idle && soldierAnimClips.idle) {
-      actions.idle = mixer.clipAction(soldierAnimClips.idle);
     }
   }
 
@@ -8029,10 +8016,7 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   if (!targetAction) return;
 
   const currentAction = actions[currentActionName] || actions.idle;
-
-  // Direction timeScale: Soldier plays walk backwards for walkBack; Hazmat uses dedicated FBX
-  const isBackwards = targetActionName === 'walkBack' && humanGroup.userData.skinId === 'skin_soldier';
-  const desiredTimeScale = isBackwards ? -1.0 : 1.0;
+  const desiredTimeScale = 1.0;
 
   // If already playing the EXACT same AnimationAction instance, do not reset or crossfade
   if (currentAction === targetAction) {
@@ -8158,29 +8142,12 @@ function createHumanMeshGroup(skinId, username, isVip) {
       const mixer = new THREE.AnimationMixer(clone);
       const actions = {};
 
-      if (soldierAnimClips.idle) actions.idle = mixer.clipAction(soldierAnimClips.idle);
-      if (soldierAnimClips.walk) actions.walk = mixer.clipAction(soldierAnimClips.walk);
-      if (soldierAnimClips.sprint) actions.sprint = mixer.clipAction(soldierAnimClips.sprint);
-
-      // GLB Soldier uses native GLTF animations only (FBX clips are incompatible with GLB skeleton rig)
-      if (soldierAnimClips.walkBack) {
-        actions.walkBack = mixer.clipAction(soldierAnimClips.walkBack);
-        actions.walkBack.setEffectiveTimeScale(-1.0);
-      } else if (soldierAnimClips.walk) {
-        actions.walkBack = mixer.clipAction(soldierAnimClips.walk);
-      }
-
-      if (soldierAnimClips.strafeLeft) {
-        actions.strafeLeft = mixer.clipAction(soldierAnimClips.strafeLeft);
-      } else if (soldierAnimClips.walk) {
-        actions.strafeLeft = mixer.clipAction(soldierAnimClips.walk);
-      }
-
-      if (soldierAnimClips.strafeRight) {
-        actions.strafeRight = mixer.clipAction(soldierAnimClips.strafeRight);
-      } else if (soldierAnimClips.walk) {
-        actions.strafeRight = mixer.clipAction(soldierAnimClips.walk);
-      }
+      Object.keys(humanAnimClips).forEach(key => {
+        const clip = humanAnimClips[key];
+        if (clip) {
+          actions[key] = mixer.clipAction(clip);
+        }
+      });
 
       if (actions.idle) {
         actions.idle.play();
