@@ -197,8 +197,8 @@ function registerAnimationToActiveMixers(animName, clip) {
   humanAnimClips[animName] = clip;
   clip.name = animName;
 
-  // Dynamically bind to localPlayerVisual if already spawned with skin_hazmat, skin_soldier, or skin_rogue
-  if (localPlayerVisual && localPlayerVisual.userData && (localPlayerVisual.userData.skinId === 'skin_hazmat' || localPlayerVisual.userData.skinId === 'skin_soldier' || localPlayerVisual.userData.skinId === 'skin_rogue') && localPlayerVisual.userData.animMixer) {
+  // Dynamically bind to localPlayerVisual if already spawned with skin_hazmat or skin_soldier
+  if (localPlayerVisual && localPlayerVisual.userData && (localPlayerVisual.userData.skinId === 'skin_hazmat' || localPlayerVisual.userData.skinId === 'skin_soldier') && localPlayerVisual.userData.animMixer) {
     const mixer = localPlayerVisual.userData.animMixer;
     localPlayerVisual.userData.animActions = localPlayerVisual.userData.animActions || {};
     localPlayerVisual.userData.animActions[animName] = mixer.clipAction(clip);
@@ -210,7 +210,7 @@ function registerAnimationToActiveMixers(animName, clip) {
 
   // Dynamically bind to remote players in lobby
   Object.values(players3D).forEach(p => {
-    if (p && p.userData && (p.userData.skinId === 'skin_hazmat' || p.userData.skinId === 'skin_soldier' || p.userData.skinId === 'skin_rogue') && p.userData.animMixer) {
+    if (p && p.userData && (p.userData.skinId === 'skin_hazmat' || p.userData.skinId === 'skin_soldier') && p.userData.animMixer) {
       const mixer = p.userData.animMixer;
       p.userData.animActions = p.userData.animActions || {};
       p.userData.animActions[animName] = mixer.clipAction(clip);
@@ -239,26 +239,11 @@ function upgradeMeshGroupToRogue(group) {
   toRemove.forEach(c => group.remove(c));
 
   const clone = SkeletonUtils.clone(preloadedRogueModel);
+  clone.rotation.y = Math.PI; // Face forward direction
   group.add(clone);
 
-  const mixer = new THREE.AnimationMixer(clone);
-  const actions = {};
-
-  Object.keys(humanAnimClips).forEach(key => {
-    const clip = humanAnimClips[key];
-    if (clip) {
-      actions[key] = mixer.clipAction(clip);
-    }
-  });
-
-  if (actions.idle) {
-    actions.idle.play();
-  }
-
-  activeAnimationMixers.push(mixer);
-  group.userData.animMixer = mixer;
-  group.userData.animActions = actions;
-  group.userData.currentAction = 'idle';
+  group.userData.animMixer = null;
+  group.userData.walkCycle = 0;
 
   if (group.userData && group.userData.isVip && (window.isVipGlowEnabled ? window.isVipGlowEnabled() : true)) {
     applyVipGlow(group, true);
@@ -572,177 +557,60 @@ export function loadSoldierAsset() {
 export const loadSoldierFBXAssets = loadSoldierAsset;
 
 export function loadRogueAsset() {
-  loadLocomotionFBXClips();
-  loadHazmatFBXAssets();
   if (preloadedRogueModel || isRogueLoading) return;
   isRogueLoading = true;
 
-  fbxLoader.load('/assets/dark_hooded_rogue/source/Dark_Hooded_Rogue.fbx', (rogueFbx) => {
-    const tryBuildRogue = () => {
-      if (!preloadedHumanFBX) {
-        setTimeout(tryBuildRogue, 100);
-        return;
+  if (!rogueDiffuseTexture) {
+    rogueDiffuseTexture = textureLoader.load('/assets/dark_hooded_rogue/textures/Dark_Hooded_Rogue_diffuse.png');
+    rogueDiffuseTexture.colorSpace = THREE.SRGBColorSpace;
+    rogueDiffuseTexture.flipY = false;
+  }
+
+  fbxLoader.load('/assets/dark_hooded_rogue/source/Dark_Hooded_Rogue.fbx', (fbx) => {
+    // Scale to standard player height (1.85 meters)
+    const initialBox = new THREE.Box3().setFromObject(fbx);
+    const rawSize = initialBox.getSize(new THREE.Vector3());
+    const rawHeight = rawSize.y || 180;
+    const targetHeight = 1.85;
+    const scale = targetHeight / rawHeight;
+    fbx.scale.set(scale, scale, scale);
+    fbx.rotation.y = Math.PI; // Face forward direction
+
+    // Center pivot so feet rest cleanly at y = 0
+    const scaledBox = new THREE.Box3().setFromObject(fbx);
+    const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+    fbx.position.x = -scaledCenter.x;
+    fbx.position.z = -scaledCenter.z;
+    fbx.position.y = -scaledBox.min.y;
+
+    fbx.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        child.frustumCulled = false;
+        child.material = new THREE.MeshStandardMaterial({
+          map: rogueDiffuseTexture || null,
+          roughness: 0.55,
+          metalness: 0.20,
+          side: THREE.DoubleSide
+        });
       }
+    });
 
-      // Clone human FBX as base rig
-      const rigBase = SkeletonUtils.clone(preloadedHumanFBX);
-      rigBase.traverse(c => {
-        if (c.isMesh) c.visible = false;
-      });
+    preloadedRogueModel = fbx;
+    isRogueLoading = false;
 
-      // Extract rogue geometry
-      let rogueMesh = null;
-      rogueFbx.traverse(c => { if (c.isMesh) rogueMesh = c; });
-      if (!rogueMesh) {
-        isRogueLoading = false;
-        return;
+    // Upgrade localPlayerVisual if skin_rogue was waiting for model to load
+    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_rogue') {
+      upgradeMeshGroupToRogue(localPlayerVisual);
+    }
+
+    // Upgrade all remote human players with skin_rogue
+    Object.values(players3D).forEach(p => {
+      if (p && p.userData && p.userData.skinId === 'skin_rogue') {
+        upgradeMeshGroupToRogue(p);
       }
-
-      const rogueGeo = rogueMesh.geometry.clone();
-      const b = rogueGeo.boundingBox || (rogueGeo.computeBoundingBox(), rogueGeo.boundingBox);
-      const rawMinY = b.min.y;
-      const rawH = b.max.y - rawMinY;
-      const targetHeight = 1.85;
-      const s = targetHeight / rawH;
-
-      // Center X/Z, align feet to Y = 0, scale to 1.85m player height
-      rogueGeo.translate(-((b.max.x + b.min.x) / 2), -rawMinY, -((b.max.z + b.min.z) / 2));
-      rogueGeo.scale(s, s, s);
-      rogueGeo.computeBoundingBox();
-
-      // Collect bones from rigBase
-      const boneMap = new Map();
-      const boneList = [];
-      rigBase.traverse(c => {
-        if (c.isBone && !boneMap.has(c.name)) {
-          boneMap.set(c.name, boneList.length);
-          boneList.push(c);
-        }
-      });
-
-      const getBoneIdx = (name) => boneMap.get(name) !== undefined ? boneMap.get(name) : 0;
-      const hipsIdx = getBoneIdx('mixamorigHips');
-      const spineIdx = getBoneIdx('mixamorigSpine');
-      const spine2Idx = getBoneIdx('mixamorigSpine2');
-      const neckIdx = getBoneIdx('mixamorigNeck');
-      const headIdx = getBoneIdx('mixamorigHead');
-
-      const leftArmIdx = getBoneIdx('mixamorigLeftArm');
-      const leftForeArmIdx = getBoneIdx('mixamorigLeftForeArm');
-      const leftHandIdx = getBoneIdx('mixamorigLeftHand');
-
-      const rightArmIdx = getBoneIdx('mixamorigRightArm');
-      const rightForeArmIdx = getBoneIdx('mixamorigRightForeArm');
-      const rightHandIdx = getBoneIdx('mixamorigRightHand');
-
-      const leftUpLegIdx = getBoneIdx('mixamorigLeftUpLeg');
-      const leftLegIdx = getBoneIdx('mixamorigLeftLeg');
-      const leftFootIdx = getBoneIdx('mixamorigLeftFoot');
-
-      const rightUpLegIdx = getBoneIdx('mixamorigRightUpLeg');
-      const rightLegIdx = getBoneIdx('mixamorigRightLeg');
-      const rightFootIdx = getBoneIdx('mixamorigRightFoot');
-
-      const pos = rogueGeo.attributes.position;
-      const count = pos.count;
-      const skinIndices = new Float32Array(count * 4);
-      const skinWeights = new Float32Array(count * 4);
-
-      for (let i = 0; i < count; i++) {
-        const x = pos.getX(i);
-        const y = pos.getY(i);
-        const normY = y / targetHeight;
-
-        let b1 = hipsIdx, w1 = 1.0, b2 = hipsIdx, w2 = 0.0;
-
-        if (normY < 0.15) {
-          b1 = x < 0 ? leftFootIdx : rightFootIdx;
-        } else if (normY < 0.32) {
-          b1 = x < 0 ? leftLegIdx : rightLegIdx;
-        } else if (normY < 0.50) {
-          b1 = x < 0 ? leftUpLegIdx : rightUpLegIdx;
-          if (normY > 0.42) {
-            b2 = hipsIdx;
-            w2 = (normY - 0.42) / 0.08;
-            w1 = 1.0 - w2;
-          }
-        } else if (normY < 0.58) {
-          b1 = hipsIdx;
-          if (normY > 0.54) {
-            b2 = spineIdx;
-            w2 = (normY - 0.54) / 0.04;
-            w1 = 1.0 - w2;
-          }
-        } else if (normY < 0.76) {
-          if (Math.abs(x) > 0.18) {
-            if (normY < 0.62) {
-              b1 = x < 0 ? leftHandIdx : rightHandIdx;
-            } else if (normY < 0.70) {
-              b1 = x < 0 ? leftForeArmIdx : rightForeArmIdx;
-            } else {
-              b1 = x < 0 ? leftArmIdx : rightArmIdx;
-            }
-          } else {
-            b1 = normY < 0.68 ? spineIdx : spine2Idx;
-          }
-        } else if (normY < 0.82) {
-          b1 = neckIdx;
-          b2 = headIdx;
-          w2 = (normY - 0.76) / 0.06;
-          w1 = 1.0 - w2;
-        } else {
-          b1 = headIdx;
-        }
-
-        const idx = i * 4;
-        skinIndices[idx] = b1;
-        skinIndices[idx + 1] = b2;
-        skinIndices[idx + 2] = 0;
-        skinIndices[idx + 3] = 0;
-
-        skinWeights[idx] = w1;
-        skinWeights[idx + 1] = w2;
-        skinWeights[idx + 2] = 0;
-        skinWeights[idx + 3] = 0;
-      }
-
-      rogueGeo.setAttribute('skinIndex', new THREE.BufferAttribute(skinIndices, 4));
-      rogueGeo.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeights, 4));
-
-      const rogueMat = new THREE.MeshStandardMaterial({
-        map: rogueDiffuseTexture || null,
-        roughness: 0.55,
-        metalness: 0.20,
-        side: THREE.DoubleSide
-      });
-
-      const skinnedRogue = new THREE.SkinnedMesh(rogueGeo, rogueMat);
-      skinnedRogue.castShadow = true;
-      skinnedRogue.receiveShadow = true;
-      skinnedRogue.frustumCulled = false;
-      skinnedRogue.userData = { isRogueMesh: true };
-
-      const skeleton = new THREE.Skeleton(boneList);
-      skinnedRogue.bind(skeleton);
-      rigBase.add(skinnedRogue);
-
-      preloadedRogueModel = rigBase;
-      isRogueLoading = false;
-
-      // Upgrade localPlayerVisual if skin_rogue was waiting for model to load
-      if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_rogue' && !localPlayerVisual.userData.animMixer) {
-        upgradeMeshGroupToRogue(localPlayerVisual);
-      }
-
-      // Upgrade any remote players
-      Object.values(players3D).forEach(p => {
-        if (p && p.userData && p.userData.skinId === 'skin_rogue' && !p.userData.animMixer) {
-          upgradeMeshGroupToRogue(p);
-        }
-      });
-    };
-
-    tryBuildRogue();
+    });
   }, undefined, (err) => {
     console.error('[ROGUE] Failed to load Dark_Hooded_Rogue.fbx:', err);
     isRogueLoading = false;
@@ -3570,6 +3438,30 @@ const _scratchVec3_2 = new THREE.Vector3();
 const _scratchNearestHuman = new THREE.Vector3();
 const _scratchEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _scratchDummy = new THREE.Object3D();
+const _scratchCameraOffset = new THREE.Vector3();
+
+function syncActiveViewCamera() {
+  if (!activeViewCamera) return;
+  const mode = viewModes[currentViewIndex];
+  if (mode === 'fps') {
+    activeViewCamera.position.copy(camera.position);
+    activeViewCamera.quaternion.copy(camera.quaternion);
+  } else {
+    _scratchEuler.set(0, camera.rotation.y, 0, 'YXZ');
+    if (mode === 'tps_shoulder') {
+      _scratchCameraOffset.set(0.35, 0.55, 2.2);
+      activeViewCamera.rotation.set(camera.rotation.x, camera.rotation.y, 0, 'YXZ');
+    } else if (mode === 'tps_far') {
+      _scratchCameraOffset.set(0, 1.2, 3.6);
+      activeViewCamera.rotation.set(camera.rotation.x - 0.08, camera.rotation.y, 0, 'YXZ');
+    } else if (mode === 'top_down') {
+      _scratchCameraOffset.set(0, 12, 0);
+      activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
+    }
+    _scratchCameraOffset.applyEuler(_scratchEuler);
+    activeViewCamera.position.copy(camera.position).add(_scratchCameraOffset);
+  }
+}
 
 function generateMaze(keysCount = 8) {
   // Clear any existing walls
@@ -4865,8 +4757,12 @@ function toggleCameraView() {
   
   if (!activeViewCamera) {
     activeViewCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    activeViewCamera.rotation.order = 'YXZ';
     scene.add(activeViewCamera);
+  } else {
+    activeViewCamera.rotation.order = 'YXZ';
   }
+  syncActiveViewCamera();
   
   // Make sure we have a local player visual if we enter TPS, and recreate if equipped skin changed
   const pSkinId = myTeam === 'Ghost' ? 'skin_ghost' : (localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat');
@@ -8320,8 +8216,8 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   }
   const actions = humanGroup.userData.animActions;
 
-  // On-demand action instantiation if clip finished loading after mesh creation (Hazmat, Soldier & Rogue use FBX)
-  if (humanGroup.userData.skinId === 'skin_hazmat' || humanGroup.userData.skinId === 'skin_soldier' || humanGroup.userData.skinId === 'skin_rogue') {
+  // On-demand action instantiation if clip finished loading after mesh creation (Hazmat & Soldier use FBX)
+  if (humanGroup.userData.skinId === 'skin_hazmat' || humanGroup.userData.skinId === 'skin_soldier') {
     if (humanAnimClips[targetActionName] && !actions[targetActionName]) {
       actions[targetActionName] = mixer.clipAction(humanAnimClips[targetActionName]);
     }
@@ -8494,26 +8390,10 @@ function createHumanMeshGroup(skinId, username, isVip) {
     loadRogueAsset();
     if (preloadedRogueModel) {
       const clone = SkeletonUtils.clone(preloadedRogueModel);
+      clone.rotation.y = Math.PI; // Face forward direction
       group.add(clone);
-
-      const mixer = new THREE.AnimationMixer(clone);
-      const actions = {};
-
-      Object.keys(humanAnimClips).forEach(key => {
-        const clip = humanAnimClips[key];
-        if (clip) {
-          actions[key] = mixer.clipAction(clip);
-        }
-      });
-
-      if (actions.idle) {
-        actions.idle.play();
-      }
-
-      activeAnimationMixers.push(mixer);
-      group.userData.animMixer = mixer;
-      group.userData.animActions = actions;
-      group.userData.currentAction = 'idle';
+      group.userData.animMixer = null;
+      group.userData.walkCycle = 0;
     } else {
       const spriteMat = new THREE.SpriteMaterial({ 
         map: getLoadedTexture('/assets/human_sprite.png'), 
@@ -9282,29 +9162,7 @@ function animate() {
     localPlayerVisual.rotation.set(0, camera.rotation.y, 0);
   }
   
-  if (activeViewCamera) {
-    const mode = viewModes[currentViewIndex];
-    if (mode === 'fps') {
-      activeViewCamera.position.copy(camera.position);
-      activeViewCamera.quaternion.copy(camera.quaternion);
-    } else {
-      _scratchEuler.set(0, camera.rotation.y, 0, 'YXZ');
-      
-      if (mode === 'tps_shoulder') {
-        _scratchVec3_1.set(0.8, 0.5, 3);
-        activeViewCamera.rotation.set(camera.rotation.x, camera.rotation.y, 0, 'YXZ');
-      } else if (mode === 'tps_far') {
-        _scratchVec3_1.set(0, 1.5, 6);
-        activeViewCamera.rotation.set(camera.rotation.x - 0.1, camera.rotation.y, 0, 'YXZ');
-      } else if (mode === 'top_down') {
-        _scratchVec3_1.set(0, 15, 0);
-        activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
-      }
-      
-      _scratchVec3_1.applyEuler(_scratchEuler);
-      activeViewCamera.position.copy(camera.position).add(_scratchVec3_1);
-    }
-  }
+  syncActiveViewCamera();
 
   const time = performance.now();
   const rawDelta = (time - prevTime) / 1000;
@@ -9649,27 +9507,7 @@ function animate() {
       }
 
       // Synchronize 3rd-person activeViewCamera immediately to prevent 1-frame camera lag
-      if (activeViewCamera) {
-        const mode = viewModes[currentViewIndex];
-        if (mode === 'fps') {
-          activeViewCamera.position.copy(camera.position);
-          activeViewCamera.quaternion.copy(camera.quaternion);
-        } else {
-          _scratchEuler.set(0, camera.rotation.y, 0, 'YXZ');
-          if (mode === 'tps_close') {
-            _scratchVec3_1.set(0, 0.8, 3.2);
-            activeViewCamera.rotation.set(camera.rotation.x, camera.rotation.y, 0, 'YXZ');
-          } else if (mode === 'tps_far') {
-            _scratchVec3_1.set(0, 1.5, 6);
-            activeViewCamera.rotation.set(camera.rotation.x - 0.1, camera.rotation.y, 0, 'YXZ');
-          } else if (mode === 'top_down') {
-            _scratchVec3_1.set(0, 15, 0);
-            activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
-          }
-          _scratchVec3_1.applyEuler(_scratchEuler);
-          activeViewCamera.position.copy(camera.position).add(_scratchVec3_1);
-        }
-      }
+      syncActiveViewCamera();
 
       // Detect whether player is physically moving or blocked against an obstacle/wall
       const hasMoveInput = Boolean(moveForward || moveBackward || moveLeft || moveRight);
@@ -9715,15 +9553,19 @@ function animate() {
         setHumanLocomotionAction(localPlayerVisual, desired, 0.15, playbackRate);
         localPlayerVisual.rotation.z = 0;
       } else if (localPlayerVisual) {
-        // Procedural stride bob and sway for static 3D meshes (Standard Issue GLB)
+        // Procedural stride bob, sway, forward lean, and idle breathing for static 3D meshes (Standard Issue GLB & Dark Hooded Rogue)
         if (isEffectivelyMoving) {
           const moveSpeed = (isSprinting ? 12 : 7) * THREE.MathUtils.clamp(localPlayerGroundSpeed / 7.0, 0.5, 1.4);
           localPlayerVisual.userData.walkCycle = (localPlayerVisual.userData.walkCycle || 0) + delta * moveSpeed;
-          localPlayerVisual.position.y = (myTeam === 'Ghost' ? 0.35 : 0) + Math.abs(Math.sin(localPlayerVisual.userData.walkCycle)) * 0.06;
-          localPlayerVisual.rotation.z = Math.sin(localPlayerVisual.userData.walkCycle * 0.5) * 0.03;
+          const baseFootY = myTeam === 'Ghost' ? 0.35 : 0;
+          localPlayerVisual.position.y = baseFootY + Math.abs(Math.sin(localPlayerVisual.userData.walkCycle)) * 0.06;
+          const rollSway = Math.sin(localPlayerVisual.userData.walkCycle * 0.5) * 0.04;
+          const pitchLean = isSprinting ? -0.08 : -0.025;
+          localPlayerVisual.rotation.set(pitchLean, camera.rotation.y, rollSway, 'YXZ');
         } else {
-          localPlayerVisual.position.y = myTeam === 'Ghost' ? 0.35 : 0;
-          localPlayerVisual.rotation.z = 0;
+          const baseFootY = myTeam === 'Ghost' ? 0.35 : 0;
+          localPlayerVisual.position.y = baseFootY + Math.sin(time * 0.003) * 0.015;
+          localPlayerVisual.rotation.set(0, camera.rotation.y, 0, 'YXZ');
         }
       }
     }
