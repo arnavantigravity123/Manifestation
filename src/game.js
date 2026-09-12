@@ -47,20 +47,70 @@ function getSoldierLocomotionClip(animName) {
   return adapted;
 }
 
-// Load Hazmat Suit authentic diffuse texture (FBX uses standard UV flipY = false)
-textureLoader.load('/assets/hazmat_texture.png', (tex) => {
-  tex.flipY = false;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  hazmatSuitTexture = tex;
-  if (preloadedHumanFBX) {
-    preloadedHumanFBX.traverse((child) => {
-      if (child.isMesh && child.material) {
-        child.material.map = hazmatSuitTexture;
-        child.material.needsUpdate = true;
+// Apply dedicated authentic modular PBR materials to Hazmat Operative submeshes
+export function applyHazmatMaterials(root) {
+  if (!root) return;
+  root.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      child.frustumCulled = false;
+
+      const name = child.name || '';
+      if (name.includes('Cube001_Cube')) {
+        // Helmet Visor / Face Shield — Deep glossy tinted obsidian polycarbonate shield
+        child.material = new THREE.MeshStandardMaterial({
+          color: 0x07111e,
+          roughness: 0.05,
+          metalness: 0.90,
+          side: THREE.DoubleSide
+        });
+      } else if (name.includes('Cube003_Cube004')) {
+        // Chemical Combat Boots — Vulcanized matte black rubber
+        child.material = new THREE.MeshStandardMaterial({
+          color: 0x141416,
+          roughness: 0.75,
+          metalness: 0.10,
+          side: THREE.DoubleSide
+        });
+      } else if (name.includes('Cube002_Cube003')) {
+        // Heavy Utility Belt — Tactical reinforced dark charcoal
+        child.material = new THREE.MeshStandardMaterial({
+          color: 0x1f1f23,
+          roughness: 0.65,
+          metalness: 0.20,
+          side: THREE.DoubleSide
+        });
+      } else if (name.includes('Cube004_Cube005')) {
+        // Life Support Filter Canister / Oxygen Regulator — Industrial gunmetal stainless steel
+        child.material = new THREE.MeshStandardMaterial({
+          color: 0x475569,
+          roughness: 0.28,
+          metalness: 0.75,
+          side: THREE.DoubleSide
+        });
+      } else if (name === 'Plane') {
+        // Chest Hazard Badge / Buckle Plate — Tactical dark plate
+        child.material = new THREE.MeshStandardMaterial({
+          color: 0x18181b,
+          roughness: 0.40,
+          metalness: 0.35,
+          side: THREE.DoubleSide
+        });
+      } else {
+        // Suit Body, Hood, Arms, and Legs — Authentic vibrant biohazard safety yellow
+        child.material = new THREE.MeshStandardMaterial({
+          color: 0xf5b800,
+          roughness: 0.36,
+          metalness: 0.05,
+          side: THREE.DoubleSide
+        });
       }
-    });
-  }
-});
+
+      child.userData.normalMat = child.material;
+    }
+  });
+}
 
 let soldierDiffuseTexture = null;
 let soldierNormalTexture = null;
@@ -158,6 +208,7 @@ function upgradeMeshGroupToFBX(group) {
   toRemove.forEach(c => group.remove(c));
 
   const clone = SkeletonUtils.clone(preloadedHumanFBX);
+  applyHazmatMaterials(clone);
   group.add(clone);
 
   // Setup full 8-directional locomotion animation mixer & actions for Hazmat
@@ -323,12 +374,6 @@ export function loadHazmatFBXAssets() {
   if (preloadedHumanFBX || isHazmatLoading) return;
   isHazmatLoading = true;
 
-  if (!hazmatSuitTexture) {
-    hazmatSuitTexture = textureLoader.load('/assets/hazmat_texture.png');
-    hazmatSuitTexture.colorSpace = THREE.SRGBColorSpace;
-    hazmatSuitTexture.flipY = false;
-  }
-
   // Load authentic Hazmat Suit 3D Model with Breathing Idle animation
   fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
     if (fbx.animations && fbx.animations.length > 0) {
@@ -352,21 +397,8 @@ export function loadHazmatFBXAssets() {
     fbx.position.z = -scaledCenter.z;
     fbx.position.y = -scaledBox.min.y;
 
-    fbx.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        child.frustumCulled = false;
-        if (hazmatSuitTexture) {
-          child.material = new THREE.MeshStandardMaterial({
-            map: hazmatSuitTexture,
-            roughness: 0.40,
-            metalness: 0.10,
-            side: THREE.DoubleSide
-          });
-        }
-      }
-    });
+    // Apply authentic modular PBR materials across suit, visor, boots, belt, and life support
+    applyHazmatMaterials(fbx);
 
     preloadedHumanFBX = fbx;
     isHazmatLoading = false;
@@ -8467,6 +8499,7 @@ function createHumanMeshGroup(skinId, username, isVip) {
     loadHazmatFBXAssets();
     if (preloadedHumanFBX) {
       const clone = SkeletonUtils.clone(preloadedHumanFBX);
+      applyHazmatMaterials(clone);
       group.add(clone);
 
       // Setup full 8-directional locomotion animation mixer & actions
