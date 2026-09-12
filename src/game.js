@@ -2795,8 +2795,7 @@ function loadAuthenticDungeonGeometries() {
   bufGeoLoader.load(
     '/assets/dungeon/models/statue.json',
     (geo) => {
-      // In statue.json, front faces +Z. Rotate by Math.PI around Y to face -Z (North)
-      geo.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI));
+      // In statue.json, front (face & praying hands) faces -Z (North) natively.
       // Scale by 0.8095 to match authentic 2.27m dungeon scale
       geo.scale(0.8095, 0.8095, 0.8095);
       geo.computeBoundingBox();
@@ -2898,6 +2897,16 @@ function spawnDungeonProps(layout, blockSize) {
 
   const totalCols = (layout && layout[0] && layout[0].length) ? layout[0].length : (layout ? layout.length : 21);
   const totalRows = layout ? layout.length : 21;
+
+  const isPassable = (row, col) => {
+    if (!layout[row] || layout[row][col] === undefined) return false;
+    return layout[row][col] === 0 || layout[row][col] === 2;
+  };
+
+  const isStaticWall = (row, col) => {
+    if (!layout[row] || layout[row][col] === undefined) return false;
+    return layout[row][col] === 1;
+  };
 
   function addPropCollider(px, pz, radius) {
     const col = { x: px, z: pz, radius };
@@ -3018,6 +3027,7 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   // 3. Statues at ALL Dead-Ends (facing down corridor on stone plinths)
+  // 3. Statues at ALL Dead-Ends (facing down corridor on stone plinths with guaranteed solid back wall)
   if (layout && layout.length > 0) {
     const deadEnds = [];
     const dirs = [
@@ -3032,16 +3042,35 @@ function spawnDungeonProps(layout, blockSize) {
         if (layout[r][c] === 0) {
           let openCount = 0;
           let openDir = null;
+          let hasSlidingDoorNeighbor = false;
           for (const d of dirs) {
-            if (layout[r + d.dz] && layout[r + d.dz][c + d.dx] === 0) {
+            if (isPassable(r + d.dz, c + d.dx)) {
               openCount++;
               openDir = d;
             }
+            if (layout[r + d.dz] && layout[r + d.dz][c + d.dx] === 2) {
+              hasSlidingDoorNeighbor = true;
+            }
           }
-          if (openCount === 1 && openDir) {
-            const xPos = (c - layout[r].length / 2) * blockSize + blockSize / 2;
-            const zPos = (r - layout.length / 2) * blockSize + blockSize / 2;
-            deadEnds.push({ x: xPos, z: zPos, dir: openDir });
+
+          // A genuine dead-end alcove MUST:
+          // 1. Have exactly 1 open passage in openDir
+          // 2. Have NO sliding door neighbors (sliding doors lower/open into passages!)
+          // 3. Have a guaranteed solid static wall directly behind the statue (r - openDir.dz, c - openDir.dx)
+          // 4. Have guaranteed solid static side walls on the left and right
+          if (openCount === 1 && openDir && !hasSlidingDoorNeighbor) {
+            const backR = r - openDir.dz;
+            const backC = c - openDir.dx;
+            const leftR = r - openDir.dx;
+            const leftC = c + openDir.dz;
+            const rightR = r + openDir.dx;
+            const rightC = c - openDir.dz;
+
+            if (isStaticWall(backR, backC) && isStaticWall(leftR, leftC) && isStaticWall(rightR, rightC)) {
+              const xPos = (c - layout[r].length / 2) * blockSize + blockSize / 2;
+              const zPos = (r - layout.length / 2) * blockSize + blockSize / 2;
+              deadEnds.push({ x: xPos, z: zPos, dir: openDir });
+            }
           }
         }
       }
@@ -3058,7 +3087,7 @@ function spawnDungeonProps(layout, blockSize) {
       const sz = de.z + backOffsetZ;
       spawnStatueMesh(sx, sz, de.dir.rot);
 
-      // 2. Flank statue with two ornate columns on LEFT and RIGHT (exactly like reference photo media_1788720074161.png)
+      // 2. Flank statue with two ornate columns on LEFT and RIGHT (snug against back wall)
       const isNS = (de.dir.dz !== 0);
       const flankOffset = 1.85; // Distance to left and right from statue center
       const pillarDistFromCenter = 2.45; // Snug against back wall
@@ -3090,20 +3119,20 @@ function spawnDungeonProps(layout, blockSize) {
     for (let r = 2; r < layout.length - 2; r++) {
       for (let c = 2; c < layout[r].length - 2; c++) {
         if (layout[r][c] === 0) {
-          const northOpen = (layout[r - 1] && layout[r - 1][c] === 0);
-          const southOpen = (layout[r + 1] && layout[r + 1][c] === 0);
-          const westOpen  = (layout[r][c - 1] === 0);
-          const eastOpen  = (layout[r][c + 1] === 0);
+          const northOpen = isPassable(r - 1, c);
+          const southOpen = isPassable(r + 1, c);
+          const westOpen  = isPassable(r, c - 1);
+          const eastOpen  = isPassable(r, c + 1);
 
           const cx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
           const cz = (r - layout.length / 2) * blockSize + blockSize / 2;
 
-          // Straight North-South corridor
+          // Straight North-South corridor (must have solid static walls on West or East)
           if (northOpen && southOpen && !westOpen && !eastOpen) {
             // Deterministic distribution: every ~3-4 straight cells
             if ((r * 7 + c * 11) % 4 === 0) {
-              const westSolid = (layout[r][c - 1] === 1);
-              const eastSolid = (layout[r][c + 1] === 1);
+              const westSolid = isStaticWall(r, c - 1);
+              const eastSolid = isStaticWall(r, c + 1);
               if (westSolid && !isBlockedByBreaker(cx - wallOffset, cz) && !isNearStatue(cx - wallOffset, cz, 4.0)) {
                 // Statue against West wall facing East (+X) into corridor
                 if (spawnStatueMesh(cx - wallOffset, cz, -Math.PI / 2)) {
@@ -3122,12 +3151,12 @@ function spawnDungeonProps(layout, blockSize) {
             }
           }
 
-          // Straight East-West corridor
+          // Straight East-West corridor (must have solid static walls on North or South)
           if (westOpen && eastOpen && !northOpen && !southOpen) {
             // Deterministic distribution: every ~3-4 straight cells
             if ((r * 7 + c * 11) % 4 === 0) {
-              const northSolid = (layout[r - 1] && layout[r - 1][c] === 1);
-              const southSolid = (layout[r + 1] && layout[r + 1][c] === 1);
+              const northSolid = isStaticWall(r - 1, c);
+              const southSolid = isStaticWall(r + 1, c);
               if (northSolid && !isBlockedByBreaker(cx, cz - wallOffset) && !isNearStatue(cx, cz - wallOffset, 4.0)) {
                 // Statue against North wall facing South (+Z) into corridor
                 if (spawnStatueMesh(cx, cz - wallOffset, Math.PI)) {
@@ -3207,11 +3236,6 @@ function spawnDungeonProps(layout, blockSize) {
   // 6. Seamless Continuous Red Velvet Runner Carpets
   // Connects strictly along all open pathways (open floors & sliding doorways), never clipping into statues, dead-end pedestals, or wall columns!
   if (layout && layout.length > 0) {
-    const isPassable = (row, col) => {
-      if (!layout[row] || layout[row][col] === undefined) return false;
-      return layout[row][col] === 0 || layout[row][col] === 2;
-    };
-
     for (let r = 0; r < layout.length; r++) {
       for (let c = 0; c < layout[r].length; c++) {
         if (isPassable(r, c)) {
