@@ -2451,6 +2451,8 @@ let dungeonProps = [];
 let dungeonPropColliders = []; // Solid collision for pillars (radius 0.60m) and statues (radius 0.80m)
 let dungeonPropGrid = new Map(); // Spatial partition for O(1) collision queries
 let pendingDungeonPropsFn = null;
+let lastDungeonLayout = null;
+let lastDungeonBlockSize = 6.0;
 
 /* ── Helper: create PBR material from separate texture PNGs ── */
 function makeDungeonMat(colorPath, normalPath, roughPath, opts = {}) {
@@ -2615,11 +2617,8 @@ function createDungeonWallBox(width = 6.0, height = 3.5, depth = 6.0) {
   return geo;
 }
 
-/* ── Procedural fallback (always works, uses texture PNGs) ── */
-function createProceduralDungeonAssets() {
-  if (dungeonAssetsLoaded) return;
-  console.log('[DUNGEON] Creating procedural dungeon assets from texture PNGs...');
-
+/* ── Authentic Dungeon Asset Initializer & Loader ── */
+function initDungeonMaterialsAndRugs() {
   // Wall — stone wall segment with moldings
   dungeonWallGeo = createDungeonWallBox(0.4, 3.5, 6.0);
   dungeonWallGeo.translate(0, 1.75, 0);
@@ -2627,33 +2626,23 @@ function createProceduralDungeonAssets() {
     '/assets/dungeon/textures/WallColor.png',
     '/assets/dungeon/textures/WallNormal.png',
     '/assets/dungeon/textures/WallRoughness.png',
-    { roughness: 0.85, metalness: 0.05, color: 0x656565, emissive: 0x000000, emissiveIntensity: 0.0, doubleSide: true }
+    { roughness: 0.85, metalness: 0.05, color: 0xffffff, emissive: 0x000000, emissiveIntensity: 0.0, doubleSide: true }
   );
 
-  // Pillar — ornate column
-  dungeonPillarGeo = new THREE.CylinderGeometry(0.48, 0.56, 3.5, 8);
-  dungeonPillarGeo.translate(0, 1.75, 0);
+  // Pillar — ornate column material
   dungeonPillarMat = makeDungeonMat(
     '/assets/dungeon/textures/ColumnColor.png',
     '/assets/dungeon/textures/ColumnNormal.png',
     '/assets/dungeon/textures/ColumnRoughness.png',
-    { roughness: 0.8, metalness: 0.02, color: 0x787878, emissive: 0x000000, emissiveIntensity: 0.0 }
+    { roughness: 0.8, metalness: 0.02, color: 0xffffff, emissive: 0x111315, emissiveIntensity: 0.1 }
   );
 
-  // Statue — monk statue
-  const statueShape = new THREE.Shape();
-  statueShape.moveTo(-0.45, 0);   statueShape.lineTo(0.45, 0);
-  statueShape.lineTo(0.38, 2.8);  statueShape.lineTo(-0.38, 2.8);
-  statueShape.lineTo(-0.45, 0);
-  const extrudeSettings = { depth: 0.6, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.06, bevelSegments: 2 };
-  dungeonStatueGeo = new THREE.ExtrudeGeometry(statueShape, extrudeSettings);
-  dungeonStatueGeo.translate(0, 0, -0.3);
-  dungeonStatueGeo.computeVertexNormals();
+  // Statue — monk statue material
   dungeonStatueMat = makeDungeonMat(
     '/assets/dungeon/textures/StatueColor.png',
     '/assets/dungeon/textures/StatueNormal.png',
     '/assets/dungeon/textures/StatueRoughness.png',
-    { roughness: 0.8, metalness: 0.04, color: 0x888888, emissive: 0x000000, emissiveIntensity: 0.0 }
+    { roughness: 0.8, metalness: 0.04, color: 0xffffff, emissive: 0x121416, emissiveIntensity: 0.12 }
   );
 
   // Seamless continuous velvet runner rugs (Full 6m, Modular 2m Hub, 2m Extension Arms, Perimeter Borders, Dead-End 4.4m, Crest 6m)
@@ -2677,198 +2666,104 @@ function createProceduralDungeonAssets() {
   dungeonRugMat.polygonOffsetFactor = -1.0;
   dungeonRugMat.polygonOffsetUnits = -1.0;
   dungeonRugMat.needsUpdate = true;
-
-  dungeonAssetsLoaded = true;
-  console.log('[DUNGEON] Procedural dungeon assets created');
-  if (typeof pendingDungeonPropsFn === 'function') {
-    pendingDungeonPropsFn();
-    pendingDungeonPropsFn = null;
-  }
 }
 
-/* ── Main loader: extracts modular corridor sets from dungeon.glb ── */
-function loadDungeonPackAssets() {
-  if (dungeonAssetsLoaded) return;
+let statueLoaded = false;
+let pillarLoaded = false;
 
-  const fallbackTimer = setTimeout(() => {
-    if (!dungeonAssetsLoaded) {
-      console.warn('[DUNGEON] GLB load timed out after 6s — using procedural fallback');
-      createProceduralDungeonAssets();
-    }
-  }, 6000);
-
-  function processGLTF(gltf) {
-    clearTimeout(fallbackTimer);
-    if (dungeonAssetsLoaded) return;
-
-    console.log('[DUNGEON] dungeon.glb parsed — extracting modular corridor sets & individual pieces...');
-    gltf.scene.updateMatrixWorld(true);
-
-    function extractModule(name, pivotOffset = null) {
-      let sourceNode = null;
-      gltf.scene.traverse(c => {
-        if (!sourceNode && (c.name === name || c.name.replace(/[\._]/g, '') === name.replace(/[\._]/g, ''))) {
-          sourceNode = c;
-        }
-      });
-      if (!sourceNode) {
-        console.warn('[DUNGEON] Module node not found:', name);
-        return null;
-      }
-
-      const worldBox = new THREE.Box3().setFromObject(sourceNode);
-      const center = worldBox.getCenter(new THREE.Vector3());
-      if (pivotOffset) center.add(pivotOffset);
-
-      const group = new THREE.Group();
-      group.name = name;
-
-      sourceNode.traverse(child => {
-        if (child.isMesh) {
-          const meshClone = child.clone();
-          const relMatrix = new THREE.Matrix4();
-          relMatrix.makeTranslation(-center.x, -worldBox.min.y, -center.z);
-          relMatrix.multiply(child.matrixWorld);
-
-          meshClone.geometry = child.geometry.clone();
-          meshClone.geometry.applyMatrix4(relMatrix);
-          meshClone.geometry.computeBoundingBox();
-          meshClone.geometry.computeVertexNormals();
-          meshClone.matrixAutoUpdate = true;
-          meshClone.position.set(0, 0, 0);
-          meshClone.rotation.set(0, 0, 0);
-          meshClone.scale.set(1, 1, 1);
-          meshClone.castShadow = true;
-          meshClone.receiveShadow = true;
-
-          if (meshClone.material) {
-            meshClone.material = meshClone.material.clone();
-            const matName = (meshClone.material.name || child.name || '').toLowerCase();
-            if (matName.includes('alfombra') || matName.includes('rug')) {
-              meshClone.material.metalness = 0.0;
-              meshClone.material.roughness = 0.85;
-              meshClone.material.emissive = new THREE.Color(0x220505);
-              meshClone.material.emissiveIntensity = 0.15;
-              meshClone.material.side = THREE.DoubleSide;
-            } else if (matName.includes('statue') || matName.includes('estatua')) {
-              meshClone.material.metalness = 0.04;
-              meshClone.material.roughness = 0.8;
-              meshClone.material.color = new THREE.Color(0x888888);
-              meshClone.material.emissive = new THREE.Color(0x000000);
-              meshClone.material.emissiveIntensity = 0.0;
-            } else if (matName.includes('pillar') || matName.includes('column') || matName.includes('material.004') || matName.includes('material004')) {
-              meshClone.material.metalness = 0.02;
-              meshClone.material.roughness = 0.8;
-              meshClone.material.color = new THREE.Color(0x787878);
-              meshClone.material.emissive = new THREE.Color(0x000000);
-              meshClone.material.emissiveIntensity = 0.0;
-            } else {
-              meshClone.material.metalness = 0.02;
-              meshClone.material.roughness = 0.85;
-              meshClone.material.color = new THREE.Color(0x656565);
-              meshClone.material.emissive = new THREE.Color(0x000000);
-              meshClone.material.emissiveIntensity = 0.0;
-            }
-            meshClone.material.needsUpdate = true;
-          }
-
-          group.add(meshClone);
-        }
-      });
-
-      return group;
-    }
-
-    // Extract modules aligned with exact 12m arm radius connection portals
-    dungeonModules.cross = extractModule('CrossCorridor', new THREE.Vector3(0, 0, 0));
-    dungeonModules.t = extractModule('TCorridor', new THREE.Vector3(0, 0, -4.8));
-    dungeonModules.corner = extractModule('CornerCorridor', new THREE.Vector3(4.8, 0, 4.8));
-    dungeonModules.straight2 = extractModule('Corridor_X2', new THREE.Vector3(0, 0, 0));
-    dungeonModules.straight4 = extractModule('Corridor_X4', new THREE.Vector3(0, 0, 0));
-    dungeonModules.wall = extractModule('IndAssetWall', new THREE.Vector3(0, 0, 0));
-    dungeonModules.squareWall = extractModule('IndAssetSquareWall', new THREE.Vector3(0, 0, 0));
-    dungeonModules.pillar = extractModule('IndAssetPillar', new THREE.Vector3(0, 0, 0));
-    dungeonModules.statue = extractModule('IndAssetStatue', new THREE.Vector3(0, 0, 0));
-    dungeonModules.rug = extractModule('IndAssetRugs', new THREE.Vector3(0, 0, 0));
-
-    // Standalone references for props if needed
-    if (dungeonModules.wall && dungeonModules.wall.children[0]) {
-      // Remap IndAssetWall back-face UVs so both sides show stone brick masonry (zero black slots/holes)
-      const wallMesh = dungeonModules.wall.children[0];
-      const uvs = wallMesh.geometry.attributes.uv;
-      if (uvs && uvs.count >= 12) {
-        uvs.setXY(4, 0.996, 0.495);
-        uvs.setXY(5, 0.996, 0.985);
-        uvs.setXY(6, 0.005, 0.985);
-        uvs.setXY(7, 0.005, 0.495);
-        uvs.needsUpdate = true;
-      }
-      dungeonWallGeo = wallMesh.geometry;
-      dungeonWallMat = wallMesh.material;
-    }
-    if (dungeonModules.pillar && dungeonModules.pillar.children[0]) {
-      dungeonPillarGeo = dungeonModules.pillar.children[0].geometry;
-      dungeonPillarMat = dungeonModules.pillar.children[0].material;
-    }
-    if (dungeonModules.statue && dungeonModules.statue.children[0]) {
-      dungeonStatueGeo = dungeonModules.statue.children[0].geometry;
-      // In dungeon.glb, IndAssetStatue's intrinsic front faces +X.
-      // Rotate by -Math.PI / 2 around Y so its front faces away from the back wall
-      // and directly down the corridor towards the approaching player and red runner rug.
-      dungeonStatueGeo.applyMatrix4(new THREE.Matrix4().makeRotationY(-Math.PI / 2));
-      dungeonStatueGeo.computeBoundingBox();
-      dungeonStatueGeo.computeVertexNormals();
-      dungeonStatueMat = dungeonModules.statue.children[0].material;
-    }
-    // Seamless continuous runner rugs & modular junction pieces (100% solid opaque)
-    dungeonRugGeoFull = createSeamlessRugGeo(2.0, 6.0);
-    dungeonRugGeoArm = createArmRugGeo(2.0, 2.0);
-    dungeonRugGeoCenterPure = createPureRedTileGeo(2.0, 2.0);
-    dungeonRugGeoBorder = createBorderStripGeo(2.0, 0.20);
-    dungeonRugGeoDeadEnd = createSeamlessRugGeo(2.0, 4.4);
-    dungeonRugGeo = dungeonRugGeoFull;
-    dungeonRugCrestGeo = createCrestRugGeo(2.0, 6.0);
-    if (!dungeonRugMat) {
-      dungeonRugMat = makeDungeonMat(
-        '/assets/dungeon/textures/RugColor.png',
-        null,
-        '/assets/dungeon/textures/RugRoughness.png',
-        { roughness: 0.85, emissive: 0x330808, emissiveIntensity: 0.25, doubleSide: true }
-      );
-    }
-    dungeonRugMat.transparent = false; // Eliminates black edge blending and floor see-through
-    dungeonRugMat.depthWrite = true;
-    dungeonRugMat.depthTest = true;
-    dungeonRugMat.roughness = 0.85;
-    dungeonRugMat.side = THREE.DoubleSide; // Ensure visibility from all camera angles
-    dungeonRugMat.polygonOffset = true;
-    dungeonRugMat.polygonOffsetFactor = -1.0;
-    dungeonRugMat.polygonOffsetUnits = -1.0;
-    dungeonRugMat.needsUpdate = true;
-
-    console.log('[DUNGEON] ✓ All dungeon 3D kit assets extracted successfully!');
+function checkDungeonAssetsReady() {
+  if (statueLoaded && pillarLoaded) {
     dungeonAssetsLoaded = true;
-
+    console.log('[DUNGEON] ✓ Authentic 3D Monk Statue and Ornate Column ready!');
     if (typeof pendingDungeonPropsFn === 'function') {
       pendingDungeonPropsFn();
       pendingDungeonPropsFn = null;
+    } else if (dungeonProps.length > 0 && lastDungeonLayout) {
+      console.log('[DUNGEON] Refreshing dungeon props with authentic 3D models...');
+      spawnDungeonProps(lastDungeonLayout, lastDungeonBlockSize);
     }
   }
-
-  gltfLoader.load('/assets/dungeon/models/dungeon.glb', processGLTF, undefined, () => {
-    console.warn('[DUNGEON] dungeon.glb failed, trying fallback dungeon_kit.glb');
-    gltfLoader.load('/assets/dungeon/models/dungeon_kit.glb', processGLTF, undefined, () => {
-      clearTimeout(fallbackTimer);
-      createProceduralDungeonAssets();
-    });
-  });
 }
 
-// Preload Dungeon Assets immediately: initialize procedural kit synchronously for instant zero-lag frame 1 readiness
-createProceduralDungeonAssets();
-loadDungeonPackAssets();
+function loadAuthenticDungeonGeometries() {
+  const bufGeoLoader = new THREE.BufferGeometryLoader();
+
+  // Load authentic 3D monk statue (6,876 vertices)
+  bufGeoLoader.load(
+    '/assets/dungeon/models/statue.json',
+    (geo) => {
+      // In statue.json, front faces +Z. Rotate by Math.PI around Y to face -Z (North)
+      geo.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI));
+      // Scale by 0.8095 to match authentic 2.27m dungeon scale
+      geo.scale(0.8095, 0.8095, 0.8095);
+      geo.computeBoundingBox();
+      geo.computeVertexNormals();
+      dungeonStatueGeo = geo;
+      statueLoaded = true;
+      console.log('[DUNGEON] ✓ Authentic 3D Monk Statue loaded from statue.json (6,876 vertices)');
+      checkDungeonAssetsReady();
+    },
+    undefined,
+    (err) => {
+      console.warn('[DUNGEON] Failed to load statue.json:', err);
+    }
+  );
+
+  // Load authentic 3D ornate pillar (3,300 vertices)
+  bufGeoLoader.load(
+    '/assets/dungeon/models/pillar.json',
+    (geo) => {
+      // Scale by 0.463 to match authentic 2.08m dungeon column scale
+      geo.scale(0.463, 0.463, 0.463);
+      geo.computeBoundingBox();
+      geo.computeVertexNormals();
+      dungeonPillarGeo = geo;
+      pillarLoaded = true;
+      console.log('[DUNGEON] ✓ Authentic 3D Ornate Column loaded from pillar.json (3,300 vertices)');
+      checkDungeonAssetsReady();
+    },
+    undefined,
+    (err) => {
+      console.warn('[DUNGEON] Failed to load pillar.json:', err);
+    }
+  );
+
+  // Safety fallback after 3s only if network completely unavailable
+  setTimeout(() => {
+    if (!statueLoaded || !pillarLoaded) {
+      console.warn('[DUNGEON] Geometry loading timed out — creating emergency geometric fallbacks');
+      if (!dungeonPillarGeo) {
+        dungeonPillarGeo = new THREE.CylinderGeometry(0.48, 0.56, 3.5, 16);
+        dungeonPillarGeo.translate(0, 1.75, 0);
+        pillarLoaded = true;
+      }
+      if (!dungeonStatueGeo) {
+        dungeonStatueGeo = new THREE.BoxGeometry(0.9, 2.8, 0.9);
+        dungeonStatueGeo.translate(0, 1.4, 0);
+        statueLoaded = true;
+      }
+      checkDungeonAssetsReady();
+    }
+  }, 3000);
+}
+
+// Backward compatibility wrappers
+function createProceduralDungeonAssets() {
+  initDungeonMaterialsAndRugs();
+  loadAuthenticDungeonGeometries();
+}
+function loadDungeonPackAssets() {
+  // Model loading handled directly by loadAuthenticDungeonGeometries()
+}
+
+// Initialize dungeon materials and load authentic 3D models immediately
+initDungeonMaterialsAndRugs();
+loadAuthenticDungeonGeometries();
 
 function spawnDungeonProps(layout, blockSize) {
+  lastDungeonLayout = layout;
+  lastDungeonBlockSize = blockSize;
+
   // Clear any existing props
   dungeonProps.forEach(p => {
     scene.remove(p);
