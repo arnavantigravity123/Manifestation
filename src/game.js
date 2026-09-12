@@ -143,7 +143,7 @@ window.updateAllVipGlows = function(enabled) {
 function upgradeMeshGroupToFBX(group) {
   if (!group || !preloadedHumanFBX) return;
   if (group.userData && group.userData.skinId && group.userData.skinId !== 'skin_hazmat') {
-    return; // Preserve custom skins (Standard Issue .glb, Cyborg sprite, Shadow sprite)
+    return; // Preserve custom skins
   }
   // Remove non-username children
   const toRemove = [];
@@ -154,26 +154,11 @@ function upgradeMeshGroupToFBX(group) {
   toRemove.forEach(c => group.remove(c));
 
   const clone = SkeletonUtils.clone(preloadedHumanFBX);
+  clone.rotation.y = Math.PI; // Face forward direction
   group.add(clone);
 
-  const mixer = new THREE.AnimationMixer(clone);
-  const actions = {};
-
-  Object.keys(humanAnimClips).forEach(key => {
-    const clip = humanAnimClips[key];
-    if (clip) {
-      actions[key] = mixer.clipAction(clip);
-    }
-  });
-
-  if (actions.idle) {
-    actions.idle.play();
-  }
-
-  activeAnimationMixers.push(mixer);
-  group.userData.animMixer = mixer;
-  group.userData.animActions = actions;
-  group.userData.currentAction = 'idle';
+  group.userData.animMixer = null;
+  group.userData.walkCycle = 0;
 
   if (group.userData && group.userData.isVip && (window.isVipGlowEnabled ? window.isVipGlowEnabled() : true)) {
     applyVipGlow(group, true);
@@ -197,8 +182,8 @@ function registerAnimationToActiveMixers(animName, clip) {
   humanAnimClips[animName] = clip;
   clip.name = animName;
 
-  // Dynamically bind to localPlayerVisual if already spawned with skin_hazmat or skin_soldier
-  if (localPlayerVisual && localPlayerVisual.userData && (localPlayerVisual.userData.skinId === 'skin_hazmat' || localPlayerVisual.userData.skinId === 'skin_soldier') && localPlayerVisual.userData.animMixer) {
+  // Dynamically bind to localPlayerVisual if already spawned with skin_soldier
+  if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_soldier' && localPlayerVisual.userData.animMixer) {
     const mixer = localPlayerVisual.userData.animMixer;
     localPlayerVisual.userData.animActions = localPlayerVisual.userData.animActions || {};
     localPlayerVisual.userData.animActions[animName] = mixer.clipAction(clip);
@@ -210,7 +195,7 @@ function registerAnimationToActiveMixers(animName, clip) {
 
   // Dynamically bind to remote players in lobby
   Object.values(players3D).forEach(p => {
-    if (p && p.userData && (p.userData.skinId === 'skin_hazmat' || p.userData.skinId === 'skin_soldier') && p.userData.animMixer) {
+    if (p && p.userData && p.userData.skinId === 'skin_soldier' && p.userData.animMixer) {
       const mixer = p.userData.animMixer;
       p.userData.animActions = p.userData.animActions || {};
       p.userData.animActions[animName] = mixer.clipAction(clip);
@@ -315,26 +300,22 @@ export function loadHazmatFBXAssets() {
   isHazmatLoading = true;
 
   if (!hazmatSuitTexture) {
-    hazmatSuitTexture = textureLoader.load('/assets/hazmat_texture.png');
+    hazmatSuitTexture = textureLoader.load('/assets/hazmat_suit/textures/Hazmat_Suit_diffuse.png');
     hazmatSuitTexture.colorSpace = THREE.SRGBColorSpace;
     hazmatSuitTexture.flipY = false;
   }
 
-  // 1. Load Base Hazmat Suit 3D Model with Breathing Idle animation
-  fbxLoader.load('/assets/human_idle.fbx', (fbx) => {
-    if (fbx.animations && fbx.animations.length > 0) {
-      registerAnimationToActiveMixers('idle', fbx.animations[0]);
-    }
-
+  // Load authentic Hazmat Suit 3D Model with Biohazard symbol
+  fbxLoader.load('/assets/hazmat_suit/source/Hazmat_Suit.fbx', (fbx) => {
     // Compute true bounding box and scale to standard player height (1.85 meters)
     const initialBox = new THREE.Box3().setFromObject(fbx);
     const rawSize = initialBox.getSize(new THREE.Vector3());
-    const rawHeight = rawSize.y || 180;
+    const rawHeight = rawSize.y || 199.76;
     
     const targetHeight = 1.85;
     const scale = targetHeight / rawHeight;
     fbx.scale.set(scale, scale, scale);
-    fbx.rotation.y = Math.PI; // Face away from camera (match game forward direction)
+    fbx.rotation.y = Math.PI; // Face forward direction (showing biohazard symbol on back)
 
     // Recenter pivot so feet rest perfectly on the floor (y = 0) and centered on X/Z
     const scaledBox = new THREE.Box3().setFromObject(fbx);
@@ -348,14 +329,12 @@ export function loadHazmatFBXAssets() {
         child.castShadow = true;
         child.receiveShadow = true;
         child.frustumCulled = false;
-        if (hazmatSuitTexture) {
-          child.material = new THREE.MeshStandardMaterial({
-            map: hazmatSuitTexture,
-            roughness: 0.45,
-            metalness: 0.15,
-            side: THREE.DoubleSide
-          });
-        }
+        child.material = new THREE.MeshStandardMaterial({
+          map: hazmatSuitTexture || null,
+          roughness: 0.40,
+          metalness: 0.10,
+          side: THREE.DoubleSide
+        });
       }
     });
 
@@ -363,16 +342,19 @@ export function loadHazmatFBXAssets() {
     isHazmatLoading = false;
 
     // Upgrade localPlayerVisual if skin_hazmat was waiting for FBX
-    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_hazmat' && !localPlayerVisual.userData.animMixer) {
+    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_hazmat') {
       upgradeMeshGroupToFBX(localPlayerVisual);
     }
 
     // Upgrade all remote human players with skin_hazmat
     Object.values(players3D).forEach(p => {
-      if (p && p.userData && p.userData.skinId === 'skin_hazmat' && !p.userData.animMixer) {
+      if (p && p.userData && p.userData.skinId === 'skin_hazmat') {
         upgradeMeshGroupToFBX(p);
       }
     });
+  }, undefined, (err) => {
+    console.error('[HAZMAT] Failed to load Hazmat_Suit.fbx:', err);
+    isHazmatLoading = false;
   });
 
   loadLocomotionFBXClips();
@@ -3449,11 +3431,11 @@ function syncActiveViewCamera() {
   } else {
     _scratchEuler.set(0, camera.rotation.y, 0, 'YXZ');
     if (mode === 'tps_shoulder') {
-      _scratchCameraOffset.set(0.35, 0.55, 2.2);
-      activeViewCamera.rotation.set(camera.rotation.x, camera.rotation.y, 0, 'YXZ');
+      _scratchCameraOffset.set(0.55, 0.45, 2.3);
+      activeViewCamera.rotation.set(camera.rotation.x, camera.rotation.y + 0.035, 0, 'YXZ');
     } else if (mode === 'tps_far') {
-      _scratchCameraOffset.set(0, 1.2, 3.6);
-      activeViewCamera.rotation.set(camera.rotation.x - 0.08, camera.rotation.y, 0, 'YXZ');
+      _scratchCameraOffset.set(0, 1.4, 3.8);
+      activeViewCamera.rotation.set(camera.rotation.x - 0.12, camera.rotation.y, 0, 'YXZ');
     } else if (mode === 'top_down') {
       _scratchCameraOffset.set(0, 12, 0);
       activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
@@ -8309,31 +8291,10 @@ function createHumanMeshGroup(skinId, username, isVip) {
     loadHazmatFBXAssets();
     if (preloadedHumanFBX) {
       const clone = SkeletonUtils.clone(preloadedHumanFBX);
+      clone.rotation.y = Math.PI; // Face forward direction
       group.add(clone);
-
-      // Setup full 8-directional locomotion animation mixer & actions
-      const mixer = new THREE.AnimationMixer(clone);
-      const actions = {};
-
-      Object.keys(humanAnimClips).forEach(key => {
-        const clip = humanAnimClips[key];
-        if (clip) {
-          actions[key] = mixer.clipAction(clip);
-        }
-      });
-
-      if (actions.idle) {
-        actions.idle.play();
-      } else if (preloadedHumanFBX.animations && preloadedHumanFBX.animations.length > 0) {
-        const act = mixer.clipAction(preloadedHumanFBX.animations[0]);
-        act.play();
-        actions.idle = act;
-      }
-
-      activeAnimationMixers.push(mixer);
-      group.userData.animMixer = mixer;
-      group.userData.animActions = actions;
-      group.userData.currentAction = 'idle';
+      group.userData.animMixer = null;
+      group.userData.walkCycle = 0;
     } else {
       const spriteMat = new THREE.SpriteMaterial({ 
         map: getLoadedTexture('/assets/human_sprite.png'), 
