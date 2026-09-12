@@ -694,6 +694,7 @@ let mobileSprintLocked = false;
 let velocity = new THREE.Vector3();
 let direction = new THREE.Vector3();
 let prevTime = performance.now();
+let localPlayerGroundSpeed = 0;
 
 export function resetPlayerMovementState() {
   moveForward = false;
@@ -702,6 +703,7 @@ export function resetPlayerMovementState() {
   moveRight = false;
   isSprinting = false;
   mobileSprintLocked = false;
+  localPlayerGroundSpeed = 0;
   if (velocity) velocity.set(0, 0, 0);
   if (direction) direction.set(0, 0, 0);
 
@@ -8017,7 +8019,7 @@ function playGhostCaptureAnimation(callback) {
   }, 3000);
 }
 
-function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuration = 0.15) {
+function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuration = 0.15, playbackRate = 1.0) {
   if (!humanGroup || !humanGroup.userData) return;
   const mixer = humanGroup.userData.animMixer;
   if (!mixer) return;
@@ -8042,11 +8044,11 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   if (!targetAction) return;
 
   const currentAction = actions[currentActionName] || actions.idle;
-  const desiredTimeScale = 1.0;
+  const desiredTimeScale = (targetActionName === 'idle') ? 1.0 : playbackRate;
 
   // If already playing the EXACT same AnimationAction instance, do not reset or crossfade
   if (currentAction === targetAction) {
-    if (targetAction.getEffectiveTimeScale() !== desiredTimeScale) {
+    if (Math.abs(targetAction.getEffectiveTimeScale() - desiredTimeScale) > 0.02) {
       targetAction.setEffectiveTimeScale(desiredTimeScale);
     }
     if (!targetAction.isRunning()) {
@@ -9170,6 +9172,9 @@ function animate() {
       }
     }
 
+    const prevPlayerX = camera.position.x;
+    const prevPlayerZ = camera.position.z;
+
     if (window.isSpectating) {
       // 6-DOF Free-Cam Spectator Flight using preallocated scratch vectors
       camera.getWorldDirection(_scratchVec3_1);
@@ -9188,42 +9193,6 @@ function animate() {
       camera.translateX(-velocity.x * delta);
       camera.translateZ(velocity.z * delta);
       camera.position.y = 1.6; // Lock height if not spectating
-
-      // Update local player 3D Hazmat/Default locomotion animation state
-      if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
-        let desired = 'idle';
-        const absX = Math.abs(direction.x);
-        const absZ = Math.abs(direction.z);
-        if ((moveLeft || moveRight) && (absX >= absZ || (!moveForward && !moveBackward))) {
-          desired = moveLeft ? 'strafeLeft' : 'strafeRight';
-        } else if (moveForward) {
-          desired = isSprinting ? 'sprint' : 'walk';
-        } else if (moveBackward) {
-          desired = 'walkBack';
-        } else if (moveLeft) {
-          desired = 'strafeLeft';
-        } else if (moveRight) {
-          desired = 'strafeRight';
-        } else if (Math.hypot(velocity.x, velocity.z) > 0.4) {
-          desired = isSprinting ? 'sprint' : 'walk';
-        }
-        setHumanLocomotionAction(localPlayerVisual, desired, 0.15);
-        localPlayerVisual.rotation.z = 0;
-      } else if (localPlayerVisual) {
-        // Procedural stride bob and sway for static 3D meshes (Standard Issue GLB)
-        const isMoving = moveForward || moveBackward || moveLeft || moveRight || (Math.hypot(velocity.x, velocity.z) > 0.4);
-        if (isMoving) {
-          const moveSpeed = isSprinting ? 12 : 7;
-          localPlayerVisual.userData.walkCycle = (localPlayerVisual.userData.walkCycle || 0) + delta * moveSpeed;
-          // Natural walking bob
-          localPlayerVisual.position.y = (myTeam === 'Ghost' ? 0.35 : 0) + Math.abs(Math.sin(localPlayerVisual.userData.walkCycle)) * 0.06;
-          // Subtle lateral sway
-          localPlayerVisual.rotation.z = Math.sin(localPlayerVisual.userData.walkCycle * 0.5) * 0.03;
-        } else {
-          localPlayerVisual.position.y = myTeam === 'Ghost' ? 0.35 : 0;
-          localPlayerVisual.rotation.z = 0;
-        }
-      }
     }
 
     // High-Performance O(1) Spatial Grid AABB Wall Collision Checking
@@ -9320,6 +9289,108 @@ function animate() {
         const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
         camera.position.set(sx, 1.6, sz); // Safety recovery to center spawn
         velocity.set(0, 0, 0);
+      }
+
+      // 4. Post-Collision Motion Analysis & Dynamic Animation State Selection
+      const actualDispX = camera.position.x - prevPlayerX;
+      const actualDispZ = camera.position.z - prevPlayerZ;
+      const actualDistMoved = Math.hypot(actualDispX, actualDispZ);
+      const instantaneousSpeed = actualDistMoved / Math.max(0.0001, delta);
+
+      // Smooth ground speed to eliminate single-frame collision jitter (responsive 15 Hz lerp)
+      localPlayerGroundSpeed = THREE.MathUtils.lerp(
+        localPlayerGroundSpeed,
+        instantaneousSpeed,
+        Math.min(1.0, delta * 15.0)
+      );
+
+      // Reconcile and synchronize localPlayerVisual position with resolved camera position
+      if (localPlayerVisual) {
+        localPlayerVisual.position.x = camera.position.x;
+        localPlayerVisual.position.z = camera.position.z;
+        if (localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
+          localPlayerVisual.position.y = myTeam === 'Ghost' ? 0.35 : 0;
+        }
+        localPlayerVisual.rotation.set(0, camera.rotation.y, 0);
+      }
+
+      // Synchronize 3rd-person activeViewCamera immediately to prevent 1-frame camera lag
+      if (activeViewCamera) {
+        const mode = viewModes[currentViewIndex];
+        if (mode === 'fps') {
+          activeViewCamera.position.copy(camera.position);
+          activeViewCamera.quaternion.copy(camera.quaternion);
+        } else {
+          _scratchEuler.set(0, camera.rotation.y, 0, 'YXZ');
+          if (mode === 'tps_close') {
+            _scratchVec3_1.set(0, 0.8, 3.2);
+            activeViewCamera.rotation.set(camera.rotation.x, camera.rotation.y, 0, 'YXZ');
+          } else if (mode === 'tps_far') {
+            _scratchVec3_1.set(0, 1.5, 6);
+            activeViewCamera.rotation.set(camera.rotation.x - 0.1, camera.rotation.y, 0, 'YXZ');
+          } else if (mode === 'top_down') {
+            _scratchVec3_1.set(0, 15, 0);
+            activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
+          }
+          _scratchVec3_1.applyEuler(_scratchEuler);
+          activeViewCamera.position.copy(camera.position).add(_scratchVec3_1);
+        }
+      }
+
+      // Detect whether player is physically moving or blocked against an obstacle/wall
+      const hasMoveInput = Boolean(moveForward || moveBackward || moveLeft || moveRight);
+      const isBlockedByWall = hasMoveInput && (localPlayerGroundSpeed < 0.45 && instantaneousSpeed < 0.35);
+
+      if (isBlockedByWall) {
+        // Dampen residual physics velocity while running directly into obstacles to prevent vibration
+        velocity.x *= 0.1;
+        velocity.z *= 0.1;
+      }
+
+      const isEffectivelyMoving = hasMoveInput && !isBlockedByWall && (localPlayerGroundSpeed >= 0.35);
+
+      // Update local player 3D locomotion animation state
+      if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
+        let desired = 'idle';
+        let playbackRate = 1.0;
+
+        if (isEffectivelyMoving) {
+          const absX = Math.abs(direction.x);
+          const absZ = Math.abs(direction.z);
+          if ((moveLeft || moveRight) && (absX >= absZ || (!moveForward && !moveBackward))) {
+            desired = moveLeft ? 'strafeLeft' : 'strafeRight';
+          } else if (moveForward) {
+            desired = (isSprinting && localPlayerGroundSpeed > 7.0) ? 'sprint' : 'walk';
+          } else if (moveBackward) {
+            desired = 'walkBack';
+          } else if (moveLeft) {
+            desired = 'strafeLeft';
+          } else if (moveRight) {
+            desired = 'strafeRight';
+          } else {
+            desired = 'walk';
+          }
+
+          // Dynamically scale animation speed to match actual ground speed (Base reference: 7.0 m/s)
+          playbackRate = THREE.MathUtils.clamp(localPlayerGroundSpeed / 7.0, 0.45, 1.55);
+        } else {
+          desired = 'idle';
+          playbackRate = 1.0;
+        }
+
+        setHumanLocomotionAction(localPlayerVisual, desired, 0.15, playbackRate);
+        localPlayerVisual.rotation.z = 0;
+      } else if (localPlayerVisual) {
+        // Procedural stride bob and sway for static 3D meshes (Standard Issue GLB)
+        if (isEffectivelyMoving) {
+          const moveSpeed = (isSprinting ? 12 : 7) * THREE.MathUtils.clamp(localPlayerGroundSpeed / 7.0, 0.5, 1.4);
+          localPlayerVisual.userData.walkCycle = (localPlayerVisual.userData.walkCycle || 0) + delta * moveSpeed;
+          localPlayerVisual.position.y = (myTeam === 'Ghost' ? 0.35 : 0) + Math.abs(Math.sin(localPlayerVisual.userData.walkCycle)) * 0.06;
+          localPlayerVisual.rotation.z = Math.sin(localPlayerVisual.userData.walkCycle * 0.5) * 0.03;
+        } else {
+          localPlayerVisual.position.y = myTeam === 'Ghost' ? 0.35 : 0;
+          localPlayerVisual.rotation.z = 0;
+        }
       }
     }
   } else {
@@ -9992,7 +10063,8 @@ function animate() {
         } else if (speed > 0.05) {
           targetAnim = 'walk';
         }
-        setHumanLocomotionAction(p, targetAnim, 0.18);
+        const remotePlayback = THREE.MathUtils.clamp(speed / 7.0, 0.45, 1.55);
+        setHumanLocomotionAction(p, targetAnim, 0.18, remotePlayback);
       } else {
         if (distMoved > 0.01) {
           p.userData.walkCycle += distMoved * 5.5;
