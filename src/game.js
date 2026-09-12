@@ -694,6 +694,25 @@ let mobileSprintLocked = false;
 let velocity = new THREE.Vector3();
 let direction = new THREE.Vector3();
 let prevTime = performance.now();
+
+export function resetPlayerMovementState() {
+  moveForward = false;
+  moveBackward = false;
+  moveLeft = false;
+  moveRight = false;
+  isSprinting = false;
+  mobileSprintLocked = false;
+  if (velocity) velocity.set(0, 0, 0);
+  if (direction) direction.set(0, 0, 0);
+
+  if (typeof localPlayerVisual !== 'undefined' && localPlayerVisual) {
+    if (localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
+      setHumanLocomotionAction(localPlayerVisual, 'idle', 0.05);
+    }
+    localPlayerVisual.rotation.z = 0;
+  }
+}
+window.resetPlayerMovementState = resetPlayerMovementState;
 export function detectMobileDevice() {
   const isNative = Boolean(
     window.Capacitor &&
@@ -1254,6 +1273,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   }
 
   const handleEnterGame = (e) => {
+    resetPlayerMovementState();
     if (window.isEscaping) {
       ptrOverlay.style.display = 'none';
       return;
@@ -1366,6 +1386,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     if (document.pointerLockElement) {
       ptrOverlay.style.display = 'none';
     } else {
+      resetPlayerMovementState();
       if (window.isEscaping) {
         ptrOverlay.style.display = 'none';
         return;
@@ -1397,6 +1418,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
         ptrOverlay.style.display = 'flex';
       }
     }
+  });
+
+  window.addEventListener('blur', () => {
+    resetPlayerMovementState();
   });
 
   document.addEventListener('pointerlockerror', () => {
@@ -4712,6 +4737,7 @@ function setupControls() {
         }
         break;
       case 'Escape':
+        resetPlayerMovementState();
         if (isMinimapExpanded) {
           const mapWrap = document.getElementById('minimap-wrapper');
           const mapCtrl = document.getElementById('minimap-expanded-controls');
@@ -9019,6 +9045,7 @@ function animate() {
   const isSoloPaused = !isMultiplayer && isPauseMenuOpen && !isInteractiveOverlay && !window.isSpectating && window.gameReady;
 
   if (isSoloPaused) {
+    resetPlayerMovementState();
     const canvasContainer = document.getElementById('canvas-container');
     if (canvasContainer) canvasContainer.style.filter = 'none';
     document.body.style.filter = 'none';
@@ -9295,6 +9322,9 @@ function animate() {
         velocity.set(0, 0, 0);
       }
     }
+  } else {
+    // When controls are inactive (paused, cursor released, overlay open):
+    resetPlayerMovementState();
   }
 
   if (window.gameReady) {
