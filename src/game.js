@@ -2703,7 +2703,7 @@ function createProceduralDungeonAssets() {
     '/assets/dungeon/textures/WallColor.png',
     '/assets/dungeon/textures/WallNormal.png',
     '/assets/dungeon/textures/WallRoughness.png',
-    { roughness: 0.85, metalness: 0.05, color: 0x656565, emissive: 0x000000, emissiveIntensity: 0.0 }
+    { roughness: 0.85, metalness: 0.05, color: 0x656565, emissive: 0x000000, emissiveIntensity: 0.0, doubleSide: true }
   );
 
   // Pillar — ornate column
@@ -3422,26 +3422,205 @@ const _scratchEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _scratchDummy = new THREE.Object3D();
 const _scratchCameraOffset = new THREE.Vector3();
 
+// Ray-AABB intersection test for third-person camera spring arm
+function rayAABBIntersect(rx, ry, rz, dx, dy, dz, minX, minY, minZ, maxX, maxY, maxZ) {
+  let tMin = -Infinity;
+  let tMax = Infinity;
+
+  if (Math.abs(dx) > 1e-6) {
+    let t1 = (minX - rx) / dx;
+    let t2 = (maxX - rx) / dx;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+    if (tMin > tMax) return null;
+  } else if (rx < minX || rx > maxX) {
+    return null;
+  }
+
+  if (Math.abs(dy) > 1e-6) {
+    let t1 = (minY - ry) / dy;
+    let t2 = (maxY - ry) / dy;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+    if (tMin > tMax) return null;
+  } else if (ry < minY || ry > maxY) {
+    return null;
+  }
+
+  if (Math.abs(dz) > 1e-6) {
+    let t1 = (minZ - rz) / dz;
+    let t2 = (maxZ - rz) / dz;
+    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+    if (tMin > tMax) return null;
+  } else if (rz < minZ || rz > maxZ) {
+    return null;
+  }
+
+  if (tMin < 0) return tMax > 0 ? 0 : null;
+  return tMin;
+}
+
 function syncActiveViewCamera() {
   if (!activeViewCamera) return;
   const mode = viewModes[currentViewIndex];
   if (mode === 'fps') {
     activeViewCamera.position.copy(camera.position);
     activeViewCamera.quaternion.copy(camera.quaternion);
-  } else {
-    _scratchEuler.set(0, camera.rotation.y, 0, 'YXZ');
-    if (mode === 'tps_shoulder') {
-      _scratchCameraOffset.set(0.55, 0.45, 2.3);
-      activeViewCamera.rotation.set(camera.rotation.x, camera.rotation.y + 0.035, 0, 'YXZ');
-    } else if (mode === 'tps_far') {
-      _scratchCameraOffset.set(0, 1.4, 3.8);
-      activeViewCamera.rotation.set(camera.rotation.x - 0.12, camera.rotation.y, 0, 'YXZ');
-    } else if (mode === 'top_down') {
-      _scratchCameraOffset.set(0, 12, 0);
-      activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
+    if (localPlayerVisual) localPlayerVisual.visible = false;
+    return;
+  }
+
+  const isDungeon = Boolean(window.isDungeonKit);
+  const ceilingY = (ceilingMesh && typeof ceilingMesh.position.y === 'number') ? ceilingMesh.position.y : (isDungeon ? 3.5 : 4.5);
+  const wallHeight = isDungeon ? 3.5 : 4.5;
+  const R_cam = 0.35; // Safe padding radius around camera to prevent near-plane wall clipping
+
+  if (mode === 'top_down') {
+    // Keep camera safely underneath ceiling so it never clips into the void or sees through the roof
+    const safeTopDownY = Math.min(3.15, ceilingY - 0.35);
+    activeViewCamera.position.set(camera.position.x, safeTopDownY, camera.position.z);
+    activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
+    if (localPlayerVisual) localPlayerVisual.visible = true;
+    return;
+  }
+
+  // TPS Modes (tps_shoulder, tps_far)
+  _scratchEuler.set(0, camera.rotation.y, 0, 'YXZ');
+  if (mode === 'tps_shoulder') {
+    _scratchCameraOffset.set(0.55, 0.45, 2.3);
+    activeViewCamera.rotation.set(camera.rotation.x, camera.rotation.y + 0.035, 0, 'YXZ');
+  } else if (mode === 'tps_far') {
+    _scratchCameraOffset.set(0, 1.4, 3.8);
+    activeViewCamera.rotation.set(camera.rotation.x - 0.12, camera.rotation.y, 0, 'YXZ');
+  }
+  _scratchCameraOffset.applyEuler(_scratchEuler);
+
+  // Ray origin (player eye level) and target position
+  const px = camera.position.x;
+  const py = camera.position.y;
+  const pz = camera.position.z;
+
+  const targetDist = _scratchCameraOffset.length();
+  if (targetDist < 0.001) {
+    activeViewCamera.position.copy(camera.position);
+    return;
+  }
+
+  const uX = _scratchCameraOffset.x / targetDist;
+  const uY = _scratchCameraOffset.y / targetDist;
+  const uZ = _scratchCameraOffset.z / targetDist;
+
+  let safeDist = targetDist;
+
+  // 1. Ceiling collision clamp
+  if (py + uY * safeDist > ceilingY - R_cam) {
+    if (uY > 0.001) {
+      const tCeil = (ceilingY - R_cam - py) / uY;
+      safeDist = Math.min(safeDist, Math.max(0.2, tCeil));
     }
-    _scratchCameraOffset.applyEuler(_scratchEuler);
-    activeViewCamera.position.copy(camera.position).add(_scratchCameraOffset);
+  }
+
+  // 2. Floor collision clamp
+  if (py + uY * safeDist < R_cam) {
+    if (uY < -0.001) {
+      const tFloor = (R_cam - py) / uY;
+      safeDist = Math.min(safeDist, Math.max(0.2, tFloor));
+    }
+  }
+
+  // 3. Static Maze Walls Occlusion Check
+  const blockSize = mazeBlockSize || 4.5;
+  const wallHalfSize = blockSize / 2;
+  const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : mazeSizeGlobal;
+  const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
+
+  const targetX = px + uX * safeDist;
+  const targetZ = pz + uZ * safeDist;
+
+  const minC = Math.max(0, Math.floor(Math.min(px, targetX) / blockSize + totalCols / 2) - 1);
+  const maxC = Math.min(totalCols - 1, Math.floor(Math.max(px, targetX) / blockSize + totalCols / 2) + 1);
+  const minR = Math.max(0, Math.floor(Math.min(pz, targetZ) / blockSize + totalRows / 2) - 1);
+  const maxR = Math.min(totalRows - 1, Math.floor(Math.max(pz, targetZ) / blockSize + totalRows / 2) + 1);
+
+  for (let r = minR; r <= maxR; r++) {
+    for (let c = minC; c <= maxC; c++) {
+      if (mazeLayout && mazeLayout[r] && mazeLayout[r][c] === 1) {
+        const wx = (c - totalCols / 2) * blockSize + wallHalfSize;
+        const wz = (r - totalRows / 2) * blockSize + wallHalfSize;
+
+        const hitT = rayAABBIntersect(
+          px, py, pz,
+          uX, uY, uZ,
+          wx - wallHalfSize - R_cam, 0, wz - wallHalfSize - R_cam,
+          wx + wallHalfSize + R_cam, wallHeight + 0.5, wz + wallHalfSize + R_cam
+        );
+
+        if (hitT !== null && hitT < safeDist) {
+          safeDist = Math.max(0.2, hitT - 0.05);
+        }
+      }
+    }
+  }
+
+  // 4. Dynamic & Sliding Walls Occlusion Check
+  if (walls && walls.length > 0) {
+    for (let i = 0; i < walls.length; i++) {
+      const wall = walls[i];
+      if (!wall || wall.position.y < -0.5) continue; // Lowered sliding doors are clear
+
+      const wx = wall.position.x;
+      const wz = wall.position.z;
+      const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : wallHalfSize;
+      const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : wallHalfSize;
+
+      const hitT = rayAABBIntersect(
+        px, py, pz,
+        uX, uY, uZ,
+        wx - hx - R_cam, 0, wz - hz - R_cam,
+        wx + hx + R_cam, wallHeight + 0.5, wz + hz + R_cam
+      );
+
+      if (hitT !== null && hitT < safeDist) {
+        safeDist = Math.max(0.2, hitT - 0.05);
+      }
+    }
+  }
+
+  // 5. Solid Dungeon Props (Pillars & Statues) Occlusion Check
+  if (dungeonPropColliders && dungeonPropColliders.length > 0) {
+    for (let i = 0; i < dungeonPropColliders.length; i++) {
+      const prop = dungeonPropColliders[i];
+      if (!prop) continue;
+      const effRadius = prop.radius + R_cam;
+      const dx = px - prop.x;
+      const dz = pz - prop.z;
+      const a = uX * uX + uZ * uZ;
+      const b = 2 * (dx * uX + dz * uZ);
+      const c = dx * dx + dz * dz - effRadius * effRadius;
+      const disc = b * b - 4 * a * c;
+      if (disc >= 0 && a > 1e-6) {
+        const t1 = (-b - Math.sqrt(disc)) / (2 * a);
+        if (t1 > 0 && t1 < safeDist) {
+          safeDist = Math.max(0.2, t1 - 0.05);
+        }
+      }
+    }
+  }
+
+  // Apply spring arm safe distance
+  activeViewCamera.position.set(
+    px + uX * safeDist,
+    py + uY * safeDist,
+    pz + uZ * safeDist
+  );
+
+  // If pushed tightly against a wall, hide player mesh to prevent near-plane head clipping
+  if (localPlayerVisual) {
+    localPlayerVisual.visible = (safeDist >= 0.45);
   }
 }
 
@@ -3586,7 +3765,8 @@ function generateMaze(keysCount = 8) {
       map: ceilTex,
       color: 0x080a0f, 
       roughness: 1.0,
-      metalness: 0.0
+      metalness: 0.0,
+      side: THREE.DoubleSide
     });
   } else {
     const ceilTex = getLoadedTexture('/assets/ceiling_texture.png', { x: ceilRep, y: ceilRep });
@@ -3594,7 +3774,8 @@ function generateMaze(keysCount = 8) {
       map: ceilTex,
       color: 0x060a12, 
       roughness: 0.95,
-      metalness: 0.0
+      metalness: 0.0,
+      side: THREE.DoubleSide
     });
   }
   
@@ -3781,7 +3962,8 @@ function generateMaze(keysCount = 8) {
       metalness: 0.05,
       color: 0x656565,
       emissive: 0x000000,
-      emissiveIntensity: 0.0
+      emissiveIntensity: 0.0,
+      side: THREE.DoubleSide
     });
     
     // Clone textures for sliding wall so they can have independent settings
@@ -3792,7 +3974,8 @@ function generateMaze(keysCount = 8) {
       roughnessMap: slidingRoughness,
       roughness: 0.85,
       metalness: 0.05,
-      color: 0x5a5a5a
+      color: 0x5a5a5a,
+      side: THREE.DoubleSide
     });
   } else {
     const generatedTex = getLoadedTexture('/assets/wall_texture.png', { x: 1, y: 1 });
@@ -3804,7 +3987,8 @@ function generateMaze(keysCount = 8) {
       bumpScale: 0.25,
       color: 0x64748b, // Clean balanced stone tone for visibility
       roughness: 0.85,
-      metalness: 0.05
+      metalness: 0.05,
+      side: THREE.DoubleSide
     });
     
     slidingWallMat = new THREE.MeshStandardMaterial({
@@ -3813,7 +3997,8 @@ function generateMaze(keysCount = 8) {
       bumpScale: 0.25,
       color: 0x475569,
       roughness: 0.85,
-      metalness: 0.05
+      metalness: 0.05,
+      side: THREE.DoubleSide
     });
   }
 
