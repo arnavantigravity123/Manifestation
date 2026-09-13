@@ -42,8 +42,8 @@ function getSoldierLocomotionClip(animName) {
   return humanAnimClips[animName] || null;
 }
 
-// Authentic Hazmat PBR Textures (4K Albedo with Biohazard logo, gloves, boots + 2K Normal + 4K Roughness + Metallic + AO)
-const HAZMAT_TEX_VER = 'v=2.2';
+// Optimized Hazmat PBR Textures (2K Albedo + 1K Normal + 1K Roughness + Metallic + AO, saving 93% GPU VRAM bandwidth)
+const HAZMAT_TEX_VER = 'v=2.3';
 let hazmatAlbedoTexture = null;
 let hazmatNormalTexture = null;
 let hazmatRoughnessTexture = null;
@@ -3445,6 +3445,7 @@ const _scratchNearestHuman = new THREE.Vector3();
 const _scratchEuler = new THREE.Euler(0, 0, 0, 'YXZ');
 const _scratchDummy = new THREE.Object3D();
 const _scratchCameraOffset = new THREE.Vector3();
+let _tpsCurrentDist = null;
 
 // Ray-AABB intersection test for third-person camera spring arm
 function rayAABBIntersect(rx, ry, rz, dx, dy, dz, minX, minY, minZ, maxX, maxY, maxZ) {
@@ -3488,13 +3489,14 @@ function rayAABBIntersect(rx, ry, rz, dx, dy, dz, minX, minY, minZ, maxX, maxY, 
   return tMin;
 }
 
-function syncActiveViewCamera() {
+function syncActiveViewCamera(delta = 0.016) {
   if (!activeViewCamera) return;
   const mode = viewModes[currentViewIndex];
   if (mode === 'fps') {
     activeViewCamera.position.copy(camera.position);
     activeViewCamera.quaternion.copy(camera.quaternion);
     if (localPlayerVisual) localPlayerVisual.visible = false;
+    _tpsCurrentDist = null;
     return;
   }
 
@@ -3509,6 +3511,7 @@ function syncActiveViewCamera() {
     activeViewCamera.position.set(camera.position.x, safeTopDownY, camera.position.z);
     activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
     if (localPlayerVisual) localPlayerVisual.visible = true;
+    _tpsCurrentDist = null;
     return;
   }
 
@@ -3590,14 +3593,18 @@ function syncActiveViewCamera() {
     }
   }
 
-  // 4. Dynamic & Sliding Walls Occlusion Check
+  // 4. Dynamic & Sliding Walls Occlusion Check (with rapid distance-squared culling)
   if (walls && walls.length > 0) {
+    const maxWallDistSq = (safeDist + wallHalfSize + R_cam) * (safeDist + wallHalfSize + R_cam);
     for (let i = 0; i < walls.length; i++) {
       const wall = walls[i];
       if (!wall || wall.position.y < -0.5) continue; // Lowered sliding doors are clear
 
       const wx = wall.position.x;
       const wz = wall.position.z;
+      const dSq = (wx - px) * (wx - px) + (wz - pz) * (wz - pz);
+      if (dSq > maxWallDistSq) continue;
+
       const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : wallHalfSize;
       const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : wallHalfSize;
 
@@ -3614,18 +3621,46 @@ function syncActiveViewCamera() {
     }
   }
 
-  // 5. Solid Dungeon Props (Pillars & Statues) Occlusion Check
-  if (dungeonPropColliders && dungeonPropColliders.length > 0) {
+  // 5. Solid Dungeon Props (Pillars & Statues) Occlusion Check via O(1) Spatial Grid
+  if (dungeonPropGrid && dungeonPropGrid.size > 0) {
+    for (let r = minR; r <= maxR; r++) {
+      for (let c = minC; c <= maxC; c++) {
+        const bucket = dungeonPropGrid.get((r * 1000) + c);
+        if (!bucket || bucket.length === 0) continue;
+        for (let i = 0; i < bucket.length; i++) {
+          const prop = bucket[i];
+          const effRadius = prop.radius + R_cam;
+          const dx = px - prop.x;
+          const dz = pz - prop.z;
+          const dSq = dx * dx + dz * dz;
+          if (dSq > (safeDist + effRadius) * (safeDist + effRadius)) continue;
+          const a = uX * uX + uZ * uZ;
+          const b = 2 * (dx * uX + dz * uZ);
+          const cCoeff = dSq - effRadius * effRadius;
+          const disc = b * b - 4 * a * cCoeff;
+          if (disc >= 0 && a > 1e-6) {
+            const t1 = (-b - Math.sqrt(disc)) / (2 * a);
+            if (t1 > 0 && t1 < safeDist) {
+              safeDist = Math.max(0.2, t1 - 0.05);
+            }
+          }
+        }
+      }
+    }
+  } else if (dungeonPropColliders && dungeonPropColliders.length > 0) {
+    const maxPropDistSq = (safeDist + 2.5 + R_cam) * (safeDist + 2.5 + R_cam);
     for (let i = 0; i < dungeonPropColliders.length; i++) {
       const prop = dungeonPropColliders[i];
       if (!prop) continue;
-      const effRadius = prop.radius + R_cam;
       const dx = px - prop.x;
       const dz = pz - prop.z;
+      const dSq = dx * dx + dz * dz;
+      if (dSq > maxPropDistSq) continue;
+      const effRadius = prop.radius + R_cam;
       const a = uX * uX + uZ * uZ;
       const b = 2 * (dx * uX + dz * uZ);
-      const c = dx * dx + dz * dz - effRadius * effRadius;
-      const disc = b * b - 4 * a * c;
+      const cCoeff = dSq - effRadius * effRadius;
+      const disc = b * b - 4 * a * cCoeff;
       if (disc >= 0 && a > 1e-6) {
         const t1 = (-b - Math.sqrt(disc)) / (2 * a);
         if (t1 > 0 && t1 < safeDist) {
@@ -3635,16 +3670,30 @@ function syncActiveViewCamera() {
     }
   }
 
-  // Apply spring arm safe distance
+  // Apply spring arm safe distance with responsive pull-in and smooth ease-out
+  if (_tpsCurrentDist === null || Math.abs(_tpsCurrentDist - safeDist) > 5.0) {
+    _tpsCurrentDist = safeDist;
+  } else if (safeDist < _tpsCurrentDist) {
+    // Wall detected behind camera: pull camera in quickly to prevent wall clipping
+    _tpsCurrentDist = safeDist;
+  } else {
+    // Wall cleared: smoothly ease camera back out (15 Hz lerp)
+    _tpsCurrentDist = THREE.MathUtils.lerp(_tpsCurrentDist, safeDist, Math.min(1.0, delta * 15.0));
+  }
+
   activeViewCamera.position.set(
-    px + uX * safeDist,
-    py + uY * safeDist,
-    pz + uZ * safeDist
+    px + uX * _tpsCurrentDist,
+    py + uY * _tpsCurrentDist,
+    pz + uZ * _tpsCurrentDist
   );
 
-  // If pushed tightly against a wall, hide player mesh to prevent near-plane head clipping
+  // If pushed tightly against a wall, hide player mesh to prevent near-plane head clipping (with hysteresis to prevent visual flicker)
   if (localPlayerVisual) {
-    localPlayerVisual.visible = (safeDist >= 0.45);
+    if (localPlayerVisual.visible) {
+      if (_tpsCurrentDist < 0.38) localPlayerVisual.visible = false;
+    } else {
+      if (_tpsCurrentDist >= 0.45) localPlayerVisual.visible = true;
+    }
   }
 }
 
@@ -9398,23 +9447,116 @@ function drawMinimap() {
   ctx.restore();
 }
 
+// Helper function to apply damage if human is near a ghost (hoisted to prevent per-frame closure GC churn)
+function applyGhostDamageToHuman(ghostPos, delta) {
+  if (window.isSpectating) return;
+  const distToPlayer = Math.hypot(ghostPos.x - camera.position.x, ghostPos.z - camera.position.z);
+  if (distToPlayer < 1.5 && myTeam === 'Human' && !isPanicked) {
+    currentHP = Math.max(0, currentHP - delta * 45);
+    const hpVal = document.getElementById('hp-value');
+    const hpBar = document.getElementById('hp-bar');
+    if (hpVal) hpVal.textContent = `${Math.ceil(currentHP)} HP`;
+    if (hpBar) hpBar.style.width = `${currentHP}%`;
+
+    const activeKeypadModal = document.getElementById('keypad-modal-ui');
+    if (activeKeypadModal && activeKeypadModal.style.display !== 'none') {
+      if (!window._lastKeypadWarn || performance.now() - window._lastKeypadWarn > 1500) {
+        window._lastKeypadWarn = performance.now();
+        triggerNotification("⚠️ DANGER: HOSTILE ATTACKING! DISENGAGE TERMINAL!");
+      }
+    }
+    
+    if (currentHP <= 0 && !isCaptured) {
+      isCaptured = true;
+
+      const myUsername = (currentLobby && currentLobby.players && currentLobby.players[myId]?.username) || 'Operative';
+      const mySkin = (currentLobby && currentLobby.players && currentLobby.players[myId]?.skinId) || null;
+
+      // Spawn persistent dead body model at exact death location
+      spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, mySkin);
+      
+      if (socketClient) {
+        socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myUsername} (${myClass}) has been captured by the void.` });
+        socketClient.emit('capture_human', { 
+          targetId: myId,
+          position: { x: camera.position.x, y: 0.04, z: camera.position.z },
+          rotation: camera.rotation.y,
+          username: myUsername,
+          characterClass: myClass,
+          skinId: mySkin
+        });
+
+        // Drop all items and keys
+        inventory.forEach(itemName => {
+          if (itemName && itemName !== '') {
+            socketClient.emit('item_dropped', {
+              id: 'item_' + seededRandom().toString(36).substr(2, 9),
+              name: itemName,
+              position: { x: camera.position.x, y: 1.6, z: camera.position.z }
+            });
+          }
+        });
+        carriedKeys.forEach(key => {
+          const preservedId = key.id || ('key_' + key.symbol);
+          socketClient.emit('key_dropped', {
+            id: preservedId,
+            typeName: key.typeName,
+            symbol: key.symbol,
+            position: { x: camera.position.x, y: 1.6, z: camera.position.z }
+          });
+        });
+        inventory = [];
+        carriedKeys = [];
+        renderHUDInventory();
+      }
+
+      playGhostCaptureAnimation(() => {
+        if (document.pointerLockElement) document.exitPointerLock();
+        window.mobileGameActive = false;
+        const hud = document.getElementById('hud-overlay');
+        if (hud) hud.style.display = 'none';
+        const mobileCtrl = document.getElementById('mobile-controls-container');
+        if (mobileCtrl) mobileCtrl.style.display = 'none';
+        if (!window.isSoloMatch) {
+          const capOverlay = document.getElementById('captured-overlay');
+          if (capOverlay) capOverlay.style.display = 'flex';
+        }
+      });
+    }
+  }
+}
+
+// Helper function to check chalk decals for a given ghost position (hoisted to prevent per-frame closure GC churn)
+function checkChalkDecals(ghostPos) {
+  for (let i = chalkDecals.length - 1; i >= 0; i--) {
+    const decal = chalkDecals[i];
+    if (ghostPos.distanceTo(decal.position) < 2.5) {
+      if (!decal.userData || !decal.userData.triggered) {
+        decal.userData = decal.userData || {};
+        decal.userData.triggered = true;
+        if (myTeam === 'Human') {
+          triggerNotification("Ghost detected stepping on UV Chalk!");
+        }
+        // Flash red to indicate detection, then fade away
+        if (decal.material && decal.material.color) decal.material.color.setHex(0xff3333);
+        setTimeout(() => {
+          scene.remove(decal);
+          if (decal.geometry) decal.geometry.dispose();
+          if (decal.material) decal.material.dispose();
+          const idx = chalkDecals.indexOf(decal);
+          if (idx > -1) chalkDecals.splice(idx, 1);
+        }, 3000);
+      }
+    }
+  }
+}
+
 // 3D Game Loop rendering
 let animationFrameId = null;
 let networkTimer = 0;
 function animate() {
   if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
   animationFrameId = requestAnimationFrame(animate);
-
-  if (localPlayerVisual) {
-    localPlayerVisual.position.x = camera.position.x;
-    localPlayerVisual.position.z = camera.position.z;
-    if (localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
-      localPlayerVisual.position.y = myTeam === 'Ghost' ? 0.35 : 0;
-    }
-    localPlayerVisual.rotation.set(0, camera.rotation.y, 0);
-  }
-  
-  syncActiveViewCamera();
 
   const time = performance.now();
   const rawDelta = (time - prevTime) / 1000;
@@ -9824,6 +9966,15 @@ function animate() {
   } else {
     // When controls are inactive (paused, cursor released, overlay open):
     resetPlayerMovementState();
+    if (localPlayerVisual) {
+      localPlayerVisual.position.x = camera.position.x;
+      localPlayerVisual.position.z = camera.position.z;
+      if (localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
+        localPlayerVisual.position.y = myTeam === 'Ghost' ? 0.35 : 0;
+      }
+      localPlayerVisual.rotation.set(0, camera.rotation.y, 0);
+    }
+    syncActiveViewCamera(delta);
   }
 
   if (window.gameReady) {
@@ -9933,110 +10084,10 @@ function animate() {
       }
     }
 
-    // Helper function to apply damage if human is near a ghost
-    const applyGhostDamageToHuman = (ghostPos) => {
-      if (window.isSpectating) return;
-      const distToPlayer = Math.hypot(ghostPos.x - camera.position.x, ghostPos.z - camera.position.z);
-      if (distToPlayer < 1.5 && myTeam === 'Human' && !isPanicked) {
-        currentHP = Math.max(0, currentHP - delta * 45);
-        document.getElementById('hp-value').textContent = `${Math.ceil(currentHP)} HP`;
-        document.getElementById('hp-bar').style.width = `${currentHP}%`;
-
-        const activeKeypadModal = document.getElementById('keypad-modal-ui');
-        if (activeKeypadModal && activeKeypadModal.style.display !== 'none') {
-          if (!window._lastKeypadWarn || performance.now() - window._lastKeypadWarn > 1500) {
-            window._lastKeypadWarn = performance.now();
-            triggerNotification("⚠️ DANGER: HOSTILE ATTACKING! DISENGAGE TERMINAL!");
-          }
-        }
-        
-        if (currentHP <= 0 && !isCaptured) {
-          isCaptured = true;
-
-          const myUsername = (currentLobby && currentLobby.players && currentLobby.players[myId]?.username) || 'Operative';
-          const mySkin = (currentLobby && currentLobby.players && currentLobby.players[myId]?.skinId) || null;
-
-          // Spawn persistent dead body model at exact death location
-          spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, mySkin);
-          
-          if (socketClient) {
-            socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myUsername} (${myClass}) has been captured by the void.` });
-            socketClient.emit('capture_human', { 
-              targetId: myId,
-              position: { x: camera.position.x, y: 0.04, z: camera.position.z },
-              rotation: camera.rotation.y,
-              username: myUsername,
-              characterClass: myClass,
-              skinId: mySkin
-            }); // Tell server we died with corpse location
-
-            // Drop all items and keys
-            inventory.forEach(itemName => {
-              if (itemName && itemName !== '') {
-                socketClient.emit('item_dropped', {
-                  id: 'item_' + seededRandom().toString(36).substr(2, 9),
-                  name: itemName,
-                  position: { x: camera.position.x, y: 1.6, z: camera.position.z }
-                });
-              }
-            });
-            carriedKeys.forEach(key => {
-              const preservedId = key.id || ('key_' + key.symbol);
-              socketClient.emit('key_dropped', {
-                id: preservedId,
-                typeName: key.typeName,
-                symbol: key.symbol,
-                position: { x: camera.position.x, y: 1.6, z: camera.position.z }
-              });
-            });
-            inventory = [];
-            carriedKeys = [];
-            renderHUDInventory();
-          }
-
-          playGhostCaptureAnimation(() => {
-            if (document.pointerLockElement) document.exitPointerLock();
-            window.mobileGameActive = false;
-            document.getElementById('hud-overlay').style.display = 'none';
-            const mobileCtrl = document.getElementById('mobile-controls-container');
-            if (mobileCtrl) mobileCtrl.style.display = 'none';
-            if (!window.isSoloMatch) {
-              document.getElementById('captured-overlay').style.display = 'flex';
-            }
-          });
-        }
-      }
-    };
-
-    // Helper function to check chalk decals for a given ghost position
-    const checkChalkDecals = (ghostPos) => {
-      for (let i = chalkDecals.length - 1; i >= 0; i--) {
-        const decal = chalkDecals[i];
-        if (ghostPos.distanceTo(decal.position) < 2.5) {
-          if (!decal.userData || !decal.userData.triggered) {
-            decal.userData = decal.userData || {};
-            decal.userData.triggered = true;
-            if (myTeam === 'Human') {
-              triggerNotification("Ghost detected stepping on UV Chalk!");
-            }
-            // Flash red to indicate detection, then fade away
-            decal.material.color.setHex(0xff3333);
-            setTimeout(() => {
-              scene.remove(decal);
-              if (decal.geometry) decal.geometry.dispose();
-              if (decal.material) decal.material.dispose();
-              const idx = chalkDecals.indexOf(decal);
-              if (idx > -1) chalkDecals.splice(idx, 1);
-            }, 3000);
-          }
-        }
-      }
-    };
-
     // Damage check against network Ghost players
     Object.values(players3D).forEach(p => {
       if (p.userData && p.userData.type === 'Ghost') {
-        applyGhostDamageToHuman(p.position);
+        applyGhostDamageToHuman(p.position, delta);
         checkChalkDecals(p.position);
       }
     });
@@ -10300,7 +10351,7 @@ function animate() {
       }
 
       // Damage check uses actual distance to PLAYER (only damages humans)
-      applyGhostDamageToHuman(ghost.position);
+      applyGhostDamageToHuman(ghost.position, delta);
       checkChalkDecals(ghost.position);
 
       // Check salt traps (triggering & consumption)
