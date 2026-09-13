@@ -512,14 +512,17 @@
                 </div>
                 <button id="quit-game-btn" style="pointer-events: auto; padding: 0.2rem 0.6rem; background: rgba(239, 68, 68, 0.2); border: 1px solid red; color: white; cursor: pointer; border-radius: 4px; font-family: inherit; font-size: 0.7rem; display: none;">ABORT</button>
              </div>
-             <!-- Tutorial Training Quest Uplink Banner -->
-             <div id="tutorial-quest-banner" class="tutorial-quest-banner" style="display: none;">
-                <div class="tutorial-banner-header">
-                   <span class="tutorial-badge">🎓 TRAINING PROTOCOL</span>
-                   <span id="tutorial-stage-indicator" class="tutorial-step">STAGE 1/6</span>
-                </div>
-                <div id="tutorial-task-title" class="tutorial-task-title">LOCOMOTION CALIBRATION</div>
-                <div id="tutorial-task-desc" class="tutorial-task-desc">Move 10 meters using <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the Mobile Virtual Joystick.</div>
+              <!-- Tutorial Training Quest Uplink Banner -->
+              <div id="tutorial-quest-banner" class="tutorial-quest-banner" style="display: none;">
+                 <div class="tutorial-banner-header">
+                    <span class="tutorial-badge">🎓 TRAINING PROTOCOL</span>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                      <span id="tutorial-stage-indicator" class="tutorial-step">STAGE 1/9</span>
+                      <button id="tutorial-abort-btn" title="Exit Training Protocol" type="button" style="background: rgba(239, 68, 68, 0.25); border: 1px solid #ef4444; color: #fca5a5; font-size: 0.7rem; border-radius: 4px; padding: 0.15rem 0.5rem; cursor: pointer; font-family: inherit; font-weight: bold; pointer-events: auto;">✕ EXIT</button>
+                    </div>
+                 </div>
+                 <div id="tutorial-task-title" class="tutorial-task-title">LOCOMOTION CALIBRATION</div>
+                 <div id="tutorial-task-desc" class="tutorial-task-desc">Move through corridors using <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the Mobile Virtual Joystick.</div>
                 <div class="tutorial-progress-track">
                    <div id="tutorial-progress-bar" class="tutorial-progress-fill" style="width: 0%;"></div>
                 </div>
@@ -738,6 +741,7 @@
         <div class="controls-guide-tabs">
           <button id="tab-controls-pc" class="controls-tab-btn active" type="button">🖥️ PC (KEYBOARD & MOUSE)</button>
           <button id="tab-controls-mobile" class="controls-tab-btn" type="button">📱 MOBILE (TOUCHSCREEN)</button>
+          <button id="tab-controls-rules" class="controls-tab-btn" type="button">🎯 HOW TO PLAY & ESCAPE</button>
         </div>
 
         <!-- PC Tab Content -->
@@ -862,6 +866,57 @@
             <div class="control-row">
               <div class="control-keys touch-badge">⏸️ PAUSE</div>
               <div class="control-desc"><strong>Top PAUSE Button</strong> — Open in-game menu and adjust look sensitivity & audio settings</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rules & Game Objectives Tab Content -->
+        <div id="controls-content-rules" class="controls-tab-content" style="display: none;">
+          <div class="controls-section-title" style="color: #38bdf8;">MISSION OBJECTIVES: HOW TO SURVIVE & ESCAPE</div>
+          <div class="controls-grid">
+            <div class="control-row">
+              <div class="control-keys" style="background: rgba(234, 179, 8, 0.2); border-color: #eab308; color: #fde047;">⚡ STEP 1</div>
+              <div class="control-desc"><strong>Restore Grid Power</strong> — Search corridors for yellow wall <strong>Circuit Breakers</strong>. Repair them to power up the Master Vault Gate and Keypad terminal! (1 required in Training/Solo, 3 in Multiplayer).</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys" style="background: rgba(56, 189, 248, 0.2); border-color: #38bdf8; color: #7dd3fc;">📝 STEP 2</div>
+              <div class="control-desc"><strong>Collect Cipher Clues</strong> — Inspect glowing yellow clue notes attached to corridor walls. Each note reveals digits of the 4-digit Master Vault security code.</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys" style="background: rgba(168, 85, 247, 0.2); border-color: #a855f7; color: #d8b4fe;">🔢 STEP 3</div>
+              <div class="control-desc"><strong>Crack the Vault Keypad</strong> — Locate the Master Vault at the labyrinth edge. Interact with the Keypad Terminal and enter the 4-digit code. Submitting the correct code unlocks the cipher!</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys" style="background: rgba(245, 158, 11, 0.2); border-color: #f59e0b; color: #fcd34d;">🔑 STEP 4</div>
+              <div class="control-desc"><strong>Twin Extraction Keys</strong> — Cracking the cipher reveals the two functional keys (e.g. Alpha & Beta) needed for the gate mechanism. In Training Mode, these are automatically installed into the gate!</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys" style="background: rgba(16, 185, 129, 0.2); border-color: #10b981; color: #6ee7b7;">🌲 STEP 5</div>
+              <div class="control-desc"><strong>Master Gate Escape</strong> — Approach the massive Master Vault blast doors with power on and both keys installed. Press <kbd>E</kbd> / tap <span class="touch-badge">INTERACT</span> to escape into the pine forest!</div>
+            </div>
+          </div>
+
+          <div class="controls-section-title" style="margin-top: 1.2rem; color: #f59e0b;">TACTICAL SURVIVAL MECHANICS</div>
+          <div class="controls-grid">
+            <div class="control-row">
+              <div class="control-keys" style="color: #fbbf24;">🏮 LANTERNS</div>
+              <div class="control-desc"><strong>UV Light Sanctuaries</strong> — Warm brass ceiling lanterns mark safe havens. Standing in the golden light rapidly regenerates <strong>Sanity (+8.5%/s)</strong> and shields you from hallucinations!</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys" style="color: #60a5fa;">🕯️ ARIADNE</div>
+              <div class="control-desc"><strong>Ariadne's Thread</strong> — Glowing orbs floating along corridor paths mark safe navigation routes leading directly back to the Master Vault!</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys" style="color: #38bdf8;">🗺️ MINIMAP</div>
+              <div class="control-desc"><strong>Minimap & Tactical Pings</strong> — Top-right radar displays sound pings and allies. Press <kbd>M</kbd> or tap radar to open full Tactical Map. Click anywhere on map to drop colored beacon pings!</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys" style="color: #a78bfa;">📦 DROP ITEMS</div>
+              <div class="control-desc"><strong>Share Supplies & Keys</strong> — Press <kbd>Q</kbd> (or tap <span class="touch-badge">DROP ITEM</span>) to drop your held item on the floor for teammates. Press <kbd>G</kbd> (or tap <span class="touch-badge">DROP KEY</span>) to drop carried gate keys!</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys" style="color: #f87171;">🧠 SANITY</div>
+              <div class="control-desc"><strong>Sanity & Hallucinations</strong> — Darkness and proximity to ghostly entities drain Sanity. Below 40% Sanity, you experience terrifying shadow hallucinations. Recover sanity in Light Sanctuaries or by reading lore notes!</div>
             </div>
           </div>
         </div>

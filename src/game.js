@@ -2296,11 +2296,11 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     || localStorage.getItem('manifestation_username') 
     || sessionStorage.getItem('rejoinUsername') 
     || '';
-  const cleanName = rawName.trim().toLowerCase();
   const isAriadne = cleanName === 'ariadne_999' || cleanName === 'aridane_999' || cleanName.includes('ariadne') || cleanName.includes('aridane');
+  const showAriadneThread = isAriadne || window.isTutorialMatch;
 
-  if (isAriadne) {
-    console.log("🌀 [ARIADNE PROTOCOL] Activated for", rawName);
+  if (showAriadneThread) {
+    console.log("🌀 [ARIADNE PROTOCOL] Activated for", rawName, "Tutorial:", window.isTutorialMatch);
 
     // 1. Find nearest open corridor to start (camera position)
     let closestStart = { x: camera.position.x, z: camera.position.z };
@@ -2397,58 +2397,64 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
     scene.add(threadGroup);
 
-    window.securityLockoutActive = false;
-    window.securityLockoutEndTime = 0;
-    if (window._securityLockoutTimer) {
-      clearTimeout(window._securityLockoutTimer);
-      window._securityLockoutTimer = null;
-    }
+    if (isAriadne && !window.isTutorialMatch) {
+      window.securityLockoutActive = false;
+      window.securityLockoutEndTime = 0;
+      if (window._securityLockoutTimer) {
+        clearTimeout(window._securityLockoutTimer);
+        window._securityLockoutTimer = null;
+      }
 
-    // Auto-complete objectives for testing
-    carriedKeys = [
-      { symbol: functionalKeysRevealed[0], typeName: 'Amber Key', mesh: null },
-      { symbol: functionalKeysRevealed[1], typeName: 'Sapphire Key', mesh: null }
-    ];
-    foundKeysList = [...functionalKeysRevealed];
-    setTimeout(() => renderCarriedKeysHUD(), 100);
-    
-    fixedBreakersCount = totalBreakersRequired;
-    circuitBreakers.forEach(b => {
-      b.isFixed = true;
-      if (b.mesh) {
-        if (b.mesh.userData && b.mesh.userData.ledMesh) {
-          b.mesh.userData.ledMesh.material.color.setHex(0x10b981);
-          b.mesh.userData.ledMesh.material.emissive.setHex(0x10b981);
-        }
-        if (b.mesh.userData && b.mesh.userData.statusLight) {
-          b.mesh.userData.statusLight.color.setHex(0x10b981);
-        }
-        if (b.mesh.material) {
-          if (Array.isArray(b.mesh.material)) {
-            b.mesh.material.forEach(m => {
-              if (m.map) m.color.setHex(0xdcfce7);
-            });
-          } else {
-            b.mesh.material.color.setHex(0x10b981);
+      // Auto-complete objectives for testing
+      carriedKeys = [
+        { symbol: functionalKeysRevealed[0], typeName: 'Amber Key', mesh: null },
+        { symbol: functionalKeysRevealed[1], typeName: 'Sapphire Key', mesh: null }
+      ];
+      foundKeysList = [...functionalKeysRevealed];
+      setTimeout(() => renderCarriedKeysHUD(), 100);
+      
+      fixedBreakersCount = totalBreakersRequired;
+      circuitBreakers.forEach(b => {
+        b.isFixed = true;
+        if (b.mesh) {
+          if (b.mesh.userData && b.mesh.userData.ledMesh) {
+            b.mesh.userData.ledMesh.material.color.setHex(0x10b981);
+            b.mesh.userData.ledMesh.material.emissive.setHex(0x10b981);
+          }
+          if (b.mesh.userData && b.mesh.userData.statusLight) {
+            b.mesh.userData.statusLight.color.setHex(0x10b981);
+          }
+          if (b.mesh.material) {
+            if (Array.isArray(b.mesh.material)) {
+              b.mesh.material.forEach(m => {
+                if (m.map) m.color.setHex(0xdcfce7);
+              });
+            } else {
+              b.mesh.material.color.setHex(0x10b981);
+            }
           }
         }
-      }
-    });
-    updateEnvironmentLighting();
+      });
+      updateEnvironmentLighting();
 
-    const codeStr = (window.cipherCodeDigits || []).join('');
-    setTimeout(() => {
-      triggerNotification(`ARIADNE PROTOCOL ACTIVE: Labyrinth thread revealed. Vault Code: ${codeStr}`);
-      
-      const cipherHUD = document.getElementById('hud-cipher-info');
-      if (cipherHUD) {
-        cipherHUD.textContent = `CODE: ${codeStr}`;
-        cipherHUD.style.color = '#3b82f6';
-        cipherHUD.style.letterSpacing = '0.3em';
-      }
+      const codeStr = (window.cipherCodeDigits || []).join('');
+      setTimeout(() => {
+        triggerNotification(`ARIADNE PROTOCOL ACTIVE: Labyrinth thread revealed. Vault Code: ${codeStr}`);
+        
+        const cipherHUD = document.getElementById('hud-cipher-info');
+        if (cipherHUD) {
+          cipherHUD.textContent = `CODE: ${codeStr}`;
+          cipherHUD.style.color = '#3b82f6';
+          cipherHUD.style.letterSpacing = '0.3em';
+        }
 
-      checkWinCondition(); // Will update gate lights
-    }, 1000);
+        checkWinCondition(); // Will update gate lights
+      }, 1000);
+    } else if (window.isTutorialMatch) {
+      setTimeout(() => {
+        triggerNotification("🕯️ ARIADNE'S THREAD: Luminous orbs show the corridor route to the Master Vault!");
+      }, 1500);
+    }
   }
 
   // Keyboard controls
@@ -5103,8 +5109,17 @@ function generateCodeClues() {
   for (let i = 0; i < 4; i++) {
     const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
     
-    const available = shuffleArray(getAvailableCorridors(4.5));
-    const corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
+    let corr;
+    if (window.isTutorialMatch && i === 0 && openCorridors.length > 0) {
+      const nearCorridors = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+      corr = nearCorridors.find(c => {
+        const d = Math.hypot(c.x, c.z);
+        return d >= 6 && d <= 18 && !isLocationOccupied(c.x, c.z, 3.5);
+      }) || nearCorridors[Math.min(3, nearCorridors.length - 1)];
+    } else {
+      const available = shuffleArray(getAvailableCorridors(4.5));
+      corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
+    }
 
     noteMesh.position.set(corr.x, 1.0, corr.z);
     noteMesh.rotation.y = seededRandom() * Math.PI;
@@ -5445,6 +5460,19 @@ function generateLightSanctuaries() {
     }
   }
 
+  // In Tutorial Mode, place a guaranteed Light Sanctuary in nearby corridors
+  if (window.isTutorialMatch && openCorridors.length > 0) {
+    const nearCorridors = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+    const tutorialSanctuary = nearCorridors.find(c => {
+      const d = Math.hypot(c.x, c.z);
+      return d >= 6 && d <= 16 && !isLocationOccupied(c.x, c.z, 5.0);
+    }) || nearCorridors[Math.min(3, nearCorridors.length - 1)];
+    if (tutorialSanctuary && !chosenSanctuaries.some(cs => Math.hypot(cs.x - tutorialSanctuary.x, cs.z - tutorialSanctuary.z) < 6.0)) {
+      chosenSanctuaries.unshift(tutorialSanctuary);
+      claimSpawnLocation(tutorialSanctuary.x, tutorialSanctuary.z, 7.0, 'Tutorial_Sanctuary');
+    }
+  }
+
   chosenSanctuaries.forEach((pos, idx) => {
     const group = new THREE.Group();
     group.position.set(pos.x, 0, pos.z);
@@ -5622,16 +5650,7 @@ function setupControls() {
         }
         return;
       } else if (event.key === 'Enter') {
-        if (codeEntered.length < 4) {
-          if (typeof triggerNotification === 'function') triggerNotification("Enter all 4 digits first.");
-        } else {
-          if (typeof socketClient !== 'undefined') socketClient.emit('try_cipher', codeEntered);
-          if (activeKeypad) activeKeypad.style.display = 'none';
-          codeEntered = '';
-          if (!window.isMobileDevice && window.gameReady && !isCaptured && window.requestGamePointerLock) {
-            window.requestGamePointerLock();
-          }
-        }
+        submitKeypadCode(codeEntered);
         return;
       }
     }
@@ -5720,6 +5739,9 @@ function setupControls() {
             if (titleText) titleText.textContent = 'TACTICAL MAP';
             if (document.pointerLockElement) document.exitPointerLock();
             drawMinimap();
+            if (window.isTutorialMatch && tutorialStage === 6) {
+              advanceTutorialStage(7, "Tactical Navigation Calibrated! Next: UV Lantern Sanctuaries");
+            }
           } else {
             isMinimapExpanded = false;
             wrapper.classList.remove('expanded');
@@ -6536,7 +6558,7 @@ function getBestInteractionTarget() {
               triggerNotification(`Picked up ${item.name}`);
               renderHUDInventory();
               if (window.isTutorialMatch && tutorialStage === 4) {
-                advanceTutorialStage(5, `Secured ${item.name}! Next: Restore Grid Power`);
+                advanceTutorialStage(5, `Secured ${item.name}! Next: Share Supplies & Keys`);
               }
             } else {
               triggerNotification("Inventory full! Drop an item first.");
@@ -6829,6 +6851,26 @@ function getBestInteractionTarget() {
                     title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
                     details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>`;
                   }
+
+                  const lobbyBtn = document.getElementById('end-game-lobby-btn');
+                  if (lobbyBtn) {
+                    lobbyBtn.textContent = 'Return to Lobby';
+                    lobbyBtn.onclick = () => {
+                      if (window.leaveGameWithAd) {
+                        window.leaveGameWithAd(() => window.location.reload());
+                      } else {
+                        window.location.reload();
+                      }
+                    };
+                  }
+                  const retryBtn = document.getElementById('end-game-retry-btn');
+                  if (retryBtn) {
+                    retryBtn.style.display = window.isTutorialMatch ? 'inline-block' : 'none';
+                    retryBtn.textContent = 'REPLAY TUTORIAL';
+                    retryBtn.onclick = () => {
+                      window.location.reload();
+                    };
+                  }
                 }
               }
             });
@@ -6935,6 +6977,18 @@ function collectClueLocal(digitIndex) {
       }).join(' ');
       cipherHUD.textContent = `CODE: ${display}`;
       cipherHUD.style.color = '#38bdf8';
+    }
+  }
+
+  if (window.isTutorialMatch) {
+    const fullCode = (window.cipherCodeDigits || []).join('');
+    triggerNotification(`🎓 TUTORIAL INTEL: Wall Clue Decoded! Master Vault Code is [ ${fullCode} ]!`);
+    if (cipherHUD) {
+      cipherHUD.textContent = `VAULT CODE: ${fullCode}`;
+      cipherHUD.style.color = '#38bdf8';
+    }
+    if (tutorialStage === 8 && fixedBreakersCount >= 1) {
+      advanceTutorialStage(9, `Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad!`);
     }
   }
 
@@ -7261,6 +7315,89 @@ function openKeypadModal() {
   }
 }
 
+function submitKeypadCode(code) {
+  if (!code || code.length < 4) {
+    triggerNotification("Enter all 4 digits first.");
+    return;
+  }
+
+  const isOfflineOrSolo = Boolean(
+    window.isSoloMatch ||
+    window.isTutorialMatch ||
+    !socketClient ||
+    !socketClient.emit ||
+    !socketClient.on ||
+    !socketClient.connected
+  );
+
+  if (isOfflineOrSolo) {
+    const targetDigits = window.cipherCodeDigits || [];
+    const targetCode = targetDigits.join('');
+
+    if (code === targetCode) {
+      gateSolved = true;
+      const realKeys = (currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.realKeySymbols) || ['Alpha', 'Beta'];
+      functionalKeysRevealed = realKeys;
+
+      if (window.isTutorialMatch) {
+        insertedGateKeys = [...realKeys];
+        triggerNotification(`🎉 CIPHER CRACKED! [${targetCode}] Verified! Twin Extraction Keys Installed into Gate!`);
+        advanceTutorialStage(9, "Cipher Cracked! Master Gate Unlocked! Approach the Gate and Tap/Press INTERACT to Escape!");
+      } else {
+        triggerNotification(`🎉 CIPHER CRACKED! Twin functional keys revealed: [${realKeys.join(' & ')}]`);
+      }
+
+      // Close modal
+      const keypadModal = document.getElementById('keypad-modal-ui');
+      if (keypadModal) {
+        keypadModal.style.display = 'none';
+        if (!isMobileDevice && !document.pointerLockElement) {
+          (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
+        }
+      }
+
+      // Remove the 3D keypad terminal mesh from the wall
+      if (padMeshRef) {
+        if (padMeshRef.parent) padMeshRef.parent.remove(padMeshRef);
+        else scene.remove(padMeshRef);
+        if (padMeshRef.geometry) padMeshRef.geometry.dispose();
+        if (padMeshRef.material) padMeshRef.material.dispose();
+        padMeshRef = null;
+      }
+
+      const cipherHUD = document.getElementById('hud-cipher-info');
+      if (cipherHUD) {
+        const cleanSymbols = realKeys.map(s => String(s).replace(/ Key$/i, ''));
+        cipherHUD.textContent = window.isTutorialMatch ? `GATE UNLOCKED` : `REQUIRED: ${cleanSymbols.join(' + ')}`;
+        cipherHUD.style.color = '#38bdf8';
+      }
+
+      updateGateHUD();
+      checkWinCondition();
+      codeEntered = '';
+      const scr = document.getElementById('keypad-screen-display');
+      if (scr) scr.textContent = getKeypadDisplayString();
+    } else {
+      playWrongCodeAnimation();
+      triggerNotification(`❌ ACCESS DENIED: [${code}] is incorrect! Check glowing wall clue notes.`);
+      codeEntered = '';
+      const scr = document.getElementById('keypad-screen-display');
+      if (scr) scr.textContent = getKeypadDisplayString();
+    }
+  } else {
+    // Multiplayer online: emit to server
+    if (typeof socketClient !== 'undefined' && socketClient.emit) {
+      socketClient.emit('try_cipher', code);
+    }
+    const modal = document.getElementById('keypad-modal-ui');
+    if (modal) modal.style.display = 'none';
+    codeEntered = '';
+    if (!window.isMobileDevice && window.gameReady && !isCaptured && window.requestGamePointerLock) {
+      window.requestGamePointerLock();
+    }
+  }
+}
+
 function setupKeypadListeners() {
   keypadUI        = document.getElementById('keypad-modal-ui');
   keypadScreen    = document.getElementById('keypad-screen-display');
@@ -7297,7 +7434,15 @@ function setupKeypadListeners() {
   keypadBtns.forEach(btn => {
     btn.addEventListener('click', (e) => {
       const val = e.target.textContent;
-      if (val === 'CLR' || val === 'ENT') return;
+      if (val === 'CLR') {
+        codeEntered = "";
+        keypadScreen.textContent = getKeypadDisplayString();
+        return;
+      }
+      if (val === 'ENT') {
+        submitKeypadCode(codeEntered);
+        return;
+      }
       // Let players type all 4 digits freely — no auto-fill from clue notes
       if (codeEntered.length < 4) {
         codeEntered += val;
@@ -7307,12 +7452,7 @@ function setupKeypadListeners() {
   });
 
   keypadSubmitBtn.addEventListener('click', () => {
-    if (codeEntered.length < 4) {
-      triggerNotification("Enter all 4 digits first.");
-      return;
-    }
-    socketClient.emit('try_cipher', codeEntered);
-    closeKeypad();
+    submitKeypadCode(codeEntered);
   });
 }
 
@@ -7354,6 +7494,10 @@ function dropActiveItem() {
   // Spawn it locally
   spawnDroppedItemLocal(itemId, item, spawnPos);
   triggerNotification(`Dropped ${item}`);
+
+  if (window.isTutorialMatch && tutorialStage === 5) {
+    advanceTutorialStage(6, "Item Dropped! Sharing supplies saves teams. Next: Tactical Minimap");
+  }
 }
 
 function spawnDroppedItemLocal(id, name, pos) {
@@ -7425,6 +7569,10 @@ function dropKey() {
   renderCarriedKeysHUD();
   checkWinCondition();
   triggerNotification(`Dropped [${poppedKey.typeName}]`);
+
+  if (window.isTutorialMatch && tutorialStage === 5) {
+    advanceTutorialStage(6, "Key Dropped! Teammates can now retrieve it. Next: Tactical Minimap");
+  }
 }
 
 // Trigger risk/reward: Panic Hide / Ghost Shadow Cloak
@@ -7818,6 +7966,9 @@ function processSanity(delta) {
   if (inSanctuary) {
     // Steadily restore sanity inside warm Light Sanctuaries (+8.5%/s)
     currentSanity = Math.min(100, currentSanity + delta * 8.5);
+    if (window.isTutorialMatch && tutorialStage === 7) {
+      advanceTutorialStage(8, "Light Sanctuary Reached! Sanity Restoring (+8.5%/s)! Next: Grid Power & Clues");
+    }
   } else if (nearGhost) {
     currentSanity = Math.max(0, currentSanity - delta * gParams.sanityDrainRate); // Difficulty scaled fast decay
   } else {
@@ -9592,8 +9743,10 @@ export function setupControlsGuideModal() {
   const resumeBtn = document.getElementById('resume-from-controls-btn');
   const tabPc = document.getElementById('tab-controls-pc');
   const tabMobile = document.getElementById('tab-controls-mobile');
+  const tabRules = document.getElementById('tab-controls-rules');
   const contentPc = document.getElementById('controls-content-pc');
   const contentMobile = document.getElementById('controls-content-mobile');
+  const contentRules = document.getElementById('controls-content-rules');
 
   if (!modal) return;
 
@@ -9608,13 +9761,17 @@ export function setupControlsGuideModal() {
     if (isMobileDevice) {
       if (tabMobile) tabMobile.classList.add('active');
       if (tabPc) tabPc.classList.remove('active');
+      if (tabRules) tabRules.classList.remove('active');
       if (contentMobile) contentMobile.style.display = 'block';
       if (contentPc) contentPc.style.display = 'none';
+      if (contentRules) contentRules.style.display = 'none';
     } else {
       if (tabPc) tabPc.classList.add('active');
       if (tabMobile) tabMobile.classList.remove('active');
+      if (tabRules) tabRules.classList.remove('active');
       if (contentPc) contentPc.style.display = 'block';
       if (contentMobile) contentMobile.style.display = 'none';
+      if (contentRules) contentRules.style.display = 'none';
     }
 
     if (document.pointerLockElement) {
@@ -9675,20 +9832,16 @@ export function setupControlsGuideModal() {
       }
     });
 
-    if (tabPc && tabMobile && contentPc && contentMobile) {
-      bindFastTap(tabPc, () => {
-        tabPc.classList.add('active');
-        tabMobile.classList.remove('active');
-        contentPc.style.display = 'block';
-        contentMobile.style.display = 'none';
-      });
-      bindFastTap(tabMobile, () => {
-        tabMobile.classList.add('active');
-        tabPc.classList.remove('active');
-        contentMobile.style.display = 'block';
-        contentPc.style.display = 'none';
-      });
-    }
+    const selectTab = (activeTab, activeContent) => {
+      [tabPc, tabMobile, tabRules].forEach(t => { if (t) t.classList.remove('active'); });
+      [contentPc, contentMobile, contentRules].forEach(c => { if (c) c.style.display = 'none'; });
+      if (activeTab) activeTab.classList.add('active');
+      if (activeContent) activeContent.style.display = 'block';
+    };
+
+    if (tabPc) bindFastTap(tabPc, () => selectTab(tabPc, contentPc));
+    if (tabMobile) bindFastTap(tabMobile, () => selectTab(tabMobile, contentMobile));
+    if (tabRules) bindFastTap(tabRules, () => selectTab(tabRules, contentRules));
   }
 }
 
@@ -9766,6 +9919,20 @@ function initTutorialQuest() {
 
   const banner = document.getElementById('tutorial-quest-banner');
   if (banner) banner.style.display = 'block';
+
+  const abortBtn = document.getElementById('tutorial-abort-btn');
+  if (abortBtn) {
+    abortBtn.onclick = (e) => {
+      if (e) {
+        if (e.stopPropagation) e.stopPropagation();
+        if (e.preventDefault) e.preventDefault();
+      }
+      if (confirm("Exit Training Protocol and return to lobby?")) {
+        window.location.reload();
+      }
+    };
+  }
+
   updateTutorialQuestBanner();
 }
 
@@ -9787,7 +9954,7 @@ function updateTutorialQuestBanner() {
 
   switch (tutorialStage) {
     case 1:
-      stageInd.textContent = 'STAGE 1/6';
+      stageInd.textContent = 'STAGE 1/9';
       titleEl.textContent = 'LOCOMOTION CALIBRATION';
       descEl.innerHTML = isMobileDevice 
         ? 'Move through corridors using the <strong>Left Virtual Joystick</strong>.' 
@@ -9798,54 +9965,92 @@ function updateTutorialQuestBanner() {
       break;
 
     case 2:
-      stageInd.textContent = 'STAGE 2/6';
-      titleEl.textContent = 'TACTICAL SPRINT BOOSTERS';
+      stageInd.textContent = 'STAGE 2/9';
+      titleEl.textContent = 'TACTICAL SPRINT & STAMINA';
       descEl.innerHTML = isMobileDevice 
-        ? 'Tap the <span class="touch-badge">SPRINT</span> button to sprint. Notice your Stamina bar!' 
-        : 'Hold <kbd>SHIFT</kbd> to sprint. Keep an eye on your Stamina gauge!';
+        ? 'Tap the <span class="touch-badge">SPRINT</span> button to sprint. Notice your <strong>Stamina Bar</strong> drains!' 
+        : 'Hold <kbd>SHIFT</kbd> to sprint. Keep an eye on your <strong>Stamina Gauge</strong>!';
       const pct2 = Math.min(100, Math.floor((tutorialSprintTime / 1.5) * 100));
       progBar.style.width = `${pct2}%`;
       hintEl.textContent = `Sprint time: ${tutorialSprintTime.toFixed(1)}s / 1.5s`;
       break;
 
     case 3:
-      stageInd.textContent = 'STAGE 3/6';
-      titleEl.textContent = 'ILLUMINATION & BATTERY';
+      stageInd.textContent = 'STAGE 3/9';
+      titleEl.textContent = 'ILLUMINATION & STEALTH';
       descEl.innerHTML = isMobileDevice 
-        ? 'Tap <span class="touch-badge">USE</span> (with no item equipped) to toggle your flashlight On/Off.' 
-        : 'Press <kbd>F</kbd> to toggle your Flashlight. Turn it off to conserve battery or stealth!';
+        ? 'Tap <span class="touch-badge">USE</span> (with empty slot) to toggle flashlight. Turn it OFF to conserve battery or stealth!' 
+        : 'Press <kbd>F</kbd> to toggle your Flashlight. Turn it OFF to conserve battery or hide from entities!';
       progBar.style.width = isFlashlightToggledOn ? '50%' : '100%';
       hintEl.textContent = isMobileDevice ? 'Tap USE to cycle beam' : 'Press [F] to toggle beam';
       break;
 
     case 4:
-      stageInd.textContent = 'STAGE 4/6';
+      stageInd.textContent = 'STAGE 4/9';
       titleEl.textContent = 'SALVAGE SUPPLIES';
       descEl.innerHTML = isMobileDevice 
-        ? 'Approach a glowing item on the corridor floor and tap <span class="touch-badge">INTERACT</span>.' 
+        ? 'Approach a glowing supply on the floor (Battery or Medkit) and tap <span class="touch-badge">INTERACT</span>.' 
         : 'Find supplies on the corridor floor and press <kbd>E</kbd> or <kbd>Left Click</kbd> to pick it up!';
-      progBar.style.width = '30%';
-      hintEl.textContent = 'Look on the corridor floor for glowing batteries or kits';
+      progBar.style.width = '40%';
+      hintEl.textContent = 'Look on the corridor floor for glowing batteries or medkits';
       break;
 
     case 5:
-      stageInd.textContent = 'STAGE 5/6';
-      titleEl.textContent = 'RESTORE GRID POWER';
+      stageInd.textContent = 'STAGE 5/9';
+      titleEl.textContent = 'SHARE SUPPLIES & KEYS';
       descEl.innerHTML = isMobileDevice 
-        ? 'Locate a yellow <strong>Circuit Breaker</strong> on the corridor wall and tap <span class="touch-badge">INTERACT</span>.' 
-        : 'Locate a yellow <strong>Circuit Breaker</strong> on the corridor wall and press <kbd>E</kbd> to repair it!';
-      progBar.style.width = fixedBreakersCount >= 1 ? '100%' : '50%';
-      hintEl.textContent = `Power Breakers: ${fixedBreakersCount} / 1 required`;
+        ? 'Tap <span class="touch-badge">DROP ITEM</span> to drop held item for teammates. (Tap <span class="touch-badge">DROP KEY</span> to drop keys).' 
+        : 'Press <kbd>Q</kbd> to drop your held item on the floor for teammates! (Press <kbd>G</kbd> to drop carried keys).';
+      progBar.style.width = '55%';
+      hintEl.textContent = isMobileDevice ? 'Tap DROP ITEM to share gear' : 'Press [Q] to drop held item';
       break;
 
     case 6:
-      stageInd.textContent = 'STAGE 6/6';
-      titleEl.textContent = 'CRACK CIPHER & EXTRACT';
+      stageInd.textContent = 'STAGE 6/9';
+      titleEl.textContent = 'TACTICAL MAP & BEACONS';
       descEl.innerHTML = isMobileDevice 
-        ? 'Find wall clue notes, head to the <strong>Master Vault Keypad</strong>, enter the code, and tap <span class="touch-badge">INTERACT</span> to escape!' 
-        : 'Inspect wall clue notes, open the <strong>Keypad</strong> at the Master Vault Gate, enter code, and press <kbd>E</kbd> to extract!';
-      progBar.style.width = '85%';
-      hintEl.textContent = 'Follow corridor markers or radar to the Vault Gate!';
+        ? 'Tap the top-right <strong>Radar Minimap</strong> to open full Tactical Map, then tap anywhere to drop a ping!' 
+        : 'Press <kbd>M</kbd> (or click radar) to open full Tactical Map. Click anywhere to place a beacon ping!';
+      progBar.style.width = '65%';
+      hintEl.textContent = isMobileDevice ? 'Tap Radar to expand map & drop a ping' : 'Press [M] to open map & click to drop a ping';
+      break;
+
+    case 7:
+      stageInd.textContent = 'STAGE 7/9';
+      titleEl.textContent = 'UV LANTERN SANCTUARIES';
+      descEl.innerHTML = isMobileDevice 
+        ? 'Find a <strong>Warm Brass Ceiling Lantern</strong>. Standing in its light recovers <strong>Sanity (+8.5%/s)</strong> and shields you!' 
+        : 'Find a <strong>Warm Brass Ceiling Lantern</strong>. Standing under it rapidly recovers <strong>Sanity (+8.5%/s)</strong>!';
+      progBar.style.width = '75%';
+      hintEl.textContent = 'Follow corridors toward the warm amber lantern glow';
+      break;
+
+    case 8:
+      stageInd.textContent = 'STAGE 8/9';
+      titleEl.textContent = 'GRID POWER & CLUE NOTES';
+      descEl.innerHTML = isMobileDevice 
+        ? 'Locate a yellow <strong>Circuit Breaker</strong> on the wall, tap <span class="touch-badge">INTERACT</span> to power the vault, then read wall clue notes!' 
+        : 'Locate a yellow <strong>Circuit Breaker</strong> on the wall, press <kbd>E</kbd> to power the vault, then inspect wall clue notes for the code!';
+      progBar.style.width = fixedBreakersCount >= 1 ? '100%' : '85%';
+      hintEl.textContent = `Circuit Breakers: ${fixedBreakersCount} / 1 required`;
+      break;
+
+    case 9:
+      stageInd.textContent = 'STAGE 9/9';
+      titleEl.textContent = 'MASTER VAULT EXTRACTION';
+      if (!gateSolved) {
+        descEl.innerHTML = isMobileDevice 
+          ? 'Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, tap <span class="touch-badge">INTERACT</span>, and enter the 4-digit code!' 
+          : 'Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, press <kbd>E</kbd>, and enter the 4-digit code!';
+        progBar.style.width = '90%';
+        hintEl.textContent = 'Follow radar or Ariadne thread to the Master Vault Keypad!';
+      } else {
+        descEl.innerHTML = isMobileDevice 
+          ? '🎉 <strong>CIPHER CRACKED! Master Gate Unlocked!</strong> Tap <span class="touch-badge">INTERACT</span> at the blast door to escape into the pine forest!' 
+          : '🎉 <strong>CIPHER CRACKED! Master Gate Unlocked!</strong> Press <kbd>E</kbd> at the blast door to escape into the pine forest!';
+        progBar.style.width = '100%';
+        hintEl.textContent = 'Gate Unlocked! Tap/Press INTERACT to Escape into the Forest!';
+      }
       break;
   }
 }
@@ -9905,6 +10110,10 @@ function setupMinimap() {
     if (titleText) titleText.textContent = 'TACTICAL MAP';
     if (document.pointerLockElement) document.exitPointerLock();
     drawMinimap();
+
+    if (window.isTutorialMatch && tutorialStage === 6) {
+      advanceTutorialStage(7, "Tactical Navigation Calibrated! Next: UV Lantern Sanctuaries");
+    }
   };
 
   const handleMapMark = (clientX, clientY) => {
@@ -9930,6 +10139,10 @@ function setupMinimap() {
         mapMarks.push({r, c});
       }
       drawMinimap();
+
+      if (window.isTutorialMatch && tutorialStage === 6) {
+        advanceTutorialStage(7, "Tactical Navigation Calibrated! Next: UV Lantern Sanctuaries");
+      }
     }
   };
 
@@ -10087,8 +10300,9 @@ function fixBreakerLocal(breakerId) {
       gateKeypadLed.material.color.setHex(0x10b981);
       if (gateKeypadLed.material.emissive) gateKeypadLed.material.emissive.setHex(0x10b981);
     }
-    if (window.isTutorialMatch && tutorialStage === 5) {
-      advanceTutorialStage(6, "Grid Power Restored! Next: Master Vault Keypad Extraction");
+    if (window.isTutorialMatch) {
+      const fullCode = (window.cipherCodeDigits || []).join('');
+      advanceTutorialStage(9, `Grid Power Restored! Master Vault Powered! Code Intel: [${fullCode}]. Head to Keypad!`);
     }
   } else {
     triggerNotification(`Circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
