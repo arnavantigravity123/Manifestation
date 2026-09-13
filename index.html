@@ -81,6 +81,7 @@
             </select>
           </div>
 
+          <button id="tutorial-btn" class="action-btn" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; margin-bottom: 0.4rem; box-shadow: 0 0 15px rgba(56, 189, 248, 0.35);">🎓 Training & Tutorial Protocol</button>
           <button id="solo-btn" class="action-btn" style="background: linear-gradient(135deg, #4f46e5, #312e81); border: 1px solid #6366f1;">Deploy Solo Protocol</button>
           
           <div style="border-top: 1px dashed rgba(255,255,255,0.2); margin: 0.5rem 0;"></div>
@@ -99,6 +100,8 @@
 
           <!-- Main Menu Legal & Credits Footer -->
           <div style="margin-top: 1.2rem; font-size: 0.75rem; color: #64748b; display: flex; justify-content: center; gap: 0.8rem; flex-wrap: wrap;">
+            <a href="#" id="menu-open-controls-trigger" style="color: #34d399; text-decoration: underline; font-weight: bold;">🎮 Controls Guide</a>
+            <span>•</span>
             <a href="#" class="open-terms-trigger" style="color: #94a3b8; text-decoration: underline;">Terms</a>
             <span>•</span>
             <a href="#" class="open-privacy-trigger" style="color: #94a3b8; text-decoration: underline;">Privacy</a>
@@ -492,11 +495,12 @@
             </div>
           </div>
 
-          <!-- Top Middle: Controls (Pause / Cam) and Slim Objective Ribbon -->
+          <!-- Top Middle: Controls (Pause / Cam / Controls Guide) and Slim Objective Ribbon -->
           <div class="top-center-hud">
              <div class="top-controls-group">
                 <button id="btn-mobile-pause" class="unified-pause-btn">⏸️ PAUSE</button>
                 <button id="btn-camera-toggle" class="unified-cam-btn" title="Toggle Camera View (V)">🎥 CAM</button>
+                <button id="btn-controls-guide" class="unified-controls-btn" title="Controls / Buttons Guide (H / C)">🎮 GUIDE</button>
              </div>
              <!-- Sleek Horizontal Master Gate Objective Ribbon -->
              <div class="terminal-status hud-panel compact-objective-bar">
@@ -507,6 +511,19 @@
                   <span id="hud-cipher-info">📝 4-DIGIT CODE</span>
                 </div>
                 <button id="quit-game-btn" style="pointer-events: auto; padding: 0.2rem 0.6rem; background: rgba(239, 68, 68, 0.2); border: 1px solid red; color: white; cursor: pointer; border-radius: 4px; font-family: inherit; font-size: 0.7rem; display: none;">ABORT</button>
+             </div>
+             <!-- Tutorial Training Quest Uplink Banner -->
+             <div id="tutorial-quest-banner" class="tutorial-quest-banner" style="display: none;">
+                <div class="tutorial-banner-header">
+                   <span class="tutorial-badge">🎓 TRAINING PROTOCOL</span>
+                   <span id="tutorial-stage-indicator" class="tutorial-step">STAGE 1/6</span>
+                </div>
+                <div id="tutorial-task-title" class="tutorial-task-title">LOCOMOTION CALIBRATION</div>
+                <div id="tutorial-task-desc" class="tutorial-task-desc">Move 10 meters using <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or the Mobile Virtual Joystick.</div>
+                <div class="tutorial-progress-track">
+                   <div id="tutorial-progress-bar" class="tutorial-progress-fill" style="width: 0%;"></div>
+                </div>
+                <div id="tutorial-task-hint" class="tutorial-task-hint">Distance: 0 / 10 meters</div>
              </div>
           </div>
 
@@ -626,6 +643,7 @@
 
         <div style="display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap; justify-content: center;">
           <button id="pause-resume-btn" class="action-btn" style="width: auto; background: var(--primary-gradient); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; font-weight: 800;">▶ RESUME</button>
+          <button id="pause-controls-btn" class="action-btn" style="width: auto; background: rgba(16, 185, 129, 0.6); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; border: 1px solid #10b981; font-weight: 800;">🎮 CONTROLS</button>
           <button id="pause-settings-btn" class="action-btn" style="width: auto; background: rgba(59, 130, 246, 0.6); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; border: 1px solid var(--human-accent); font-weight: 800;">⚙️ SETTINGS</button>
           <button id="pause-abort-btn" class="action-btn" style="width: auto; background: rgba(139,0,0,0.85); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; border: 1px solid #ef4444; font-weight: 800;">🚨 ABORT MATCH</button>
         </div>
@@ -701,6 +719,155 @@
       <div id="ghost-capture-vignette" style="position: absolute; top:0; left:0; width:100%; height:100%; background: radial-gradient(ellipse at center, transparent 30%, rgba(80,0,120,0.0) 100%); transition: background 1.5s ease;"></div>
       <div id="ghost-capture-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: 'Orbitron', sans-serif; font-size: 2.5rem; color: #a855f7; text-shadow: 0 0 30px rgba(168,85,247,0.8), 0 0 60px rgba(100,0,180,0.4); opacity: 0; letter-spacing: 5px; text-align: center;"></div>
       <div id="ghost-capture-static" style="position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; mix-blend-mode: overlay; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px);"></div>
+    </div>
+
+    <!-- 6. Controls & Buttons Guide Modal -->
+    <div id="controls-guide-modal" class="settings-modal" style="display: none; z-index: 25000;">
+      <div class="settings-panel controls-guide-panel">
+        <div class="controls-guide-header">
+          <div style="display: flex; align-items: center; gap: 0.6rem;">
+            <span style="font-size: 1.5rem;">🎮</span>
+            <div>
+              <h2 style="margin: 0; font-size: 1.3rem; text-align: left; color: #38bdf8;">CONTROLS & BUTTONS GUIDE</h2>
+              <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; text-align: left;">Operative Field Manual</div>
+            </div>
+          </div>
+          <button id="close-controls-modal-btn" class="modal-close-icon" title="Close Guide">✕</button>
+        </div>
+
+        <div class="controls-guide-tabs">
+          <button id="tab-controls-pc" class="controls-tab-btn active" type="button">🖥️ PC (KEYBOARD & MOUSE)</button>
+          <button id="tab-controls-mobile" class="controls-tab-btn" type="button">📱 MOBILE (TOUCHSCREEN)</button>
+        </div>
+
+        <!-- PC Tab Content -->
+        <div id="controls-content-pc" class="controls-tab-content">
+          <div class="controls-section-title">HUMAN OPERATIVE CONTROLS</div>
+          <div class="controls-grid">
+            <div class="control-row">
+              <div class="control-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+              <div class="control-desc"><strong>Movement</strong> — Walk through corridors in 360°</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>SHIFT</kbd></div>
+              <div class="control-desc"><strong>Tactical Sprint</strong> — High-speed sprint (consumes Stamina)</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>E</kbd> / <kbd>CLICK</kbd></div>
+              <div class="control-desc"><strong>Interact / Salvage</strong> — Pick up items, repair breakers, inspect clues, open keypad</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>F</kbd></div>
+              <div class="control-desc"><strong>Flashlight</strong> — Toggle flashlight beam On/Off to conserve battery</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>1</kbd>–<kbd>8</kbd> / <kbd>WHEEL</kbd></div>
+              <div class="control-desc"><strong>Select Inventory</strong> — Switch active hotbar item slot</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>LEFT CLICK</kbd></div>
+              <div class="control-desc"><strong>Use Item</strong> — Consume Sanity Pills, apply Medkit, or trigger held equipment</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>Q</kbd></div>
+              <div class="control-desc"><strong>Drop Item</strong> — Drop currently held item on the floor for teammates</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>G</kbd></div>
+              <div class="control-desc"><strong>Drop Key</strong> — Drop carried gate key on the floor</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>SPACE</kbd></div>
+              <div class="control-desc"><strong>Special Ability</strong> — Panic Hide / Class Perk (Salt barrier, Adrenaline, Remote, Revive)</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>V</kbd></div>
+              <div class="control-desc"><strong>Camera Perspective</strong> — Switch between 1st Person & 3rd Person Over-the-Shoulder</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>M</kbd></div>
+              <div class="control-desc"><strong>Tactical Map</strong> — Expand full-screen minimap and click to drop beacons</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>H</kbd> / <kbd>C</kbd></div>
+              <div class="control-desc"><strong>Controls Guide</strong> — Open this Controls & Buttons Manual anytime</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>ESC</kbd> / <kbd>P</kbd></div>
+              <div class="control-desc"><strong>Pause Menu</strong> — Open pause screen & sound/sensitivity settings</div>
+            </div>
+          </div>
+
+          <div class="controls-section-title" style="margin-top: 1rem; color: #c084fc;">GHOST ENTITY CONTROLS (WHEN PLAYING AS GHOST)</div>
+          <div class="controls-grid">
+            <div class="control-row">
+              <div class="control-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div>
+              <div class="control-desc"><strong>Float / Stalk</strong> — Glide silently through the corridors</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>E</kbd> / <kbd>CLICK</kbd></div>
+              <div class="control-desc"><strong>Ghost Attack</strong> — Strike and capture nearby human survivors</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys"><kbd>SPACE</kbd></div>
+              <div class="control-desc"><strong>Entity Power</strong> — Class ability (Phase through walls, Teleport, Invisibility, Mimic, Screech)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mobile Tab Content -->
+        <div id="controls-content-mobile" class="controls-tab-content" style="display: none;">
+          <div class="controls-section-title">MOBILE TOUCHSCREEN INTERFACE</div>
+          <div class="controls-grid">
+            <div class="control-row">
+              <div class="control-keys touch-badge">🕹️ JOYSTICK</div>
+              <div class="control-desc"><strong>Left Screen Virtual Joystick</strong> — Touch & drag anywhere on the left side to move smoothly in 360°</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys touch-badge">👆 DRAG</div>
+              <div class="control-desc"><strong>Right Screen Look Area</strong> — Swipe anywhere on the right side to aim camera and point flashlight</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys touch-badge">🔘 INTERACT</div>
+              <div class="control-desc"><strong>INTERACT Button</strong> — Pick up items, collect keys, fix circuit breakers, inspect cipher clues, and open the keypad</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys touch-badge">🔘 USE</div>
+              <div class="control-desc"><strong>USE Button</strong> — Activate equipped item (recharge flashlight battery, consume pills, use medkit)</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys touch-badge">🔘 SPRINT</div>
+              <div class="control-desc"><strong>SPRINT Button</strong> — Tap to lock/unlock fast running speed (uses Stamina bar)</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys touch-badge">🔘 SPECIAL</div>
+              <div class="control-desc"><strong>SPECIAL Button</strong> — Unleash your class special ability (Panic Hide, Salt Barrier, Adrenaline Boost, Breaker Remote)</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys touch-badge">🔘 DROP ITEM</div>
+              <div class="control-desc"><strong>DROP ITEM Button</strong> — Drop your held inventory item to share with teammates</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys touch-badge">🔘 DROP KEY</div>
+              <div class="control-desc"><strong>DROP KEY Button</strong> — Drop a carried gate key</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys touch-badge">🎥 CAM</div>
+              <div class="control-desc"><strong>Top CAM Button</strong> — Switch between First-Person and Third-Person Over-the-Shoulder camera</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys touch-badge">🗺️ MINIMAP</div>
+              <div class="control-desc"><strong>Top-Right Minimap</strong> — Tap radar minimap to expand full-screen tactical map and tap to place marker pings</div>
+            </div>
+            <div class="control-row">
+              <div class="control-keys touch-badge">⏸️ PAUSE</div>
+              <div class="control-desc"><strong>Top PAUSE Button</strong> — Open in-game menu and adjust look sensitivity & audio settings</div>
+            </div>
+          </div>
+        </div>
+
+        <button id="resume-from-controls-btn" class="action-btn" style="margin-top: 1.2rem; background: linear-gradient(135deg, #10b981, #047857); font-weight: 800; letter-spacing: 1px;">✓ CLOSE / RESUME GAME</button>
+      </div>
     </div>
 
     <!-- 7. Settings Modal Overlay -->

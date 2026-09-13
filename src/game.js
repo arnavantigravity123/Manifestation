@@ -1267,16 +1267,25 @@ function shuffleArray(array) {
   return array;
 }
 
-export function initGame(socket, socketId, matchConfig, isSolo = false) {
+export function initGame(socket, socketId, matchConfig, isSolo = false, isTutorial = false) {
   socketClient = socket;
   myId = socketId;
   currentLobby = matchConfig;
+  window.isTutorialMatch = Boolean(
+    isTutorial ||
+    (matchConfig && matchConfig.id && matchConfig.id.startsWith('tutorial-')) ||
+    (matchConfig && matchConfig.settings && matchConfig.settings.isTutorial)
+  );
   window.isSoloMatch = Boolean(
     isSolo ||
+    window.isTutorialMatch ||
     (matchConfig && matchConfig.id && matchConfig.id.startsWith('solo-')) ||
     (sessionStorage.getItem('rejoinIsSolo') === 'true') ||
     (!matchConfig.isPublic && Object.keys(matchConfig.players || {}).length <= 1)
   );
+  if (window.isTutorialMatch) {
+    totalBreakersRequired = 1;
+  }
 
   // Initialize seededRandom using server-provided mazeGeometrySeed
   const seed = (matchConfig.puzzleState && matchConfig.puzzleState.mazeGeometrySeed) || 0.12345;
@@ -1516,7 +1525,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
   };
 
   ptrOverlay.addEventListener('click', (e) => {
-    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.glass-panel')) return;
+    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('.glass-panel')) return;
     handleEnterGame(e);
   });
   container.addEventListener('click', handleEnterGame);
@@ -1531,6 +1540,15 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     pauseResumeBtn.addEventListener('touchstart', handleEnterGame, { passive: false });
   }
 
+  // Initialize Controls Guide & Tutorial Quest engine
+  setupControlsGuideModal();
+  if (window.isTutorialMatch) {
+    initTutorialQuest();
+  } else {
+    const tutBanner = document.getElementById('tutorial-quest-banner');
+    if (tutBanner) tutBanner.style.display = 'none';
+  }
+
   // Global helper to request pointer lock during active gameplay
   window.requestGamePointerLock = () => {
     if (isMobileDevice || !window.gameReady || window.isSpectating || window.isEscaping) return;
@@ -1538,6 +1556,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     if (ptrOverlay && ptrOverlay.style.display === 'flex') return;
     const settingsModal = document.getElementById('settings-modal');
     if (settingsModal && settingsModal.style.display === 'flex') return;
+    const controlsGuideModal = document.getElementById('controls-guide-modal');
+    if (controlsGuideModal && controlsGuideModal.style.display === 'flex') return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
     if (isMinimapExpanded) return;
@@ -1562,7 +1582,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     if (isMobileDevice || window.isEscaping) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
-    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions')) return;
+    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('#controls-guide-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions')) return;
     if (ptrOverlay.style.display !== 'flex') {
       window.requestGamePointerLock();
     }
@@ -1571,7 +1591,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
     if (isMobileDevice || window.isEscaping) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
-    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions')) return;
+    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('#controls-guide-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions')) return;
     if (ptrOverlay.style.display !== 'flex') {
       window.requestGamePointerLock();
     }
@@ -4803,6 +4823,9 @@ function generateCircuitBreakers() {
   }
 
   const shuffledCandidates = shuffleArray(wallCandidates);
+  if (window.isTutorialMatch) {
+    shuffledCandidates.sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+  }
 
   for (let i = 0; i < totalBreakersRequired; i++) {
     // Attempt spacing with 10m threshold, then 6m, then any candidate
@@ -4988,6 +5011,23 @@ function generateConsumableItems() {
       name: name
     });
   });
+
+  // In Tutorial Mode, place a guaranteed Battery Pack and Med Kit in corridors right next to human spawn
+  if (window.isTutorialMatch && openCorridors.length > 0) {
+    const nearCorridors = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+    if (nearCorridors[1]) {
+      const c = nearCorridors[1];
+      const itemId = 'tutorial_battery';
+      const mesh = createItemPickupMesh(itemId, 'Battery Pack', c);
+      itemsInMaze.push({ id: itemId, mesh: mesh, name: 'Battery Pack' });
+    }
+    if (nearCorridors[2]) {
+      const c = nearCorridors[2];
+      const itemId = 'tutorial_medkit';
+      const mesh = createItemPickupMesh(itemId, 'Med Kit', c);
+      itemsInMaze.push({ id: itemId, mesh: mesh, name: 'Med Kit' });
+    }
+  }
 }
 
 // --- Feature 4: Light Sanctuaries (UV Lantern Zones) ---
@@ -5233,8 +5273,25 @@ function setupControls() {
         }
         break;
       case 'KeyQ':
-      case 'KeyF':
         dropActiveItem();
+        break;
+      case 'KeyF':
+        if (myTeam === 'Human') {
+          toggleFlashlight();
+        }
+        break;
+      case 'KeyH':
+      case 'KeyC':
+        const ctrlModal = document.getElementById('controls-guide-modal');
+        if (ctrlModal) {
+          if (ctrlModal.style.display === 'flex') {
+            if (window.closeControlsGuideModal) window.closeControlsGuideModal();
+            else ctrlModal.style.display = 'none';
+          } else {
+            if (window.openControlsGuideModal) window.openControlsGuideModal();
+            else ctrlModal.style.display = 'flex';
+          }
+        }
         break;
       case 'Space':
         // Risk/Reward Ability: Panic Hide
@@ -5288,6 +5345,12 @@ function setupControls() {
         break;
       case 'Escape':
         resetPlayerMovementState();
+        const ctrlGuideModal = document.getElementById('controls-guide-modal');
+        if (ctrlGuideModal && ctrlGuideModal.style.display === 'flex') {
+          if (window.closeControlsGuideModal) window.closeControlsGuideModal();
+          else ctrlGuideModal.style.display = 'none';
+          return;
+        }
         if (isMinimapExpanded) {
           const mapWrap = document.getElementById('minimap-wrapper');
           const mapCtrl = document.getElementById('minimap-expanded-controls');
@@ -5763,7 +5826,11 @@ function setupControls() {
         if (!isCaptured) {
           const item = inventory[activeSlot];
           if (!item || item === "") {
-            triggerNotification("No usable item in active slot. Tap a hotbar slot to select.");
+            if (myTeam === 'Human') {
+              toggleFlashlight();
+            } else {
+              triggerNotification("No usable item in active slot. Tap a hotbar slot to select.");
+            }
           } else {
             useActiveItem();
           }
@@ -5848,6 +5915,20 @@ function setupControls() {
           const sModal = document.getElementById('settings-modal');
           if (sModal) sModal.style.display = 'flex';
         }
+      });
+    }
+
+    const pauseControlsBtn = document.getElementById('pause-controls-btn');
+    if (pauseControlsBtn) {
+      addTapListener(pauseControlsBtn, () => {
+        if (window.openControlsGuideModal) window.openControlsGuideModal();
+      });
+    }
+
+    const hudControlsBtn = document.getElementById('btn-controls-guide');
+    if (hudControlsBtn) {
+      addTapListener(hudControlsBtn, () => {
+        if (window.openControlsGuideModal) window.openControlsGuideModal();
       });
     }
 
@@ -6063,6 +6144,9 @@ function getBestInteractionTarget() {
               if (window.socket) window.socket.emit('item_picked_up', { id: item.id });
               triggerNotification(`Picked up ${item.name}`);
               renderHUDInventory();
+              if (window.isTutorialMatch && tutorialStage === 4) {
+                advanceTutorialStage(5, `Secured ${item.name}! Next: Restore Grid Power`);
+              }
             } else {
               triggerNotification("Inventory full! Drop an item first.");
             }
@@ -6327,10 +6411,33 @@ function getBestInteractionTarget() {
                 const details = document.getElementById('end-game-details');
                 if (title && details) {
                   endOverlay.style.display = 'flex';
-                  title.textContent = "ESCAPED!";
-                  title.style.color = "#10b981";
-                  title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
-                  details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>`;
+                  if (window.isTutorialMatch) {
+                    title.textContent = "🎓 CERTIFIED!";
+                    title.style.color = "#38bdf8";
+                    title.style.textShadow = "0 0 25px rgba(56, 189, 248, 0.8)";
+                    details.innerHTML = `
+                      <div style="font-weight:bold; color: #38bdf8; margin-bottom: 0.8rem; font-size: 1.3rem;">TRAINING PROTOCOL CERTIFIED</div>
+                      <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You successfully mastered movement, sprint boosters, flashlight operation, supply salvage, circuit breaker power restoration, and master vault keypad extraction!</p>
+                      <div style="margin-top: 1rem; padding: 0.6rem; background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; border-radius: 8px; color: #7dd3fc; font-weight: bold; font-size: 0.9rem;">
+                        🏆 CERTIFICATION REWARD: +500 TRAINING CREDITS
+                      </div>
+                    `;
+                    try {
+                      const profileStr = localStorage.getItem('manifestation_user_profile');
+                      if (profileStr) {
+                        const profile = JSON.parse(profileStr);
+                        profile.credits = (profile.credits || 0) + 500;
+                        localStorage.setItem('manifestation_user_profile', JSON.stringify(profile));
+                      }
+                      const localCreds = parseInt(localStorage.getItem('manifestation_credits') || '0', 10);
+                      localStorage.setItem('manifestation_credits', (localCreds + 500).toString());
+                    } catch(e) {}
+                  } else {
+                    title.textContent = "ESCAPED!";
+                    title.style.color = "#10b981";
+                    title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
+                    details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>`;
+                  }
                 }
               }
             });
@@ -7374,6 +7481,11 @@ function getVisionMultiplier() {
 function processFlashlightBattery(delta) {
   if (myTeam !== 'Human' || window.isSpectating) return;
   if (!flashLight) return;
+
+  if (!isFlashlightToggledOn) {
+    flashLight.intensity = 0;
+    return;
+  }
 
   const mult = getVisionMultiplier();
   const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
@@ -9078,6 +9190,255 @@ function spawnGhostAIs(count) {
 }
 
 // ==========================================
+// CONTROLS & BUTTONS GUIDE MODAL
+// ==========================================
+let controlsGuideSetupDone = false;
+export function setupControlsGuideModal() {
+  const modal = document.getElementById('controls-guide-modal');
+  const hudGuideBtn = document.getElementById('btn-controls-guide');
+  const pauseGuideBtn = document.getElementById('pause-controls-btn');
+  const closeBtn = document.getElementById('close-controls-modal-btn');
+  const resumeBtn = document.getElementById('resume-from-controls-btn');
+  const tabPc = document.getElementById('tab-controls-pc');
+  const tabMobile = document.getElementById('tab-controls-mobile');
+  const contentPc = document.getElementById('controls-content-pc');
+  const contentMobile = document.getElementById('controls-content-mobile');
+
+  if (!modal) return;
+
+  const showModal = (e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    modal.style.display = 'flex';
+    
+    // Choose active tab based on device detection
+    if (isMobileDevice) {
+      if (tabMobile) tabMobile.classList.add('active');
+      if (tabPc) tabPc.classList.remove('active');
+      if (contentMobile) contentMobile.style.display = 'block';
+      if (contentPc) contentPc.style.display = 'none';
+    } else {
+      if (tabPc) tabPc.classList.add('active');
+      if (tabMobile) tabMobile.classList.remove('active');
+      if (contentPc) contentPc.style.display = 'block';
+      if (contentMobile) contentMobile.style.display = 'none';
+    }
+
+    if (document.pointerLockElement) {
+      try { document.exitPointerLock(); } catch(err) {}
+    }
+  };
+
+  const hideModal = (e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    modal.style.display = 'none';
+    const ptrOverlay = document.getElementById('pointer-lock-overlay');
+    const isPaused = ptrOverlay && ptrOverlay.style.display === 'flex';
+    if (!isMobileDevice && window.gameReady && !isCaptured && !isPaused && window.requestGamePointerLock) {
+      window.requestGamePointerLock();
+    }
+  };
+
+  window.openControlsGuideModal = showModal;
+  window.closeControlsGuideModal = hideModal;
+
+  if (!controlsGuideSetupDone) {
+    controlsGuideSetupDone = true;
+
+    if (hudGuideBtn) {
+      hudGuideBtn.addEventListener('click', showModal);
+      if ('ontouchstart' in window) {
+        hudGuideBtn.addEventListener('touchend', showModal);
+      }
+    }
+
+    if (pauseGuideBtn) {
+      pauseGuideBtn.addEventListener('click', showModal);
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', hideModal);
+    if (resumeBtn) resumeBtn.addEventListener('click', hideModal);
+
+    if (tabPc && tabMobile && contentPc && contentMobile) {
+      tabPc.addEventListener('click', () => {
+        tabPc.classList.add('active');
+        tabMobile.classList.remove('active');
+        contentPc.style.display = 'block';
+        contentMobile.style.display = 'none';
+      });
+      tabMobile.addEventListener('click', () => {
+        tabMobile.classList.add('active');
+        tabPc.classList.remove('active');
+        contentMobile.style.display = 'block';
+        contentPc.style.display = 'none';
+      });
+    }
+  }
+}
+
+// ==========================================
+// FLASHLIGHT TOGGLE CONTROLLER
+// ==========================================
+let isFlashlightToggledOn = true;
+function toggleFlashlight() {
+  if (myTeam !== 'Human' || window.isSpectating) return;
+  if (!flashLight) return;
+  if (flashlightBattery <= 0) {
+    triggerNotification("Flashlight battery depleted! Find a Battery Pack.");
+    return;
+  }
+  isFlashlightToggledOn = !isFlashlightToggledOn;
+  if (!isFlashlightToggledOn) {
+    flashLight.intensity = 0;
+    triggerNotification("Flashlight [OFF] — Conserving Battery");
+  } else {
+    triggerNotification("Flashlight [ON]");
+  }
+  if (window.isTutorialMatch && tutorialStage === 3) {
+    advanceTutorialStage(4, "Illumination Operational! Next: Salvage Supplies");
+  }
+}
+
+// ==========================================
+// TUTORIAL TRAINING QUEST ENGINE
+// ==========================================
+let tutorialStage = 1;
+let tutorialDistanceMoved = 0;
+let tutorialSprintTime = 0;
+let tutorialLastPlayerPos = null;
+
+function playTutorialChime() {
+  try {
+    if (!audioCtx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AudioContextClass();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (!audioCtx) return;
+
+    const now = audioCtx.currentTime;
+    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6 (Ascending major chord fanfare)
+    notes.forEach((freq, idx) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+      gain.gain.setValueAtTime(0.18, now + idx * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.35);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now + idx * 0.08);
+      osc.stop(now + idx * 0.08 + 0.35);
+    });
+  } catch(e) {}
+}
+
+function initTutorialQuest() {
+  tutorialStage = 1;
+  tutorialDistanceMoved = 0;
+  tutorialSprintTime = 0;
+  tutorialLastPlayerPos = (camera && camera.position) ? camera.position.clone() : new THREE.Vector3(0, 1.6, 0);
+
+  const banner = document.getElementById('tutorial-quest-banner');
+  if (banner) banner.style.display = 'block';
+  updateTutorialQuestBanner();
+}
+
+function updateTutorialQuestBanner() {
+  const banner = document.getElementById('tutorial-quest-banner');
+  if (!banner || !window.isTutorialMatch) {
+    if (banner) banner.style.display = 'none';
+    return;
+  }
+
+  banner.style.display = 'block';
+  const stageInd = document.getElementById('tutorial-stage-indicator');
+  const titleEl = document.getElementById('tutorial-task-title');
+  const descEl = document.getElementById('tutorial-task-desc');
+  const progBar = document.getElementById('tutorial-progress-bar');
+  const hintEl = document.getElementById('tutorial-task-hint');
+
+  if (!stageInd || !titleEl || !descEl || !progBar || !hintEl) return;
+
+  switch (tutorialStage) {
+    case 1:
+      stageInd.textContent = 'STAGE 1/6';
+      titleEl.textContent = 'LOCOMOTION CALIBRATION';
+      descEl.innerHTML = isMobileDevice 
+        ? 'Move through corridors using the <strong>Left Virtual Joystick</strong>.' 
+        : 'Move through corridors using <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>.';
+      const pct1 = Math.min(100, Math.floor((tutorialDistanceMoved / 8) * 100));
+      progBar.style.width = `${pct1}%`;
+      hintEl.textContent = `Distance: ${Math.floor(tutorialDistanceMoved)}m / 8m`;
+      break;
+
+    case 2:
+      stageInd.textContent = 'STAGE 2/6';
+      titleEl.textContent = 'TACTICAL SPRINT BOOSTERS';
+      descEl.innerHTML = isMobileDevice 
+        ? 'Tap the <span class="touch-badge">SPRINT</span> button to sprint. Notice your Stamina bar!' 
+        : 'Hold <kbd>SHIFT</kbd> to sprint. Keep an eye on your Stamina gauge!';
+      const pct2 = Math.min(100, Math.floor((tutorialSprintTime / 1.5) * 100));
+      progBar.style.width = `${pct2}%`;
+      hintEl.textContent = `Sprint time: ${tutorialSprintTime.toFixed(1)}s / 1.5s`;
+      break;
+
+    case 3:
+      stageInd.textContent = 'STAGE 3/6';
+      titleEl.textContent = 'ILLUMINATION & BATTERY';
+      descEl.innerHTML = isMobileDevice 
+        ? 'Tap <span class="touch-badge">USE</span> (with no item equipped) to toggle your flashlight On/Off.' 
+        : 'Press <kbd>F</kbd> to toggle your Flashlight. Turn it off to conserve battery or stealth!';
+      progBar.style.width = isFlashlightToggledOn ? '50%' : '100%';
+      hintEl.textContent = isMobileDevice ? 'Tap USE to cycle beam' : 'Press [F] to toggle beam';
+      break;
+
+    case 4:
+      stageInd.textContent = 'STAGE 4/6';
+      titleEl.textContent = 'SALVAGE SUPPLIES';
+      descEl.innerHTML = isMobileDevice 
+        ? 'Approach a glowing item on the corridor floor and tap <span class="touch-badge">INTERACT</span>.' 
+        : 'Find supplies on the corridor floor and press <kbd>E</kbd> or <kbd>Left Click</kbd> to pick it up!';
+      progBar.style.width = '30%';
+      hintEl.textContent = 'Look on the corridor floor for glowing batteries or kits';
+      break;
+
+    case 5:
+      stageInd.textContent = 'STAGE 5/6';
+      titleEl.textContent = 'RESTORE GRID POWER';
+      descEl.innerHTML = isMobileDevice 
+        ? 'Locate a yellow <strong>Circuit Breaker</strong> on the corridor wall and tap <span class="touch-badge">INTERACT</span>.' 
+        : 'Locate a yellow <strong>Circuit Breaker</strong> on the corridor wall and press <kbd>E</kbd> to repair it!';
+      progBar.style.width = fixedBreakersCount >= 1 ? '100%' : '50%';
+      hintEl.textContent = `Power Breakers: ${fixedBreakersCount} / 1 required`;
+      break;
+
+    case 6:
+      stageInd.textContent = 'STAGE 6/6';
+      titleEl.textContent = 'CRACK CIPHER & EXTRACT';
+      descEl.innerHTML = isMobileDevice 
+        ? 'Find wall clue notes, head to the <strong>Master Vault Keypad</strong>, enter the code, and tap <span class="touch-badge">INTERACT</span> to escape!' 
+        : 'Inspect wall clue notes, open the <strong>Keypad</strong> at the Master Vault Gate, enter code, and press <kbd>E</kbd> to extract!';
+      progBar.style.width = '85%';
+      hintEl.textContent = 'Follow corridor markers or radar to the Vault Gate!';
+      break;
+  }
+}
+
+function advanceTutorialStage(nextStage, successMsg) {
+  if (tutorialStage >= nextStage) return;
+  tutorialStage = nextStage;
+  playTutorialChime();
+  if (successMsg) triggerNotification(`🎓 ${successMsg}`);
+  updateTutorialQuestBanner();
+}
+
+// ==========================================
 // MINIMAP LOGIC
 // ==========================================
 let minimapSetupDone = false;
@@ -9305,6 +9666,9 @@ function fixBreakerLocal(breakerId) {
     if (gateKeypadLed && gateKeypadLed.material) {
       gateKeypadLed.material.color.setHex(0x10b981);
       if (gateKeypadLed.material.emissive) gateKeypadLed.material.emissive.setHex(0x10b981);
+    }
+    if (window.isTutorialMatch && tutorialStage === 5) {
+      advanceTutorialStage(6, "Grid Power Restored! Next: Master Vault Keypad Extraction");
     }
   } else {
     triggerNotification(`Circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
@@ -11108,14 +11472,45 @@ function animate() {
       : 3;
     
     // Calculate how many AI bot ghosts are needed so Total Ghosts == totalTargetGhosts exactly
-    const botGhostsToSpawn = (currentLobby.settings && currentLobby.settings.botGhostsCount !== undefined)
+    let botGhostsToSpawn = (currentLobby.settings && currentLobby.settings.botGhostsCount !== undefined)
       ? currentLobby.settings.botGhostsCount
       : Math.max(0, totalTargetGhosts - playerGhostCount);
+
+    if (window.isTutorialMatch) {
+      botGhostsToSpawn = 0;
+    }
 
     console.log(`[GHOST SPAWNER] Target Total Ghosts: ${totalTargetGhosts} | Real Player Ghosts: ${playerGhostCount} | AI Bots Spawning: ${botGhostsToSpawn}`);
 
     if (botGhostsToSpawn > 0) {
       spawnGhostAIs(botGhostsToSpawn);
+    }
+  }
+
+  // Tutorial Stage 1 (Move 8m) & Stage 2 (Sprint 1.5s) Real-Time Tracking
+  if (window.isTutorialMatch && window.gameReady && !isCaptured) {
+    if (tutorialStage === 1) {
+      if (!tutorialLastPlayerPos) {
+        tutorialLastPlayerPos = camera.position.clone();
+      } else {
+        const stepDist = Math.hypot(camera.position.x - tutorialLastPlayerPos.x, camera.position.z - tutorialLastPlayerPos.z);
+        if (stepDist > 0.04) {
+          tutorialDistanceMoved += stepDist;
+          tutorialLastPlayerPos.copy(camera.position);
+          updateTutorialQuestBanner();
+          if (tutorialDistanceMoved >= 8) {
+            advanceTutorialStage(2, "Locomotion Verified! Next: Sprint Calibration");
+          }
+        }
+      }
+    } else if (tutorialStage === 2) {
+      if (isSprinting && (moveForward || moveBackward || moveLeft || moveRight || (typeof joystickVector !== 'undefined' && (Math.abs(joystickVector.x) > 0.1 || Math.abs(joystickVector.y) > 0.1)))) {
+        tutorialSprintTime += delta;
+        updateTutorialQuestBanner();
+        if (tutorialSprintTime >= 1.5) {
+          advanceTutorialStage(3, "Sprint Boosters Calibrated! Next: Flashlight Operation");
+        }
+      }
     }
   }
 

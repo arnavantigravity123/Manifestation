@@ -1128,7 +1128,8 @@ input[type="text"]:focus {
 }
 
 .unified-pause-btn,
-.unified-cam-btn {
+.unified-cam-btn,
+.unified-controls-btn {
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.25);
   color: #e2e8f0;
@@ -1154,8 +1155,15 @@ input[type="text"]:focus {
   color: #38bdf8;
 }
 
+.unified-controls-btn {
+  border-color: rgba(16, 185, 129, 0.6);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(15, 23, 42, 0.9));
+  color: #34d399;
+}
+
 .unified-pause-btn:active,
-.unified-cam-btn:active {
+.unified-cam-btn:active,
+.unified-controls-btn:active {
   transform: scale(0.93);
   filter: brightness(1.3);
 }
@@ -2475,6 +2483,233 @@ body.is-mobile .lobby-chat {
 #hud-overlay,
 .glass-panel {
   filter: none !important;
+}
+
+/* =========================================================
+   Controls & Buttons Guide Modal
+   ========================================================= */
+.controls-guide-panel {
+  max-width: 660px !important;
+  width: 94vw !important;
+  max-height: 85vh;
+  overflow-y: auto;
+  text-align: left !important;
+  padding: 1.4rem !important;
+  background: rgba(15, 23, 42, 0.96) !important;
+  border: 1px solid rgba(56, 189, 248, 0.3) !important;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.9), 0 0 20px rgba(56, 189, 248, 0.2) !important;
+}
+
+.controls-guide-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.modal-close-icon {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.modal-close-icon:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.controls-guide-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 0.6rem;
+}
+
+.controls-tab-btn {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  border-radius: 6px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.controls-tab-btn.active {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+  color: #38bdf8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+}
+
+.controls-section-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.75rem;
+  color: #38bdf8;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  margin: 0.6rem 0 0.4rem 0;
+}
+
+.controls-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0.75rem;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.control-keys {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 140px;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  font-family: 'Orbitron', monospace;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #f8fafc;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-bottom: 2px solid #334155;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.touch-badge {
+  padding: 0.25rem 0.5rem;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 4px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.control-desc {
+  font-size: 0.8rem;
+  color: #cbd5e1;
+  line-height: 1.35;
+  flex: 1;
+}
+
+/* =========================================================
+   Tutorial Training Quest Uplink Banner
+   ========================================================= */
+.tutorial-quest-banner {
+  margin-top: 6px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 0.92));
+  border: 1.5px solid rgba(56, 189, 248, 0.55);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.25), inset 0 0 15px rgba(56, 189, 248, 0.05);
+  border-radius: 8px;
+  padding: 0.5rem 0.9rem;
+  max-width: 480px;
+  width: 90vw;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: auto;
+  animation: tutorialPulse 3s infinite ease-in-out;
+}
+
+@keyframes tutorialPulse {
+  0%, 100% { border-color: rgba(56, 189, 248, 0.45); box-shadow: 0 0 15px rgba(56, 189, 248, 0.2); }
+  50% { border-color: rgba(56, 189, 248, 0.85); box-shadow: 0 0 25px rgba(56, 189, 248, 0.45); }
+}
+
+.tutorial-banner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 3px;
+}
+
+.tutorial-badge {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #38bdf8;
+}
+
+.tutorial-step {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.tutorial-task-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.5);
+}
+
+.tutorial-task-desc {
+  font-size: 0.76rem;
+  color: #cbd5e1;
+  line-height: 1.3;
+  margin-bottom: 5px;
+}
+
+.tutorial-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.tutorial-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #818cf8);
+  border-radius: 999px;
+  transition: width 0.25s ease-out;
+}
+
+.tutorial-task-hint {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 0.5px;
 }
 
 

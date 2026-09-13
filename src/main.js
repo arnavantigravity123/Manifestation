@@ -21,6 +21,7 @@ let socket = null;
 let currentLobby = null;
 let myId = null;
 let isSoloMode = false;
+let isTutorialMode = false;
 
 const isTouchCapable = detectMobileDevice();
 if (isTouchCapable) {
@@ -76,7 +77,9 @@ window.isVipActive = isVipActive;
 window.isVipGlowEnabled = isVipGlowEnabled;
 
 // Main Menu Action Buttons
+const tutorialBtn = document.getElementById('tutorial-btn');
 const soloBtn = document.getElementById('solo-btn');
+const menuOpenControlsTrigger = document.getElementById('menu-open-controls-trigger');
 const joinPublicBtn = document.getElementById('join-public-btn');
 const createPublicBtn = document.getElementById('create-public-btn');
 const createPrivateBtn = document.getElementById('create-private-btn');
@@ -1126,16 +1129,23 @@ function initializeSocketConnection() {
 
   socket.on('joined_room_success', ({ roomId, isPublic }) => {
     if (isSoloMode) {
-      const selectedDiff = (soloDifficultySelect && soloDifficultySelect.value) || 'medium';
+      const selectedDiff = isTutorialMode ? 'easy' : ((soloDifficultySelect && soloDifficultySelect.value) || 'medium');
       const soloHumanClasses = ['Locksmith', 'Trapper', 'Scout', 'Medic', 'Flashlight Expert', 'Quartermaster'];
-      const chosenSoloSetting = (soloClassSelect && soloClassSelect.value) || localStorage.getItem('manifestation_solo_class') || 'Random';
+      const chosenSoloSetting = isTutorialMode ? 'Locksmith' : ((soloClassSelect && soloClassSelect.value) || localStorage.getItem('manifestation_solo_class') || 'Random');
       
       let chosenClass = chosenSoloSetting;
       if (!chosenClass || chosenClass === 'Random' || !soloHumanClasses.includes(chosenClass)) {
         chosenClass = soloHumanClasses[Math.floor(Math.random() * soloHumanClasses.length)];
       }
 
-      socket.emit('update_settings', { botsEnabled: true, difficulty: selectedDiff });
+      socket.emit('update_settings', { 
+        botsEnabled: !isTutorialMode, 
+        difficulty: selectedDiff,
+        isTutorial: isTutorialMode,
+        ghostsCount: isTutorialMode ? 0 : undefined,
+        botGhostsCount: isTutorialMode ? 0 : undefined,
+        totalBreakers: isTutorialMode ? 1 : undefined
+      });
       socket.emit('update_player', { team: 'Human', characterClass: chosenClass, isVip: isVipActive() });
       setTimeout(() => {
         socket.emit('start_match');
@@ -1178,7 +1188,7 @@ function initializeSocketConnection() {
     // Step 1: Interstitial Ad (VIP bypasses instantly)
     window.showInterstitialAd(() => {
       // Step 2 & 3: Role Reveal and Gameplay initialization handled inside initGame
-      initGame(socket, myId, matchConfig, isSoloMode);
+      initGame(socket, myId, matchConfig, isSoloMode, isTutorialMode);
     });
   });
 
@@ -1216,14 +1226,41 @@ function getSkinId() {
   return localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
 }
 
+if (tutorialBtn) {
+  tutorialBtn.addEventListener('click', () => {
+    isSoloMode = true;
+    isTutorialMode = true;
+    soloLoadingOverlay.textContent = "INITIALIZING TRAINING PROTOCOL...";
+    soloLoadingOverlay.style.display = 'block';
+    const s = initializeSocketConnection();
+    
+    const roomId = 'tutorial-' + Math.floor(100000 + Math.random() * 900000).toString();
+    s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
+  });
+}
+
 soloBtn.addEventListener('click', () => {
   isSoloMode = true;
+  isTutorialMode = false;
+  soloLoadingOverlay.textContent = "INITIALIZING SOLO CONTAINMENT...";
   soloLoadingOverlay.style.display = 'block';
   const s = initializeSocketConnection();
   
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
   s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
 });
+
+if (menuOpenControlsTrigger) {
+  menuOpenControlsTrigger.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (window.openControlsGuideModal) {
+      window.openControlsGuideModal();
+    } else {
+      const modal = document.getElementById('controls-guide-modal');
+      if (modal) modal.style.display = 'flex';
+    }
+  });
+}
 
 createPublicBtn.addEventListener('click', () => {
   const s = initializeSocketConnection();

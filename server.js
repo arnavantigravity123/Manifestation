@@ -802,6 +802,10 @@ io.on('connection', (socket) => {
     if (settings.difficulty !== undefined) lobbies[roomId].settings.difficulty = settings.difficulty;
     if (settings.botsEnabled !== undefined) lobbies[roomId].settings.botsEnabled = settings.botsEnabled;
     if (settings.roleSelectionMode !== undefined) lobbies[roomId].settings.roleSelectionMode = settings.roleSelectionMode;
+    if (settings.isTutorial !== undefined) lobbies[roomId].settings.isTutorial = settings.isTutorial;
+    if (settings.totalBreakers !== undefined) lobbies[roomId].settings.totalBreakers = settings.totalBreakers;
+    if (settings.ghostsCount !== undefined) lobbies[roomId].settings.ghostsCount = settings.ghostsCount;
+    if (settings.botGhostsCount !== undefined) lobbies[roomId].settings.botGhostsCount = settings.botGhostsCount;
 
     updateLobbyState(roomId);
   });
@@ -869,9 +873,14 @@ io.on('connection', (socket) => {
 
     const diff = lobby.settings.difficulty || 'medium';
     let totalBreakers = 3;
-    if (diff === 'easy') totalBreakers = 2;
+    if (lobby.settings.isTutorial || lobby.settings.totalBreakers === 1) totalBreakers = 1;
+    else if (diff === 'easy') totalBreakers = 2;
     else if (diff === 'hard') totalBreakers = 4;
     else if (diff === 'impossible') totalBreakers = 6;
+    if (lobby.settings.isTutorial) {
+      lobby.settings.ghostsCount = 0;
+      lobby.settings.botGhostsCount = 0;
+    }
     const mazeSize = calculateMazeSize(diff);
 
     lobby.puzzleState = {
