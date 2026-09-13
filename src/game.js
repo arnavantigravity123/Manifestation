@@ -1374,9 +1374,9 @@ window.gameDifficulty = localStorage.getItem('manifestation_difficulty') || 'med
 
 function getMazeSizeForDifficulty(difficulty = window.gameDifficulty || 'medium') {
   if (difficulty === 'easy') return 21;
-  if (difficulty === 'hard') return 37;
-  if (difficulty === 'impossible') return 43;
-  return 29; // medium
+  if (difficulty === 'hard') return 41;
+  if (difficulty === 'impossible') return 51;
+  return 31; // medium
 }
 window.getMazeSizeForDifficulty = getMazeSizeForDifficulty;
 window.mazeSizeGlobal = getMazeSizeForDifficulty(window.gameDifficulty);

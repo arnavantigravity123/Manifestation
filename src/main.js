@@ -1294,7 +1294,9 @@ function startLocalSoloMatch(isTutorial = false) {
   const keyNames = ['Alpha', 'Beta', 'Gamma', 'Delta'];
   const realKeySymbols = realKeyIndexes.map(i => keyNames[i]);
 
-  const mazeSize = selectedDiff === 'easy' ? 9 : (selectedDiff === 'hard' ? 15 : (selectedDiff === 'impossible' ? 17 : 11));
+  const mazeSize = (typeof window.getMazeSizeForDifficulty === 'function')
+    ? window.getMazeSizeForDifficulty(selectedDiff)
+    : (selectedDiff === 'easy' ? 21 : (selectedDiff === 'hard' ? 41 : (selectedDiff === 'impossible' ? 51 : 31)));
 
   const matchConfig = {
     id: roomId,
