@@ -9626,28 +9626,33 @@ export function setupControlsGuideModal() {
   if (!controlsGuideSetupDone) {
     controlsGuideSetupDone = true;
 
-    if (hudGuideBtn) {
-      hudGuideBtn.addEventListener('click', showModal);
-      if ('ontouchstart' in window) {
-        hudGuideBtn.addEventListener('touchend', showModal);
-      }
-    }
+    const bindFastTap = (el, fn) => {
+      if (!el) return;
+      let lastT = 0;
+      const handler = (e) => {
+        if (e && e.cancelable && e.type === 'touchstart') e.preventDefault();
+        const now = performance.now();
+        if (now - lastT < 150) return;
+        lastT = now;
+        fn(e);
+      };
+      el.addEventListener('pointerdown', handler);
+      el.addEventListener('click', handler);
+    };
 
-    if (pauseGuideBtn) {
-      pauseGuideBtn.addEventListener('click', showModal);
-    }
-
-    if (closeBtn) closeBtn.addEventListener('click', hideModal);
-    if (resumeBtn) resumeBtn.addEventListener('click', hideModal);
+    if (hudGuideBtn) bindFastTap(hudGuideBtn, showModal);
+    if (pauseGuideBtn) bindFastTap(pauseGuideBtn, showModal);
+    if (closeBtn) bindFastTap(closeBtn, hideModal);
+    if (resumeBtn) bindFastTap(resumeBtn, hideModal);
 
     if (tabPc && tabMobile && contentPc && contentMobile) {
-      tabPc.addEventListener('click', () => {
+      bindFastTap(tabPc, () => {
         tabPc.classList.add('active');
         tabMobile.classList.remove('active');
         contentPc.style.display = 'block';
         contentMobile.style.display = 'none';
       });
-      tabMobile.addEventListener('click', () => {
+      bindFastTap(tabMobile, () => {
         tabMobile.classList.add('active');
         tabPc.classList.remove('active');
         contentMobile.style.display = 'block';

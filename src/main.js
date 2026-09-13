@@ -30,6 +30,15 @@ if (isTouchCapable) {
   document.body.classList.remove('is-mobile');
 }
 
+// Pre-warm backend socket connection immediately on app load to eliminate 15s cold-start latency
+setTimeout(() => {
+  try {
+    initializeSocketConnection();
+  } catch (e) {
+    console.warn("[SOCKET] Pre-warm socket warning:", e);
+  }
+}, 100);
+
 // DOM Elements
 const authView = document.getElementById('auth-view');
 const lobbyView = document.getElementById('lobby-view');
@@ -1226,33 +1235,116 @@ function getSkinId() {
   return localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
 }
 
+function addFastButtonListener(btn, callback) {
+  if (!btn) return;
+  let lastTrigger = 0;
+  const fire = (e) => {
+    if (e && e.cancelable && e.type === 'touchstart') e.preventDefault();
+    const now = performance.now();
+    if (now - lastTrigger < 150) return;
+    lastTrigger = now;
+    callback(e);
+  };
+  btn.addEventListener('pointerdown', fire);
+  btn.addEventListener('click', fire);
+}
+
+function startLocalSoloMatch(isTutorial = false) {
+  isSoloMode = true;
+  isTutorialMode = isTutorial;
+  
+  if (soloLoadingOverlay) soloLoadingOverlay.style.display = 'none';
+  if (authView) authView.style.display = 'none';
+  if (lobbyView) lobbyView.style.display = 'none';
+  const startScreen = document.getElementById('start-screen');
+  if (startScreen) startScreen.style.display = 'none';
+
+  const selectedDiff = isTutorial ? 'easy' : ((soloDifficultySelect && soloDifficultySelect.value) || 'medium');
+  const soloHumanClasses = ['Locksmith', 'Trapper', 'Scout', 'Medic', 'Flashlight Expert', 'Quartermaster'];
+  const chosenSoloSetting = isTutorial ? 'Locksmith' : ((soloClassSelect && soloClassSelect.value) || localStorage.getItem('manifestation_solo_class') || 'Random');
+  let chosenClass = chosenSoloSetting;
+  if (!chosenClass || chosenClass === 'Random' || !soloHumanClasses.includes(chosenClass)) {
+    chosenClass = soloHumanClasses[Math.floor(Math.random() * soloHumanClasses.length)];
+  }
+
+  const localId = 'solo-' + Math.floor(Math.random() * 1000000);
+  const roomId = (isTutorial ? 'tutorial-' : 'solo-') + Math.floor(100000 + Math.random() * 900000);
+
+  const codeDigits = [
+    Math.floor(Math.random() * 10).toString(),
+    Math.floor(Math.random() * 10).toString(),
+    Math.floor(Math.random() * 10).toString(),
+    Math.floor(Math.random() * 10).toString()
+  ];
+  const keysCount = 4;
+  const realKeyIndexes = [];
+  while (realKeyIndexes.length < 2) {
+    const idx = Math.floor(Math.random() * keysCount);
+    if (!realKeyIndexes.includes(idx)) realKeyIndexes.push(idx);
+  }
+  const keyNames = ['Alpha', 'Beta', 'Gamma', 'Delta'];
+  const realKeySymbols = realKeyIndexes.map(i => keyNames[i]);
+
+  const mazeSize = selectedDiff === 'easy' ? 9 : (selectedDiff === 'hard' ? 15 : (selectedDiff === 'impossible' ? 17 : 11));
+
+  const matchConfig = {
+    id: roomId,
+    isPublic: false,
+    settings: {
+      isTutorial,
+      botsEnabled: !isTutorial,
+      difficulty: selectedDiff,
+      roleSelectionMode: 'manual'
+    },
+    players: {
+      [localId]: {
+        username: getUsername(),
+        team: 'Human',
+        characterClass: chosenClass,
+        skinId: getSkinId(),
+        isVip: isVipActive(),
+        isHost: true
+      }
+    },
+    puzzleState: {
+      mazeGeometrySeed: Math.random(),
+      difficulty: selectedDiff,
+      totalBreakers: isTutorial ? 1 : 3,
+      mazeSize: mazeSize,
+      keysCount: 4,
+      codeDigits: codeDigits,
+      realKeySymbols: realKeySymbols,
+      insertedKeys: []
+    }
+  };
+
+  // Safe mock socket client for offline / instant solo gameplay
+  const mockSocket = {
+    id: localId,
+    connected: true,
+    emit: (evt, data) => {},
+    on: () => {},
+    off: () => {}
+  };
+
+  initGame(mockSocket, localId, matchConfig, true, isTutorial);
+}
+
 if (tutorialBtn) {
-  tutorialBtn.addEventListener('click', () => {
-    isSoloMode = true;
-    isTutorialMode = true;
-    soloLoadingOverlay.textContent = "INITIALIZING TRAINING PROTOCOL...";
-    soloLoadingOverlay.style.display = 'block';
-    const s = initializeSocketConnection();
-    
-    const roomId = 'tutorial-' + Math.floor(100000 + Math.random() * 900000).toString();
-    s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
+  addFastButtonListener(tutorialBtn, () => {
+    startLocalSoloMatch(true);
   });
 }
 
-soloBtn.addEventListener('click', () => {
-  isSoloMode = true;
-  isTutorialMode = false;
-  soloLoadingOverlay.textContent = "INITIALIZING SOLO CONTAINMENT...";
-  soloLoadingOverlay.style.display = 'block';
-  const s = initializeSocketConnection();
-  
-  const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
-});
+if (soloBtn) {
+  addFastButtonListener(soloBtn, () => {
+    startLocalSoloMatch(false);
+  });
+}
 
 if (menuOpenControlsTrigger) {
-  menuOpenControlsTrigger.addEventListener('click', (e) => {
-    e.preventDefault();
+  addFastButtonListener(menuOpenControlsTrigger, (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (window.openControlsGuideModal) {
       window.openControlsGuideModal();
     } else {
@@ -1262,24 +1354,24 @@ if (menuOpenControlsTrigger) {
   });
 }
 
-createPublicBtn.addEventListener('click', () => {
+addFastButtonListener(createPublicBtn, () => {
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
   s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: true, isVip: isVipActive() });
 });
 
-joinPublicBtn.addEventListener('click', () => {
+addFastButtonListener(joinPublicBtn, () => {
   const s = initializeSocketConnection();
   s.emit('join_public_matchmaking', { username: getUsername(), skinId: getSkinId(), isVip: isVipActive() });
 });
 
-createPrivateBtn.addEventListener('click', () => {
+addFastButtonListener(createPrivateBtn, () => {
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
   s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
 });
 
-joinPrivateBtn.addEventListener('click', () => {
+addFastButtonListener(joinPrivateBtn, () => {
   const roomId = privateRoomInput.value.trim();
   if (!roomId) {
     alert("Please enter a room code first.");
