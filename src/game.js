@@ -763,6 +763,19 @@ let isForestLoading = false;
 let vaultGroupRef = null;
 let forestSceneInstance = null;
 
+function disposeHierarchy(obj) {
+  if (!obj) return;
+  obj.traverse(child => {
+    if (child.isMesh || child.isPoints) {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+        else child.material.dispose();
+      }
+    }
+  });
+}
+
 export function loadForestAsset() {
   if (preloadedForestModel || isForestLoading) return;
   isForestLoading = true;
@@ -786,8 +799,8 @@ export function loadForestAsset() {
 
     isForestLoading = false;
     console.log("[FOREST] 3D Forest environment model loaded successfully!");
-    if (vaultGroupRef) {
-      attachForestToVault();
+    if (forestSceneInstance) {
+      addGLBModelToForest(forestSceneInstance);
     }
   }, undefined, (err) => {
     console.warn('[FOREST] Error loading /assets/forest.glb:', err);
@@ -795,19 +808,9 @@ export function loadForestAsset() {
   });
 }
 
-export function attachForestToVault() {
-  if (!vaultGroupRef) return;
-
-  if (forestSceneInstance && forestSceneInstance.parent) {
-    forestSceneInstance.parent.remove(forestSceneInstance);
-  }
-
-  const forestContainer = new THREE.Group();
-  forestContainer.name = 'forest_outdoor_world';
-  // Kept strictly 100% hidden during normal maze gameplay — only revealed when escaping through the vault!
-  forestContainer.visible = false;
-
-  if (preloadedForestModel) {
+function addGLBModelToForest(forestContainer) {
+  if (!preloadedForestModel || !forestContainer || forestContainer.userData.hasGlb) return;
+  try {
     const forestCloneWrapper = new THREE.Group();
     forestCloneWrapper.name = 'forest_glb_wrapper';
     forestCloneWrapper.rotation.y = Math.PI; // Face forward down the corridor into -Z
@@ -834,6 +837,377 @@ export function attachForestToVault() {
 
     forestCloneWrapper.add(forestClone);
     forestContainer.add(forestCloneWrapper);
+    forestContainer.userData.hasGlb = true;
+    console.log('[FOREST] GLB model attached to outdoor forest container successfully!');
+  } catch (e) {
+    console.warn('[FOREST] Error attaching GLB model to forest container:', e);
+  }
+}
+
+function buildProceduralForestEnvironment(forestContainer) {
+  const procGroup = new THREE.Group();
+  procGroup.name = 'procedural_forest_scenery';
+
+  // 1. Natural Organic Meadow Terrain (160m wide x 160m deep)
+  const terrainGeo = new THREE.PlaneGeometry(160, 160, 32, 32);
+  terrainGeo.rotateX(-Math.PI / 2);
+  terrainGeo.translate(0, -0.04, -80);
+
+  const posAttr = terrainGeo.attributes.position;
+  for (let i = 0; i < posAttr.count; i++) {
+    const vx = posAttr.getX(i);
+    const vz = posAttr.getZ(i);
+    const absX = Math.abs(vx);
+    let vy = 0;
+    // Keep trail level right outside the vault portal
+    if (absX < 2.4 && vz > -35) {
+      vy = 0;
+    } else {
+      // Gentle rolling hill slopes rising on the flanks
+      const flankDist = Math.max(0, absX - 2.4);
+      vy = Math.min(5.5, flankDist * 0.16 + Math.sin(vz * 0.09 + vx * 0.05) * 1.1 + Math.cos(vx * 0.07) * 0.8);
+    }
+    posAttr.setY(i, vy);
+  }
+  terrainGeo.computeVertexNormals();
+
+  const terrainMat = new THREE.MeshStandardMaterial({
+    color: 0x2b5329, // Lush mossy meadow green
+    roughness: 0.88,
+    metalness: 0.04,
+    flatShading: true
+  });
+  const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+  terrainMesh.receiveShadow = true;
+  procGroup.add(terrainMesh);
+
+  // 2. Earthy Winding Trail leading out from the doorway
+  const pathGeo = new THREE.PlaneGeometry(3.6, 75, 4, 30);
+  pathGeo.rotateX(-Math.PI / 2);
+  pathGeo.translate(0, 0.01, -37.5);
+  // Give the path gentle natural curvature
+  const pathPos = pathGeo.attributes.position;
+  for (let i = 0; i < pathPos.count; i++) {
+    const pz = pathPos.getZ(i);
+    const curveX = Math.sin(pz * 0.06) * 1.2;
+    pathPos.setX(i, pathPos.getX(i) + curveX);
+  }
+  pathGeo.computeVertexNormals();
+
+  const pathMat = new THREE.MeshStandardMaterial({
+    color: 0x5a4634, // Forest dirt trail
+    roughness: 0.92,
+    metalness: 0.02
+  });
+  const pathMesh = new THREE.Mesh(pathGeo, pathMat);
+  pathMesh.receiveShadow = true;
+  procGroup.add(pathMesh);
+
+  // 3. Natural Slate Stepping Stones at the Vault Threshold
+  const stoneGeo = new THREE.BoxGeometry(0.85, 0.06, 0.65);
+  const stoneMat = new THREE.MeshStandardMaterial({
+    color: 0x696e73,
+    roughness: 0.75,
+    metalness: 0.12
+  });
+  const stoneOffsets = [
+    { x: -0.6, z: -0.8, r: 0.1 },
+    { x: 0.5, z: -1.4, r: -0.2 },
+    { x: -0.4, z: -2.2, r: 0.15 },
+    { x: 0.6, z: -3.1, r: -0.1 },
+    { x: -0.2, z: -4.0, r: 0.25 },
+    { x: 0.5, z: -5.0, r: -0.18 },
+    { x: -0.5, z: -6.2, r: 0.08 },
+    { x: 0.3, z: -7.5, r: -0.12 },
+    { x: -0.4, z: -9.0, r: 0.2 },
+    { x: 0.4, z: -10.5, r: -0.15 }
+  ];
+  stoneOffsets.forEach(st => {
+    const sMesh = new THREE.Mesh(stoneGeo, stoneMat);
+    sMesh.position.set(st.x, 0.03, st.z);
+    sMesh.rotation.y = st.r;
+    sMesh.receiveShadow = true;
+    procGroup.add(sMesh);
+  });
+
+  // 4. Layered 3D Evergreen Pine Trees (75+ trees)
+  const trunkGeo = new THREE.CylinderGeometry(0.22, 0.42, 4.4, 6);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3d2716, roughness: 0.9, metalness: 0.02 });
+
+  const pineT1Geo = new THREE.ConeGeometry(2.4, 3.4, 6);
+  const pineT2Geo = new THREE.ConeGeometry(1.85, 2.8, 6);
+  const pineT3Geo = new THREE.ConeGeometry(1.25, 2.2, 6);
+
+  const pineMatBase = new THREE.MeshStandardMaterial({ color: 0x163822, roughness: 0.78, metalness: 0.03, flatShading: true });
+  const pineMatMid  = new THREE.MeshStandardMaterial({ color: 0x1d4d2e, roughness: 0.78, metalness: 0.03, flatShading: true });
+  const pineMatTop  = new THREE.MeshStandardMaterial({ color: 0x27673c, roughness: 0.72, metalness: 0.03, flatShading: true });
+
+  function createPineTree(scale = 1.0) {
+    const treeGroup = new THREE.Group();
+
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = 2.2;
+    trunk.castShadow = true;
+    trunk.receiveShadow = true;
+    treeGroup.add(trunk);
+
+    const t1 = new THREE.Mesh(pineT1Geo, pineMatBase);
+    t1.position.y = 4.0;
+    t1.castShadow = true;
+    t1.receiveShadow = true;
+    treeGroup.add(t1);
+
+    const t2 = new THREE.Mesh(pineT2Geo, pineMatMid);
+    t2.position.y = 5.8;
+    t2.castShadow = true;
+    t2.receiveShadow = true;
+    treeGroup.add(t2);
+
+    const t3 = new THREE.Mesh(pineT3Geo, pineMatTop);
+    t3.position.y = 7.4;
+    t3.castShadow = true;
+    t3.receiveShadow = true;
+    treeGroup.add(t3);
+
+    treeGroup.scale.set(scale, scale, scale);
+    return treeGroup;
+  }
+
+  // Pre-determined tree coordinates providing cinematic framing and deep forest density
+  const treeLocations = [
+    // Flanking gateway entrance trees framing the camera view
+    { x: -3.4, z: -3.5, s: 1.15 },
+    { x: 3.4, z: -3.8, s: 1.2 },
+    { x: -4.0, z: -7.5, s: 1.35 },
+    { x: 4.2, z: -8.0, s: 1.3 },
+    { x: -3.8, z: -12.5, s: 1.45 },
+    { x: 4.5, z: -13.2, s: 1.4 },
+    { x: -4.4, z: -18.0, s: 1.55 },
+    { x: 4.2, z: -19.5, s: 1.5 },
+    { x: -4.0, z: -25.0, s: 1.6 },
+    { x: 4.6, z: -26.5, s: 1.55 },
+    { x: -3.8, z: -32.0, s: 1.65 },
+    { x: 4.5, z: -34.0, s: 1.6 },
+
+    // Left Forest Hillside Groves
+    { x: -7.5, z: -5.0, s: 1.25 },
+    { x: -11.0, z: -8.5, s: 1.4 },
+    { x: -15.5, z: -6.0, s: 1.5 },
+    { x: -9.2, z: -14.0, s: 1.45 },
+    { x: -14.0, z: -17.5, s: 1.6 },
+    { x: -19.5, z: -12.0, s: 1.7 },
+    { x: -8.5, z: -22.0, s: 1.5 },
+    { x: -13.0, z: -26.0, s: 1.65 },
+    { x: -18.5, z: -24.0, s: 1.75 },
+    { x: -25.0, z: -18.0, s: 1.8 },
+    { x: -10.5, z: -35.0, s: 1.55 },
+    { x: -16.0, z: -38.0, s: 1.7 },
+    { x: -22.0, z: -34.0, s: 1.85 },
+    { x: -30.0, z: -28.0, s: 1.9 },
+    { x: -12.0, z: -46.0, s: 1.6 },
+    { x: -18.5, z: -50.0, s: 1.75 },
+    { x: -26.0, z: -45.0, s: 1.8 },
+    { x: -35.0, z: -40.0, s: 1.95 },
+    { x: -15.0, z: -60.0, s: 1.7 },
+    { x: -22.0, z: -65.0, s: 1.85 },
+    { x: -32.0, z: -58.0, s: 1.9 },
+    { x: -42.0, z: -52.0, s: 2.0 },
+    { x: -18.0, z: -78.0, s: 1.8 },
+    { x: -28.0, z: -82.0, s: 1.9 },
+    { x: -38.0, z: -76.0, s: 2.05 },
+    { x: -20.0, z: -95.0, s: 1.85 },
+    { x: -32.0, z: -102.0, s: 2.0 },
+    { x: -45.0, z: -92.0, s: 2.1 },
+
+    // Right Forest Hillside Groves
+    { x: 8.0, z: -5.5, s: 1.25 },
+    { x: 12.0, z: -9.0, s: 1.4 },
+    { x: 16.5, z: -7.0, s: 1.55 },
+    { x: 9.5, z: -15.0, s: 1.45 },
+    { x: 14.5, z: -18.0, s: 1.6 },
+    { x: 21.0, z: -13.0, s: 1.7 },
+    { x: 9.0, z: -23.0, s: 1.5 },
+    { x: 14.0, z: -27.0, s: 1.65 },
+    { x: 19.5, z: -25.0, s: 1.75 },
+    { x: 27.0, z: -19.0, s: 1.8 },
+    { x: 11.0, z: -36.0, s: 1.55 },
+    { x: 17.0, z: -39.0, s: 1.7 },
+    { x: 23.5, z: -35.0, s: 1.85 },
+    { x: 32.0, z: -29.0, s: 1.9 },
+    { x: 12.5, z: -48.0, s: 1.65 },
+    { x: 19.0, z: -52.0, s: 1.75 },
+    { x: 27.0, z: -46.0, s: 1.85 },
+    { x: 36.0, z: -42.0, s: 1.95 },
+    { x: 16.0, z: -62.0, s: 1.7 },
+    { x: 23.0, z: -67.0, s: 1.85 },
+    { x: 34.0, z: -60.0, s: 1.9 },
+    { x: 44.0, z: -54.0, s: 2.0 },
+    { x: 19.0, z: -80.0, s: 1.8 },
+    { x: 29.0, z: -84.0, s: 1.9 },
+    { x: 39.0, z: -78.0, s: 2.05 },
+    { x: 21.0, z: -98.0, s: 1.85 },
+    { x: 34.0, z: -104.0, s: 2.0 },
+    { x: 46.0, z: -95.0, s: 2.1 }
+  ];
+
+  treeLocations.forEach((tl, idx) => {
+    const tree = createPineTree(tl.s);
+    // Determine ground height Y for realistic slope planting
+    const absX = Math.abs(tl.x);
+    let gy = 0;
+    if (absX >= 2.4 || tl.z <= -35) {
+      const flankDist = Math.max(0, absX - 2.4);
+      gy = Math.min(5.5, flankDist * 0.16 + Math.sin(tl.z * 0.09 + tl.x * 0.05) * 1.1 + Math.cos(tl.x * 0.07) * 0.8);
+    }
+    tree.position.set(tl.x, gy - 0.2, tl.z);
+    tree.rotation.y = (idx * 1.37) % (Math.PI * 2);
+    procGroup.add(tree);
+  });
+
+  // 5. Granite Boulders along trail margins
+  const rockGeo = new THREE.DodecahedronGeometry(1.0, 1);
+  const rockMat = new THREE.MeshStandardMaterial({
+    color: 0x595d61,
+    roughness: 0.82,
+    metalness: 0.08,
+    flatShading: true
+  });
+  const rockPlacements = [
+    { x: -2.6, z: -4.5, sx: 0.9, sy: 0.6, sz: 0.8, r: 0.4 },
+    { x: 2.7, z: -6.0, sx: 1.1, sy: 0.7, sz: 1.0, r: 1.2 },
+    { x: -2.9, z: -10.0, sx: 1.3, sy: 0.8, sz: 1.1, r: -0.6 },
+    { x: 2.8, z: -15.5, sx: 1.0, sy: 0.65, sz: 0.9, r: 2.1 },
+    { x: -3.1, z: -20.0, sx: 1.4, sy: 0.9, sz: 1.2, r: 0.8 },
+    { x: 3.2, z: -28.0, sx: 1.6, sy: 1.0, sz: 1.3, r: -1.5 },
+    { x: -3.5, z: -36.0, sx: 1.8, sy: 1.1, sz: 1.5, r: 0.3 },
+    { x: 3.4, z: -44.0, sx: 1.5, sy: 0.9, sz: 1.3, r: 1.7 }
+  ];
+  rockPlacements.forEach(rp => {
+    const rock = new THREE.Mesh(rockGeo, rockMat);
+    rock.scale.set(rp.sx, rp.sy, rp.sz);
+    rock.position.set(rp.x, rp.sy * 0.45, rp.z);
+    rock.rotation.set(rp.r * 0.3, rp.r, rp.r * 0.2);
+    rock.castShadow = true;
+    rock.receiveShadow = true;
+    procGroup.add(rock);
+  });
+
+  // 6. Lush Foliage Bushes & Shrubbery
+  const bushGeo = new THREE.SphereGeometry(1.0, 6, 5);
+  const bushMat = new THREE.MeshStandardMaterial({
+    color: 0x2d6833,
+    roughness: 0.82,
+    metalness: 0.03,
+    flatShading: true
+  });
+  const bushPlacements = [
+    { x: -2.8, z: -2.8, s: 0.7 },
+    { x: 2.9, z: -2.5, s: 0.65 },
+    { x: -3.2, z: -5.8, s: 0.85 },
+    { x: 3.3, z: -9.5, s: 0.8 },
+    { x: -3.5, z: -14.0, s: 0.95 },
+    { x: 3.6, z: -17.0, s: 0.9 },
+    { x: -3.7, z: -22.5, s: 1.05 },
+    { x: 3.8, z: -30.0, s: 1.1 }
+  ];
+  bushPlacements.forEach(bp => {
+    const bush = new THREE.Mesh(bushGeo, bushMat);
+    bush.scale.set(bp.s * 1.2, bp.s * 0.7, bp.s * 1.1);
+    bush.position.set(bp.x, bp.s * 0.35, bp.z);
+    bush.castShadow = true;
+    bush.receiveShadow = true;
+    procGroup.add(bush);
+  });
+
+  // 7. Atmospheric Volumetric God Rays (Angled sunlight shafts streaming through the forest canopy)
+  const rayGeo = new THREE.CylinderGeometry(0.5, 3.2, 28, 8, 1, true);
+  const rayMat = new THREE.MeshBasicMaterial({
+    color: 0xfffae0,
+    transparent: true,
+    opacity: 0.11,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  const rayAngles = [
+    { x: -4, y: 12, z: -10, rotZ: -0.22, rotX: 0.15 },
+    { x: 2,  y: 13, z: -15, rotZ: -0.28, rotX: 0.18 },
+    { x: -1, y: 14, z: -22, rotZ: -0.24, rotX: 0.20 },
+    { x: 5,  y: 13, z: -28, rotZ: -0.30, rotX: 0.14 }
+  ];
+  rayAngles.forEach(ra => {
+    const ray = new THREE.Mesh(rayGeo, rayMat);
+    ray.position.set(ra.x, ra.y, ra.z);
+    ray.rotation.z = ra.rotZ;
+    ray.rotation.x = ra.rotX;
+    procGroup.add(ray);
+  });
+
+  // 8. Drifting Golden Sun Dust / Forest Pollen Particles
+  const moteCount = 140;
+  const moteGeo = new THREE.BufferGeometry();
+  const motePositions = new Float32Array(moteCount * 3);
+  for (let i = 0; i < moteCount; i++) {
+    motePositions[i * 3 + 0] = (Math.random() - 0.5) * 22; // X
+    motePositions[i * 3 + 1] = 0.5 + Math.random() * 6.5;  // Y
+    motePositions[i * 3 + 2] = -Math.random() * 32;        // Z
+  }
+  moteGeo.setAttribute('position', new THREE.BufferAttribute(motePositions, 3));
+  const moteMat = new THREE.PointsMaterial({
+    color: 0xffe699,
+    size: 0.16,
+    transparent: true,
+    opacity: 0.65,
+    blending: THREE.AdditiveBlending
+  });
+  const motes = new THREE.Points(moteGeo, moteMat);
+  procGroup.add(motes);
+
+  // 9. Majestic Distant Horizon Mountain Peaks
+  const mtnGeo = new THREE.ConeGeometry(32, 42, 6);
+  const mtnMat = new THREE.MeshStandardMaterial({
+    color: 0x2b424d, // Atmospheric misted blue-grey mountain stone
+    roughness: 0.95,
+    metalness: 0.05,
+    flatShading: true
+  });
+  const mountainPeaks = [
+    { x: -50, z: -130, s: 1.1 },
+    { x: -15, z: -145, s: 1.35 },
+    { x: 25,  z: -140, s: 1.25 },
+    { x: 60,  z: -125, s: 1.05 }
+  ];
+  mountainPeaks.forEach(mp => {
+    const mtn = new THREE.Mesh(mtnGeo, mtnMat);
+    mtn.scale.set(mp.s, mp.s, mp.s);
+    mtn.position.set(mp.x, 14 * mp.s, mp.z);
+    mtn.rotation.y = (mp.x * 0.1) % (Math.PI * 2);
+    procGroup.add(mtn);
+  });
+
+  forestContainer.add(procGroup);
+  console.log("[FOREST] 3D Procedural Forest Environment generated with 70+ trees, trail, god rays, and mountains!");
+}
+
+export function attachForestToVault() {
+  if (!vaultGroupRef) return;
+
+  if (forestSceneInstance && forestSceneInstance.parent) {
+    forestSceneInstance.parent.remove(forestSceneInstance);
+    disposeHierarchy(forestSceneInstance);
+  }
+
+  const forestContainer = new THREE.Group();
+  forestContainer.name = 'forest_outdoor_world';
+  // Kept strictly 100% hidden during normal maze gameplay — only revealed when escaping through the vault!
+  forestContainer.visible = false;
+
+  // 1. Immediately build rich 3D procedural forest (guaranteed instant visual fidelity, 0s delay)
+  buildProceduralForestEnvironment(forestContainer);
+
+  // 2. Attach GLB model if already loaded
+  if (preloadedForestModel) {
+    addGLBModelToForest(forestContainer);
   }
 
   // Outdoor Natural Sunlight & Sky Light
@@ -856,8 +1230,7 @@ export function attachForestToVault() {
   forestSceneInstance = forestContainer;
 }
 
-// 3D Forest Environment Model is deferred and loaded on-demand when vault is initialized
-// to save 50MB+ RAM during core maze gameplay.
+// 3D Forest Environment Model is preloaded and augmented with procedural scenery
 
 let scene, camera, renderer;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -1373,6 +1746,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     clearTimeout(window._securityLockoutTimer);
     window._securityLockoutTimer = null;
   }
+  // Preload forest model in background during gameplay
+  loadForestAsset();
   functionalKeysRevealed = [];
   foundKeysList = [];
   carriedKeys = [];
@@ -4561,6 +4936,7 @@ function generateMaze(keysCount = 8) {
 
   // Attach 3D Forest Environment directly outside the vault portal
   attachForestToVault();
+  loadForestAsset();
 
   // 6. Invisible Collision Blocker volume preventing players from walking through the closed door
   let blockerSizeX = 4.5, blockerSizeZ = 0.8;
@@ -8452,31 +8828,31 @@ function playEscapeCinematic(callback) {
     camera.lookAt(camLookAt);
   }
 
-  // Phase 2: Gate opens — slide the heavy door mesh up dynamically over 1100ms
+  // Phase 2: Reveal 3D Forest & Atmospheric Horizon
+  if (forestSceneInstance) {
+    forestSceneInstance.visible = true;
+    if (forestSceneInstance.userData.outdoorSun) forestSceneInstance.userData.outdoorSun.visible = true;
+    if (forestSceneInstance.userData.skyHemisphere) forestSceneInstance.userData.skyHemisphere.visible = true;
+  }
+
+  // Atmospheric transition: dark dungeon fog opens into crisp, expansive outdoor forest air and vibrant sky
+  if (scene) {
+    scene.background = new THREE.Color(0x6bb5ea); // Clear azure blue sky!
+    if (scene.fog) {
+      scene.fog.color.setHex(0x9fd2ee); // Soft atmospheric aerial horizon mist
+      scene.fog.density = 0.005; // Expansive outdoor sightlines
+    }
+  }
+  if (ambientLight) {
+    ambientLight.intensity = Math.max(ambientLight.intensity, 2.2);
+  }
+
+  // Gate opens — slide the heavy door mesh up dynamically over 1100ms
   if (gateMeshRef) {
     const startY = gateMeshRef.position.y;
     const targetY = startY + 5.2;
     const startTime = performance.now();
     const duration = 1100;
-
-    // REVEAL 3D FOREST: The forest appears as the vault door opens to escape!
-    if (forestSceneInstance) {
-      forestSceneInstance.visible = true;
-      if (forestSceneInstance.userData.outdoorSun) forestSceneInstance.userData.outdoorSun.visible = true;
-      if (forestSceneInstance.userData.skyHemisphere) forestSceneInstance.userData.skyHemisphere.visible = true;
-    }
-
-    // Atmospheric transition: dark dungeon fog opens into crisp, expansive outdoor forest air and vibrant sky
-    if (scene) {
-      scene.background = new THREE.Color(0x6bb5ea); // Clear azure blue sky!
-      if (scene.fog) {
-        scene.fog.color.setHex(0x9fd2ee); // Soft atmospheric aerial horizon mist
-        scene.fog.density = 0.005; // Expansive outdoor sightlines
-      }
-    }
-    if (ambientLight) {
-      ambientLight.intensity = Math.max(ambientLight.intensity, 2.2);
-    }
     
     const animateGate = (now) => {
       const elapsed = now - startTime;
