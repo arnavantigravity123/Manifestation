@@ -2982,8 +2982,8 @@ function spawnDungeonProps(layout, blockSize) {
     return layout[row][col] === 1;
   };
 
-  function addPropCollider(px, pz, radius) {
-    const col = { x: px, z: pz, radius };
+  function addPropCollider(px, pz, radius, slidingWallRef = null) {
+    const col = { x: px, z: pz, radius, slidingWallRef };
     dungeonPropColliders.push(col);
     const c = Math.floor((px / blockSize) + (totalCols / 2));
     const r = Math.floor((pz / blockSize) + (totalRows / 2));
@@ -3435,6 +3435,80 @@ function spawnDungeonProps(layout, blockSize) {
     dungeonProps.push(instancedStatues);
   }
 
+  // 6. Sliding Wall Indent Shrines (Monk Statue & Flanking Columns parented to sliding wall)
+  // Ensures closed sliding wall indents are never bare empty walls, and seamlessly sink into the floor on key realignment!
+  if (slidingWallSegments && slidingWallSegments.length > 0 && dungeonStatueGeo && dungeonPillarGeo) {
+    slidingWallSegments.forEach(wallMesh => {
+      if (!wallMesh || !wallMesh.userData) return;
+      if (wallMesh.userData.decorations) {
+        wallMesh.userData.decorations.forEach(d => {
+          wallMesh.remove(d);
+        });
+      }
+      wallMesh.userData.decorations = [];
+
+      const r = wallMesh.userData.row;
+      const c = wallMesh.userData.col;
+      const isEW = wallMesh.userData.isEW;
+      const wx = wallMesh.position.x;
+      const wz = wallMesh.position.z;
+
+      const addShrineFace = (localX, localZ, rotY, flankAxis) => {
+        // Center Monk Statue
+        const statue = new THREE.Mesh(dungeonStatueGeo, dungeonStatueMat);
+        statue.scale.set(1.3, 1.45, 1.3);
+        statue.position.set(localX, 0, localZ);
+        statue.rotation.set(0, rotY, 0);
+        statue.castShadow = false;
+        statue.receiveShadow = true;
+        statue.frustumCulled = false;
+        wallMesh.add(statue);
+        wallMesh.userData.decorations.push(statue);
+
+        // Statue dynamic prop collider tied to sliding wall
+        addPropCollider(wx + localX, wz + localZ, 0.70, wallMesh);
+
+        // Flanking Ornate Columns (snug against wall at ±1.85m lateral)
+        const flankDist = 1.85;
+        [-flankDist, flankDist].forEach(fo => {
+          const pillar = new THREE.Mesh(dungeonPillarGeo, dungeonPillarMat);
+          pillar.scale.set(1.5, 1.68, 1.5);
+          const pLocalX = (flankAxis === 'z') ? localX : (localX + fo);
+          const pLocalZ = (flankAxis === 'z') ? (localZ + fo) : localZ;
+          pillar.position.set(pLocalX, 0, pLocalZ);
+          pillar.castShadow = false;
+          pillar.receiveShadow = true;
+          pillar.frustumCulled = false;
+          wallMesh.add(pillar);
+          wallMesh.userData.decorations.push(pillar);
+
+          // Pillar dynamic prop collider tied to sliding wall
+          addPropCollider(wx + pLocalX, wz + pLocalZ, 0.55, wallMesh);
+        });
+      };
+
+      const wallFaceOffset = 0.85;
+
+      if (isEW) {
+        // Wall spans North-South across an East-West passage
+        if (c > 0 && layout[r] && layout[r][c - 1] === 0) {
+          addShrineFace(-wallFaceOffset, 0, Math.PI / 2, 'z');
+        }
+        if (c < layout[r].length - 1 && layout[r] && layout[r][c + 1] === 0) {
+          addShrineFace(wallFaceOffset, 0, -Math.PI / 2, 'z');
+        }
+      } else {
+        // Wall spans East-West across a North-South passage
+        if (r > 0 && layout[r - 1] && layout[r - 1][c] === 0) {
+          addShrineFace(0, -wallFaceOffset, 0, 'x');
+        }
+        if (r < layout.length - 1 && layout[r + 1] && layout[r + 1][c] === 0) {
+          addShrineFace(0, wallFaceOffset, Math.PI, 'x');
+        }
+      }
+    });
+  }
+
   console.log(`[DUNGEON-SPAWN] Successfully placed throughout labyrinth: ${placedPillars} Pillars (Instanced), ${placedStatues} Statues (Instanced), ${placedRugs} Red Runner Rugs (Merged into 1 draw call)!`);
 }
 
@@ -3629,6 +3703,7 @@ function syncActiveViewCamera(delta = 0.016) {
         if (!bucket || bucket.length === 0) continue;
         for (let i = 0; i < bucket.length; i++) {
           const prop = bucket[i];
+          if (prop.slidingWallRef && prop.slidingWallRef.position.y < -0.5) continue;
           const effRadius = prop.radius + R_cam;
           const dx = px - prop.x;
           const dz = pz - prop.z;
@@ -3651,7 +3726,7 @@ function syncActiveViewCamera(delta = 0.016) {
     const maxPropDistSq = (safeDist + 2.5 + R_cam) * (safeDist + 2.5 + R_cam);
     for (let i = 0; i < dungeonPropColliders.length; i++) {
       const prop = dungeonPropColliders[i];
-      if (!prop) continue;
+      if (!prop || (prop.slidingWallRef && prop.slidingWallRef.position.y < -0.5)) continue;
       const dx = px - prop.x;
       const dz = pz - prop.z;
       const dSq = dx * dx + dz * dz;
@@ -4144,8 +4219,10 @@ function generateMaze(keysCount = 8) {
           col: c, 
           row: r, 
           halfSizeX: halfX, 
-          halfSizeZ: halfZ 
+          halfSizeZ: halfZ,
+          isEW: isEW
         };
+        wallMesh.frustumCulled = false;
         scene.add(wallMesh);
         walls.push(wallMesh);
         slidingWallSegments.push(wallMesh);
@@ -9850,6 +9927,7 @@ function animate() {
               if (!bucket) continue;
               for (let i = 0; i < bucket.length; i++) {
                 const prop = bucket[i];
+                if (prop.slidingWallRef && prop.slidingWallRef.position.y < -0.5) continue;
                 const dx = camera.position.x - prop.x;
                 const dz = camera.position.z - prop.z;
                 const maxD = prop.radius + playerBodyRadius;
@@ -10254,6 +10332,7 @@ function animate() {
               if (!bucket) continue;
               for (let i = 0; i < bucket.length; i++) {
                 const prop = bucket[i];
+                if (prop.slidingWallRef && prop.slidingWallRef.position.y < -0.5) continue;
                 const dx = ghost.position.x - prop.x;
                 const dz = ghost.position.z - prop.z;
                 const maxD = prop.radius + ghostRadius;
@@ -10714,15 +10793,15 @@ function animate() {
               rx = Math.floor(tempRand() * totalCols);
               rz = Math.floor(tempRand() * totalRows);
               attempts++;
-            } while (mazeLayout[rz] && (mazeLayout[rz][rx] === 1) && attempts < 50);
+            } while (mazeLayout[rz] && (mazeLayout[rz][rx] === 1 || mazeLayout[rz][rx] === 2) && attempts < 50);
 
-            // Guaranteed fallback: pick any adjacent open corridor if random sampling picked a wall
-            if (!mazeLayout[rz] || mazeLayout[rz][rx] === 1) {
+            // Guaranteed fallback: pick any adjacent open corridor if random sampling picked a wall or closed door
+            if (!mazeLayout[rz] || mazeLayout[rz][rx] !== 0) {
               const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
               for (const [dc, dr] of dirs) {
                 const nc = ghostGrid.col + dc;
                 const nr = ghostGrid.row + dr;
-                if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr] && mazeLayout[nr][nc] !== 1) {
+                if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr] && mazeLayout[nr][nc] === 0) {
                   rx = nc;
                   rz = nr;
                   break;
@@ -10735,12 +10814,13 @@ function animate() {
         }
         
         if (destGrid) {
-          const generatedPath = bfsPath(ghostGrid.col, ghostGrid.row, destGrid.col, destGrid.row, true);
+          const generatedPath = bfsPath(ghostGrid.col, ghostGrid.row, destGrid.col, destGrid.row, false);
           if (generatedPath && generatedPath.length > 0) {
             ghost.userData.path = generatedPath;
             ghost.userData.pathIdx = 1; // Skip start cell waypoint
           } else {
-            // If path could not be found to destGrid, clear targetGrid immediately so it retries rather than locking
+            // If path could not be found to destGrid (e.g. target behind closed sliding door), switch to WANDER so it roams and doesn't lock up against the door!
+            ghost.userData.aiState = 'WANDER';
             ghost.userData.targetGrid = null;
             ghost.userData.path = null;
             ghost.userData.pathTime = 0;
