@@ -2033,31 +2033,46 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   const isGhostRole = (myTeam === 'Ghost');
   if (splashBadge) {
-    splashBadge.textContent = isGhostRole ? "SPECTRAL ENTITY (GHOST)" : "HUMAN OPERATIVE";
-    splashBadge.style.background = isGhostRole ? "rgba(168, 85, 247, 0.2)" : "rgba(56, 189, 248, 0.2)";
-    splashBadge.style.border = isGhostRole ? "1px solid #a855f7" : "1px solid #38bdf8";
-    splashBadge.style.color = isGhostRole ? "#c084fc" : "#38bdf8";
+    if (window.isTutorialMatch) {
+      splashBadge.textContent = "FIELD TRAINING ACADEMY";
+      splashBadge.style.background = "rgba(14, 165, 233, 0.25)";
+      splashBadge.style.border = "1px solid #38bdf8";
+      splashBadge.style.color = "#38bdf8";
+    } else {
+      splashBadge.textContent = isGhostRole ? "SPECTRAL ENTITY (GHOST)" : "HUMAN OPERATIVE";
+      splashBadge.style.background = isGhostRole ? "rgba(168, 85, 247, 0.2)" : "rgba(56, 189, 248, 0.2)";
+      splashBadge.style.border = isGhostRole ? "1px solid #a855f7" : "1px solid #38bdf8";
+      splashBadge.style.color = isGhostRole ? "#c084fc" : "#38bdf8";
+    }
   }
   if (splashTitle) {
-    splashTitle.textContent = `${myClass.toUpperCase()}`;
+    splashTitle.textContent = window.isTutorialMatch ? "TRAINING PROTOCOL" : `${myClass.toUpperCase()}`;
     splashTitle.style.color = isGhostRole ? "#c084fc" : "#38bdf8";
   }
   if (splashDesc) {
-    const classInfo = (window.classesData && window.classesData[myTeam] && window.classesData[myTeam][myClass]) 
-      ? window.classesData[myTeam][myClass].desc 
-      : "Standard tactical operative gear equipped.";
-    splashDesc.textContent = classInfo;
+    if (window.isTutorialMatch) {
+      splashDesc.textContent = "Operative Field Training Simulation. Complete each guided stage to master movement, sprint, illumination, salvage, power restoration, and extraction.";
+    } else {
+      const classInfo = (window.classesData && window.classesData[myTeam] && window.classesData[myTeam][myClass]) 
+        ? window.classesData[myTeam][myClass].desc 
+        : "Standard tactical operative gear equipped.";
+      splashDesc.textContent = classInfo;
+    }
   }
   if (splashObjectives) {
-    splashObjectives.textContent = isGhostRole
-      ? "Patrol the dark corridors, stalk the human survivors, and harvest all souls before they break the ciphers and escape."
-      : "Survive the labyrinth, fix power breakers, crack the 4-digit cipher at the keypad terminal, find the twin gate keys, and reach the extraction gate.";
+    if (window.isTutorialMatch) {
+      splashObjectives.textContent = "STAGE 1: Locomotion Calibration. Walk through the training corridors to calibrate your operative sensors.";
+    } else {
+      splashObjectives.textContent = isGhostRole
+        ? "Patrol the dark corridors, stalk the human survivors, and harvest all souls before they break the ciphers and escape."
+        : "Survive the labyrinth, fix power breakers, crack the 4-digit cipher at the keypad terminal, find the twin gate keys, and reach the extraction gate.";
+    }
   }
 
   if (roleSplash) roleSplash.style.display = 'flex';
   window.gameReady = false;
 
-  let roleCountdownSeconds = 5;
+  let roleCountdownSeconds = window.isTutorialMatch ? 2 : 5;
   let roleCountdownInterval = null;
 
   const dismissSplash = () => {
@@ -2099,7 +2114,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   };
 
   if (roleEnterBtn) {
-    roleEnterBtn.textContent = `ENTER LABYRINTH (${roleCountdownSeconds}s)`;
+    roleEnterBtn.textContent = window.isTutorialMatch ? "START TRAINING PROTOCOL" : `ENTER LABYRINTH (${roleCountdownSeconds}s)`;
     roleEnterBtn.onclick = (e) => {
       e.stopPropagation();
       dismissSplash();
@@ -2114,7 +2129,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     if (roleCountdownSeconds <= 0) {
       dismissSplash();
     } else if (roleEnterBtn) {
-      roleEnterBtn.textContent = `ENTER LABYRINTH (${roleCountdownSeconds}s)`;
+      roleEnterBtn.textContent = window.isTutorialMatch ? "START TRAINING PROTOCOL" : `ENTER LABYRINTH (${roleCountdownSeconds}s)`;
     }
   }, 1000);
 
@@ -9584,8 +9599,8 @@ export function setupControlsGuideModal() {
 
   const showModal = (e) => {
     if (e) {
-      e.stopPropagation();
-      e.preventDefault();
+      if (e.stopPropagation) e.stopPropagation();
+      if (e.preventDefault) e.preventDefault();
     }
     modal.style.display = 'flex';
     
@@ -9609,8 +9624,8 @@ export function setupControlsGuideModal() {
 
   const hideModal = (e) => {
     if (e) {
-      e.stopPropagation();
-      e.preventDefault();
+      if (e.stopPropagation) e.stopPropagation();
+      if (e.preventDefault) e.preventDefault();
     }
     modal.style.display = 'none';
     const ptrOverlay = document.getElementById('pointer-lock-overlay');
@@ -9632,18 +9647,33 @@ export function setupControlsGuideModal() {
       const handler = (e) => {
         if (e && e.cancelable && e.type === 'touchstart') e.preventDefault();
         const now = performance.now();
-        if (now - lastT < 150) return;
+        if (now - lastT < 120) return;
         lastT = now;
         fn(e);
       };
       el.addEventListener('pointerdown', handler);
       el.addEventListener('click', handler);
+      if ('ontouchstart' in window) {
+        el.addEventListener('touchend', handler);
+      }
     };
 
     if (hudGuideBtn) bindFastTap(hudGuideBtn, showModal);
     if (pauseGuideBtn) bindFastTap(pauseGuideBtn, showModal);
     if (closeBtn) bindFastTap(closeBtn, hideModal);
     if (resumeBtn) bindFastTap(resumeBtn, hideModal);
+
+    // Backdrop click to close
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) hideModal(e);
+    });
+
+    // Escape key to close
+    window.addEventListener('keydown', (e) => {
+      if ((e.key === 'Escape' || e.key === 'Esc') && modal.style.display !== 'none') {
+        hideModal(e);
+      }
+    });
 
     if (tabPc && tabMobile && contentPc && contentMobile) {
       bindFastTap(tabPc, () => {
@@ -9659,6 +9689,15 @@ export function setupControlsGuideModal() {
         contentPc.style.display = 'none';
       });
     }
+  }
+}
+
+// Auto-run on initial script load so the modal works anytime from main menu or in-game
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupControlsGuideModal);
+  } else {
+    setupControlsGuideModal();
   }
 }
 

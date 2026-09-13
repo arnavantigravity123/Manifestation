@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import { initGame, setMobileMode, detectMobileDevice } from './game.js';
+import { initGame, setMobileMode, detectMobileDevice, setupControlsGuideModal } from './game.js';
 import { Purchases } from '@revenuecat/purchases-capacitor';
 import { Capacitor } from '@capacitor/core';
 
@@ -38,6 +38,13 @@ setTimeout(() => {
     console.warn("[SOCKET] Pre-warm socket warning:", e);
   }
 }, 100);
+
+// Initialize Controls Guide modal listeners immediately so buttons always respond from the start screen
+try {
+  setupControlsGuideModal();
+} catch (e) {
+  console.warn("[CONTROLS] Modal init warning:", e);
+}
 
 // DOM Elements
 const authView = document.getElementById('auth-view');
@@ -1256,6 +1263,8 @@ function startLocalSoloMatch(isTutorial = false) {
   if (soloLoadingOverlay) soloLoadingOverlay.style.display = 'none';
   if (authView) authView.style.display = 'none';
   if (lobbyView) lobbyView.style.display = 'none';
+  const guideModal = document.getElementById('controls-guide-modal');
+  if (guideModal) guideModal.style.display = 'none';
   const startScreen = document.getElementById('start-screen');
   if (startScreen) startScreen.style.display = 'none';
 
@@ -1345,8 +1354,9 @@ if (soloBtn) {
 if (menuOpenControlsTrigger) {
   addFastButtonListener(menuOpenControlsTrigger, (e) => {
     if (e && e.preventDefault) e.preventDefault();
+    setupControlsGuideModal();
     if (window.openControlsGuideModal) {
-      window.openControlsGuideModal();
+      window.openControlsGuideModal(e);
     } else {
       const modal = document.getElementById('controls-guide-modal');
       if (modal) modal.style.display = 'flex';

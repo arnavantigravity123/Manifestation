@@ -732,7 +732,7 @@
               <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; text-align: left;">Operative Field Manual</div>
             </div>
           </div>
-          <button id="close-controls-modal-btn" class="modal-close-icon" title="Close Guide">✕</button>
+          <button id="close-controls-modal-btn" class="modal-close-icon" title="Close Guide" onclick="document.getElementById('controls-guide-modal').style.display='none'; if(window.closeControlsGuideModal) window.closeControlsGuideModal(event);">✕</button>
         </div>
 
         <div class="controls-guide-tabs">
@@ -866,7 +866,7 @@
           </div>
         </div>
 
-        <button id="resume-from-controls-btn" class="action-btn" style="margin-top: 1.2rem; background: linear-gradient(135deg, #10b981, #047857); font-weight: 800; letter-spacing: 1px;">✓ CLOSE / RESUME GAME</button>
+        <button id="resume-from-controls-btn" class="action-btn" style="margin-top: 1.2rem; background: linear-gradient(135deg, #10b981, #047857); font-weight: 800; letter-spacing: 1px;" onclick="document.getElementById('controls-guide-modal').style.display='none'; if(window.closeControlsGuideModal) window.closeControlsGuideModal(event);">✓ CLOSE / RESUME GAME</button>
       </div>
     </div>
 
