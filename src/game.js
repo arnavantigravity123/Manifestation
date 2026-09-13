@@ -85,15 +85,16 @@ export function getHazmatMaterials() {
   }
 
   if (!hazmatSuitMaterial) {
+    const isMobile = isMobileDevice || isLowEndHardware;
     hazmatSuitMaterial = new THREE.MeshStandardMaterial({
       map: hazmatAlbedoTexture,
-      normalMap: hazmatNormalTexture,
-      roughnessMap: hazmatRoughnessTexture,
-      metalnessMap: hazmatMetallicTexture,
-      aoMap: hazmatAOTexture,
+      normalMap: !isMobile ? hazmatNormalTexture : null,
+      roughnessMap: !isMobile ? hazmatRoughnessTexture : null,
+      metalnessMap: !isMobile ? hazmatMetallicTexture : null,
+      aoMap: !isMobile ? hazmatAOTexture : null,
       roughness: 0.9,
       metalness: 0.1,
-      side: THREE.DoubleSide
+      side: THREE.FrontSide
     });
   }
 
@@ -451,6 +452,17 @@ export function loadHazmatFBXAssets() {
   loadLocomotionFBXClips();
 }
 
+function disposeUnusedFBXMesh(group) {
+  if (!group || typeof group.traverse !== 'function') return;
+  group.traverse(child => {
+    if (child.geometry) child.geometry.dispose();
+    if (child.material) {
+      if (Array.isArray(child.material)) child.material.forEach(m => m && m.dispose());
+      else child.material.dispose();
+    }
+  });
+}
+
 let isLocomotionClipsLoading = false;
 export function loadLocomotionFBXClips() {
   if (isLocomotionClipsLoading) return;
@@ -461,6 +473,7 @@ export function loadLocomotionFBXClips() {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('idle', anim.animations[0]);
     }
+    disposeUnusedFBXMesh(anim);
   });
 
   // 1. Load Walk Forward animation (With-Skin FBX)
@@ -468,11 +481,13 @@ export function loadLocomotionFBXClips() {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('walk', anim.animations[0]);
     }
+    disposeUnusedFBXMesh(anim);
   }, undefined, () => {
     fbxLoader.load('/assets/Walking.fbx', (anim) => {
       if (anim.animations && anim.animations.length > 0) {
         registerAnimationToActiveMixers('walk', anim.animations[0]);
       }
+      disposeUnusedFBXMesh(anim);
     });
   });
 
@@ -481,11 +496,13 @@ export function loadLocomotionFBXClips() {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('sprint', anim.animations[0]);
     }
+    disposeUnusedFBXMesh(anim);
   }, undefined, () => {
     fbxLoader.load('/assets/Standing Sprint Forward.fbx', (anim) => {
       if (anim.animations && anim.animations.length > 0) {
         registerAnimationToActiveMixers('sprint', anim.animations[0]);
       }
+      disposeUnusedFBXMesh(anim);
     });
   });
 
@@ -494,11 +511,13 @@ export function loadLocomotionFBXClips() {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('walkBack', anim.animations[0]);
     }
+    disposeUnusedFBXMesh(anim);
   }, undefined, () => {
     fbxLoader.load('/assets/Walking Backwards.fbx', (anim) => {
       if (anim.animations && anim.animations.length > 0) {
         registerAnimationToActiveMixers('walkBack', anim.animations[0]);
       }
+      disposeUnusedFBXMesh(anim);
     });
   });
 
@@ -507,11 +526,13 @@ export function loadLocomotionFBXClips() {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('strafeLeft', anim.animations[0]);
     }
+    disposeUnusedFBXMesh(anim);
   }, undefined, () => {
     fbxLoader.load('/assets/Left Strafe Walk.fbx', (anim) => {
       if (anim.animations && anim.animations.length > 0) {
         registerAnimationToActiveMixers('strafeLeft', anim.animations[0]);
       }
+      disposeUnusedFBXMesh(anim);
     });
   });
 
@@ -520,11 +541,13 @@ export function loadLocomotionFBXClips() {
     if (anim.animations && anim.animations.length > 0) {
       registerAnimationToActiveMixers('strafeRight', anim.animations[0]);
     }
+    disposeUnusedFBXMesh(anim);
   }, undefined, () => {
     fbxLoader.load('/assets/Right Strafe Walking.fbx', (anim) => {
       if (anim.animations && anim.animations.length > 0) {
         registerAnimationToActiveMixers('strafeRight', anim.animations[0]);
       }
+      disposeUnusedFBXMesh(anim);
     });
   });
 }
@@ -833,8 +856,8 @@ export function attachForestToVault() {
   forestSceneInstance = forestContainer;
 }
 
-// Preload 3D Forest Environment Model immediately
-loadForestAsset();
+// 3D Forest Environment Model is deferred and loaded on-demand when vault is initialized
+// to save 50MB+ RAM during core maze gameplay.
 
 let scene, camera, renderer;
 let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
@@ -927,6 +950,9 @@ export function setMobileMode(mode) {
     isMobileDevice = detectMobileDevice();
   }
   window.isMobileDevice = isMobileDevice;
+  if (renderer) {
+    renderer.setPixelRatio((isMobileDevice || isLowEndHardware) ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
+  }
   
   const mobileCtrl = document.getElementById('mobile-controls-container');
   if (isMobileDevice) {
@@ -2120,6 +2146,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false) {
       activeViewCamera.aspect = w / h;
       activeViewCamera.updateProjectionMatrix();
     }
+    renderer.setPixelRatio((isMobileDevice || isLowEndHardware) ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
     renderer.setSize(w, h);
   });
 
@@ -2633,10 +2660,11 @@ let lastDungeonBlockSize = 6.0;
 
 /* ── Helper: create PBR material from separate texture PNGs ── */
 function makeDungeonMat(colorPath, normalPath, roughPath, opts = {}) {
+  const isMobile = isMobileDevice || isLowEndHardware;
   const mat = new THREE.MeshStandardMaterial({
     map:          getLoadedTexture(colorPath, null, true),
-    normalMap:    normalPath ? getLoadedTexture(normalPath) : null,
-    roughnessMap: roughPath  ? getLoadedTexture(roughPath)  : null,
+    normalMap:    (!isMobile && normalPath) ? getLoadedTexture(normalPath) : null,
+    roughnessMap: (!isMobile && roughPath)  ? getLoadedTexture(roughPath)  : null,
     roughness:    opts.roughness ?? 0.6,
     metalness:    opts.metalness ?? 0.05,
     color:        0xffffff,
@@ -3870,10 +3898,11 @@ function generateMaze(keysCount = 8) {
   
   let floorMat;
   if (isDungeon) {
+    const isMobile = isMobileDevice || isLowEndHardware;
     const dungeonFloorRep = Math.max(15, Math.round(floorExtent / 3.0));
     const groundTex = getLoadedTexture('/assets/dungeon/textures/GroundColor.png', { x: dungeonFloorRep, y: dungeonFloorRep }, true);
-    const groundRoughness = getLoadedTexture('/assets/dungeon/textures/GroundRoughness.png', { x: dungeonFloorRep, y: dungeonFloorRep });
-    const groundNormal = getLoadedTexture('/assets/dungeon/textures/GroundNormal.png', { x: dungeonFloorRep, y: dungeonFloorRep });
+    const groundRoughness = !isMobile ? getLoadedTexture('/assets/dungeon/textures/GroundRoughness.png', { x: dungeonFloorRep, y: dungeonFloorRep }) : null;
+    const groundNormal = !isMobile ? getLoadedTexture('/assets/dungeon/textures/GroundNormal.png', { x: dungeonFloorRep, y: dungeonFloorRep }) : null;
     floorMat = new THREE.MeshStandardMaterial({ 
       map: groundTex,
       roughnessMap: groundRoughness,
@@ -4102,9 +4131,10 @@ function generateMaze(keysCount = 8) {
 
   let wallMat, slidingWallMat;
   if (isDungeon) {
+    const isMobile = isMobileDevice || isLowEndHardware;
     const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', null, true);
-    const dungeonWallNormal = getLoadedTexture('/assets/dungeon/textures/WallNormal.png');
-    const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/WallRoughness.png');
+    const dungeonWallNormal = !isMobile ? getLoadedTexture('/assets/dungeon/textures/WallNormal.png') : null;
+    const dungeonWallRoughness = !isMobile ? getLoadedTexture('/assets/dungeon/textures/WallRoughness.png') : null;
 
     wallMat = new THREE.MeshStandardMaterial({ 
       map: dungeonWallTex,
@@ -4115,19 +4145,18 @@ function generateMaze(keysCount = 8) {
       color: 0x656565,
       emissive: 0x000000,
       emissiveIntensity: 0.0,
-      side: THREE.DoubleSide
+      side: THREE.FrontSide // FrontSide enables hardware backface culling, doubling fillrate!
     });
     
-    // Clone textures for sliding wall so they can have independent settings
-    const slidingWallTex = dungeonWallTex.clone();
-    const slidingRoughness = dungeonWallRoughness.clone();
+    // Sliding wall shares the same textures directly without wasteful GPU cloning
     slidingWallMat = new THREE.MeshStandardMaterial({
-      map: slidingWallTex,
-      roughnessMap: slidingRoughness,
+      map: dungeonWallTex,
+      normalMap: dungeonWallNormal,
+      roughnessMap: dungeonWallRoughness,
       roughness: 0.85,
       metalness: 0.05,
       color: 0x5a5a5a,
-      side: THREE.DoubleSide
+      side: THREE.FrontSide
     });
   } else {
     const generatedTex = getLoadedTexture('/assets/wall_texture.png', { x: 1, y: 1 });
@@ -9631,11 +9660,22 @@ function checkChalkDecals(ghostPos) {
 // 3D Game Loop rendering
 let animationFrameId = null;
 let networkTimer = 0;
+let lastRenderTime = 0;
 function animate() {
   if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
   animationFrameId = requestAnimationFrame(animate);
 
   const time = performance.now();
+
+  // Mobile / Low-End Thermal Guard: Cap frame rate to 60 FPS
+  // High-refresh mobile displays (90Hz / 120Hz / 144Hz) push phone GPUs past thermal limits.
+  // Throttling to smooth 60 FPS halves GPU work, keeps the phone cool, and conserves battery!
+  const isMobile = isMobileDevice || isLowEndHardware;
+  if (isMobile && (time - lastRenderTime < 15.5)) {
+    return;
+  }
+  lastRenderTime = time;
+
   const rawDelta = (time - prevTime) / 1000;
   prevTime = time;
   const delta = Math.min(0.05, Math.max(0.0001, rawDelta)); // Clamp delta to prevent time jumps
@@ -10367,51 +10407,24 @@ function animate() {
       const prevGhostX = ghost.position.x;
       const prevGhostZ = ghost.position.z;
 
-      // Find nearest human and track all active humans in the match
+      // Find nearest human
       let nearestHumanPos = null;
       let minDist = Infinity;
       let closestHumanId = null;
-      const activeHumans = [];
       
       if (myTeam === 'Human' && !isPanicked && !isCaptured) {
         const d = ghost.position.distanceTo(camera.position);
-        const myUsername = (currentLobby && currentLobby.players && currentLobby.players[myId]?.username) || 'Operative';
-        const mySkin = (currentLobby && currentLobby.players && currentLobby.players[myId]?.skinId) || localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
-        const myVip = Boolean((window.isVipActive && window.isVipActive()) || (currentLobby && currentLobby.players && currentLobby.players[myId]?.isVip));
-        const localData = {
-          id: myId || 'local_human',
-          username: myUsername,
-          skinId: mySkin,
-          isVip: myVip,
-          distance: d,
-          position: camera.position
-        };
-        activeHumans.push(localData);
-
         if (d < minDist) {
           minDist = d;
           _scratchNearestHuman.set(camera.position.x, ghost.position.y, camera.position.z);
           nearestHumanPos = _scratchNearestHuman;
-          closestHumanId = localData.id;
+          closestHumanId = myId || 'local_human';
         }
       }
-      Object.entries(players3D).forEach(([pId, p]) => {
+      for (const pId in players3D) {
+        const p = players3D[pId];
         if (p && p.userData && p.userData.type === 'Human' && !p.userData.isCaptured && !p.userData.isPanicked) {
           const d = ghost.position.distanceTo(p.position);
-          const lobbyEntry = (currentLobby && currentLobby.players) ? currentLobby.players[pId] : null;
-          const pUsername = (lobbyEntry && lobbyEntry.username) || p.userData.username || 'Operative';
-          const pSkin = (lobbyEntry && lobbyEntry.skinId) || p.userData.skinId || 'skin_hazmat';
-          const pVip = Boolean((lobbyEntry && lobbyEntry.isVip) || p.userData.isVip);
-          const remoteData = {
-            id: pId,
-            username: pUsername,
-            skinId: pSkin,
-            isVip: pVip,
-            distance: d,
-            position: p.position
-          };
-          activeHumans.push(remoteData);
-
           if (d < minDist) {
             minDist = d;
             _scratchNearestHuman.set(p.position.x, ghost.position.y, p.position.z);
@@ -10419,7 +10432,7 @@ function animate() {
             closestHumanId = pId;
           }
         }
-      });
+      }
 
       const distToPlayer = minDist !== Infinity ? minDist : 9999;
       const targetPos = nearestHumanPos;
@@ -10568,7 +10581,33 @@ function animate() {
               if (ghost.userData.chasedTargetId) excludedIds.add(ghost.userData.chasedTargetId);
 
               // 1. Choose a random teammate from active humans in the labyrinth (excluding closest & chased)
-              const eligibleTeammates = activeHumans.filter(h => !excludedIds.has(h.id));
+              const eligibleTeammates = [];
+              if (myTeam === 'Human' && !isPanicked && !isCaptured && !excludedIds.has(myId || 'local_human')) {
+                const myUsername = (currentLobby && currentLobby.players && currentLobby.players[myId]?.username) || 'Operative';
+                const mySkin = (currentLobby && currentLobby.players && currentLobby.players[myId]?.skinId) || localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
+                const myVip = Boolean((window.isVipActive && window.isVipActive()) || (currentLobby && currentLobby.players && currentLobby.players[myId]?.isVip));
+                eligibleTeammates.push({
+                  id: myId || 'local_human',
+                  username: myUsername,
+                  skinId: mySkin,
+                  isVip: myVip
+                });
+              }
+              for (const pId in players3D) {
+                const p = players3D[pId];
+                if (p && p.userData && p.userData.type === 'Human' && !p.userData.isCaptured && !p.userData.isPanicked && !excludedIds.has(pId)) {
+                  const lobbyEntry = (currentLobby && currentLobby.players) ? currentLobby.players[pId] : null;
+                  const pUsername = (lobbyEntry && lobbyEntry.username) || p.userData.username || 'Operative';
+                  const pSkin = (lobbyEntry && lobbyEntry.skinId) || p.userData.skinId || 'skin_hazmat';
+                  const pVip = Boolean((lobbyEntry && lobbyEntry.isVip) || p.userData.isVip);
+                  eligibleTeammates.push({
+                    id: pId,
+                    username: pUsername,
+                    skinId: pSkin,
+                    isVip: pVip
+                  });
+                }
+              }
 
               let chosenTeammate = null;
               if (eligibleTeammates.length > 0) {
@@ -11024,11 +11063,12 @@ function animate() {
         }
       });
     } else if (p.userData && (p.userData.type === 'Human' || !p.userData.type)) {
-      // Calculate delta movement to drive the locomotion state & walk cycle
-      const currentPos = p.position.clone();
-      const lastPos = p.userData.lastPosition || p.position.clone();
-      const distMoved = currentPos.distanceTo(lastPos);
-      p.userData.lastPosition = currentPos;
+      // Calculate delta movement to drive the locomotion state & walk cycle without GC churn
+      if (!p.userData.lastPosition) {
+        p.userData.lastPosition = new THREE.Vector3().copy(p.position);
+      }
+      const distMoved = p.position.distanceTo(p.userData.lastPosition);
+      p.userData.lastPosition.copy(p.position);
 
       if (p.userData.animMixer || p.userData.animActions) {
         const speed = distMoved / Math.max(0.001, delta);
