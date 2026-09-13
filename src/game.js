@@ -2296,6 +2296,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     || localStorage.getItem('manifestation_username') 
     || sessionStorage.getItem('rejoinUsername') 
     || '';
+  const cleanName = rawName.trim().toLowerCase();
   const isAriadne = cleanName === 'ariadne_999' || cleanName === 'aridane_999' || cleanName.includes('ariadne') || cleanName.includes('aridane');
   const showAriadneThread = isAriadne || window.isTutorialMatch;
 
