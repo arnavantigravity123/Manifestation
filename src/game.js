@@ -10039,6 +10039,194 @@ function animate() {
       }
     });
 
+    // Deterministic Grid-Plane & Exposed Corner Collision Solver for Ghost AI
+    // Guarantees ghosts can NEVER penetrate, corner-squeeze, or phase through walls or alcoves
+    function resolveGhostCollision(ghost) {
+      if (!ghost || !ghost.position || !mazeLayout || !mazeLayout[0]) return;
+      const blockSize = mazeBlockSize || 6.0;
+      const ghostRadius = 0.55;
+      const totalCols = mazeLayout[0].length;
+      const totalRows = mazeLayout.length;
+      const halfBlock = blockSize / 2;
+      const isSolid = (v) => (v === 1 || v === 2);
+
+      for (let pass = 0; pass < 2; pass++) {
+        const px = ghost.position.x;
+        const pz = ghost.position.z;
+        const col = Math.max(0, Math.min(totalCols - 1, Math.floor((px / blockSize) + totalCols / 2)));
+        const row = Math.max(0, Math.min(totalRows - 1, Math.floor((pz / blockSize) + totalRows / 2)));
+
+        const currentCellVal = mazeLayout[row] ? mazeLayout[row][col] : 1;
+
+        if (isSolid(currentCellVal)) {
+          // Recovery: Ghost has penetrated inside a solid wall cell. Immediately eject to nearest open neighbor!
+          const dirs = [
+            { dc: 0, dr: -1, axis: 'z', sign: -1 }, // North
+            { dc: 0, dr: 1, axis: 'z', sign: 1 },   // South
+            { dc: -1, dr: 0, axis: 'x', sign: -1 }, // West
+            { dc: 1, dr: 0, axis: 'x', sign: 1 }    // East
+          ];
+          let bestDir = null;
+          let minDisplacement = Infinity;
+
+          for (const d of dirs) {
+            const nc = col + d.dc;
+            const nr = row + d.dr;
+            if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr] && mazeLayout[nr][nc] === 0) {
+              if (d.axis === 'z') {
+                const edgeZ = (d.sign < 0) ? (row - totalRows / 2) * blockSize : (row + 1 - totalRows / 2) * blockSize;
+                const disp = Math.abs(pz - edgeZ);
+                if (disp < minDisplacement) {
+                  minDisplacement = disp;
+                  bestDir = { ...d, target: edgeZ + d.sign * ghostRadius };
+                }
+              } else {
+                const edgeX = (d.sign < 0) ? (col - totalCols / 2) * blockSize : (col + 1 - totalCols / 2) * blockSize;
+                const disp = Math.abs(px - edgeX);
+                if (disp < minDisplacement) {
+                  minDisplacement = disp;
+                  bestDir = { ...d, target: edgeX + d.sign * ghostRadius };
+                }
+              }
+            }
+          }
+
+          if (bestDir) {
+            if (bestDir.axis === 'z') ghost.position.z = bestDir.target;
+            else ghost.position.x = bestDir.target;
+          }
+        } else {
+          // Ghost is in an open corridor/alcove cell. Apply hard boundary planes against all cardinal solid neighbors!
+          // 1. North neighbor (row - 1)
+          if (row > 0 && isSolid(mazeLayout[row - 1][col])) {
+            const northEdgeZ = (row - totalRows / 2) * blockSize;
+            if (ghost.position.z < northEdgeZ + ghostRadius) {
+              ghost.position.z = northEdgeZ + ghostRadius;
+            }
+          }
+          // 2. South neighbor (row + 1)
+          if (row < totalRows - 1 && isSolid(mazeLayout[row + 1][col])) {
+            const southEdgeZ = (row + 1 - totalRows / 2) * blockSize;
+            if (ghost.position.z > southEdgeZ - ghostRadius) {
+              ghost.position.z = southEdgeZ - ghostRadius;
+            }
+          }
+          // 3. West neighbor (col - 1)
+          if (col > 0 && isSolid(mazeLayout[row][col - 1])) {
+            const westEdgeX = (col - totalCols / 2) * blockSize;
+            if (ghost.position.x < westEdgeX + ghostRadius) {
+              ghost.position.x = westEdgeX + ghostRadius;
+            }
+          }
+          // 4. East neighbor (col + 1)
+          if (col < totalCols - 1 && isSolid(mazeLayout[row][col + 1])) {
+            const eastEdgeX = (col + 1 - totalCols / 2) * blockSize;
+            if (ghost.position.x > eastEdgeX - ghostRadius) {
+              ghost.position.x = eastEdgeX - ghostRadius;
+            }
+          }
+
+          // 5. Diagonal exposed convex corner vertices (smooth rounding around hallway corners)
+          const diags = [
+            { dc: -1, dr: -1 }, // Northwest
+            { dc: 1, dr: -1 },  // Northeast
+            { dc: -1, dr: 1 },  // Southwest
+            { dc: 1, dr: 1 }   // Southeast
+          ];
+
+          for (const dg of diags) {
+            const diagC = col + dg.dc;
+            const diagR = row + dg.dr;
+            if (diagR >= 0 && diagR < totalRows && diagC >= 0 && diagC < totalCols) {
+              if (isSolid(mazeLayout[diagR][diagC])) {
+                const card1Open = !isSolid(mazeLayout[row][diagC]);
+                const card2Open = !isSolid(mazeLayout[diagR][col]);
+                if (card1Open || card2Open) {
+                  const cornerX = (col + (dg.dc > 0 ? 1 : 0) - totalCols / 2) * blockSize;
+                  const cornerZ = (row + (dg.dr > 0 ? 1 : 0) - totalRows / 2) * blockSize;
+                  const dx = ghost.position.x - cornerX;
+                  const dz = ghost.position.z - cornerZ;
+                  if (dx * dg.dc < 0 && dz * dg.dr < 0) {
+                    const distSq = dx * dx + dz * dz;
+                    if (distSq < ghostRadius * ghostRadius && distSq > 0.0001) {
+                      const dist = Math.sqrt(distSq);
+                      ghost.position.x = cornerX + (dx / dist) * ghostRadius;
+                      ghost.position.z = cornerZ + (dz / dist) * ghostRadius;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Dynamic sliding door meshes collision (if raised)
+        if (walls && walls.length > 0) {
+          for (let i = 0; i < walls.length; i++) {
+            const wall = walls[i];
+            if (wall.position.y < -0.5) continue; // Skip lowered doors
+            const wx = wall.position.x;
+            const wz = wall.position.z;
+            const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : halfBlock;
+            const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : halfBlock;
+
+            const minX = wx - hx - ghostRadius;
+            const maxX = wx + hx + ghostRadius;
+            const minZ = wz - hz - ghostRadius;
+            const maxZ = wz + hz + ghostRadius;
+
+            if (ghost.position.x > minX && ghost.position.x < maxX &&
+                ghost.position.z > minZ && ghost.position.z < maxZ) {
+              const penLeft = ghost.position.x - minX;
+              const penRight = maxX - ghost.position.x;
+              const penTop = ghost.position.z - minZ;
+              const penBottom = maxZ - ghost.position.z;
+
+              const minPenX = penLeft < penRight ? -penLeft : penRight;
+              const minPenZ = penTop < penBottom ? -penTop : penBottom;
+              if (Math.abs(minPenX) < Math.abs(minPenZ)) {
+                ghost.position.x += minPenX;
+              } else {
+                ghost.position.z += minPenZ;
+              }
+            }
+          }
+        }
+
+        // Dungeon Props Collision (Spatial grid check - O(1))
+        if (dungeonPropGrid && dungeonPropGrid.size > 0) {
+          for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+              const bucket = dungeonPropGrid.get(((row + dr) * 1000) + (col + dc));
+              if (!bucket) continue;
+              for (let i = 0; i < bucket.length; i++) {
+                const prop = bucket[i];
+                const dx = ghost.position.x - prop.x;
+                const dz = ghost.position.z - prop.z;
+                const maxD = prop.radius + ghostRadius;
+                if (Math.abs(dx) > maxD || Math.abs(dz) > maxD) continue;
+                const dist = Math.hypot(dx, dz);
+                if (dist < maxD && dist > 0.0001) {
+                  const overlap = maxD - dist;
+                  ghost.position.x += (dx / dist) * overlap;
+                  ghost.position.z += (dz / dist) * overlap;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Hard Map Boundary Safety Clamp
+      const maxPlayableLimit = (mazeSizeGlobal / 2 - 1.0) * blockSize;
+      ghost.position.x = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, ghost.position.x));
+      ghost.position.z = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, ghost.position.z));
+      if (isNaN(ghost.position.x) || isNaN(ghost.position.z) || ghost.position.y < -2.0) {
+        const spawnCell = openCorridors && openCorridors.length > 0 ? openCorridors[0] : { x: 0, z: 0 };
+        ghost.position.set(spawnCell.x, 0.35, spawnCell.z);
+      }
+    }
+
     // 4. Update AI Bots pathing behaviors toward nearest human
     ghosts3D.forEach((ghost, idx) => {
       // Breaker Remote freezes all ghost movement
@@ -10292,6 +10480,7 @@ function animate() {
             }
             if (safeLeapDist > 0) {
               ghost.position.addScaledVector(forward, safeLeapDist);
+              resolveGhostCollision(ghost);
             }
           } else if (gClass === 'Poltergeist') {
             const dist = targetPos.distanceTo(ghost.position);
@@ -10415,6 +10604,7 @@ function animate() {
           // Move toward current waypoint
           _scratchVec3_1.set(dx, 0, dz).normalize();
           ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
+          resolveGhostCollision(ghost);
         }
       } else {
         // Arrived at final waypoint or navigating inside destination cell
@@ -10427,6 +10617,7 @@ function animate() {
           if (sameCell || hasDirectLos) {
             _scratchVec3_1.set(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
             ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
+            resolveGhostCollision(ghost);
           } else {
             // Separated by a wall! Immediately force BFS repath around corridor rather than driving into the wall
             ghost.userData.pathTime = 0;
@@ -10452,129 +10643,8 @@ function animate() {
         ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
       }
 
-      // Multi-pass robust AABB sliding wall & prop collision for ghost AI (prevents wall phasing & corner tunneling)
-      const blockSize = mazeBlockSize || 6.0;
-      const ghostRadius = 0.55;
-      const wallHalfSize = blockSize / 2;
-      const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : mazeSizeGlobal;
-      const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
-
-      for (let iter = 0; iter < 3; iter++) {
-        const gGridC = Math.floor((ghost.position.x / blockSize) + totalCols / 2);
-        const gGridR = Math.floor((ghost.position.z / blockSize) + totalRows / 2);
-
-        // 1. Static walls & closed sliding doors in 3x3 neighborhood
-        for (let r = Math.max(0, gGridR - 1); r <= Math.min(totalRows - 1, gGridR + 1); r++) {
-          for (let c = Math.max(0, gGridC - 1); c <= Math.min(totalCols - 1, gGridC + 1); c++) {
-            if (mazeLayout && mazeLayout[r] && (mazeLayout[r][c] === 1 || mazeLayout[r][c] === 2)) {
-              const wx = (c - totalCols / 2) * blockSize + blockSize / 2;
-              const wz = (r - totalRows / 2) * blockSize + blockSize / 2;
-
-              const minX = wx - wallHalfSize - ghostRadius;
-              const maxX = wx + wallHalfSize + ghostRadius;
-              const minZ = wz - wallHalfSize - ghostRadius;
-              const maxZ = wz + wallHalfSize + ghostRadius;
-
-              if (ghost.position.x > minX && ghost.position.x < maxX &&
-                  ghost.position.z > minZ && ghost.position.z < maxZ) {
-                
-                const penLeft = ghost.position.x - minX;
-                const penRight = maxX - ghost.position.x;
-                const penTop = ghost.position.z - minZ;
-                const penBottom = maxZ - ghost.position.z;
-
-                // Use previous un-collided position to determine approach direction with 100% certainty
-                const wasWest = prevGhostX <= (wx - wallHalfSize);
-                const wasEast = prevGhostX >= (wx + wallHalfSize);
-                const wasNorth = prevGhostZ <= (wz - wallHalfSize);
-                const wasSouth = prevGhostZ >= (wz + wallHalfSize);
-
-                if (wasWest && !wasNorth && !wasSouth) {
-                  ghost.position.x = minX;
-                } else if (wasEast && !wasNorth && !wasSouth) {
-                  ghost.position.x = maxX;
-                } else if (wasNorth && !wasWest && !wasEast) {
-                  ghost.position.z = minZ;
-                } else if (wasSouth && !wasWest && !wasEast) {
-                  ghost.position.z = maxZ;
-                } else {
-                  // Diagonal approach or already slightly penetrating: clamp along minimum penetration axis
-                  const minPenX = penLeft < penRight ? -penLeft : penRight;
-                  const minPenZ = penTop < penBottom ? -penTop : penBottom;
-                  if (Math.abs(minPenX) < Math.abs(minPenZ)) {
-                    ghost.position.x += minPenX;
-                  } else {
-                    ghost.position.z += minPenZ;
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // 2. Active dynamic walls (raised sliding doors & gate blockers)
-        for (let i = 0; i < walls.length; i++) {
-          const wall = walls[i];
-          if (wall.position.y < -0.5) continue; // Skip lowered sliding doors
-          const wx = wall.position.x;
-          const wz = wall.position.z;
-          const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : wallHalfSize;
-          const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : wallHalfSize;
-
-          const minX = wx - hx - ghostRadius;
-          const maxX = wx + hx + ghostRadius;
-          const minZ = wz - hz - ghostRadius;
-          const maxZ = wz + hz + ghostRadius;
-
-          if (ghost.position.x > minX && ghost.position.x < maxX &&
-              ghost.position.z > minZ && ghost.position.z < maxZ) {
-            const penLeft = ghost.position.x - minX;
-            const penRight = maxX - ghost.position.x;
-            const penTop = ghost.position.z - minZ;
-            const penBottom = maxZ - ghost.position.z;
-
-            const minPenX = penLeft < penRight ? -penLeft : penRight;
-            const minPenZ = penTop < penBottom ? -penTop : penBottom;
-            if (Math.abs(minPenX) < Math.abs(minPenZ)) {
-              ghost.position.x += minPenX;
-            } else {
-              ghost.position.z += minPenZ;
-            }
-          }
-        }
-
-        // 3. Solid Dungeon Props Collision (Spatial grid check - O(1))
-        if (dungeonPropGrid && dungeonPropGrid.size > 0) {
-          for (let dr = -1; dr <= 1; dr++) {
-            for (let dc = -1; dc <= 1; dc++) {
-              const bucket = dungeonPropGrid.get(((gGridR + dr) * 1000) + (gGridC + dc));
-              if (!bucket) continue;
-              for (let i = 0; i < bucket.length; i++) {
-                const prop = bucket[i];
-                const dx = ghost.position.x - prop.x;
-                const dz = ghost.position.z - prop.z;
-                const maxD = prop.radius + ghostRadius;
-                if (Math.abs(dx) > maxD || Math.abs(dz) > maxD) continue;
-                const dist = Math.hypot(dx, dz);
-                if (dist < maxD && dist > 0.0001) {
-                  const overlap = maxD - dist;
-                  ghost.position.x += (dx / dist) * overlap;
-                  ghost.position.z += (dz / dist) * overlap;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // Hard Map Boundary Safety Clamp (Prevents glitching outside outer maze walls)
-      const maxPlayableLimit = (mazeSizeGlobal / 2 - 1.0) * blockSize;
-      ghost.position.x = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, ghost.position.x));
-      ghost.position.z = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, ghost.position.z));
-      if (isNaN(ghost.position.x) || isNaN(ghost.position.z) || ghost.position.y < -2.0) {
-        const spawnCell = openCorridors && openCorridors.length > 0 ? openCorridors[0] : { x: 0, z: 0 };
-        ghost.position.set(spawnCell.x, 0.35, spawnCell.z);
-      }
+      // Final robust grid-plane, corner, dynamic door, and prop collision enforcement
+      resolveGhostCollision(ghost);
     });
 
 
