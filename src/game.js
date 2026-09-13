@@ -7331,6 +7331,7 @@ function setupSocketListeners() {
       const pUsername = currentLobby && currentLobby.players[id] ? currentLobby.players[id].username : 'Unknown';
       const isVipPlayer = Boolean((currentLobby && currentLobby.players[id] && currentLobby.players[id].isVip) || isVipMove);
       const capMesh = isGhost ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername, isVipPlayer);
+      capMesh.userData.id = id;
       capMesh.userData.isVip = isVipPlayer;
       const glowPref = window.isVipGlowEnabled ? window.isVipGlowEnabled() : true;
       if (isVipPlayer && glowPref) {
@@ -8498,6 +8499,7 @@ function createHumanMeshGroup(skinId, username, isVip) {
   group.userData = group.userData || {};
   group.userData.type = 'Human';
   group.userData.skinId = effectiveSkin;
+  group.userData.username = username || '';
   group.userData.walkCycle = 0;
   group.userData.lastPosition = new THREE.Vector3();
   group.userData.isVip = vipActive;
@@ -10235,35 +10237,66 @@ function animate() {
       const prevGhostX = ghost.position.x;
       const prevGhostZ = ghost.position.z;
 
-      // Find nearest human
+      // Find nearest human and track all active humans in the match
       let nearestHumanPos = null;
       let minDist = Infinity;
+      let closestHumanId = null;
+      const activeHumans = [];
       
       if (myTeam === 'Human' && !isPanicked && !isCaptured) {
-         const d = ghost.position.distanceTo(camera.position);
-         if (d < minDist) {
-           minDist = d;
-           _scratchNearestHuman.set(camera.position.x, ghost.position.y, camera.position.z);
-           nearestHumanPos = _scratchNearestHuman;
-         }
+        const d = ghost.position.distanceTo(camera.position);
+        const myUsername = (currentLobby && currentLobby.players && currentLobby.players[myId]?.username) || 'Operative';
+        const mySkin = (currentLobby && currentLobby.players && currentLobby.players[myId]?.skinId) || localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
+        const myVip = Boolean((window.isVipActive && window.isVipActive()) || (currentLobby && currentLobby.players && currentLobby.players[myId]?.isVip));
+        const localData = {
+          id: myId || 'local_human',
+          username: myUsername,
+          skinId: mySkin,
+          isVip: myVip,
+          distance: d,
+          position: camera.position
+        };
+        activeHumans.push(localData);
+
+        if (d < minDist) {
+          minDist = d;
+          _scratchNearestHuman.set(camera.position.x, ghost.position.y, camera.position.z);
+          nearestHumanPos = _scratchNearestHuman;
+          closestHumanId = localData.id;
+        }
       }
-      Object.values(players3D).forEach(p => {
-         if (p.userData && p.userData.type === 'Human' && !p.userData.isCaptured && !p.userData.isPanicked) {
-            const d = ghost.position.distanceTo(p.position);
-            if (d < minDist) {
-              minDist = d;
-              _scratchNearestHuman.set(p.position.x, ghost.position.y, p.position.z);
-              nearestHumanPos = _scratchNearestHuman;
-            }
-         }
+      Object.entries(players3D).forEach(([pId, p]) => {
+        if (p && p.userData && p.userData.type === 'Human' && !p.userData.isCaptured && !p.userData.isPanicked) {
+          const d = ghost.position.distanceTo(p.position);
+          const lobbyEntry = (currentLobby && currentLobby.players) ? currentLobby.players[pId] : null;
+          const pUsername = (lobbyEntry && lobbyEntry.username) || p.userData.username || 'Operative';
+          const pSkin = (lobbyEntry && lobbyEntry.skinId) || p.userData.skinId || 'skin_hazmat';
+          const pVip = Boolean((lobbyEntry && lobbyEntry.isVip) || p.userData.isVip);
+          const remoteData = {
+            id: pId,
+            username: pUsername,
+            skinId: pSkin,
+            isVip: pVip,
+            distance: d,
+            position: p.position
+          };
+          activeHumans.push(remoteData);
+
+          if (d < minDist) {
+            minDist = d;
+            _scratchNearestHuman.set(p.position.x, ghost.position.y, p.position.z);
+            nearestHumanPos = _scratchNearestHuman;
+            closestHumanId = pId;
+          }
+        }
       });
 
       const distToPlayer = minDist !== Infinity ? minDist : 9999;
       const targetPos = nearestHumanPos;
 
-      // Distance culling for ghost dynamic light: prevents 8 simultaneous point lights melting GPU
+      // Distance culling for ghost dynamic light: prevents 8 simultaneous point lights melting GPU (hidden while Mimic is disguised)
       if (ghost.userData && ghost.userData.auraLight) {
-        ghost.userData.auraLight.visible = (distToPlayer < 14.0);
+        ghost.userData.auraLight.visible = !ghost.userData.isMimicDisguised && (distToPlayer < 14.0);
       }
 
       // Damage check uses actual distance to PLAYER (only damages humans)
@@ -10360,12 +10393,14 @@ function animate() {
       if (canSeePlayer && targetPos) {
         ghost.userData.aiState = 'CHASE';
         ghost.userData.loseSightTimer = 0;
+        ghost.userData.chasedTargetId = closestHumanId;
       } else if (ghost.userData.aiState === 'CHASE') {
         if (!targetPos) {
           ghost.userData.aiState = 'WANDER';
           ghost.userData.targetGrid = null;
           ghost.userData.path = null;
           ghost.userData.pathTime = 0;
+          ghost.userData.chasedTargetId = null;
         } else {
           ghost.userData.loseSightTimer += delta;
           if (ghost.userData.loseSightTimer > gParams.botLoseSightDuration) {
@@ -10373,6 +10408,7 @@ function animate() {
             ghost.userData.targetGrid = null;
             ghost.userData.path = null;
             ghost.userData.pathTime = 0;
+            ghost.userData.chasedTargetId = null;
           }
         }
       }
@@ -10396,10 +10432,75 @@ function animate() {
               ghost.userData.isMimicDisguised = true;
               if (myTeam === 'Human') triggerNotification(`A Mimic bot is disguising itself (${Math.round(gParams.cloneDuration / 1000)}s)!`);
               
-              // NEVER default: pick Mech Soldier or Biohazard Hazmat
-              const chosenSkin = Math.random() < 0.5 ? 'skin_soldier' : 'skin_hazmat';
-              const mimicGroup = createHumanMeshGroup(chosenSkin, 'Operative', false);
+              // Exclude the closest person to the bot AND the person it is actively chasing
+              const excludedIds = new Set();
+              if (closestHumanId) excludedIds.add(closestHumanId);
+              if (ghost.userData.chasedTargetId) excludedIds.add(ghost.userData.chasedTargetId);
+
+              // 1. Choose a random teammate from active humans in the labyrinth (excluding closest & chased)
+              const eligibleTeammates = activeHumans.filter(h => !excludedIds.has(h.id));
+
+              let chosenTeammate = null;
+              if (eligibleTeammates.length > 0) {
+                chosenTeammate = eligibleTeammates[Math.floor(Math.random() * eligibleTeammates.length)];
+              } else if (currentLobby && currentLobby.players) {
+                // 2. Check general lobby roster for other teammates (even if waiting / captured)
+                const eligibleLobby = Object.entries(currentLobby.players)
+                  .filter(([pId, pData]) => pData.team !== 'Ghost' && !excludedIds.has(pId))
+                  .map(([pId, pData]) => ({
+                    id: pId,
+                    username: pData.username || 'Operative',
+                    skinId: pData.skinId || (pId === myId ? localStorage.getItem('manifestation_equipped_skin') : 'skin_hazmat') || 'skin_hazmat',
+                    isVip: Boolean(pData.isVip || (pId === myId && window.isVipActive && window.isVipActive()))
+                  }));
+                if (eligibleLobby.length > 0) {
+                  chosenTeammate = eligibleLobby[Math.floor(Math.random() * eligibleLobby.length)];
+                }
+              }
+
+              // 3. Fallback for solo/singleplayer matches where only 1 human exists in total
+              if (!chosenTeammate) {
+                const fallbackSkins = ['skin_soldier', 'skin_hazmat'];
+                const fallbackNames = ['Operative_Echo', 'Agent_Cipher', 'Spectre_4', 'Operative_Bravo'];
+                chosenTeammate = {
+                  id: 'fallback_solo',
+                  username: fallbackNames[Math.floor(Math.random() * fallbackNames.length)],
+                  skinId: fallbackSkins[Math.floor(Math.random() * fallbackSkins.length)],
+                  isVip: Math.random() < 0.25
+                };
+              }
+
+              const chosenSkin = chosenTeammate.skinId || 'skin_hazmat';
+              const chosenUsername = chosenTeammate.username || 'Operative';
+              const chosenIsVip = Boolean(chosenTeammate.isVip);
+
+              const mimicGroup = createHumanMeshGroup(chosenSkin, chosenUsername, chosenIsVip);
               mimicGroup.rotation.y = Math.PI; // Invert to align human model facing forward with ghost movement
+              
+              // Thermal camera material setup (Cyan for teammates)
+              const meshThermalMat = new THREE.MeshBasicMaterial({ 
+                color: 0x38bdf8, 
+                fog: false, 
+                depthTest: false, 
+                side: THREE.DoubleSide 
+              });
+              mimicGroup.traverse(c => {
+                if (c.isMesh) {
+                  c.userData.normalMat = c.material;
+                  c.userData.thermalMat = meshThermalMat;
+                } else if (c.isSprite && !c.userData.isUsernameTag) {
+                  c.userData.normalMat = c.material;
+                  c.userData.thermalMat = new THREE.SpriteMaterial({
+                    map: c.material.map,
+                    color: 0x38bdf8,
+                    fog: false,
+                    depthTest: false,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending
+                  });
+                }
+              });
+
               ghost.add(mimicGroup);
               ghost.userData.mimicGroup = mimicGroup;
               
@@ -10410,8 +10511,11 @@ function animate() {
               
               // Start locomotion animations
               if (mimicGroup.userData && mimicGroup.userData.animActions) {
+                if (mimicGroup.userData.animActions.idle) {
+                  mimicGroup.userData.animActions.idle.stop();
+                }
                 if (mimicGroup.userData.animActions.walk) {
-                  mimicGroup.userData.animActions.walk.play();
+                  mimicGroup.userData.animActions.walk.reset().play();
                 } else if (mimicGroup.userData.animActions.idle) {
                   mimicGroup.userData.animActions.idle.play();
                 }
@@ -10431,6 +10535,11 @@ function animate() {
                       if (child.material) {
                         if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
                         else child.material.dispose();
+                      }
+                    } else if (child.isSprite) {
+                      if (child.material) {
+                        if (child.material.map) child.material.map.dispose();
+                        child.material.dispose();
                       }
                     }
                   });
