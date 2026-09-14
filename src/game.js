@@ -3453,7 +3453,7 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   // Helper: prevent spawning props inside or within collision radius of player spawn hub
-  function isNearSpawn(x, z, minDist = 2.8) {
+  function isNearSpawn(x, z, minDist = 1.8) {
     if (!window.humanSpawnPos) return false;
     return Math.hypot(x - window.humanSpawnPos.x, z - window.humanSpawnPos.z) < minDist;
   }
@@ -3465,7 +3465,7 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   function spawnPillarMesh(px, pz) {
-    if (placedPillars >= 200) return false; // Strict budget cap to prevent memory bloat on large maps
+    if (placedPillars >= 800) return false; // Generous budget ensures all corridors are fully lined with columns
     if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz) || isNearVaultDoorway(px, pz)) return false;
     if (isNearStatue(px, pz, 0.75)) return false; // Never spawn pillar inside or overlapping a statue
     if (isNearPillar(px, pz, 1.8)) return false;
@@ -3636,8 +3636,8 @@ function spawnDungeonProps(layout, blockSize) {
     const pillarWallOffset = 2.45;
     const flankDist = 1.85;
 
-    for (let r = 2; r < layout.length - 2; r++) {
-      for (let c = 2; c < layout[r].length - 2; c++) {
+    for (let r = 1; r < layout.length - 1; r++) {
+      for (let c = 1; c < layout[r].length - 1; c++) {
         if (layout[r][c] === 0) {
           const northOpen = isPassable(r - 1, c);
           const southOpen = isPassable(r + 1, c);
@@ -3699,7 +3699,7 @@ function spawnDungeonProps(layout, blockSize) {
     }
   }
 
-  // 5. Ornate Columns Lining Corridor Walls (Architectural cadence at junctions, corners, and spaced intervals)
+  // 5. Ornate Columns Lining Corridor Walls (Architectural cadence lining all labyrinth walls)
   if (layout && layout.length > 0) {
     const wallOffset = 2.45; // Snug against wall in 6.0m wide corridor
     for (let r = 1; r < layout.length - 1; r++) {
@@ -3714,12 +3714,6 @@ function spawnDungeonProps(layout, blockSize) {
           if (openNeighbors <= 1) continue;
           // Shrines already have their own statue and flanking columns; skip placing additional columns here
           if (shrineCells.has(`${r},${c}`)) continue;
-
-          // Architectural cadence: place columns at junctions (openNeighbors >= 3)
-          // or at corners (openNeighbors === 2 with perpendicular turn)
-          // or spaced every 5 cells on straight corridors
-          const isStraight = (openNeighbors === 2 && ((layout[r - 1] && layout[r - 1][c] === 0 && layout[r + 1] && layout[r + 1][c] === 0) || (layout[r][c - 1] === 0 && layout[r][c + 1] === 0)));
-          if (isStraight && ((r + c) % 5 !== 0)) continue;
 
           const cx = (c - layout[r].length / 2) * blockSize + blockSize / 2;
           const cz = (r - layout.length / 2) * blockSize + blockSize / 2;
