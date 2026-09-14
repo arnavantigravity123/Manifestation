@@ -5676,7 +5676,7 @@ function setupControls() {
         break;
       case 'ShiftLeft':
       case 'ShiftRight':
-        if (myTeam === 'Human' && !isSprintExhausted && stamina >= SPRINT_RECOVERY_THRESHOLD) {
+        if (myTeam === 'Human' && !isSprintExhausted && stamina > 0) {
           isSprinting = true;
         }
         break;
@@ -6213,7 +6213,7 @@ function setupControls() {
         joystickAutoSprinting = false;
       }
 
-      const canSprint = myTeam === 'Human' && !isSprintExhausted && stamina >= SPRINT_RECOVERY_THRESHOLD;
+      const canSprint = myTeam === 'Human' && !isSprintExhausted && stamina > 0;
       const shouldSprint = isMoving && (mobileSprintLocked || joystickAutoSprinting) && canSprint;
 
       if (shouldSprint) {
