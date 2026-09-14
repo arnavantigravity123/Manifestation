@@ -5994,6 +5994,10 @@ function setupControls() {
     let lookTouchId = null;
     let lastLookX = 0;
     let lastLookY = 0;
+    let lookStartX = 0;
+    let lookStartY = 0;
+    let lookStartTime = 0;
+    let lookTouchMovedFar = false;
 
     // Listen on document for looking around, but ignore all touch events on interactive buttons and HUD
     document.addEventListener('touchstart', (e) => {
@@ -6009,6 +6013,7 @@ function setupControls() {
         e.target.closest('#mobile-actions') || 
         e.target.closest('#minimap-container') ||
         e.target.closest('#keypad-modal-ui') ||
+        e.target.closest('#interaction-prompt') ||
         e.target.closest('.inventory-slot') ||
         e.target.closest('.key-slot') ||
         e.target.closest('.glass-panel')
@@ -6022,6 +6027,10 @@ function setupControls() {
           lookTouchId = t.identifier;
           lastLookX = t.clientX;
           lastLookY = t.clientY;
+          lookStartX = t.clientX;
+          lookStartY = t.clientY;
+          lookStartTime = performance.now();
+          lookTouchMovedFar = false;
           break;
         }
       }
@@ -6034,6 +6043,10 @@ function setupControls() {
         if (t.identifier === lookTouchId) {
           const dx = t.clientX - lastLookX;
           const dy = t.clientY - lastLookY;
+
+          if (Math.hypot(t.clientX - lookStartX, t.clientY - lookStartY) > 12) {
+            lookTouchMovedFar = true;
+          }
 
           const sensitivity = window.lookSensitivity !== undefined ? window.lookSensitivity : 1.0;
           // Responsive mobile swipe look speed
@@ -6053,7 +6066,14 @@ function setupControls() {
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (t.identifier === lookTouchId) {
+          const duration = performance.now() - lookStartTime;
+          const distMoved = Math.hypot(t.clientX - lookStartX, t.clientY - lookStartY);
           lookTouchId = null;
+
+          // If finger tapped without a significant swipe (<350ms duration & <18px displacement), trigger direct 3D object click
+          if (!lookTouchMovedFar && duration < 350 && distMoved < 18) {
+            handleDirectTapInteraction(t.clientX, t.clientY);
+          }
           break;
         }
       }
@@ -6251,6 +6271,13 @@ function setupControls() {
 
     if (interactBtn) {
       addTapListener(interactBtn, () => {
+        if (!isCaptured) checkInteractions();
+      });
+    }
+
+    const interactionPromptEl = document.getElementById('interaction-prompt');
+    if (interactionPromptEl) {
+      addTapListener(interactionPromptEl, () => {
         if (!isCaptured) checkInteractions();
       });
     }
@@ -6520,7 +6547,7 @@ function getBestInteractionTarget() {
         bestCandidate = {
           type: 'mirage',
           item: mItem,
-          promptText: isMobileDevice ? `Tap INTERACT to pick up ${mItem.name}` : `Press <kbd>E</kbd> to pick up ${mItem.name}`,
+          promptText: isMobileDevice ? `Tap to pick up ${mItem.name}` : `Press <kbd>E</kbd> to pick up ${mItem.name}`,
           action: () => dissolveMirageItem(mItem)
         };
       }
@@ -6539,7 +6566,7 @@ function getBestInteractionTarget() {
         bestCandidate = {
           type: 'item',
           item: item,
-          promptText: isMobileDevice ? `Tap INTERACT to pick up ${itemName}` : `Press <kbd>E</kbd> to pick up ${itemName}`,
+          promptText: isMobileDevice ? `Tap to pick up ${itemName}` : `Press <kbd>E</kbd> to pick up ${itemName}`,
           action: () => {
             const uniqueEquipment = ["EMF Radar", "Thermal Camera", "Breaker Remote"];
             if (uniqueEquipment.includes(item.name) && inventory.includes(item.name)) {
@@ -6577,7 +6604,7 @@ function getBestInteractionTarget() {
         bestScore = res.score;
         const hasKeySpace = carriedKeys.length < MAX_CARRIED_KEYS;
         const prompt = hasKeySpace
-          ? (isMobileDevice ? `Tap INTERACT to collect ${key.typeName}` : `Press <kbd>E</kbd> to collect ${key.typeName}`)
+          ? (isMobileDevice ? `Tap to collect ${key.typeName}` : `Press <kbd>E</kbd> to collect ${key.typeName}`)
           : (isMobileDevice ? `Hands Full! Tap DROP KEY to replace` : `Hands Full! Press <kbd>G</kbd> to drop a key first`);
         bestCandidate = {
           type: 'key',
@@ -6639,7 +6666,7 @@ function getBestInteractionTarget() {
         bestCandidate = {
           type: 'breaker',
           breaker: breaker,
-          promptText: isMobileDevice ? "Tap INTERACT to repair breaker" : "Press <kbd>E</kbd> to repair breaker",
+          promptText: isMobileDevice ? "Tap to repair Breaker" : "Press <kbd>E</kbd> to repair breaker",
           action: () => {
             if (typeof socketClient !== 'undefined') socketClient.emit('breaker_fixed', { breakerId: breaker.id });
             fixBreakerLocal(breaker.id);
@@ -6663,7 +6690,7 @@ function getBestInteractionTarget() {
           const revealedDigit = digits[clue.digitIndex] !== undefined ? digits[clue.digitIndex] : '?';
           prompt = `Cipher Clue #${clue.digitIndex + 1}: [ ${revealedDigit} ] (Code Already Read)`;
         } else {
-          prompt = isMobileDevice ? `Tap INTERACT to inspect Cipher Clue #${clue.digitIndex + 1}` : `Press <kbd>E</kbd> to inspect Cipher Clue #${clue.digitIndex + 1}`;
+          prompt = isMobileDevice ? `Tap to inspect Cipher Clue #${clue.digitIndex + 1}` : `Press <kbd>E</kbd> to inspect Cipher Clue #${clue.digitIndex + 1}`;
         }
         bestCandidate = {
           type: 'clue',
@@ -6723,13 +6750,13 @@ function getBestInteractionTarget() {
           const diff = window.securityLockoutEndTime - performance.now();
           if (diff <= 0) {
             window.securityLockoutActive = false;
-            prompt = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
+            prompt = isMobileDevice ? "Tap to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
           } else {
             const remaining = Math.max(1, Math.ceil(diff / 1000));
             prompt = `ACCESS DENIED: Security Lockout (${remaining}s remaining)`;
           }
         } else {
-          prompt = isMobileDevice ? "Tap INTERACT to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
+          prompt = isMobileDevice ? "Tap to Open Keypad" : "Press <kbd>E</kbd> to Open Keypad";
         }
       } else {
         const uninsertedKeyIndex = carriedKeys.findIndex(k => 
@@ -6739,13 +6766,13 @@ function getBestInteractionTarget() {
         if (uninsertedKeyIndex !== -1) {
           const keyToInsert = carriedKeys[uninsertedKeyIndex];
           const keyId = getKeyIdentifier(keyToInsert);
-          prompt = isMobileDevice ? `Tap INTERACT to Insert [${keyId}]` : `Press <kbd>E</kbd> to Insert [${keyId}]`;
+          prompt = isMobileDevice ? `Tap to Insert [${keyId}]` : `Press <kbd>E</kbd> to Insert [${keyId}]`;
         } else if (insertedGateKeys.length >= 2) {
           const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
           if (!breakersFixed) {
             prompt = `MASTER GATE LOCKED: Need ${totalBreakersRequired} Breakers to Power Door (${fixedBreakersCount}/${totalBreakersRequired})`;
           } else {
-            prompt = isMobileDevice ? "Tap INTERACT to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
+            prompt = isMobileDevice ? "Tap to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
           }
         } else {
           prompt = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
@@ -6914,6 +6941,228 @@ function updateInteractionPrompt() {
   } else {
     if (promptEl.style.display !== 'none') {
       promptEl.style.display = 'none';
+    }
+  }
+}
+
+// Direct tap interaction for mobile touchscreen: click on 3D items, breakers, clues, keys, or keypad directly
+function handleDirectTapInteraction(clientX, clientY) {
+  if (myTeam === 'Ghost' || window.isSpectating || isMinimapExpanded || isCaptured || window.isEscaping) return;
+  const keypadEl = document.getElementById('keypad-modal-ui');
+  if (keypadEl && keypadEl.style.display !== 'none') return;
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  if (ptrOverlay && ptrOverlay.style.display !== 'none') return;
+
+  const renderCam = (typeof activeViewCamera !== 'undefined' && activeViewCamera) ? activeViewCamera : camera;
+  if (!renderCam) return;
+
+  // 1. Raycast from touch screen coordinates into the 3D scene
+  const raycaster = new THREE.Raycaster();
+  const touchNDC = new THREE.Vector2(
+    (clientX / window.innerWidth) * 2 - 1,
+    -(clientY / window.innerHeight) * 2 + 1
+  );
+  raycaster.setFromCamera(touchNDC, renderCam);
+
+  const candidates = [];
+
+  // Ground dropped items
+  if (typeof itemsInMaze !== 'undefined' && itemsInMaze.length > 0) {
+    for (let i = 0; i < itemsInMaze.length; i++) {
+      const itm = itemsInMaze[i];
+      if (itm && itm.mesh) {
+        candidates.push({
+          mesh: itm.mesh,
+          pos: itm.mesh.position,
+          maxDist: 6.0,
+          action: () => {
+            const uniqueEquipment = ["EMF Radar", "Thermal Camera", "Breaker Remote"];
+            if (uniqueEquipment.includes(itm.name) && inventory.includes(itm.name)) {
+              triggerNotification(`You already have a ${itm.name}!`);
+              return;
+            }
+            const emptyIndex = inventory.indexOf('');
+            if (emptyIndex !== -1) {
+              inventory[emptyIndex] = itm.name;
+              disposeItemMesh(itm.mesh);
+              const idx = itemsInMaze.indexOf(itm);
+              if (idx !== -1) itemsInMaze.splice(idx, 1);
+              if (window.socket) window.socket.emit('item_picked_up', { id: itm.id });
+              triggerNotification(`Picked up ${itm.name}`);
+              renderHUDInventory();
+              if (window.isTutorialMatch && tutorialStage === 4) {
+                advanceTutorialStage(5, `Secured ${itm.name}! Next: Share Supplies & Keys`);
+              }
+            } else {
+              triggerNotification("Inventory full! Drop an item first.");
+            }
+          }
+        });
+      }
+    }
+  }
+
+  // Circuit Breakers
+  if (typeof circuitBreakers !== 'undefined' && circuitBreakers.length > 0) {
+    for (let i = 0; i < circuitBreakers.length; i++) {
+      const cb = circuitBreakers[i];
+      if (cb && cb.mesh && !cb.isFixed) {
+        candidates.push({
+          mesh: cb.mesh,
+          pos: cb.mesh.position,
+          maxDist: 6.0,
+          action: () => {
+            if (typeof socketClient !== 'undefined') socketClient.emit('breaker_fixed', { breakerId: cb.id });
+            fixBreakerLocal(cb.id);
+          }
+        });
+      }
+    }
+  }
+
+  // Code Clue Notes
+  if (typeof codeClueNotes !== 'undefined' && codeClueNotes.length > 0) {
+    for (let i = 0; i < codeClueNotes.length; i++) {
+      const clue = codeClueNotes[i];
+      if (clue && clue.mesh) {
+        candidates.push({
+          mesh: clue.mesh,
+          pos: clue.mesh.position,
+          maxDist: 6.0,
+          action: () => {
+            if (clue.collected) {
+              const digitNames = ['1ST', '2ND', '3RD', '4TH'];
+              const digits = window.cipherCodeDigits || [];
+              const revealedDigit = digits[clue.digitIndex] !== undefined ? digits[clue.digitIndex] : '?';
+              triggerNotification(`Code already read! ${digitNames[clue.digitIndex]} digit of gate code: [ ${revealedDigit} ]`);
+            } else {
+              if (typeof socketClient !== 'undefined') {
+                socketClient.emit('clue_collected', { digitIndex: clue.digitIndex });
+              }
+              collectClueLocal(clue.digitIndex);
+            }
+          }
+        });
+      }
+    }
+  }
+
+  // Keys in Maze
+  if (typeof keysInMaze !== 'undefined' && keysInMaze.length > 0) {
+    for (let i = 0; i < keysInMaze.length; i++) {
+      const k = keysInMaze[i];
+      if (k && k.mesh) {
+        candidates.push({
+          mesh: k.mesh,
+          pos: k.mesh.position,
+          maxDist: 6.0,
+          action: () => {
+            if (carriedKeys.length >= MAX_CARRIED_KEYS) {
+              triggerNotification(`Cannot carry more than ${MAX_CARRIED_KEYS} keys. Tap DROP KEY first.`);
+              return;
+            }
+            const keyId = k.id || ('key_' + k.symbol);
+            const isNewKey = !discoveredKeyIds.has(keyId);
+            if (isNewKey) discoveredKeyIds.add(keyId);
+
+            scene.remove(k.mesh);
+            k.mesh.traverse(child => {
+              if (child.isMesh) {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+              }
+            });
+            carriedKeys.push({ id: keyId, symbol: k.symbol, typeName: k.typeName });
+            foundKeysList.push(key.symbol);
+
+            const isReal = gateSolved && functionalKeysRevealed.includes(key.symbol);
+            if (isNewKey) {
+              triggerNotification(`Discovered NEW [${k.typeName}]! The labyrinth shifts! (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
+            } else {
+              triggerNotification(`Picked up [${k.typeName}]${isReal ? ' ★ (Twin Key Verified)' : ''} (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
+            }
+
+            renderCarriedKeysHUD();
+            checkWinCondition();
+
+            if (typeof socketClient !== 'undefined') {
+              socketClient.emit('key_picked_up', { keyId: keyId });
+              if (isNewKey) {
+                socketClient.emit('solve_puzzle_room', { keyId: keyId });
+              }
+            }
+            const idx = keysInMaze.indexOf(k);
+            if (idx !== -1) keysInMaze.splice(idx, 1);
+          }
+        });
+      }
+    }
+  }
+
+  // Mirage Items
+  if (typeof mirageItems !== 'undefined' && mirageItems.length > 0) {
+    for (let i = 0; i < mirageItems.length; i++) {
+      const mi = mirageItems[i];
+      if (mi && mi.mesh && !mi.dissolving) {
+        candidates.push({
+          mesh: mi.mesh,
+          pos: mi.mesh.position,
+          maxDist: 6.0,
+          action: () => dissolveMirageItem(mi)
+        });
+      }
+    }
+  }
+
+  // Vault Keypad & Master Gate
+  if (typeof vaultGroup !== 'undefined' && vaultGroup) {
+    const gateVec = (typeof gateCoordinates !== 'undefined') ? new THREE.Vector3(gateCoordinates.x, 1.8, gateCoordinates.z) : null;
+    const padVec = (gateKeypadWorldPos && gateKeypadWorldPos.lengthSq() > 0) ? gateKeypadWorldPos : gateVec;
+    candidates.push({
+      mesh: vaultGroup,
+      pos: padVec || camera.position,
+      maxDist: 6.0,
+      action: () => {
+        const bestTarget = getBestInteractionTarget();
+        if (bestTarget && typeof bestTarget.action === 'function') {
+          bestTarget.action();
+        } else {
+          checkInteractions();
+        }
+      }
+    });
+  }
+
+  // Check raycast intersections
+  const pPos = camera.position;
+  let directHitAction = null;
+  let minRayDist = Infinity;
+
+  for (let c = 0; c < candidates.length; c++) {
+    const cand = candidates[c];
+    if (!cand.mesh) continue;
+    const pDist = pPos.distanceTo(cand.pos);
+    if (pDist > cand.maxDist) continue;
+
+    const hits = raycaster.intersectObject(cand.mesh, true);
+    if (hits && hits.length > 0) {
+      if (hits[0].distance < minRayDist) {
+        minRayDist = hits[0].distance;
+        directHitAction = cand.action;
+      }
+    }
+  }
+
+  if (directHitAction) {
+    directHitAction();
+    return;
+  }
+
+  // 2. Proximity tap fallback: If ray missed the tiny geometry, but an interaction target is currently eligible and in range
+  const bestTarget = getBestInteractionTarget();
+  if (bestTarget && typeof bestTarget.action === 'function') {
+    if (clientY > 45 && clientY < window.innerHeight - 60) {
+      bestTarget.action();
     }
   }
 }
@@ -10072,7 +10321,7 @@ function updateTutorialQuestBanner() {
       stageInd.textContent = 'STAGE 4/10';
       titleEl.textContent = 'SALVAGE SUPPLIES';
       descEl.innerHTML = isMobileDevice 
-        ? 'Approach a glowing supply on the floor (Battery or Medkit) and tap <span class="touch-badge">INTERACT</span>.' 
+        ? 'Approach a glowing supply on the floor (Battery or Medkit) and tap it directly on your screen.' 
         : 'Find supplies on the corridor floor and press <kbd>E</kbd> to pick it up!';
       progBar.style.width = '40%';
       hintEl.textContent = 'Look on the corridor floor for glowing batteries or medkits';
@@ -10132,7 +10381,7 @@ function updateTutorialQuestBanner() {
       stageInd.textContent = 'STAGE 9/10';
       titleEl.textContent = 'GRID POWER & CLUE NOTES';
       descEl.innerHTML = isMobileDevice 
-        ? 'Locate a yellow <strong>Circuit Breaker</strong> on the wall, tap <span class="touch-badge">INTERACT</span> to power the vault, then read wall clue notes!' 
+        ? 'Locate a yellow <strong>Circuit Breaker</strong> on the wall and tap it to power the vault, then tap wall clue notes!' 
         : 'Locate a yellow <strong>Circuit Breaker</strong> on the wall, press <kbd>E</kbd> to power the vault, then inspect wall clue notes for the code!';
       progBar.style.width = fixedBreakersCount >= 1 ? '100%' : '85%';
       hintEl.textContent = `Circuit Breakers: ${fixedBreakersCount} / 1 required`;
@@ -10143,16 +10392,16 @@ function updateTutorialQuestBanner() {
       titleEl.textContent = 'MASTER VAULT EXTRACTION';
       if (!gateSolved) {
         descEl.innerHTML = isMobileDevice 
-          ? 'Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, tap <span class="touch-badge">INTERACT</span>, and enter the 4-digit code!' 
+          ? 'Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, tap it directly to open, and enter the 4-digit code!' 
           : 'Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, press <kbd>E</kbd>, and enter the 4-digit code!';
         progBar.style.width = '90%';
         hintEl.textContent = 'Follow radar or Ariadne thread to the Master Vault Keypad!';
       } else {
         descEl.innerHTML = isMobileDevice 
-          ? '🎉 <strong>CIPHER CRACKED! Master Gate Unlocked!</strong> Tap <span class="touch-badge">INTERACT</span> at the blast door to escape into the pine forest!' 
+          ? '🎉 <strong>CIPHER CRACKED! Master Gate Unlocked!</strong> Tap the blast door to escape into the pine forest!' 
           : '🎉 <strong>CIPHER CRACKED! Master Gate Unlocked!</strong> Press <kbd>E</kbd> at the blast door to escape into the pine forest!';
         progBar.style.width = '100%';
-        hintEl.textContent = 'Gate Unlocked! Tap/Press INTERACT to Escape into the Forest!';
+        hintEl.textContent = isMobileDevice ? 'Gate Unlocked! Tap the blast door to Escape into the Forest!' : 'Gate Unlocked! Press E to Escape into the Forest!';
       }
       break;
   }
