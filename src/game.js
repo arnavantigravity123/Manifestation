@@ -1373,6 +1373,7 @@ let totalBreakersRequired = 3;
 window.gameDifficulty = localStorage.getItem('manifestation_difficulty') || 'medium';
 
 function getMazeSizeForDifficulty(difficulty = window.gameDifficulty || 'medium') {
+  if (window.isTutorialMatch) return 11;
   if (difficulty === 'easy') return 21;
   if (difficulty === 'hard') return 41;
   if (difficulty === 'impossible') return 51;
@@ -2254,7 +2255,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   window.cipherCodeDigits = matchConfig.puzzleState.codeDigits || [null, null, null, null];
   window.gameDifficulty = (matchConfig.puzzleState && matchConfig.puzzleState.difficulty) || 'medium';
   totalBreakersRequired = (matchConfig.puzzleState && matchConfig.puzzleState.totalBreakers) || 3;
-  mazeSizeGlobal = (matchConfig.puzzleState && matchConfig.puzzleState.mazeSize) || getMazeSizeForDifficulty(window.gameDifficulty);
+  mazeSizeGlobal = window.isTutorialMatch ? 11 : ((matchConfig.puzzleState && matchConfig.puzzleState.mazeSize) || getMazeSizeForDifficulty(window.gameDifficulty));
   window.mazeSizeGlobal = mazeSizeGlobal;
 
   // Know which 2 keys are functional from the start (players must find them via trial/error or clues)
@@ -4306,7 +4307,7 @@ function generateMaze(keysCount = 8) {
   const blockSize = 6.0;
   mazeBlockSize = blockSize;
   window.mazeBlockSize = blockSize;
-  const mazeSize = (typeof mazeSizeGlobal !== 'undefined' && mazeSizeGlobal) ? mazeSizeGlobal : getMazeSizeForDifficulty(window.gameDifficulty);
+  const mazeSize = window.isTutorialMatch ? 11 : ((typeof mazeSizeGlobal !== 'undefined' && mazeSizeGlobal) ? mazeSizeGlobal : getMazeSizeForDifficulty(window.gameDifficulty));
   mazeSizeGlobal = mazeSize;
   window.mazeSizeGlobal = mazeSize;
 
@@ -4523,7 +4524,7 @@ function generateMaze(keysCount = 8) {
   }
 
   // 5. Safe Sliding Doors Placement (Only on single internal walls with open passages on both sides)
-  const slidingDoorCount = Math.round(mazeSize * 0.7);
+  const slidingDoorCount = window.isTutorialMatch ? 0 : Math.round(mazeSize * 0.7);
   let placedDoors = 0;
   let attempts = 0;
   while (placedDoors < slidingDoorCount && attempts < 200) {
@@ -5118,7 +5119,7 @@ function generateCodeClues() {
         return d >= 6 && d <= 18 && !isLocationOccupied(c.x, c.z, 3.5);
       }) || nearCorridors[Math.min(3, nearCorridors.length - 1)];
     } else {
-      const available = shuffleArray(getAvailableCorridors(4.5));
+      const available = shuffleArray(getAvailableCorridors(window.isTutorialMatch ? 2.0 : 4.5));
       corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
     }
 
@@ -5126,7 +5127,7 @@ function generateCodeClues() {
     noteMesh.rotation.y = seededRandom() * Math.PI;
     scene.add(noteMesh);
 
-    claimSpawnLocation(corr.x, corr.z, 4.5, `Clue_${i}`);
+    claimSpawnLocation(corr.x, corr.z, window.isTutorialMatch ? 2.5 : 4.5, `Clue_${i}`);
     codeClueNotes.push({ mesh: noteMesh, digitIndex: i, collected: false });
   }
 }
@@ -5444,20 +5445,20 @@ function generateLightSanctuaries() {
   });
   sanctuaryZones = [];
 
-  const sanctuaryCount = mazeSizeGlobal >= 41 ? 3 : 2;
+  const sanctuaryCount = window.isTutorialMatch ? 1 : (mazeSizeGlobal >= 41 ? 3 : 2);
   const sanctuaryCandidates = openCorridors.filter(c => {
     const d = Math.sqrt(c.x * c.x + c.z * c.z);
-    return d > 12 && d < (mazeSizeGlobal * 2.0) && !isLocationOccupied(c.x, c.z, 6.5);
+    return d > (window.isTutorialMatch ? 4 : 12) && d < (mazeSizeGlobal * 2.0) && !isLocationOccupied(c.x, c.z, window.isTutorialMatch ? 3.5 : 6.5);
   });
 
   const chosenSanctuaries = [];
   for (let sIdx = 0; sIdx < sanctuaryCount && sanctuaryCandidates.length > 0; sIdx++) {
     const rIdx = Math.floor(seededRandom() * sanctuaryCandidates.length);
     const pos = sanctuaryCandidates.splice(rIdx, 1)[0];
-    const tooClose = chosenSanctuaries.some(cs => Math.hypot(cs.x - pos.x, cs.z - pos.z) < 16);
+    const tooClose = chosenSanctuaries.some(cs => Math.hypot(cs.x - pos.x, cs.z - pos.z) < (window.isTutorialMatch ? 8 : 16));
     if (!tooClose || chosenSanctuaries.length === 0) {
       chosenSanctuaries.push(pos);
-      claimSpawnLocation(pos.x, pos.z, 7.0, `Sanctuary_${sIdx}`);
+      claimSpawnLocation(pos.x, pos.z, window.isTutorialMatch ? 4.0 : 7.0, `Sanctuary_${sIdx}`);
     }
   }
 
@@ -5466,11 +5467,11 @@ function generateLightSanctuaries() {
     const nearCorridors = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
     const tutorialSanctuary = nearCorridors.find(c => {
       const d = Math.hypot(c.x, c.z);
-      return d >= 6 && d <= 16 && !isLocationOccupied(c.x, c.z, 5.0);
-    }) || nearCorridors[Math.min(3, nearCorridors.length - 1)];
-    if (tutorialSanctuary && !chosenSanctuaries.some(cs => Math.hypot(cs.x - tutorialSanctuary.x, cs.z - tutorialSanctuary.z) < 6.0)) {
+      return d >= 6 && d <= 18 && !isLocationOccupied(c.x, c.z, 3.5);
+    }) || nearCorridors[Math.min(2, nearCorridors.length - 1)];
+    if (tutorialSanctuary && !chosenSanctuaries.some(cs => Math.hypot(cs.x - tutorialSanctuary.x, cs.z - tutorialSanctuary.z) < 4.0)) {
       chosenSanctuaries.unshift(tutorialSanctuary);
-      claimSpawnLocation(tutorialSanctuary.x, tutorialSanctuary.z, 7.0, 'Tutorial_Sanctuary');
+      claimSpawnLocation(tutorialSanctuary.x, tutorialSanctuary.z, 5.0, 'Tutorial_Sanctuary');
     }
   }
 
@@ -6988,8 +6989,8 @@ function collectClueLocal(digitIndex) {
       cipherHUD.textContent = `VAULT CODE: ${fullCode}`;
       cipherHUD.style.color = '#38bdf8';
     }
-    if (tutorialStage === 8 && fixedBreakersCount >= 1) {
-      advanceTutorialStage(9, `Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad!`);
+    if (tutorialStage === 9 && fixedBreakersCount >= 1) {
+      advanceTutorialStage(10, `Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad!`);
     }
   }
 
@@ -7968,7 +7969,7 @@ function processSanity(delta) {
     // Steadily restore sanity inside warm Light Sanctuaries (+8.5%/s)
     currentSanity = Math.min(100, currentSanity + delta * 8.5);
     if (window.isTutorialMatch && tutorialStage === 7) {
-      advanceTutorialStage(8, "Light Sanctuary Reached! Sanity Restoring (+8.5%/s)! Next: Grid Power & Clues");
+      advanceTutorialStage(8, "Light Sanctuary Reached! Sanity Restoring (+8.5%/s)! Next: Core Objectives & Ghost Drill");
     }
   } else if (nearGhost) {
     currentSanity = Math.max(0, currentSanity - delta * gParams.sanityDrainRate); // Difficulty scaled fast decay
@@ -9751,15 +9752,22 @@ export function setupControlsGuideModal() {
 
   if (!modal) return;
 
-  const showModal = (e) => {
-    if (e) {
+  const showModal = (e, requestedTab) => {
+    if (e && e.preventDefault) {
       if (e.stopPropagation) e.stopPropagation();
-      if (e.preventDefault) e.preventDefault();
+      e.preventDefault();
     }
     modal.style.display = 'flex';
     
-    // Choose active tab based on device detection
-    if (isMobileDevice) {
+    // Choose active tab based on requestedTab or device detection
+    if (requestedTab === 'rules') {
+      if (tabRules) tabRules.classList.add('active');
+      if (tabPc) tabPc.classList.remove('active');
+      if (tabMobile) tabMobile.classList.remove('active');
+      if (contentRules) contentRules.style.display = 'block';
+      if (contentPc) contentPc.style.display = 'none';
+      if (contentMobile) contentMobile.style.display = 'none';
+    } else if (isMobileDevice) {
       if (tabMobile) tabMobile.classList.add('active');
       if (tabPc) tabPc.classList.remove('active');
       if (tabRules) tabRules.classList.remove('active');
@@ -9793,7 +9801,7 @@ export function setupControlsGuideModal() {
     }
   };
 
-  window.openControlsGuideModal = showModal;
+  window.openControlsGuideModal = (tab) => showModal(null, tab);
   window.closeControlsGuideModal = hideModal;
 
   if (!controlsGuideSetupDone) {
@@ -9884,7 +9892,59 @@ function toggleFlashlight() {
 let tutorialStage = 1;
 let tutorialDistanceMoved = 0;
 let tutorialSprintTime = 0;
+let tutorialGhostDrillTimer = 0;
 let tutorialLastPlayerPos = null;
+
+function removePracticeGhost() {
+  for (let i = ghosts3D.length - 1; i >= 0; i--) {
+    const g = ghosts3D[i];
+    if (g && g.userData && g.userData.isPracticeGhost) {
+      scene.remove(g);
+      g.traverse(c => {
+        if (c.geometry) c.geometry.dispose();
+        if (c.material) {
+          if (Array.isArray(c.material)) c.material.forEach(m => m.dispose());
+          else c.material.dispose();
+        }
+      });
+      ghosts3D.splice(i, 1);
+    }
+  }
+}
+
+function spawnPracticeGhost() {
+  removePracticeGhost();
+
+  let targetPos = null;
+  if (openCorridors && openCorridors.length > 0) {
+    const candidates = openCorridors.filter(c => {
+      const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
+      return d >= 8.0 && d <= 18.0;
+    });
+    if (candidates.length > 0) {
+      targetPos = candidates[0];
+    } else {
+      targetPos = openCorridors[Math.min(2, openCorridors.length - 1)];
+    }
+  }
+  if (!targetPos) {
+    targetPos = { x: camera.position.x + 8.0, z: camera.position.z + 8.0 };
+  }
+
+  const ghostGroup = createGhostMeshGroup('skin_ghost');
+  ghostGroup.position.set(targetPos.x, 0, targetPos.z);
+  ghostGroup.userData.isPracticeGhost = true;
+  ghostGroup.userData.ghostClass = 'Stalker';
+  scene.add(ghostGroup);
+  ghosts3D.push(ghostGroup);
+
+  triggerNotification("👻 SPECTRAL THREAT DRILL: Training Ghost manifested! Keep distance or seek shelter!");
+}
+
+function isInsideSanctuary(pos) {
+  if (typeof sanctuaryZones === 'undefined' || !pos) return false;
+  return sanctuaryZones.some(s => Math.hypot(pos.x - s.x, pos.z - s.z) < (s.radius || 4.5));
+}
 
 function playTutorialChime() {
   try {
@@ -9916,6 +9976,8 @@ function initTutorialQuest() {
   tutorialStage = 1;
   tutorialDistanceMoved = 0;
   tutorialSprintTime = 0;
+  tutorialGhostDrillTimer = 0;
+  removePracticeGhost();
   tutorialLastPlayerPos = (camera && camera.position) ? camera.position.clone() : new THREE.Vector3(0, 1.6, 0);
 
   const banner = document.getElementById('tutorial-quest-banner');
@@ -9929,7 +9991,24 @@ function initTutorialQuest() {
         if (e.preventDefault) e.preventDefault();
       }
       if (confirm("Exit Training Protocol and return to lobby?")) {
+        removePracticeGhost();
         window.location.reload();
+      }
+    };
+  }
+
+  const rulesBtn = document.getElementById('tutorial-rules-btn');
+  if (rulesBtn) {
+    rulesBtn.onclick = (e) => {
+      if (e) {
+        if (e.stopPropagation) e.stopPropagation();
+        if (e.preventDefault) e.preventDefault();
+      }
+      if (window.openControlsGuideModal) {
+        window.openControlsGuideModal('rules');
+      } else {
+        const modal = document.getElementById('controls-guide-modal');
+        if (modal) modal.style.display = 'flex';
       }
     };
   }
@@ -9955,7 +10034,7 @@ function updateTutorialQuestBanner() {
 
   switch (tutorialStage) {
     case 1:
-      stageInd.textContent = 'STAGE 1/9';
+      stageInd.textContent = 'STAGE 1/10';
       titleEl.textContent = 'LOCOMOTION CALIBRATION';
       descEl.innerHTML = isMobileDevice 
         ? 'Move through corridors using the <strong>Left Virtual Joystick</strong>.' 
@@ -9966,7 +10045,7 @@ function updateTutorialQuestBanner() {
       break;
 
     case 2:
-      stageInd.textContent = 'STAGE 2/9';
+      stageInd.textContent = 'STAGE 2/10';
       titleEl.textContent = 'TACTICAL SPRINT & STAMINA';
       descEl.innerHTML = isMobileDevice 
         ? 'Tap the <span class="touch-badge">SPRINT</span> button to sprint. Notice your <strong>Stamina Bar</strong> drains!' 
@@ -9977,7 +10056,7 @@ function updateTutorialQuestBanner() {
       break;
 
     case 3:
-      stageInd.textContent = 'STAGE 3/9';
+      stageInd.textContent = 'STAGE 3/10';
       titleEl.textContent = 'ILLUMINATION & STEALTH';
       descEl.innerHTML = isMobileDevice 
         ? 'Tap <span class="touch-badge">USE</span> (with empty slot) to toggle flashlight. Turn it OFF to conserve battery or stealth!' 
@@ -9987,7 +10066,7 @@ function updateTutorialQuestBanner() {
       break;
 
     case 4:
-      stageInd.textContent = 'STAGE 4/9';
+      stageInd.textContent = 'STAGE 4/10';
       titleEl.textContent = 'SALVAGE SUPPLIES';
       descEl.innerHTML = isMobileDevice 
         ? 'Approach a glowing supply on the floor (Battery or Medkit) and tap <span class="touch-badge">INTERACT</span>.' 
@@ -9997,7 +10076,7 @@ function updateTutorialQuestBanner() {
       break;
 
     case 5:
-      stageInd.textContent = 'STAGE 5/9';
+      stageInd.textContent = 'STAGE 5/10';
       titleEl.textContent = 'SHARE SUPPLIES & KEYS';
       descEl.innerHTML = isMobileDevice 
         ? 'Tap <span class="touch-badge">DROP ITEM</span> to drop held item for teammates. (Tap <span class="touch-badge">DROP KEY</span> to drop keys).' 
@@ -10007,7 +10086,7 @@ function updateTutorialQuestBanner() {
       break;
 
     case 6:
-      stageInd.textContent = 'STAGE 6/9';
+      stageInd.textContent = 'STAGE 6/10';
       titleEl.textContent = 'TACTICAL MAP & BEACONS';
       descEl.innerHTML = isMobileDevice 
         ? 'Tap the top-right <strong>Radar Minimap</strong> to open full Tactical Map, then tap anywhere to drop a ping!' 
@@ -10017,7 +10096,7 @@ function updateTutorialQuestBanner() {
       break;
 
     case 7:
-      stageInd.textContent = 'STAGE 7/9';
+      stageInd.textContent = 'STAGE 7/10';
       titleEl.textContent = 'UV LANTERN SANCTUARIES';
       descEl.innerHTML = isMobileDevice 
         ? 'Find a <strong>Warm Brass Ceiling Lantern</strong>. Standing in its light recovers <strong>Sanity (+8.5%/s)</strong> and shields you!' 
@@ -10027,7 +10106,27 @@ function updateTutorialQuestBanner() {
       break;
 
     case 8:
-      stageInd.textContent = 'STAGE 8/9';
+      stageInd.textContent = 'STAGE 8/10';
+      titleEl.textContent = 'CORE OBJECTIVES & GHOST DRILL';
+      descEl.innerHTML = `
+        <div style="margin-bottom: 0.35rem; color: #7dd3fc; font-size: 0.8rem; line-height: 1.35;">
+          <strong>MISSION OBJECTIVES:</strong><br>
+          1️⃣ <strong>Restore Power:</strong> Repair yellow Circuit Breakers ⚡<br>
+          2️⃣ <strong>Find Cipher:</strong> Inspect glowing Clue Notes on walls 📝<br>
+          3️⃣ <strong>Survive Entity:</strong> Evade the Ghost (shelter in Lanterns) 👻<br>
+          4️⃣ <strong>Escape:</strong> Crack Keypad & exit through Master Vault 🌲
+        </div>
+        <div style="border-top: 1px solid rgba(168,85,247,0.3); padding-top: 0.3rem; color: #e9d5ff;">
+          👻 <strong>GHOST DRILL:</strong> A training ghost has spawned! Notice the purple aura & heartbeat. Practice evading it or taking shelter under a UV Lantern!
+        </div>
+      `;
+      const drillPct = Math.min(100, Math.floor((tutorialGhostDrillTimer / 7.0) * 100));
+      progBar.style.width = `${drillPct}%`;
+      hintEl.textContent = `Survive & practice for ${Math.max(0, 7.0 - tutorialGhostDrillTimer).toFixed(1)}s (Shelter under UV Lanterns to speed up!)`;
+      break;
+
+    case 9:
+      stageInd.textContent = 'STAGE 9/10';
       titleEl.textContent = 'GRID POWER & CLUE NOTES';
       descEl.innerHTML = isMobileDevice 
         ? 'Locate a yellow <strong>Circuit Breaker</strong> on the wall, tap <span class="touch-badge">INTERACT</span> to power the vault, then read wall clue notes!' 
@@ -10036,8 +10135,8 @@ function updateTutorialQuestBanner() {
       hintEl.textContent = `Circuit Breakers: ${fixedBreakersCount} / 1 required`;
       break;
 
-    case 9:
-      stageInd.textContent = 'STAGE 9/9';
+    case 10:
+      stageInd.textContent = 'STAGE 10/10';
       titleEl.textContent = 'MASTER VAULT EXTRACTION';
       if (!gateSolved) {
         descEl.innerHTML = isMobileDevice 
@@ -10061,6 +10160,14 @@ function advanceTutorialStage(nextStage, successMsg) {
   tutorialStage = nextStage;
   playTutorialChime();
   if (successMsg) triggerNotification(`🎓 ${successMsg}`);
+
+  if (nextStage === 8) {
+    tutorialGhostDrillTimer = 0;
+    spawnPracticeGhost();
+  } else if (nextStage > 8) {
+    removePracticeGhost();
+  }
+
   updateTutorialQuestBanner();
 }
 
@@ -10303,7 +10410,7 @@ function fixBreakerLocal(breakerId) {
     }
     if (window.isTutorialMatch) {
       const fullCode = (window.cipherCodeDigits || []).join('');
-      advanceTutorialStage(9, `Grid Power Restored! Master Vault Powered! Code Intel: [${fullCode}]. Head to Keypad!`);
+      advanceTutorialStage(10, `Grid Power Restored! Master Vault Powered! Code Intel: [${fullCode}]. Head to Keypad!`);
     }
   } else {
     triggerNotification(`Circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
@@ -10557,6 +10664,16 @@ function applyGhostDamageToHuman(ghostPos, delta) {
   if (window.isSpectating) return;
   const distToPlayer = Math.hypot(ghostPos.x - camera.position.x, ghostPos.z - camera.position.z);
   if (distToPlayer < 1.5 && myTeam === 'Human' && !isPanicked) {
+    if (window.isTutorialMatch) {
+      if (currentHP > 50) {
+        currentHP = Math.max(50, currentHP - delta * 15);
+        const hpVal = document.getElementById('hp-value');
+        const hpBar = document.getElementById('hp-bar');
+        if (hpVal) hpVal.textContent = `${Math.ceil(currentHP)} HP`;
+        if (hpBar) hpBar.style.width = `${currentHP}%`;
+      }
+      return; // In training drill, ghost proximity demonstrates threat without capturing player
+    }
     currentHP = Math.max(0, currentHP - delta * 45);
     const hpVal = document.getElementById('hp-value');
     const hpBar = document.getElementById('hp-bar');
@@ -11469,6 +11586,10 @@ function animate() {
       }
 
       let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? juggernautSpeed : baseMoveSpeed;
+      if (ghost.userData && ghost.userData.isPracticeGhost) {
+        const isProtected = isInsideSanctuary(camera.position);
+        moveSpeed = isProtected ? 0.35 : 2.0;
+      }
 
       // In Impossible and Hard modes, ghosts can trigger occasional speed surges
       if (window.gameDifficulty === 'impossible' || window.gameDifficulty === 'hard') {
@@ -12145,6 +12266,14 @@ function animate() {
         if (tutorialSprintTime >= 1.5) {
           advanceTutorialStage(3, "Sprint Boosters Calibrated! Next: Flashlight Operation");
         }
+      }
+    } else if (tutorialStage === 8) {
+      const inSanctuary = isInsideSanctuary(camera.position);
+      tutorialGhostDrillTimer += delta * (inSanctuary ? 2.0 : 1.0);
+      updateTutorialQuestBanner();
+      if (tutorialGhostDrillTimer >= 7.0) {
+        removePracticeGhost();
+        advanceTutorialStage(9, "Objectives Understood & Ghost Repelled! Next: Restore Grid Power & Inspect Clues");
       }
     }
   }
