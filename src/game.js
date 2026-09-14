@@ -819,10 +819,14 @@ function addGLBModelToForest(forestContainer) {
 
     const forestClone = preloadedForestModel.clone(true);
     // CRUCIAL: forest.glb is exported with Z-up from 3ds Max/SketchUp.
-    // In Three.js, Y is Up. Rotate -90 deg on X so Z becomes +Y (Up) and Y becomes -Z (Forward depth into woods).
+    // In Three.js, Y is Up. By rotating -90 deg on X and +90 deg on Z (Euler XYZ order):
+    // 1. Model +Z (Up) maps to Three.js +Y (Up).
+    // 2. Model +X (the picturesque open forest clearing & panoramic trail) maps to Three.js -Z (Forward depth into woods).
+    // 3. Model +Y maps to Three.js -X (Lateral scene bounds with towering trees and pond).
     forestClone.rotation.x = -Math.PI / 2;
-    // Align trail entrance to the vault doorway threshold (center trail at X=0, ground level at Y=0, path extending into -Z)
-    forestClone.position.set(-1565, -903, -467);
+    forestClone.rotation.z = Math.PI / 2;
+    // Seamlessly align the forest trail entrance to the vault doorway threshold (X=0, ground level Y=0, path extending down -Z)
+    forestClone.position.set(0, -939, 200);
 
     forestClone.traverse(child => {
       if (child.isMesh) {
