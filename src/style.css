@@ -1051,23 +1051,30 @@ input[type="text"]:focus {
 }
 
 .notification-box {
-  position: absolute;
-  top: 15%;
+  position: fixed;
+  top: 52px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(185, 28, 28, 0.95);
-  border: 1px solid var(--primary-accent);
-  padding: 0.8rem 2rem;
-  border-radius: 4px;
-  color: white;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1.5px solid rgba(56, 189, 248, 0.65);
+  padding: 0.5rem 1.4rem;
+  border-radius: 6px;
+  color: #f1f5f9;
   font-family: 'Orbitron', sans-serif;
   text-transform: uppercase;
   letter-spacing: 1px;
-  font-size: 0.9rem;
-  z-index: 101;
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
-  animation: slideDown 0.3s ease-out;
+  font-size: 0.78rem;
+  font-weight: 700;
+  z-index: 10005;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.3), 0 4px 12px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: none;
+  animation: slideDown 0.25s ease-out;
   display: none;
+  max-width: 90vw;
+  text-align: center;
+  white-space: normal;
 }
 
 /* Dynamic crosshair */
@@ -1478,10 +1485,14 @@ body.is-mobile #mobile-actions,
   }
 
   .notification-box {
-    top: 8%;
-    padding: 0.4rem 0.8rem;
-    font-size: 0.58rem;
-    width: 80%;
+    top: auto;
+    bottom: 24px;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.62rem;
+    max-width: 80vw;
+    background: rgba(15, 23, 42, 0.96);
+    border-color: rgba(56, 189, 248, 0.7);
+    box-shadow: 0 0 14px rgba(0, 0, 0, 0.8);
   }
 }
 
@@ -2712,4 +2723,61 @@ kbd {
   letter-spacing: 0.5px;
 }
 
+/* Mobile Landscape Viewport Compact Tuning (<520px height) */
+@media (max-height: 520px) and (orientation: landscape) {
+  .tutorial-quest-banner {
+    margin-top: 2px;
+    padding: 0.22rem 0.6rem;
+    max-width: 440px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(2, 6, 23, 0.9));
+  }
 
+  .tutorial-banner-header {
+    margin-bottom: 2px;
+  }
+
+  .tutorial-badge {
+    font-size: 0.58rem;
+    letter-spacing: 0.5px;
+  }
+
+  .tutorial-step {
+    font-size: 0.55rem;
+    padding: 0.05rem 0.35rem;
+  }
+
+  #tutorial-rules-btn, #tutorial-abort-btn {
+    font-size: 0.58rem !important;
+    padding: 0.08rem 0.35rem !important;
+  }
+
+  .tutorial-task-title {
+    font-size: 0.72rem;
+    margin-bottom: 1px;
+    letter-spacing: 0.5px;
+  }
+
+  .tutorial-task-desc {
+    font-size: 0.64rem;
+    line-height: 1.22;
+    margin-bottom: 2px;
+  }
+
+  .tutorial-progress-track {
+    height: 4px;
+    margin: 2px 0;
+  }
+
+  .tutorial-task-hint {
+    font-size: 0.58rem;
+  }
+
+  .notification-box {
+    top: auto;
+    bottom: 18px;
+    font-size: 0.6rem;
+    padding: 0.3rem 0.8rem;
+    max-width: 70vw;
+  }
+}

@@ -1923,6 +1923,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   } else {
     const tutBanner = document.getElementById('tutorial-quest-banner');
     if (tutBanner) tutBanner.style.display = 'none';
+    const objBar = document.querySelector('.compact-objective-bar');
+    if (objBar) objBar.style.display = 'flex';
   }
 
   // Global helper to request pointer lock during active gameplay
@@ -8835,14 +8837,17 @@ function triggerAlarmFlashing() {
   }, 10000); // Pulse alarm for 10 seconds
 }
 
+let notificationTimeout = null;
 function triggerNotification(text) {
   const box = document.getElementById('game-notification');
+  if (!box) return;
   box.textContent = text.toUpperCase();
   box.style.display = 'block';
   
-  setTimeout(() => {
+  if (notificationTimeout) clearTimeout(notificationTimeout);
+  notificationTimeout = setTimeout(() => {
     box.style.display = 'none';
-  }, 4000);
+  }, 2800);
 }
 
 // ==========================================
@@ -9976,6 +9981,10 @@ function initTutorialQuest() {
 
   const banner = document.getElementById('tutorial-quest-banner');
   if (banner) banner.style.display = 'block';
+
+  // In Tutorial match, hide the redundant 0/3 breakers bar so the screen stays clean
+  const objBar = document.querySelector('.compact-objective-bar');
+  if (objBar) objBar.style.display = 'none';
 
   const abortBtn = document.getElementById('tutorial-abort-btn');
   if (abortBtn) {
