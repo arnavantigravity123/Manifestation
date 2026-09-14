@@ -17,6 +17,22 @@ if (Capacitor.isNativePlatform()) {
     console.warn("RevenueCat native configuration warning:", err);
   }
 }
+
+// Expose RevenueCat Purchases SDK on window for verification & DevTools inspection
+window.Purchases = Purchases;
+window.checkRevenueCat = async () => {
+  console.log("🔍 Checking RevenueCat SDK status...");
+  console.log("• Purchases SDK Object:", Purchases);
+  console.log("• Platform:", Capacitor.getPlatform(), "| Is Native:", Capacitor.isNativePlatform());
+  try {
+    const isConfigured = await Purchases.isConfigured();
+    console.log("• SDK Configured on device:", isConfigured.isConfigured);
+    return isConfigured;
+  } catch(e) {
+    console.log("• Native bridge note (Web/Mock mode):", e.message || e);
+    return { isConfigured: false, webMode: true, message: e.message || e };
+  }
+};
 let socket = null;
 let currentLobby = null;
 let myId = null;
