@@ -9991,7 +9991,7 @@ function updateTutorialQuestBanner() {
       titleEl.textContent = 'SALVAGE SUPPLIES';
       descEl.innerHTML = isMobileDevice 
         ? 'Approach a glowing supply on the floor (Battery or Medkit) and tap <span class="touch-badge">INTERACT</span>.' 
-        : 'Find supplies on the corridor floor and press <kbd>E</kbd> or <kbd>Left Click</kbd> to pick it up!';
+        : 'Find supplies on the corridor floor and press <kbd>E</kbd> to pick it up!';
       progBar.style.width = '40%';
       hintEl.textContent = 'Look on the corridor floor for glowing batteries or medkits';
       break;
