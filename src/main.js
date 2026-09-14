@@ -173,8 +173,6 @@ const classesData = {
 };
 window.classesData = classesData;
 
-let currentSelectedTeam = localStorage.getItem('manifestation_team') || 'Human';
-
 // Pre-fill username from localStorage or random fallback
 const savedUsername = localStorage.getItem('manifestation_username');
 if (savedUsername && savedUsername.trim() !== '') {
@@ -273,17 +271,35 @@ function updateSubclassDesc() {
   }
 }
 
-// Initial Fill with restored team & class
-if (currentSelectedTeam === 'Ghost') {
-  chooseGhostBtn.classList.add('active');
-  chooseHumanBtn.classList.remove('active');
-  populateSubclasses('Ghost');
-} else {
+// Default team starts cleanly as Human (auto-resets to Human Locksmith in lobbies)
+let currentSelectedTeam = 'Human';
+
+export function resetLobbyRoleToHumanLocksmith() {
   currentSelectedTeam = 'Human';
-  chooseHumanBtn.classList.add('active');
-  chooseGhostBtn.classList.remove('active');
-  populateSubclasses('Human');
+  localStorage.setItem('manifestation_team', 'Human');
+  localStorage.setItem('manifestation_class', 'Locksmith');
+  
+  if (chooseHumanBtn && chooseGhostBtn) {
+    chooseHumanBtn.classList.add('active');
+    chooseGhostBtn.classList.remove('active');
+  }
+  if (subclassSelect) {
+    populateSubclasses('Human', 'Locksmith');
+    subclassSelect.value = 'Locksmith';
+  }
+  updateSubclassDesc();
+
+  if (socket && currentLobby) {
+    socket.emit('update_player', {
+      team: 'Human',
+      characterClass: 'Locksmith'
+    });
+  }
 }
+window.resetLobbyRoleToHumanLocksmith = resetLobbyRoleToHumanLocksmith;
+
+// Initial Fill: strictly reset to Human Locksmith
+resetLobbyRoleToHumanLocksmith();
 
 subclassSelect.addEventListener('change', () => {
   localStorage.setItem('manifestation_class', subclassSelect.value);
@@ -296,8 +312,9 @@ chooseHumanBtn.addEventListener('click', () => {
   localStorage.setItem('manifestation_team', 'Human');
   chooseHumanBtn.classList.add('active');
   chooseGhostBtn.classList.remove('active');
-  populateSubclasses('Human');
-  localStorage.setItem('manifestation_class', subclassSelect.value);
+  populateSubclasses('Human', 'Locksmith');
+  subclassSelect.value = 'Locksmith';
+  localStorage.setItem('manifestation_class', 'Locksmith');
   updatePlayerSettings();
 });
 
@@ -306,8 +323,9 @@ chooseGhostBtn.addEventListener('click', () => {
   localStorage.setItem('manifestation_team', 'Ghost');
   chooseGhostBtn.classList.add('active');
   chooseHumanBtn.classList.remove('active');
-  populateSubclasses('Ghost');
-  localStorage.setItem('manifestation_class', subclassSelect.value);
+  populateSubclasses('Ghost', 'Stalker');
+  subclassSelect.value = 'Stalker';
+  localStorage.setItem('manifestation_class', 'Stalker');
   updatePlayerSettings();
 });
 
@@ -1187,6 +1205,7 @@ function initializeSocketConnection() {
     }
 
     isTutorialMode = false;
+    resetLobbyRoleToHumanLocksmith();
 
     // Save to sessionStorage for auto-rejoin upon match end
     sessionStorage.setItem('rejoinLobbyId', roomId);
@@ -1392,6 +1411,7 @@ if (menuOpenControlsTrigger) {
 addFastButtonListener(createPublicBtn, () => {
   isSoloMode = false;
   isTutorialMode = false;
+  resetLobbyRoleToHumanLocksmith();
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
   s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: true, isVip: isVipActive() });
@@ -1400,6 +1420,7 @@ addFastButtonListener(createPublicBtn, () => {
 addFastButtonListener(joinPublicBtn, () => {
   isSoloMode = false;
   isTutorialMode = false;
+  resetLobbyRoleToHumanLocksmith();
   const s = initializeSocketConnection();
   s.emit('join_public_matchmaking', { username: getUsername(), skinId: getSkinId(), isVip: isVipActive() });
 });
@@ -1407,6 +1428,7 @@ addFastButtonListener(joinPublicBtn, () => {
 addFastButtonListener(createPrivateBtn, () => {
   isSoloMode = false;
   isTutorialMode = false;
+  resetLobbyRoleToHumanLocksmith();
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
   s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
@@ -1420,6 +1442,7 @@ addFastButtonListener(joinPrivateBtn, () => {
   }
   isSoloMode = false;
   isTutorialMode = false;
+  resetLobbyRoleToHumanLocksmith();
   const s = initializeSocketConnection();
   s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
 });
@@ -1428,6 +1451,7 @@ addFastButtonListener(joinPrivateBtn, () => {
 function quitToMenu() {
   isSoloMode = false;
   isTutorialMode = false;
+  resetLobbyRoleToHumanLocksmith();
   sessionStorage.removeItem('rejoinLobbyId');
   sessionStorage.removeItem('rejoinUsername');
   sessionStorage.removeItem('rejoinIsPublic');
