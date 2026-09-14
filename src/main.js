@@ -1186,6 +1186,8 @@ function initializeSocketConnection() {
       return;
     }
 
+    isTutorialMode = false;
+
     // Save to sessionStorage for auto-rejoin upon match end
     sessionStorage.setItem('rejoinLobbyId', roomId);
     sessionStorage.setItem('rejoinUsername', getUsername());
@@ -1209,6 +1211,8 @@ function initializeSocketConnection() {
 
   socket.on('match_started', (matchConfig) => {
     logSystemMessage("Breach sequence authorized. Entering Labyrinth...");
+    isSoloMode = false;
+    isTutorialMode = false;
     authView.style.display = 'none';
     lobbyView.style.display = 'none';
     const uiOverlay = document.getElementById('ui-overlay');
@@ -1220,7 +1224,8 @@ function initializeSocketConnection() {
     // Step 1: Interstitial Ad (VIP bypasses instantly)
     window.showInterstitialAd(() => {
       // Step 2 & 3: Role Reveal and Gameplay initialization handled inside initGame
-      initGame(socket, myId, matchConfig, isSoloMode, isTutorialMode);
+      // Always pass isSolo=false, isTutorial=false for multiplayer lobby matches
+      initGame(socket, myId, matchConfig, false, false);
     });
   });
 
@@ -1385,17 +1390,23 @@ if (menuOpenControlsTrigger) {
 }
 
 addFastButtonListener(createPublicBtn, () => {
+  isSoloMode = false;
+  isTutorialMode = false;
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
   s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: true, isVip: isVipActive() });
 });
 
 addFastButtonListener(joinPublicBtn, () => {
+  isSoloMode = false;
+  isTutorialMode = false;
   const s = initializeSocketConnection();
   s.emit('join_public_matchmaking', { username: getUsername(), skinId: getSkinId(), isVip: isVipActive() });
 });
 
 addFastButtonListener(createPrivateBtn, () => {
+  isSoloMode = false;
+  isTutorialMode = false;
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
   s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
@@ -1407,12 +1418,16 @@ addFastButtonListener(joinPrivateBtn, () => {
     alert("Please enter a room code first.");
     return;
   }
+  isSoloMode = false;
+  isTutorialMode = false;
   const s = initializeSocketConnection();
   s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
 });
 
 // ====== Quit Handlers ======
 function quitToMenu() {
+  isSoloMode = false;
+  isTutorialMode = false;
   sessionStorage.removeItem('rejoinLobbyId');
   sessionStorage.removeItem('rejoinUsername');
   sessionStorage.removeItem('rejoinIsPublic');

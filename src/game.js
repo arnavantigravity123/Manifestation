@@ -813,13 +813,16 @@ function addGLBModelToForest(forestContainer) {
   try {
     const forestCloneWrapper = new THREE.Group();
     forestCloneWrapper.name = 'forest_glb_wrapper';
-    forestCloneWrapper.rotation.y = Math.PI; // Face forward down the corridor into -Z
-    const scale = 0.016; // Accurately scales trail to 4.8m width and trees to 13m height
+    // Accurately scales trail to 4.8m width and pine trees to 14m height
+    const scale = 0.016;
     forestCloneWrapper.scale.set(scale, scale, scale);
 
     const forestClone = preloadedForestModel.clone(true);
-    // Align trail entrance directly to the vault doorway threshold (model coordinates: X=1565, Y=917.58, Z=-1550)
-    forestClone.position.set(-1565, -917.58, 1550);
+    // CRUCIAL: forest.glb is exported with Z-up from 3ds Max/SketchUp.
+    // In Three.js, Y is Up. Rotate -90 deg on X so Z becomes +Y (Up) and Y becomes -Z (Forward depth into woods).
+    forestClone.rotation.x = -Math.PI / 2;
+    // Align trail entrance to the vault doorway threshold (center trail at X=0, ground level at Y=0, path extending into -Z)
+    forestClone.position.set(-1565, -903, 467);
 
     forestClone.traverse(child => {
       if (child.isMesh) {
@@ -838,7 +841,7 @@ function addGLBModelToForest(forestContainer) {
     forestCloneWrapper.add(forestClone);
     forestContainer.add(forestCloneWrapper);
     forestContainer.userData.hasGlb = true;
-    console.log('[FOREST] GLB model attached to outdoor forest container successfully!');
+    console.log('[FOREST] 3D Forest GLB model attached with correct Y-up orientation and aligned trail entrance!');
   } catch (e) {
     console.warn('[FOREST] Error attaching GLB model to forest container:', e);
   }
@@ -851,7 +854,7 @@ function buildProceduralForestEnvironment(forestContainer) {
   // 1. Natural Organic Meadow Terrain (160m wide x 160m deep)
   const terrainGeo = new THREE.PlaneGeometry(160, 160, 32, 32);
   terrainGeo.rotateX(-Math.PI / 2);
-  terrainGeo.translate(0, -0.04, -80);
+  terrainGeo.translate(0, -0.25, -80);
 
   const posAttr = terrainGeo.attributes.position;
   for (let i = 0; i < posAttr.count; i++) {
@@ -1659,6 +1662,12 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   );
   if (window.isTutorialMatch) {
     totalBreakersRequired = 1;
+  } else {
+    // Strictly hide tutorial training banner and display the 4-digit code / breakers objective bar
+    const tutBanner = document.getElementById('tutorial-quest-banner');
+    if (tutBanner) tutBanner.style.display = 'none';
+    const objBar = document.querySelector('.compact-objective-bar');
+    if (objBar) objBar.style.display = 'flex';
   }
 
   // Initialize seededRandom using server-provided mazeGeometrySeed
@@ -8429,6 +8438,24 @@ function setupSocketListeners() {
     // Ignore local player position broadcasts so we don't spawn a clone on ourselves
     if (!id || id === myId) return;
 
+    // Never spawn or update 3D living player models for captured/dead operatives (prevents ghost camping corpses)
+    if (currentLobby && currentLobby.players && currentLobby.players[id] && currentLobby.players[id].isCaptured) {
+      if (players3D[id]) {
+        scene.remove(players3D[id]);
+        players3D[id].traverse(child => {
+          if (child.isMesh || child.isSprite) {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+              else child.material.dispose();
+            }
+          }
+        });
+        delete players3D[id];
+      }
+      return;
+    }
+
     // If player mesh exists but team has changed, remove it to spawn the correct mesh type
     if (players3D[id] && players3D[id].userData && players3D[id].userData.type !== team) {
       scene.remove(players3D[id]);
@@ -8696,6 +8723,7 @@ function setupSocketListeners() {
         isCaptured = true;
         const myUsername = username || (currentLobby && currentLobby.players[myId]?.username) || 'Operative';
         spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, skinId);
+        onHumanKilled(myId, camera.position);
         playGhostCaptureAnimation(() => {
           if (document.pointerLockElement) document.exitPointerLock();
           window.mobileGameActive = false;
@@ -8714,6 +8742,7 @@ function setupSocketListeners() {
       const targetClass = characterClass || (currentLobby && currentLobby.players[targetId]?.characterClass) || 'Survivor';
       if (spawnPos) {
         spawnDeadBody(spawnPos, spawnRot, targetUser, targetClass, skinId);
+        onHumanKilled(targetId, spawnPos);
       }
       if (players3D[targetId]) {
         scene.remove(players3D[targetId]);
@@ -9888,6 +9917,43 @@ export function spawnDeadBody(position, rotationY = 0, username = 'Operative', c
   return corpseGroup;
 }
 
+export function onHumanKilled(victimId, victimPos) {
+  if (!victimPos) return;
+  const vPos = (victimPos.isVector3) ? victimPos : new THREE.Vector3(victimPos.x, victimPos.y || 0, victimPos.z);
+
+  // If ghost bots were chasing this victim, or are lingering within 16m of the corpse, force immediate disengagement & dispersal
+  if (typeof ghosts3D !== 'undefined' && ghosts3D.length > 0) {
+    ghosts3D.forEach((ghost, idx) => {
+      const distToVictim = ghost.position.distanceTo(vPos);
+      if (ghost.userData && (ghost.userData.chasedTargetId === victimId || distToVictim < 16.0)) {
+        ghost.userData.aiState = 'WANDER';
+        ghost.userData.chasedTargetId = null;
+        ghost.userData.loseSightTimer = 0;
+        ghost.userData.path = null;
+        ghost.userData.pathIdx = 0;
+        ghost.userData.pathTime = 0;
+
+        // Immediately choose a distant patrol corridor cell (> 20m away) so the ghost vacates the area
+        if (typeof openCorridors !== 'undefined' && openCorridors.length > 0) {
+          const farCandidates = openCorridors.filter(c => {
+            const d = Math.hypot(c.x - vPos.x, c.z - vPos.z);
+            return d > 20.0;
+          });
+          if (farCandidates.length > 0) {
+            const seedInt = Math.floor(Math.random() * 100000);
+            const farTarget = farCandidates[seedInt % farCandidates.length];
+            ghost.userData.targetGrid = worldToGrid(farTarget.x, farTarget.z);
+          } else {
+            ghost.userData.targetGrid = null;
+          }
+        } else {
+          ghost.userData.targetGrid = null;
+        }
+      }
+    });
+  }
+}
+
 function addProceduralCorpse(group, rotationY) {
   const bodySubgroup = new THREE.Group();
   
@@ -10335,6 +10401,8 @@ function updateTutorialQuestBanner() {
   const banner = document.getElementById('tutorial-quest-banner');
   if (!banner || !window.isTutorialMatch) {
     if (banner) banner.style.display = 'none';
+    const objBar = document.querySelector('.compact-objective-bar');
+    if (objBar && !window.isTutorialMatch) objBar.style.display = 'flex';
     return;
   }
 
@@ -11011,6 +11079,7 @@ function applyGhostDamageToHuman(ghostPos, delta) {
 
       // Spawn persistent dead body model at exact death location
       spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, mySkin);
+      onHumanKilled(myId, camera.position);
       
       if (socketClient) {
         socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myUsername} (${myClass}) has been captured by the void.` });
@@ -11854,7 +11923,8 @@ function animate() {
       }
       for (const pId in players3D) {
         const p = players3D[pId];
-        if (p && p.userData && p.userData.type === 'Human' && !p.userData.isCaptured && !p.userData.isPanicked) {
+        const isDead = Boolean((p && p.userData && p.userData.isCaptured) || (currentLobby && currentLobby.players && currentLobby.players[pId] && currentLobby.players[pId].isCaptured));
+        if (p && p.userData && p.userData.type === 'Human' && !isDead && !p.userData.isPanicked) {
           const d = ghost.position.distanceTo(p.position);
           if (d < minDist) {
             minDist = d;
@@ -12263,11 +12333,19 @@ function animate() {
             const tempRand = mulberry32(seedInt + idx * 1000 + ghost.userData.wanderCount * 17);
             const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : mazeSizeGlobal;
             const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
+            const blockSize = mazeBlockSize || 6.0;
+            const isNearCorpse = (col, row) => {
+              if (!deadBodies || deadBodies.length === 0) return false;
+              const wx = (col - totalCols / 2) * blockSize + blockSize / 2;
+              const wz = (row - totalRows / 2) * blockSize + blockSize / 2;
+              return deadBodies.some(b => Math.hypot(b.position.x - wx, b.position.z - wz) < 9.0);
+            };
+
             do {
               rx = Math.floor(tempRand() * totalCols);
               rz = Math.floor(tempRand() * totalRows);
               attempts++;
-            } while (mazeLayout[rz] && (mazeLayout[rz][rx] === 1 || mazeLayout[rz][rx] === 2) && attempts < 50);
+            } while ((!mazeLayout[rz] || mazeLayout[rz][rx] === 1 || mazeLayout[rz][rx] === 2 || isNearCorpse(rx, rz)) && attempts < 50);
 
             // Guaranteed fallback: pick any adjacent open corridor if random sampling picked a wall or closed door
             if (!mazeLayout[rz] || mazeLayout[rz][rx] !== 0) {
@@ -12275,7 +12353,7 @@ function animate() {
               for (const [dc, dr] of dirs) {
                 const nc = ghostGrid.col + dc;
                 const nr = ghostGrid.row + dr;
-                if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr] && mazeLayout[nr][nc] === 0) {
+                if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr] && mazeLayout[nr][nc] === 0 && !isNearCorpse(nc, nr)) {
                   rx = nc;
                   rz = nr;
                   break;
@@ -12365,7 +12443,7 @@ function animate() {
 
     // 5. Emit movement states
     networkTimer += delta;
-    if (networkTimer >= 0.05 && !window.isSpectating) { // 20Hz update, skip if spectating
+    if (networkTimer >= 0.05 && !window.isSpectating && !isCaptured) { // 20Hz update, skip if spectating or captured
       socketClient.emit('player_movement', {
         position: { x: camera.position.x, z: camera.position.z },
         rotation: { y: camera.rotation.y },
