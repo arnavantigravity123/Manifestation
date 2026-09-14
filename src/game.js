@@ -6088,11 +6088,16 @@ function setupControls() {
     let joyCenterX = 0;
     let joyCenterY = 0;
 
+    let joystickAutoSprinting = false;
+    const SPRINT_ENGAGE_THRESHOLD = 72; // Must pull thumb significantly farther outside base (170% of base radius) to sprint
+    const SPRINT_RELEASE_THRESHOLD = 58; // Hysteresis buffer to maintain sprint smoothly without stutter
+
     const resetJoy = () => {
       moveForward = false;
       moveBackward = false;
       moveLeft = false;
       moveRight = false;
+      joystickAutoSprinting = false;
       if (!mobileSprintLocked) {
         isSprinting = false;
         joystickBase.classList.remove('sprinting');
@@ -6144,35 +6149,74 @@ function setupControls() {
       }
     });
 
+    // Also attach window listeners for the active joystick touch so fast wide drags never drop tracking
+    window.addEventListener('touchmove', (e) => {
+      if (joystickTouchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === joystickTouchId) {
+          handleJoyMove(t.clientX, t.clientY);
+          break;
+        }
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+      if (joystickTouchId === null) return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joystickTouchId) {
+          resetJoy();
+          break;
+        }
+      }
+    });
+
     function handleJoyMove(clientX, clientY) {
       const dx = clientX - joyCenterX;
       const dy = clientY - joyCenterY;
       const dist = Math.hypot(dx, dy);
-      const maxRadius = 48; // Max physical travel radius
-      const sprintThreshold = 44; // Outer threshold (92% of max travel) required to activate auto-sprint!
-      
       const angle = Math.atan2(dy, dx);
-      const clampDist = Math.min(dist, maxRadius);
+
+      const walkMaxRadius = 42; // Base rim radius for 100% walk speed
+      const maxVisualRadius = 56; // Elastic visual stretch limit for knob
       
-      const kx = Math.cos(angle) * clampDist;
-      const ky = Math.sin(angle) * clampDist;
+      // Elastic visual stretch: knob stays within 42px during walk, and stretches slightly up to 56px when pulled far
+      let visualDist = dist;
+      if (dist > walkMaxRadius) {
+        visualDist = walkMaxRadius + Math.min(maxVisualRadius - walkMaxRadius, (dist - walkMaxRadius) * 0.35);
+      } else {
+        visualDist = Math.min(dist, walkMaxRadius);
+      }
+      
+      const kx = Math.cos(angle) * visualDist;
+      const ky = Math.sin(angle) * visualDist;
       
       joystickKnob.style.transform = `translate(${kx}px, ${ky}px)`;
       
-      const joyX = kx / maxRadius;
-      const joyY = ky / maxRadius;
+      const joyX = Math.cos(angle) * Math.min(1.0, dist / walkMaxRadius);
+      const joyY = Math.sin(angle) * Math.min(1.0, dist / walkMaxRadius);
       
       moveForward = joyY < -0.2;
       moveBackward = joyY > 0.2;
       moveLeft = joyX < -0.2;
       moveRight = joyX > 0.2;
 
-      // Auto-sprint when extending joystick extra far into the outer sprint zone OR when SPRINT button is locked ON
+      // Auto-sprint requires pulling thumb significantly farther (≥72px) with hysteresis buffer (58px)
       const isMoving = moveForward || moveBackward || moveLeft || moveRight;
-      const inSprintZone = dist >= sprintThreshold;
-      const canSprint = myTeam === 'Human' && !isSprintExhausted && stamina >= SPRINT_RECOVERY_THRESHOLD;
+      if (isMoving) {
+        if (!joystickAutoSprinting && dist >= SPRINT_ENGAGE_THRESHOLD) {
+          joystickAutoSprinting = true;
+        } else if (joystickAutoSprinting && dist < SPRINT_RELEASE_THRESHOLD) {
+          joystickAutoSprinting = false;
+        }
+      } else {
+        joystickAutoSprinting = false;
+      }
 
-      if (isMoving && (mobileSprintLocked || inSprintZone) && canSprint) {
+      const canSprint = myTeam === 'Human' && !isSprintExhausted && stamina >= SPRINT_RECOVERY_THRESHOLD;
+      const shouldSprint = isMoving && (mobileSprintLocked || joystickAutoSprinting) && canSprint;
+
+      if (shouldSprint) {
         isSprinting = true;
         joystickBase.classList.add('sprinting');
         joystickKnob.classList.add('sprinting');
