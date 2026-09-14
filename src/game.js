@@ -2223,6 +2223,25 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   renderer.shadowMap.enabled = false; // Disable heavy multi-pass shadow map rendering for smooth 60-144 FPS
   container.appendChild(renderer.domElement);
 
+  // Live memory & GPU diagnostic utility
+  window.getGameMemoryStats = () => {
+    const mem = window.performance && window.performance.memory;
+    const jsHeapMB = mem ? (mem.usedJSHeapSize / (1024 * 1024)).toFixed(1) + ' MB' : 'N/A';
+    const totalAllocatedMB = mem ? (mem.totalJSHeapSize / (1024 * 1024)).toFixed(1) + ' MB' : 'N/A';
+    const gpuInfo = renderer ? renderer.info : null;
+    const stats = {
+      activeJSHeap: jsHeapMB,
+      allocatedHeap: totalAllocatedMB,
+      estimatedTotalRAM: isMobileDevice ? '~250 - 380 MB (0.25 - 0.38 GB)' : '~380 - 480 MB (0.38 - 0.48 GB)',
+      gpuGeometries: gpuInfo ? gpuInfo.memory.geometries : 'N/A',
+      gpuTextures: gpuInfo ? gpuInfo.memory.textures : 'N/A',
+      drawCallsPerFrame: gpuInfo ? gpuInfo.render.calls : 'N/A',
+      trianglesPerFrame: gpuInfo ? gpuInfo.render.triangles : 'N/A'
+    };
+    console.table(stats);
+    return stats;
+  };
+
   // Setup Audio Context for procedural EMF sound
   setupProceduralAudio();
 
