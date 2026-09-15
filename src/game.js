@@ -1572,8 +1572,18 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   const handleEnterGame = (e) => {
     resetPlayerMovementState();
-    if (window.isEscaping) {
-      ptrOverlay.style.display = 'none';
+    if (window.isEscaping || isCaptured || window.isCapturedAnimation || window.isSpectating || !window.gameReady) {
+      if (ptrOverlay) ptrOverlay.style.display = 'none';
+      return;
+    }
+    const endOverlay = document.getElementById('end-game-overlay');
+    if (endOverlay && endOverlay.style.display === 'flex') {
+      if (ptrOverlay) ptrOverlay.style.display = 'none';
+      return;
+    }
+    const capturedOverlay = document.getElementById('captured-overlay');
+    if (capturedOverlay && capturedOverlay.style.display === 'flex') {
+      if (ptrOverlay) ptrOverlay.style.display = 'none';
       return;
     }
     const keypadEl = document.getElementById('keypad-modal-ui');
@@ -1633,8 +1643,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   // Initialize Controls Guide & Tutorial Quest engine
   setupControlsGuideModal();
   if (window.isTutorialMatch) {
+    totalBreakersRequired = 1;
     initTutorialQuest();
   } else {
+    // Strictly hide tutorial training banner and display the 4-digit code / breakers objective bar
     const tutBanner = document.getElementById('tutorial-quest-banner');
     if (tutBanner) tutBanner.style.display = 'none';
     const objBar = document.querySelector('.compact-objective-bar');
@@ -1643,7 +1655,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   // Global helper to request pointer lock during active gameplay
   window.requestGamePointerLock = () => {
-    if (isMobileDevice || !window.gameReady || window.isSpectating || window.isEscaping) return;
+    if (isMobileDevice || !window.gameReady || window.isSpectating || window.isEscaping || isCaptured || window.isCapturedAnimation) return;
     if (document.pointerLockElement) return;
     if (ptrOverlay && ptrOverlay.style.display === 'flex') return;
     const settingsModal = document.getElementById('settings-modal');
@@ -1671,7 +1683,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   // Global click & pointerdown to relock mouse anytime desktop player clicks during gameplay
   window.addEventListener('click', (e) => {
-    if (isMobileDevice || window.isEscaping) return;
+    if (isMobileDevice || window.isEscaping || isCaptured || window.isCapturedAnimation || window.isSpectating || !window.gameReady) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
     if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('#controls-guide-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions')) return;
@@ -1680,7 +1692,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     }
   });
   window.addEventListener('pointerdown', (e) => {
-    if (isMobileDevice || window.isEscaping) return;
+    if (isMobileDevice || window.isEscaping || isCaptured || window.isCapturedAnimation || window.isSpectating || !window.gameReady) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
     if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('#controls-guide-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions')) return;
@@ -1690,7 +1702,14 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   });
 
   document.addEventListener('pointerlockchange', () => {
-    if (isMobileDevice || window.isEscaping) {
+    if (
+      isMobileDevice || 
+      window.isEscaping || 
+      isCaptured || 
+      window.isCapturedAnimation || 
+      window.isSpectating || 
+      !window.gameReady
+    ) {
       ptrOverlay.style.display = 'none';
       return;
     }
@@ -1698,20 +1717,30 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       ptrOverlay.style.display = 'none';
     } else {
       resetPlayerMovementState();
-      if (window.isEscaping) {
-        ptrOverlay.style.display = 'none';
-        return;
-      }
-      // Don't show pause overlay if keypad modal, minimap, settings modal, or game-over is open
+      // Don't show pause overlay if dying, captured, escaping, spectating, keypad modal, minimap, settings modal, or game-over is open
       const keypadEl = document.getElementById('keypad-modal-ui');
       const isKeypadOpen = Boolean(keypadEl && keypadEl.style.display !== 'none');
       const settingsModal = document.getElementById('settings-modal');
       const isSettingsOpen = Boolean(settingsModal && settingsModal.style.display === 'flex');
-      if (isKeypadOpen || isMinimapExpanded || isSettingsOpen) {
-        ptrOverlay.style.display = 'none';
-      } else if (
-        (document.getElementById('captured-overlay') && document.getElementById('captured-overlay').style.display === 'flex') ||
-        (document.getElementById('end-game-overlay') && document.getElementById('end-game-overlay').style.display === 'flex')
+      const capturedOverlay = document.getElementById('captured-overlay');
+      const isCapturedOpen = Boolean(capturedOverlay && capturedOverlay.style.display === 'flex');
+      const endOverlay = document.getElementById('end-game-overlay');
+      const isEndOpen = Boolean(endOverlay && endOverlay.style.display === 'flex');
+      const captureAnimOverlay = document.getElementById('ghost-capture-overlay');
+      const isCaptureAnimOpen = Boolean(captureAnimOverlay && captureAnimOverlay.style.display !== 'none');
+
+      if (
+        isKeypadOpen || 
+        isMinimapExpanded || 
+        isSettingsOpen || 
+        isCapturedOpen || 
+        isEndOpen || 
+        isCaptureAnimOpen || 
+        isCaptured || 
+        window.isCapturedAnimation || 
+        window.isSpectating || 
+        window.isEscaping || 
+        !window.gameReady
       ) {
         ptrOverlay.style.display = 'none';
       } else {
@@ -6097,6 +6126,7 @@ function setupControls() {
     }
 
     const handlePause = () => {
+      if (isCaptured || window.isCapturedAnimation || window.isEscaping || !window.gameReady) return;
       window.mobileGameActive = false;
 
       const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
@@ -8418,6 +8448,60 @@ function setupSocketListeners() {
     }
   });
 
+  function showSoloDeathEndScreen() {
+    const ptrOverlay = document.getElementById('pointer-lock-overlay');
+    if (ptrOverlay) ptrOverlay.style.display = 'none';
+    const capOverlay = document.getElementById('captured-overlay');
+    if (capOverlay) capOverlay.style.display = 'none';
+    const hud = document.getElementById('hud-overlay');
+    if (hud) hud.style.display = 'none';
+    const mobileCtrl = document.getElementById('mobile-controls-container');
+    if (mobileCtrl) mobileCtrl.style.display = 'none';
+
+    const overlay = document.getElementById('end-game-overlay');
+    const title = document.getElementById('end-game-title');
+    const details = document.getElementById('end-game-details');
+    const retryBtn = document.getElementById('end-game-retry-btn');
+    const lobbyBtn = document.getElementById('end-game-lobby-btn');
+
+    if (overlay && title && details) {
+      overlay.style.display = 'flex';
+      title.textContent = "YOU DIED";
+      title.style.color = "#ef4444";
+      title.style.textShadow = "0 0 30px rgba(239, 68, 68, 0.9)";
+      details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 0.8rem; font-size: 1.3rem;">CONSUMED BY THE VOID</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You were dragged into the darkness before completing the extraction sequence.</p>`;
+
+      if (retryBtn) {
+        retryBtn.style.display = 'inline-block';
+        retryBtn.onclick = () => {
+          sessionStorage.setItem('rejoinRetrySolo', 'true');
+          sessionStorage.setItem('rejoinIsSolo', 'true');
+          if (window.leaveGameWithAd) {
+            window.leaveGameWithAd(() => window.location.reload());
+          } else {
+            window.location.reload();
+          }
+        };
+      }
+
+      if (lobbyBtn) {
+        lobbyBtn.textContent = 'Main Menu';
+        lobbyBtn.onclick = () => {
+          sessionStorage.removeItem('rejoinLobbyId');
+          sessionStorage.removeItem('rejoinUsername');
+          sessionStorage.removeItem('rejoinIsPublic');
+          sessionStorage.removeItem('rejoinIsSolo');
+          sessionStorage.removeItem('rejoinRetrySolo');
+          if (window.leaveGameWithAd) {
+            window.leaveGameWithAd(() => window.location.reload());
+          } else {
+            window.location.reload();
+          }
+        };
+      }
+    }
+  }
+
   socketClient.on('human_captured', (data) => {
     const { targetId, position, rotation, username, characterClass, skinId } = data || {};
     if (currentLobby && currentLobby.players && currentLobby.players[targetId]) {
@@ -8430,13 +8514,19 @@ function setupSocketListeners() {
         spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, skinId);
         onHumanKilled(myId, camera.position);
         playGhostCaptureAnimation(() => {
+          const ptrOverlay = document.getElementById('pointer-lock-overlay');
+          if (ptrOverlay) ptrOverlay.style.display = 'none';
           if (document.pointerLockElement) document.exitPointerLock();
           window.mobileGameActive = false;
+          window.gameReady = false;
           document.getElementById('hud-overlay').style.display = 'none';
           const mobileCtrl = document.getElementById('mobile-controls-container');
           if (mobileCtrl) mobileCtrl.style.display = 'none';
           if (!window.isSoloMatch) {
-            document.getElementById('captured-overlay').style.display = 'flex';
+            const capOverlay = document.getElementById('captured-overlay');
+            if (capOverlay) capOverlay.style.display = 'flex';
+          } else {
+            showSoloDeathEndScreen();
           }
         });
       }
@@ -8573,7 +8663,9 @@ function setupSocketListeners() {
   });
 
   socketClient.on('match_ended', ({ winner, summary }) => {
-    // Exit pointer lock
+    // Hide pause/resume overlay immediately so it never leaks onto the end flow
+    const ptrOverlay = document.getElementById('pointer-lock-overlay');
+    if (ptrOverlay) ptrOverlay.style.display = 'none';
     if (document.pointerLockElement) document.exitPointerLock();
     window.mobileGameActive = false;
     window.gameReady = false;
@@ -8581,6 +8673,7 @@ function setupSocketListeners() {
 
     const renderOverlay = () => {
       // Hide active in-game overlays so they never overlap with the end screen
+      if (ptrOverlay) ptrOverlay.style.display = 'none';
       const capOverlay = document.getElementById('captured-overlay');
       if (capOverlay) capOverlay.style.display = 'none';
       const hud = document.getElementById('hud-overlay');
@@ -9159,6 +9252,8 @@ function playEscapeCinematic(callback) {
 // ==========================================
 function playGhostCaptureAnimation(callback) {
   window.isCapturedAnimation = true;
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  if (ptrOverlay) ptrOverlay.style.display = 'none';
 
   // Dismiss in-game interactive modals so the capture jumpscare and cinematic are fully visible
   if (typeof keypadUI !== 'undefined' && keypadUI) {
@@ -9266,6 +9361,9 @@ function playGhostCaptureAnimation(callback) {
     captureText.style.opacity = '0';
     captureText.style.transform = 'translate(-50%, -50%) scale(1)';
     staticEl.style.opacity = '0';
+    window.isCapturedAnimation = false;
+    const ptrOverlay = document.getElementById('pointer-lock-overlay');
+    if (ptrOverlay) ptrOverlay.style.display = 'none';
     if (callback) callback();
   }, 3000);
 }
@@ -10822,8 +10920,11 @@ function applyGhostDamageToHuman(ghostPos, delta) {
       }
 
       playGhostCaptureAnimation(() => {
+        const ptrOverlay = document.getElementById('pointer-lock-overlay');
+        if (ptrOverlay) ptrOverlay.style.display = 'none';
         if (document.pointerLockElement) document.exitPointerLock();
         window.mobileGameActive = false;
+        window.gameReady = false;
         const hud = document.getElementById('hud-overlay');
         if (hud) hud.style.display = 'none';
         const mobileCtrl = document.getElementById('mobile-controls-container');
@@ -10831,6 +10932,8 @@ function applyGhostDamageToHuman(ghostPos, delta) {
         if (!window.isSoloMatch) {
           const capOverlay = document.getElementById('captured-overlay');
           if (capOverlay) capOverlay.style.display = 'flex';
+        } else {
+          showSoloDeathEndScreen();
         }
       });
     }
