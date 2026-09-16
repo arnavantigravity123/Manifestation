@@ -825,8 +825,8 @@ function addGLBModelToForest(forestContainer) {
     // 3. Model +Y maps to Three.js -X (Lateral scene bounds with towering trees and pond).
     forestClone.rotation.x = -Math.PI / 2;
     forestClone.rotation.z = Math.PI / 2;
-    // Seamlessly align the forest trail entrance to the vault doorway threshold (X=0, ground level Y=0, path extending down -Z)
-    forestClone.position.set(0, -939, 200);
+    // Perfectly center the main forest trail and pine valley on the doorway threshold (X=0, ground level Y=0, path extending down -Z)
+    forestClone.position.set(-500, -938, 600);
 
     forestClone.traverse(child => {
       if (child.isMesh) {
@@ -888,7 +888,7 @@ export function attachForestToVault() {
   const rayMat = new THREE.MeshBasicMaterial({
     color: 0xfffae0,
     transparent: true,
-    opacity: 0.11,
+    opacity: 0.05,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -9232,9 +9232,9 @@ function playEscapeCinematic(callback) {
         const localY = 1.65 + Math.sin(progress * Math.PI * 4.0) * 0.04; // Gentle natural footsteps
         const localCamPos = new THREE.Vector3(0, localY, localZ);
         
-        // Look ahead into the trees and gently tilt up toward towering canopy
+        // Look ahead down the forest trail and frame the majestic pine trees
         const lookZ = localZ - 18.0;
-        const lookY = 1.65 + eased * 2.2;
+        const lookY = 1.65 + eased * 0.5;
         const localLookTarget = new THREE.Vector3(0, lookY, lookZ);
 
         camera.position.copy(vaultGroupRef.localToWorld(localCamPos));
