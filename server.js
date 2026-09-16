@@ -1011,6 +1011,17 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('player_panicked', { id: socket.id, isPanicked: false });
   });
 
+  socket.on('damage_human', (payload) => {
+    const { targetId, amount } = payload || {};
+    const { roomId } = socket;
+    if (!roomId) return;
+    io.to(roomId).emit('human_damaged', {
+      targetId,
+      amount: amount || 35,
+      attackerId: socket.id
+    });
+  });
+
   socket.on('capture_human', (payload) => {
     const { targetId, position, rotation, username, characterClass, skinId } = payload || {};
     console.log(`[Lobby ${socket.roomId}] Player ${targetId} captured.`);

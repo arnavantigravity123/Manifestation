@@ -7133,15 +7133,18 @@ function useActiveItem() {
     let closestDist = gParams.clawsRange;
     Object.keys(players3D).forEach(id => {
       const dist = camera.position.distanceTo(players3D[id].position);
-      const isHuman = players3D[id].userData && players3D[id].userData.type === 'Human';
+      const isHuman = players3D[id].userData && (players3D[id].userData.type === 'Human' || !players3D[id].userData.isGhost);
       if (isHuman && dist < closestDist) {
         closestDist = dist;
         closestId = id;
       }
     });
     if (closestId) {
-      socketClient.emit('capture_human', { targetId: closestId });
-      triggerNotification("Captured a survivor!");
+      const dmg = 35;
+      if (socketClient && socketClient.emit) {
+        socketClient.emit('damage_human', { targetId: closestId, amount: dmg });
+      }
+      triggerNotification(`Struck survivor with Ghost Claws! (-${dmg} HP)`);
       abilityCooldowns[item] = now + gParams.clawsCooldown;
     } else {
       triggerNotification("No survivor in range.");
@@ -8546,6 +8549,28 @@ function setupSocketListeners() {
     }
   });
 
+  socketClient.on('human_damaged', ({ targetId, amount, attackerId }) => {
+    if (targetId === myId && myTeam === 'Human' && !isCaptured && !window.isSpectating) {
+      const dmg = amount || 35;
+      currentHP = Math.max(0, currentHP - dmg);
+      const hpVal = document.getElementById('hp-value');
+      const hpBar = document.getElementById('hp-bar');
+      if (hpVal) hpVal.textContent = `${Math.ceil(currentHP)} HP`;
+      if (hpBar) hpBar.style.width = `${currentHP}%`;
+      triggerNotification(`⚠️ Struck by Ghost Claws! (-${dmg} HP)`);
+
+      const vig = document.getElementById('damage-vignette') || document.getElementById('vignette-overlay');
+      if (vig) {
+        vig.style.boxShadow = 'inset 0 0 80px rgba(239, 68, 68, 0.9)';
+        setTimeout(() => { if (vig) vig.style.boxShadow = ''; }, 300);
+      }
+
+      if (currentHP <= 0 && !isCaptured) {
+        triggerLocalPlayerCapture();
+      }
+    }
+  });
+
   socketClient.on('ghost_mimic_clone', ({ id }) => {
     if (players3D[id]) {
       const originalPosition = players3D[id].position.clone();
@@ -8572,6 +8597,8 @@ function setupSocketListeners() {
       const humanMesh = createHumanMeshGroup(pSkinId, pUsername);
       humanMesh.position.copy(originalPosition);
       humanMesh.rotation.copy(originalRotation);
+      humanMesh.userData.isGhost = true; // Ensure proximity damage identifies them as hostile ghost even in disguise!
+      humanMesh.userData.isMimicDisguised = true;
       scene.add(humanMesh);
       players3D[id] = humanMesh;
       
@@ -10875,69 +10902,74 @@ function applyGhostDamageToHuman(ghostPos, delta) {
     }
     
     if (currentHP <= 0 && !isCaptured) {
-      isCaptured = true;
-
-      const myUsername = (currentLobby && currentLobby.players && currentLobby.players[myId]?.username) || 'Operative';
-      const mySkin = (currentLobby && currentLobby.players && currentLobby.players[myId]?.skinId) || null;
-
-      // Spawn persistent dead body model at exact death location
-      spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, mySkin);
-      onHumanKilled(myId, camera.position);
-      
-      if (socketClient) {
-        socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myUsername} (${myClass}) has been captured by the void.` });
-        socketClient.emit('capture_human', { 
-          targetId: myId,
-          position: { x: camera.position.x, y: 0.04, z: camera.position.z },
-          rotation: camera.rotation.y,
-          username: myUsername,
-          characterClass: myClass,
-          skinId: mySkin
-        });
-
-        // Drop all items and keys
-        inventory.forEach(itemName => {
-          if (itemName && itemName !== '') {
-            socketClient.emit('item_dropped', {
-              id: 'item_' + seededRandom().toString(36).substr(2, 9),
-              name: itemName,
-              position: { x: camera.position.x, y: 1.6, z: camera.position.z }
-            });
-          }
-        });
-        carriedKeys.forEach(key => {
-          const preservedId = key.id || ('key_' + key.symbol);
-          socketClient.emit('key_dropped', {
-            id: preservedId,
-            typeName: key.typeName,
-            symbol: key.symbol,
-            position: { x: camera.position.x, y: 1.6, z: camera.position.z }
-          });
-        });
-        inventory = [];
-        carriedKeys = [];
-        renderHUDInventory();
-      }
-
-      playGhostCaptureAnimation(() => {
-        const ptrOverlay = document.getElementById('pointer-lock-overlay');
-        if (ptrOverlay) ptrOverlay.style.display = 'none';
-        if (document.pointerLockElement) document.exitPointerLock();
-        window.mobileGameActive = false;
-        window.gameReady = false;
-        const hud = document.getElementById('hud-overlay');
-        if (hud) hud.style.display = 'none';
-        const mobileCtrl = document.getElementById('mobile-controls-container');
-        if (mobileCtrl) mobileCtrl.style.display = 'none';
-        if (!window.isSoloMatch) {
-          const capOverlay = document.getElementById('captured-overlay');
-          if (capOverlay) capOverlay.style.display = 'flex';
-        } else {
-          showSoloDeathEndScreen();
-        }
-      });
+      triggerLocalPlayerCapture();
     }
   }
+}
+
+function triggerLocalPlayerCapture() {
+  if (isCaptured) return;
+  isCaptured = true;
+
+  const myUsername = (currentLobby && currentLobby.players && currentLobby.players[myId]?.username) || 'Operative';
+  const mySkin = (currentLobby && currentLobby.players && currentLobby.players[myId]?.skinId) || null;
+
+  // Spawn persistent dead body model at exact death location
+  spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, mySkin);
+  onHumanKilled(myId, camera.position);
+  
+  if (socketClient) {
+    socketClient.emit('chat_message', { msg: `[SYSTEM]: Operative ${myUsername} (${myClass}) has been captured by the void.` });
+    socketClient.emit('capture_human', { 
+      targetId: myId,
+      position: { x: camera.position.x, y: 0.04, z: camera.position.z },
+      rotation: camera.rotation.y,
+      username: myUsername,
+      characterClass: myClass,
+      skinId: mySkin
+    });
+
+    // Drop all items and keys
+    inventory.forEach(itemName => {
+      if (itemName && itemName !== '') {
+        socketClient.emit('item_dropped', {
+          id: 'item_' + seededRandom().toString(36).substr(2, 9),
+          name: itemName,
+          position: { x: camera.position.x, y: 1.6, z: camera.position.z }
+        });
+      }
+    });
+    carriedKeys.forEach(key => {
+      const preservedId = key.id || ('key_' + key.symbol);
+      socketClient.emit('key_dropped', {
+        id: preservedId,
+        typeName: key.typeName,
+        symbol: key.symbol,
+        position: { x: camera.position.x, y: 1.6, z: camera.position.z }
+      });
+    });
+    inventory = [];
+    carriedKeys = [];
+    renderHUDInventory();
+  }
+
+  playGhostCaptureAnimation(() => {
+    const ptrOverlay = document.getElementById('pointer-lock-overlay');
+    if (ptrOverlay) ptrOverlay.style.display = 'none';
+    if (document.pointerLockElement) document.exitPointerLock();
+    window.mobileGameActive = false;
+    window.gameReady = false;
+    const hud = document.getElementById('hud-overlay');
+    if (hud) hud.style.display = 'none';
+    const mobileCtrl = document.getElementById('mobile-controls-container');
+    if (mobileCtrl) mobileCtrl.style.display = 'none';
+    if (!window.isSoloMatch) {
+      const capOverlay = document.getElementById('captured-overlay');
+      if (capOverlay) capOverlay.style.display = 'flex';
+    } else {
+      showSoloDeathEndScreen();
+    }
+  });
 }
 
 // Helper function to check chalk decals for a given ghost position (hoisted to prevent per-frame closure GC churn)
@@ -11510,9 +11542,9 @@ function animate() {
       }
     }
 
-    // Damage check against network Ghost players
+    // Damage check against network Ghost players (including disguised Mimics)
     Object.values(players3D).forEach(p => {
-      if (p.userData && p.userData.type === 'Ghost') {
+      if (p.userData && (p.userData.type === 'Ghost' || p.userData.isGhost)) {
         applyGhostDamageToHuman(p.position, delta);
         checkChalkDecals(p.position);
       }
@@ -11957,7 +11989,7 @@ function animate() {
               const chosenIsVip = Boolean(chosenTeammate.isVip);
 
               const mimicGroup = createHumanMeshGroup(chosenSkin, chosenUsername, chosenIsVip);
-              mimicGroup.rotation.y = Math.PI; // Invert to align human model facing forward with ghost movement
+              mimicGroup.rotation.y = 0; // Aligns human model facing forward (-Z) matching ghost movement direction
               
               // Thermal camera material setup (Cyan for teammates)
               const meshThermalMat = new THREE.MeshBasicMaterial({ 
