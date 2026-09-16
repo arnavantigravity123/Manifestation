@@ -819,14 +819,14 @@ function addGLBModelToForest(forestContainer) {
 
     const forestClone = preloadedForestModel.clone(true);
     // CRUCIAL: forest.glb is exported with Z-up from 3ds Max/SketchUp.
-    // In Three.js, Y is Up. By rotating -90 deg on X and +90 deg on Z (Euler XYZ order):
+    // In Three.js, Y is Up. By rotating -90 deg on X (Euler XYZ order):
     // 1. Model +Z (Up) maps to Three.js +Y (Up).
-    // 2. Model +X (the picturesque open forest clearing & panoramic trail) maps to Three.js -Z (Forward depth into woods).
-    // 3. Model +Y maps to Three.js -X (Lateral scene bounds with towering trees and pond).
+    // 2. Model +Y (picturesque open trail towards lake & pine forest) maps to Three.js -Z (Forward depth into woods).
+    // 3. Model +X maps to Three.js +X (Lateral scene bounds with towering trees on left & right).
     forestClone.rotation.x = -Math.PI / 2;
-    forestClone.rotation.z = Math.PI / 2;
-    // Perfectly center the main forest trail and pine valley on the doorway threshold (X=0, ground level Y=0, path extending down -Z)
-    forestClone.position.set(-500, -938, 600);
+    forestClone.rotation.z = 0;
+    // Perfectly align the main forest trail and pine valley on the doorway threshold (X=0, ground level Y=0, path extending down -Z)
+    forestClone.position.set(-1565, -920, -400);
 
     forestClone.traverse(child => {
       if (child.isMesh) {
@@ -888,16 +888,16 @@ export function attachForestToVault() {
   const rayMat = new THREE.MeshBasicMaterial({
     color: 0xfffae0,
     transparent: true,
-    opacity: 0.05,
+    opacity: 0.035,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
   });
   const rayAngles = [
-    { x: -4, y: 12, z: -10, rotZ: -0.22, rotX: 0.15 },
-    { x: 2,  y: 13, z: -15, rotZ: -0.28, rotX: 0.18 },
-    { x: -1, y: 14, z: -22, rotZ: -0.24, rotX: 0.20 },
-    { x: 5,  y: 13, z: -28, rotZ: -0.30, rotX: 0.14 }
+    { x: -8, y: 14, z: -16, rotZ: -0.22, rotX: 0.15 },
+    { x: 7,  y: 15, z: -20, rotZ: -0.28, rotX: 0.18 },
+    { x: -6, y: 16, z: -28, rotZ: -0.24, rotX: 0.20 },
+    { x: 8,  y: 15, z: -32, rotZ: -0.30, rotX: 0.14 }
   ];
   rayAngles.forEach(ra => {
     const ray = new THREE.Mesh(rayGeo, rayMat);
@@ -2063,10 +2063,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     || '';
   const cleanName = rawName.trim().toLowerCase();
   const isAriadne = cleanName === 'ariadne_999' || cleanName === 'aridane_999' || cleanName.includes('ariadne') || cleanName.includes('aridane');
-  const showAriadneThread = isAriadne || window.isTutorialMatch;
+  const showAriadneThread = isAriadne;
 
   if (showAriadneThread) {
-    console.log("🌀 [ARIADNE PROTOCOL] Activated for", rawName, "Tutorial:", window.isTutorialMatch);
+    console.log("🌀 [ARIADNE PROTOCOL] Activated for developer/easter-egg operative", rawName);
 
     // 1. Find nearest open corridor to start (camera position)
     let closestStart = { x: camera.position.x, z: camera.position.z };
@@ -2216,10 +2216,6 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
         checkWinCondition(); // Will update gate lights
       }, 1000);
-    } else if (window.isTutorialMatch) {
-      setTimeout(() => {
-        triggerNotification("🕯️ ARIADNE'S THREAD: Luminous orbs show the corridor route to the Master Vault!");
-      }, 1500);
     }
   }
 

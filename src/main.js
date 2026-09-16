@@ -846,6 +846,7 @@ if (acceptLegalBtn) {
 // ==========================================
 const gameAdBackdrop = document.getElementById('game-ad-backdrop');
 const gameAdModal = document.getElementById('game-ad-modal');
+const adEmergencyCloseBtn = document.getElementById('ad-emergency-close-btn');
 const adTimerCountdown = document.getElementById('ad-timer-countdown');
 const adProgressBar = document.getElementById('ad-progress-bar');
 const adRewardLabel = document.getElementById('ad-reward-label');
@@ -854,9 +855,36 @@ const adVipPromoBtn = document.getElementById('ad-vip-promo-btn');
 
 let activeAdInterval = null;
 
+function dismissAdModal() {
+  if (activeAdInterval) {
+    clearInterval(activeAdInterval);
+    activeAdInterval = null;
+  }
+  if (gameAdBackdrop) {
+    gameAdBackdrop.style.display = 'none';
+    gameAdBackdrop.style.backdropFilter = 'none';
+    gameAdBackdrop.style.webkitBackdropFilter = 'none';
+  }
+  if (gameAdModal) {
+    gameAdModal.style.display = 'none';
+  }
+}
+
+if (adEmergencyCloseBtn) {
+  adEmergencyCloseBtn.onclick = () => {
+    dismissAdModal();
+  };
+}
+
 function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, onReward = null }) {
   if (!gameAdModal) {
     if (isRewarded && onReward) onReward();
+    if (onComplete) onComplete();
+    return;
+  }
+
+  // Never interrupt active tutorial / training protocol onboarding with interstitial ads!
+  if (!isRewarded && (window.isTutorialMatch || window.isTutorialMode)) {
     if (onComplete) onComplete();
     return;
   }
@@ -904,43 +932,29 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
     }
 
     if (elapsed >= totalMs) {
-      clearInterval(activeAdInterval);
-      activeAdInterval = null;
-      if (gameAdBackdrop) {
-        gameAdBackdrop.style.display = 'none';
-        gameAdBackdrop.style.backdropFilter = 'none';
-        gameAdBackdrop.style.webkitBackdropFilter = 'none';
-      }
-      gameAdModal.style.display = 'none';
+      dismissAdModal();
       if (isRewarded && onReward) onReward();
       if (onComplete) onComplete();
     }
   }, 100);
 
+  if (adEmergencyCloseBtn) {
+    adEmergencyCloseBtn.onclick = () => {
+      dismissAdModal();
+      if (onComplete) onComplete();
+    };
+  }
+
   if (adSkipBtn) {
     adSkipBtn.onclick = () => {
-      if (activeAdInterval) clearInterval(activeAdInterval);
-      activeAdInterval = null;
-      if (gameAdBackdrop) {
-        gameAdBackdrop.style.display = 'none';
-        gameAdBackdrop.style.backdropFilter = 'none';
-        gameAdBackdrop.style.webkitBackdropFilter = 'none';
-      }
-      gameAdModal.style.display = 'none';
+      dismissAdModal();
       if (onComplete) onComplete();
     };
   }
 
   if (adVipPromoBtn) {
     adVipPromoBtn.onclick = () => {
-      if (activeAdInterval) clearInterval(activeAdInterval);
-      activeAdInterval = null;
-      if (gameAdBackdrop) {
-        gameAdBackdrop.style.display = 'none';
-        gameAdBackdrop.style.backdropFilter = 'none';
-        gameAdBackdrop.style.webkitBackdropFilter = 'none';
-      }
-      gameAdModal.style.display = 'none';
+      dismissAdModal();
       if (!currentUser) {
         promptGuestToCreateAccount('VIP Pass via RevenueCat');
       } else {
@@ -954,12 +968,16 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
 }
 
 window.showInterstitialAd = (onComplete) => {
+  if (window.isTutorialMatch || window.isTutorialMode) {
+    if (onComplete) onComplete();
+    return;
+  }
   playAdSequence({ duration: 5, isRewarded: false, onComplete });
 };
 
 window.leaveGameWithAd = (callback) => {
   const isVip = (currentUser && currentUser.isVip) || (localStorage.getItem('manifestation_is_vip') === 'true');
-  if (isVip) {
+  if (isVip || window.isTutorialMatch || window.isTutorialMode) {
     if (callback) callback();
     else window.location.reload();
     return;
