@@ -1316,6 +1316,7 @@ let lastLightCullTime = 0;
 
 // Persistent Dead Bodies tracking
 let deadBodies = [];
+let playerCorpses = {}; // targetId -> { mesh, position: { x, y, z }, rotationY, username }
 
 // Sanity Features: Sanctuaries, Shadow Decoys, and Mirage Loot
 let sanctuaryZones = [];
@@ -1402,6 +1403,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       });
     });
     deadBodies = [];
+    playerCorpses = {};
   }
 
   // Remove any stale player meshes from scene
@@ -7076,12 +7078,33 @@ function useActiveItem() {
     
     let targetPlayerId = null;
     let targetPlayerName = 'Survivor';
+    let targetCorpsePos = null;
 
-    if (currentLobby && currentLobby.players) {
+    // 1. Prefer closest fallen teammate's corpse
+    let closestDist = Infinity;
+    if (typeof playerCorpses !== 'undefined') {
+      for (const [id, corpse] of Object.entries(playerCorpses)) {
+        if (id !== myId && corpse && corpse.position) {
+          const d = Math.hypot(corpse.position.x - camera.position.x, corpse.position.z - camera.position.z);
+          if (d < closestDist) {
+            closestDist = d;
+            targetPlayerId = id;
+            targetPlayerName = corpse.username || (currentLobby && currentLobby.players[id]?.username) || 'Survivor';
+            targetCorpsePos = { x: corpse.position.x, y: corpse.position.y || 1.6, z: corpse.position.z };
+          }
+        }
+      }
+    }
+
+    // 2. Fallback to any captured human in lobby if corpse registry had not synced yet
+    if (!targetPlayerId && currentLobby && currentLobby.players) {
       for (const [id, p] of Object.entries(currentLobby.players)) {
         if (id !== myId && p.team === 'Human' && p.isCaptured) {
           targetPlayerId = id;
           targetPlayerName = p.username || 'Survivor';
+          if (p.x !== undefined && p.z !== undefined) {
+            targetCorpsePos = { x: p.x, y: p.y || 1.6, z: p.z };
+          }
           break;
         }
       }
@@ -7089,7 +7112,7 @@ function useActiveItem() {
 
     if (targetPlayerId) {
       if (typeof socketClient !== 'undefined') {
-        socketClient.emit('revive_player', { targetId: targetPlayerId });
+        socketClient.emit('revive_player', { targetId: targetPlayerId, position: targetCorpsePos });
       }
       removeItem(activeSlot);
       triggerNotification(`⚡ Defibrillator discharged! Reviving Operative ${targetPlayerName}!`);
@@ -8376,26 +8399,42 @@ function setupSocketListeners() {
     }
   });
 
-  socketClient.on('player_revived_sync', ({ targetId, medicName, revivedName }) => {
+  socketClient.on('player_revived_sync', ({ targetId, medicName, revivedName, position }) => {
     if (currentLobby && currentLobby.players && currentLobby.players[targetId]) {
       currentLobby.players[targetId].isCaptured = false;
-    }
-    if (players3D[targetId]) {
-      if (players3D[targetId].userData) {
-        players3D[targetId].userData.isCaptured = false;
+      if (position) {
+        currentLobby.players[targetId].x = position.x;
+        currentLobby.players[targetId].y = position.y;
+        currentLobby.players[targetId].z = position.z;
       }
-      players3D[targetId].visible = true;
     }
+
+    // Resolve corpse location
+    const corpseEntry = (typeof playerCorpses !== 'undefined') ? playerCorpses[targetId] : null;
+    const spawnX = (position && position.x !== undefined) ? position.x : (corpseEntry && corpseEntry.position ? corpseEntry.position.x : 0);
+    const spawnZ = (position && position.z !== undefined) ? position.z : (corpseEntry && corpseEntry.position ? corpseEntry.position.z : 0);
+
+    // Remove the dead body from the 3D scene and clear corpse tracking
+    if (typeof removeCorpse === 'function') {
+      removeCorpse(targetId);
+    }
+
     triggerNotification(`⚡ [${medicName}] revived Operative ${revivedName}!`);
 
     if (targetId === myId) {
       isCaptured = false;
       window.isSpectating = false;
+      window.isCapturedAnimation = false;
+      window.gameReady = true; // CRITICAL: Unfreeze controls, physics loop, and input processing!
       currentHP = 75;
       currentSanity = 75;
       isPanicked = false;
       panicTimer = 0;
-      camera.position.y = 1.6;
+
+      // Teleport local player camera directly over their dead body
+      camera.position.set(spawnX, 1.6, spawnZ);
+      velocity.set(0, 0, 0);
+      direction.set(0, 0, 0);
 
       // Restore carry slots so player can hold items and pick up dropped gear
       if (!inventory || inventory.length === 0 || inventory.every(s => !s || s === '')) {
@@ -8417,17 +8456,54 @@ function setupSocketListeners() {
 
       const capOverlay = document.getElementById('captured-overlay');
       if (capOverlay) capOverlay.style.display = 'none';
+      const ghostCapOverlay = document.getElementById('ghost-capture-overlay');
+      if (ghostCapOverlay) ghostCapOverlay.style.display = 'none';
+      const endOverlay = document.getElementById('end-game-overlay');
+      if (endOverlay) endOverlay.style.display = 'none';
       const hudOverlay = document.getElementById('hud-overlay');
       if (hudOverlay) hudOverlay.style.display = 'flex';
 
       if (!isMobileDevice) {
-        (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
+        if (window.requestGamePointerLock) {
+          window.requestGamePointerLock();
+        } else {
+          (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
+        }
       } else {
         window.mobileGameActive = true;
         const mobileCtrl = document.getElementById('mobile-controls-container');
         if (mobileCtrl) mobileCtrl.style.display = 'flex';
       }
+
+      // Immediately broadcast new position so all peers and server register local player alive and in-place
+      if (socketClient) {
+        socketClient.emit('player_move', {
+          position: { x: camera.position.x, y: camera.position.y, z: camera.position.z },
+          rotation: { x: camera.rotation.x, y: camera.rotation.y, z: camera.rotation.z }
+        });
+      }
+
       triggerNotification("⚡ REVIVED BY MEDIC! BACK IN THE ACTION!");
+    } else {
+      // Remote player revived: ensure their 3D model is active and positioned at their corpse
+      if (players3D[targetId]) {
+        players3D[targetId].visible = true;
+        if (players3D[targetId].userData) {
+          players3D[targetId].userData.isCaptured = false;
+        }
+        players3D[targetId].position.set(spawnX, 0, spawnZ);
+      } else {
+        const pSkinId = (currentLobby && currentLobby.players && currentLobby.players[targetId] && currentLobby.players[targetId].skinId) || null;
+        const pUsername = (currentLobby && currentLobby.players && currentLobby.players[targetId] && currentLobby.players[targetId].username) || revivedName || 'Survivor';
+        const isVipPlayer = Boolean(currentLobby && currentLobby.players && currentLobby.players[targetId] && currentLobby.players[targetId].isVip);
+        const revivedMesh = createHumanMeshGroup(pSkinId, pUsername, isVipPlayer);
+        revivedMesh.userData.id = targetId;
+        revivedMesh.userData.isCaptured = false;
+        revivedMesh.userData.type = 'Human';
+        revivedMesh.position.set(spawnX, 0, spawnZ);
+        scene.add(revivedMesh);
+        players3D[targetId] = revivedMesh;
+      }
     }
   });
 
@@ -8510,7 +8586,7 @@ function setupSocketListeners() {
       if (!isCaptured) {
         isCaptured = true;
         const myUsername = username || (currentLobby && currentLobby.players[myId]?.username) || 'Operative';
-        spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, skinId);
+        spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, skinId, myId);
         onHumanKilled(myId, camera.position);
         playGhostCaptureAnimation(() => {
           const ptrOverlay = document.getElementById('pointer-lock-overlay');
@@ -8535,7 +8611,7 @@ function setupSocketListeners() {
       const targetUser = username || (currentLobby && currentLobby.players[targetId]?.username) || 'Operative';
       const targetClass = characterClass || (currentLobby && currentLobby.players[targetId]?.characterClass) || 'Survivor';
       if (spawnPos) {
-        spawnDeadBody(spawnPos, spawnRot, targetUser, targetClass, skinId);
+        spawnDeadBody(spawnPos, spawnRot, targetUser, targetClass, skinId, targetId);
         onHumanKilled(targetId, spawnPos);
       }
       if (players3D[targetId]) {
@@ -9647,14 +9723,42 @@ function createHumanMeshGroup(skinId, username, isVip) {
   return group;
 }
 
-export function spawnDeadBody(position, rotationY = 0, username = 'Operative', characterClass = 'Survivor', skinId = null) {
+export function removeCorpse(targetId) {
+  if (!targetId || !playerCorpses[targetId]) return;
+  const entry = playerCorpses[targetId];
+  if (entry && entry.mesh) {
+    if (scene) scene.remove(entry.mesh);
+    const idx = deadBodies.indexOf(entry.mesh);
+    if (idx !== -1) deadBodies.splice(idx, 1);
+    entry.mesh.traverse(child => {
+      if (child.isMesh || child.isSprite || child.isPoints) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      }
+    });
+  }
+  delete playerCorpses[targetId];
+}
+
+export function spawnDeadBody(position, rotationY = 0, username = 'Operative', characterClass = 'Survivor', skinId = null, targetId = null) {
   if (!scene || !position) return null;
 
+  if (targetId) {
+    removeCorpse(targetId);
+  }
+
   const corpseGroup = new THREE.Group();
-  const posX = position.x || 0;
+  const posX = (position.x !== undefined) ? position.x : 0;
   const posY = 0.04;
-  const posZ = position.z || 0;
+  const posZ = (position.z !== undefined) ? position.z : 0;
   corpseGroup.position.set(posX, posY, posZ);
+  corpseGroup.userData.targetId = targetId;
+  corpseGroup.userData.position = { x: posX, y: posY, z: posZ };
+  corpseGroup.userData.username = username;
+  corpseGroup.userData.characterClass = characterClass;
 
   // 1. Dark Blood Pool / Void Corruption Decal on floor
   const poolGeo = new THREE.CircleGeometry(0.85, 24);
@@ -9740,6 +9844,14 @@ export function spawnDeadBody(position, rotationY = 0, username = 'Operative', c
 
   scene.add(corpseGroup);
   deadBodies.push(corpseGroup);
+  if (targetId) {
+    playerCorpses[targetId] = {
+      mesh: corpseGroup,
+      position: { x: posX, y: posY, z: posZ },
+      rotationY: rotationY,
+      username: username
+    };
+  }
   return corpseGroup;
 }
 
@@ -9765,13 +9877,10 @@ export function onHumanKilled(victimId, victimPos) {
             const d = Math.hypot(c.x - vPos.x, c.z - vPos.z);
             return d > 20.0;
           });
-          if (farCandidates.length > 0) {
-            const seedInt = Math.floor(Math.random() * 100000);
-            const farTarget = farCandidates[seedInt % farCandidates.length];
-            ghost.userData.targetGrid = worldToGrid(farTarget.x, farTarget.z);
-          } else {
-            ghost.userData.targetGrid = null;
-          }
+          const pool = farCandidates.length > 0 ? farCandidates : openCorridors;
+          const seedInt = Math.floor(Math.random() * 100000);
+          const farTarget = pool[seedInt % pool.length];
+          ghost.userData.targetGrid = worldToGrid(farTarget.x, farTarget.z);
         } else {
           ghost.userData.targetGrid = null;
         }
@@ -10845,6 +10954,28 @@ function drawMinimap() {
     }
   });
 
+  // Draw Fallen Teammates (Corpses)
+  if (myTeam === 'Human' && typeof playerCorpses !== 'undefined') {
+    Object.values(playerCorpses).forEach(c => {
+      if (c && c.position) {
+        const cc = (c.position.x / blockSize) + (totalCols / 2);
+        const cr = (c.position.z / blockSize) + (totalRows / 2);
+        ctx.save();
+        ctx.translate(cc * cellSize, cr * cellSize);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const half = cellSize * 0.35;
+        ctx.moveTo(-half, -half);
+        ctx.lineTo(half, half);
+        ctx.moveTo(half, -half);
+        ctx.lineTo(-half, half);
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
+  }
+
   // Draw Player Marker (Local)
   const pc = (camera.position.x / blockSize) + (totalCols / 2);
   const pr = (camera.position.z / blockSize) + (totalRows / 2);
@@ -10911,7 +11042,7 @@ function triggerLocalPlayerCapture() {
   const mySkin = (currentLobby && currentLobby.players && currentLobby.players[myId]?.skinId) || null;
 
   // Spawn persistent dead body model at exact death location
-  spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, mySkin);
+  spawnDeadBody(camera.position, camera.rotation.y, myUsername, myClass, mySkin, myId);
   onHumanKilled(myId, camera.position);
   
   if (socketClient) {
@@ -12196,7 +12327,27 @@ function animate() {
                 }
               }
             }
-            ghost.userData.targetGrid = { col: rx, row: rz };
+            if (!mazeLayout[rz] || mazeLayout[rz][rx] !== 0) {
+              if (typeof openCorridors !== 'undefined' && openCorridors.length > 0) {
+                const safeCandidates = openCorridors.filter(c => {
+                  const g = worldToGrid(c.x, c.z);
+                  return !isNearCorpse(g.col, g.row);
+                });
+                const pickList = safeCandidates.length > 0 ? safeCandidates : openCorridors;
+                const pick = pickList[Math.floor(tempRand() * pickList.length)];
+                const gPick = worldToGrid(pick.x, pick.z);
+                rx = gPick.col;
+                rz = gPick.row;
+              } else {
+                rx = ghostGrid.col;
+                rz = ghostGrid.row;
+              }
+            }
+            if (rx !== undefined && rz !== undefined && mazeLayout[rz] && mazeLayout[rz][rx] === 0) {
+              ghost.userData.targetGrid = { col: rx, row: rz };
+            } else {
+              ghost.userData.targetGrid = null;
+            }
           }
           destGrid = ghost.userData.targetGrid;
         }

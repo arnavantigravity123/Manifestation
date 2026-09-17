@@ -1062,12 +1062,17 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('revive_player', ({ targetId }) => {
+  socket.on('revive_player', ({ targetId, position }) => {
     const { roomId } = socket;
     const lobby = lobbies[roomId];
     if (!lobby) return;
     if (lobby.players[targetId]) {
       lobby.players[targetId].isCaptured = false;
+      if (position) {
+        lobby.players[targetId].x = position.x;
+        lobby.players[targetId].y = position.y;
+        lobby.players[targetId].z = position.z;
+      }
     }
     const medicName = (lobby.players[socket.id] && lobby.players[socket.id].username) || 'Medic';
     const revivedName = (lobby.players[targetId] && lobby.players[targetId].username) || 'Survivor';
@@ -1075,7 +1080,8 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('player_revived_sync', {
       targetId,
       medicName,
-      revivedName
+      revivedName,
+      position
     });
     io.to(roomId).emit('chat_message', { msg: `[SYSTEM]: Medic ${medicName} revived Operative ${revivedName}!` });
   });
