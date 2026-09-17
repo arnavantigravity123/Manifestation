@@ -32,14 +32,23 @@ const humanAnimClips = {
 const soldierNativeClips = {
   idle: null,
   walk: null,
-  sprint: null
+  sprint: null,
+  walkBack: null,
+  strafeLeft: null,
+  strafeRight: null
 };
 
 function getSoldierLocomotionClip(animName) {
   if (soldierNativeClips[animName]) {
     return soldierNativeClips[animName];
   }
-  return humanAnimClips[animName] || null;
+  if (animName === 'walkBack' || animName === 'strafeLeft' || animName === 'strafeRight') {
+    return soldierNativeClips.walk || soldierNativeClips.idle || null;
+  }
+  if (animName === 'sprint') {
+    return soldierNativeClips.sprint || soldierNativeClips.walk || soldierNativeClips.idle || null;
+  }
+  return soldierNativeClips.idle || null;
 }
 
 // Optimized Hazmat PBR Textures (2K Albedo + 1K Normal + 1K Roughness + Metallic + AO, saving 93% GPU VRAM bandwidth)
@@ -339,18 +348,14 @@ function registerAnimationToActiveMixers(animName, clip) {
 
   const bindToEntity = (entity) => {
     if (!entity || !entity.userData || !entity.userData.animMixer) return;
+    // Soldier character exclusively uses native GLTF skeleton animations — never bind FBX clips!
+    if (entity.userData.skinId === 'skin_soldier') return;
+
     const mixer = entity.userData.animMixer;
     entity.userData.animActions = entity.userData.animActions || {};
-
-    const targetClip = (entity.userData.skinId === 'skin_soldier')
-      ? getSoldierLocomotionClip(animName)
-      : clip;
-
-    if (targetClip) {
-      entity.userData.animActions[animName] = mixer.clipAction(targetClip);
-      if (entity.userData.currentAction === animName) {
-        setHumanLocomotionAction(entity, animName, 0.15);
-      }
+    entity.userData.animActions[animName] = mixer.clipAction(clip);
+    if (entity.userData.currentAction === animName) {
+      setHumanLocomotionAction(entity, animName, 0.15);
     }
   };
 
@@ -376,6 +381,12 @@ function upgradeMeshGroupToSoldier(group) {
     toRemove.push(c);
   });
   toRemove.forEach(c => group.remove(c));
+
+  if (group.userData && group.userData.animMixer) {
+    const oldIdx = activeAnimationMixers.indexOf(group.userData.animMixer);
+    if (oldIdx !== -1) activeAnimationMixers.splice(oldIdx, 1);
+    group.userData.animMixer.stopAllAction();
+  }
 
   const clone = SkeletonUtils.clone(preloadedSoldierModel);
   group.add(clone);
@@ -685,20 +696,50 @@ export function loadSoldierAsset() {
           soldierNativeClips.walk = clip;
         }
       });
+      if (soldierNativeClips.walk) {
+        soldierNativeClips.walkBack = soldierNativeClips.walk;
+        soldierNativeClips.strafeLeft = soldierNativeClips.walk;
+        soldierNativeClips.strafeRight = soldierNativeClips.walk;
+      }
     }
 
     preloadedSoldierModel = model;
     isSoldierLoading = false;
 
+    // Helper to rebind all native soldier actions to an existing soldier entity
+    const rebindSoldierActions = (entity) => {
+      if (!entity || !entity.userData || !entity.userData.animMixer || entity.userData.skinId !== 'skin_soldier') return;
+      const mixer = entity.userData.animMixer;
+      entity.userData.animActions = {};
+      ['idle', 'walk', 'sprint', 'walkBack', 'strafeLeft', 'strafeRight'].forEach(key => {
+        const c = getSoldierLocomotionClip(key);
+        if (c) {
+          entity.userData.animActions[key] = mixer.clipAction(c);
+        }
+      });
+      if (entity.userData.animActions.idle) {
+        entity.userData.animActions.idle.play();
+      }
+      entity.userData.currentAction = 'idle';
+    };
+
     // Upgrade localPlayerVisual if skin_soldier was waiting for model to load
-    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_soldier' && !localPlayerVisual.userData.animMixer) {
-      upgradeMeshGroupToSoldier(localPlayerVisual);
+    if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.skinId === 'skin_soldier') {
+      if (!localPlayerVisual.userData.animMixer) {
+        upgradeMeshGroupToSoldier(localPlayerVisual);
+      } else {
+        rebindSoldierActions(localPlayerVisual);
+      }
     }
 
     // Upgrade all remote human players with skin_soldier
     Object.values(players3D).forEach(p => {
-      if (p && p.userData && p.userData.skinId === 'skin_soldier' && !p.userData.animMixer) {
-        upgradeMeshGroupToSoldier(p);
+      if (p && p.userData && p.userData.skinId === 'skin_soldier') {
+        if (!p.userData.animMixer) {
+          upgradeMeshGroupToSoldier(p);
+        } else {
+          rebindSoldierActions(p);
+        }
       }
     });
   }, undefined, (err) => {
@@ -9594,7 +9635,11 @@ function setHumanLocomotionAction(humanGroup, targetActionName, crossfadeDuratio
   if (!targetAction) return;
 
   const currentAction = actions[currentActionName] || actions.idle;
-  const desiredTimeScale = (targetActionName === 'idle') ? 1.0 : playbackRate;
+  const isSoldier = (humanGroup.userData.skinId === 'skin_soldier');
+  let desiredTimeScale = (targetActionName === 'idle') ? 1.0 : playbackRate;
+  if (isSoldier && targetActionName === 'walkBack') {
+    desiredTimeScale = -Math.abs(desiredTimeScale);
+  }
 
   // If already playing the EXACT same AnimationAction instance, do not reset or crossfade
   if (currentAction === targetAction) {
