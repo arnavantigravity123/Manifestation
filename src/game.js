@@ -818,15 +818,16 @@ function addGLBModelToForest(forestContainer) {
     forestCloneWrapper.scale.set(scale, scale, scale);
 
     const forestClone = preloadedForestModel.clone(true);
-    // CRUCIAL: forest.glb is exported with Z-up from 3ds Max/SketchUp.
-    // In Three.js, Y is Up. By rotating -90 deg on X (Euler XYZ order):
+    // CRUCIAL: forest.glb is exported with Z-up from SketchUp.
+    // By rotating -90 deg on X and -45 deg on Z:
     // 1. Model +Z (Up) maps to Three.js +Y (Up).
-    // 2. Model +Y (picturesque open trail towards lake & pine forest) maps to Three.js -Z (Forward depth into woods).
-    // 3. Model +X maps to Three.js +X (Lateral scene bounds with towering trees on left & right).
+    // 2. The picturesque white marble rotunda pavilion (the white sitting area with pillars & steps)
+    //    faces directly toward the open vault doorway along -Z across serene blue water and pine trees!
     forestClone.rotation.x = -Math.PI / 2;
-    forestClone.rotation.z = 0;
-    // Perfectly align the main forest trail and pine valley on the doorway threshold (X=0, ground level Y=0, path extending down -Z)
-    forestClone.position.set(-1565, -920, -400);
+    forestClone.rotation.y = 0;
+    forestClone.rotation.z = -Math.PI / 4;
+    // Perfectly aligns the white marble sitting pavilion and entrance path in front of the doorway threshold
+    forestClone.position.set(-662.56, -886.75, -1464.02);
 
     forestClone.traverse(child => {
       if (child.isMesh) {
@@ -9228,7 +9229,7 @@ function playEscapeCinematic(callback) {
     // Don't snap the player backwards if they are already standing close to the gate
     startLocalZ = Math.min(3.4, Math.max(1.8, currentLocal.z));
     const camStart = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, startLocalZ));
-    const camLookAt = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, -10.0));
+    const camLookAt = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.85, -14.0));
     camera.position.copy(camStart);
     camera.lookAt(camLookAt);
   }
@@ -9299,14 +9300,14 @@ function playEscapeCinematic(callback) {
       const eased = 1 - Math.pow(1 - progress, 2.5);
 
       if (vaultGroupRef) {
-        // Walk from startLocalZ through doorway threshold out to Z = -14.0 in the open woods
-        const localZ = startLocalZ + (-14.0 - startLocalZ) * eased;
+        // Walk from startLocalZ through doorway threshold out towards the sunlit white pavilion
+        const localZ = startLocalZ + (-6.5 - startLocalZ) * eased;
         const localY = 1.65 + Math.sin(progress * Math.PI * 4.0) * 0.04; // Gentle natural footsteps
         const localCamPos = new THREE.Vector3(0, localY, localZ);
         
-        // Look ahead down the forest trail and frame the majestic pine trees
-        const lookZ = localZ - 18.0;
-        const lookY = 1.65 + eased * 0.5;
+        // Look ahead and frame the majestic white marble sitting rotunda and pine trees
+        const lookZ = -14.0;
+        const lookY = 1.85 + eased * 0.15;
         const localLookTarget = new THREE.Vector3(0, lookY, lookZ);
 
         camera.position.copy(vaultGroupRef.localToWorld(localCamPos));
