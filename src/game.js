@@ -852,16 +852,13 @@ function addGLBModelToForest(forestContainer) {
     // Perfectly aligns the white marble sitting pavilion and water 18m in front of the doorway threshold
     forestClone.position.set(-629.33, -930.10, -1718.69);
 
-    const forestClipPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), -0.2);
-
     forestClone.traverse(child => {
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        child.frustumCulled = false;
         if (child.material) {
           child.material.side = THREE.DoubleSide;
-          child.material.clippingPlanes = [forestClipPlane];
-          child.material.clipShadows = true;
           if (child.material.transparent) {
             child.material.alphaTest = 0.35;
             child.material.depthWrite = true;
