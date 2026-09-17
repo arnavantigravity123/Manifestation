@@ -842,16 +842,17 @@ function addGLBModelToForest(forestContainer) {
     forestCloneWrapper.scale.set(scale, scale, scale);
 
     const forestClone = preloadedForestModel.clone(true);
-    // CRUCIAL: forest.glb is exported with Z-up from SketchUp.
-    // By rotating -90 deg on X and -45 deg on Z:
-    // 1. Model +Z (Up) maps to Three.js +Y (Up).
-    // 2. The picturesque white marble rotunda pavilion (the white sitting area with pillars & steps)
-    //    faces directly toward the open vault doorway along -Z across serene blue water and pine trees!
-    forestClone.rotation.x = -Math.PI / 2;
-    forestClone.rotation.y = 0;
-    forestClone.rotation.z = -Math.PI / 4;
-    // Perfectly aligns the white marble sitting pavilion and entrance path in front of the doorway threshold
-    forestClone.position.set(-662.56, -886.75, -1464.02);
+    // CRUCIAL FIX: GLTFLoader already parses Node 0's -90 deg X-axis rotation matrix from Sketchfab.
+    // Setting rotation.x = 0 keeps the model upright (Y-up) without inverted flipping.
+    // Rotating around Y by 315 deg (7*PI/4) points the magnificent white marble sitting rotunda,
+    // peaceful lake, and pine mountain amphitheater directly toward the open vault doorway!
+    forestClone.rotation.x = 0;
+    forestClone.rotation.y = (315 * Math.PI) / 180;
+    forestClone.rotation.z = 0;
+    // Perfectly aligns the white marble sitting pavilion and water 18m in front of the doorway threshold
+    forestClone.position.set(-629.33, -930.10, -1718.69);
+
+    const forestClipPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), -0.2);
 
     forestClone.traverse(child => {
       if (child.isMesh) {
@@ -859,6 +860,8 @@ function addGLBModelToForest(forestContainer) {
         child.receiveShadow = true;
         if (child.material) {
           child.material.side = THREE.DoubleSide;
+          child.material.clippingPlanes = [forestClipPlane];
+          child.material.clipShadows = true;
           if (child.material.transparent) {
             child.material.alphaTest = 0.35;
             child.material.depthWrite = true;
@@ -2007,6 +2010,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   renderer.setPixelRatio(isLowEnd ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
   renderer.setSize(w, h);
   renderer.shadowMap.enabled = false; // Disable heavy multi-pass shadow map rendering for smooth 60-144 FPS
+  renderer.localClippingEnabled = true; // Enables GPU fragment clipping planes for doorway threshold
   container.appendChild(renderer.domElement);
 
   // Live memory & GPU diagnostic utility
@@ -9264,13 +9268,13 @@ function playEscapeCinematic(callback) {
   }, 50);
 
   // Position camera directly in front of the vault door facing straight at it
-  let startLocalZ = 3.4;
+  let startLocalZ = 2.4;
   if (vaultGroupRef) {
     const currentLocal = vaultGroupRef.worldToLocal(camera.position.clone());
     // Don't snap the player backwards if they are already standing close to the gate
-    startLocalZ = Math.min(3.4, Math.max(1.8, currentLocal.z));
+    startLocalZ = Math.min(2.4, Math.max(1.2, currentLocal.z));
     const camStart = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, startLocalZ));
-    const camLookAt = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.85, -14.0));
+    const camLookAt = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.85, -18.0));
     camera.position.copy(camStart);
     camera.lookAt(camLookAt);
   }
@@ -9347,8 +9351,8 @@ function playEscapeCinematic(callback) {
         const localCamPos = new THREE.Vector3(0, localY, localZ);
         
         // Look ahead and frame the majestic white marble sitting rotunda and pine trees
-        const lookZ = -14.0;
-        const lookY = 1.85 + eased * 0.15;
+        const lookZ = -18.0;
+        const lookY = 1.95 + eased * 0.15;
         const localLookTarget = new THREE.Vector3(0, lookY, lookZ);
 
         camera.position.copy(vaultGroupRef.localToWorld(localCamPos));
