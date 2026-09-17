@@ -2098,8 +2098,16 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   if (mobilePauseBtn) mobilePauseBtn.style.display = '';
   if (globalPauseBtn) globalPauseBtn.style.display = '';
 
-  // Ariadne Protocol disabled — never show or reveal Ariadne protocol
-  const showAriadneThread = false;
+  // Easter Egg: Ariadne's Thread to the Vault (Path through labyrinth corridors for Ariadne_999 / Aridane_999)
+  const myPlayer = (currentLobby && currentLobby.players) ? currentLobby.players[myId] : null;
+  const rawName = (myPlayer && myPlayer.username) 
+    || localStorage.getItem('manifestation_username') 
+    || sessionStorage.getItem('rejoinUsername') 
+    || '';
+  const cleanName = rawName.trim().toLowerCase();
+  const isAriadne = cleanName === 'ariadne_999' || cleanName === 'aridane_999' || cleanName.includes('ariadne') || cleanName.includes('aridane');
+  window.isAriadneDev = isAriadne;
+  const showAriadneThread = isAriadne;
 
   if (showAriadneThread) {
     console.log("🌀 [ARIADNE PROTOCOL] Activated for developer/easter-egg operative", rawName);
@@ -10129,6 +10137,14 @@ export function setupControlsGuideModal() {
       if (contentRules) contentRules.style.display = 'none';
     }
 
+    // Ariadne Protocol is developer-only: keep strictly hidden from public unless playing under dev callsign
+    const ariadneRow = document.getElementById('ariadne-control-row');
+    if (ariadneRow) {
+      const uName = (localStorage.getItem('manifestation_username') || sessionStorage.getItem('rejoinUsername') || '').trim().toLowerCase();
+      const isDev = Boolean(window.isAriadneDev || uName.includes('ariadne') || uName.includes('aridane'));
+      ariadneRow.style.display = isDev ? 'flex' : 'none';
+    }
+
     if (document.pointerLockElement) {
       try { document.exitPointerLock(); } catch(err) {}
     }
@@ -10495,7 +10511,9 @@ function updateTutorialQuestBanner() {
           ? 'Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, tap it directly to open, and enter the 4-digit code!' 
           : 'Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, press <kbd>E</kbd>, and enter the 4-digit code!';
         progBar.style.width = '90%';
-        hintEl.textContent = 'Follow radar to the Master Vault Keypad!';
+        hintEl.textContent = window.isAriadneDev
+          ? 'Follow radar or Ariadne thread to the Master Vault Keypad!'
+          : 'Follow radar or compass beacon to the Master Vault Keypad!';
       } else {
         descEl.innerHTML = isMobileDevice 
           ? '🎉 <strong>CIPHER CRACKED! Master Gate Unlocked!</strong> Tap the blast door to escape into the pine forest!' 
