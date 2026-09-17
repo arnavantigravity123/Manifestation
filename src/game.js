@@ -53,6 +53,30 @@ let hazmatAOTexture = null;
 let hazmatSuitMaterial = null;
 let hazmatVisorMaterial = null;
 
+// Universal Fast Tap / Click Listener: eliminates 300ms mobile touch delay and responds in < 1ms
+export function addFastTapListener(el, callback) {
+  if (!el) return;
+  let lastTrigger = 0;
+  const fire = (e) => {
+    const now = performance.now();
+    if (now - lastTrigger < 120) return;
+    lastTrigger = now;
+    try {
+      callback(e);
+    } catch (err) {
+      console.error('[FAST-TAP] Error executing callback:', el.id || el, err);
+    }
+  };
+  el.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    fire(e);
+  });
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    fire(e);
+  });
+}
+
 export function getHazmatMaterials() {
   if (!hazmatAlbedoTexture) {
     hazmatAlbedoTexture = textureLoader.load('/assets/hazmat/Hazmat_albedo.jpeg?' + HAZMAT_TEX_VER, (tex) => {
@@ -1821,7 +1845,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   if (roleSplash) roleSplash.style.display = 'flex';
   window.gameReady = false;
 
-  let roleCountdownSeconds = window.isTutorialMatch ? 2 : 5;
+  let roleCountdownSeconds = 2;
   let roleCountdownInterval = null;
 
   const dismissSplash = () => {
@@ -1862,16 +1886,32 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     }
   };
 
+  const handleRoleDismiss = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    dismissSplash();
+    if (!isMobileDevice && window.requestGamePointerLock) {
+      window.requestGamePointerLock();
+    }
+  };
+
   if (roleEnterBtn) {
     roleEnterBtn.textContent = window.isTutorialMatch ? "START TRAINING PROTOCOL" : `ENTER LABYRINTH (${roleCountdownSeconds}s)`;
-    roleEnterBtn.onclick = (e) => {
-      e.stopPropagation();
-      dismissSplash();
-      if (!isMobileDevice && window.requestGamePointerLock) {
-        window.requestGamePointerLock();
-      }
-    };
+    addFastTapListener(roleEnterBtn, handleRoleDismiss);
   }
+
+  if (roleSplash) {
+    // Tapping anywhere on the role splash screen enters immediately
+    roleSplash.addEventListener('pointerdown', handleRoleDismiss);
+  }
+
+  // Any keypress (Space, Enter, WASD, Escape) enters immediately
+  const onRoleKey = (e) => {
+    if (roleSplash && roleSplash.style.display !== 'none') {
+      window.removeEventListener('keydown', onRoleKey);
+      handleRoleDismiss(e);
+    }
+  };
+  window.addEventListener('keydown', onRoleKey);
 
   roleCountdownInterval = setInterval(() => {
     roleCountdownSeconds -= 1;
@@ -6686,21 +6726,21 @@ function getBestInteractionTarget() {
                   const lobbyBtn = document.getElementById('end-game-lobby-btn');
                   if (lobbyBtn) {
                     lobbyBtn.textContent = 'Return to Lobby';
-                    lobbyBtn.onclick = () => {
+                    addFastTapListener(lobbyBtn, () => {
                       if (window.leaveGameWithAd) {
                         window.leaveGameWithAd(() => window.location.reload());
                       } else {
                         window.location.reload();
                       }
-                    };
+                    });
                   }
                   const retryBtn = document.getElementById('end-game-retry-btn');
                   if (retryBtn) {
                     retryBtn.style.display = window.isTutorialMatch ? 'inline-block' : 'none';
                     retryBtn.textContent = 'REPLAY TUTORIAL';
-                    retryBtn.onclick = () => {
+                    addFastTapListener(retryBtn, () => {
                       window.location.reload();
-                    };
+                    });
                   }
                 }
               }
@@ -8549,7 +8589,7 @@ function setupSocketListeners() {
 
       if (retryBtn) {
         retryBtn.style.display = 'inline-block';
-        retryBtn.onclick = () => {
+        addFastTapListener(retryBtn, () => {
           sessionStorage.setItem('rejoinRetrySolo', 'true');
           sessionStorage.setItem('rejoinIsSolo', 'true');
           if (window.leaveGameWithAd) {
@@ -8557,12 +8597,12 @@ function setupSocketListeners() {
           } else {
             window.location.reload();
           }
-        };
+        });
       }
 
       if (lobbyBtn) {
         lobbyBtn.textContent = 'Main Menu';
-        lobbyBtn.onclick = () => {
+        addFastTapListener(lobbyBtn, () => {
           sessionStorage.removeItem('rejoinLobbyId');
           sessionStorage.removeItem('rejoinUsername');
           sessionStorage.removeItem('rejoinIsPublic');
@@ -8573,7 +8613,7 @@ function setupSocketListeners() {
           } else {
             window.location.reload();
           }
-        };
+        });
       }
     }
   }
@@ -8808,7 +8848,7 @@ function setupSocketListeners() {
 
           if (retryBtn) {
             retryBtn.style.display = 'inline-block';
-            retryBtn.onclick = () => {
+            addFastTapListener(retryBtn, () => {
               sessionStorage.setItem('rejoinRetrySolo', 'true');
               sessionStorage.setItem('rejoinIsSolo', 'true');
               if (window.leaveGameWithAd) {
@@ -8816,12 +8856,12 @@ function setupSocketListeners() {
               } else {
                 window.location.reload();
               }
-            };
+            });
           }
 
           if (lobbyBtn) {
             lobbyBtn.textContent = 'Main Menu';
-            lobbyBtn.onclick = () => {
+            addFastTapListener(lobbyBtn, () => {
               sessionStorage.removeItem('rejoinLobbyId');
               sessionStorage.removeItem('rejoinUsername');
               sessionStorage.removeItem('rejoinIsPublic');
@@ -8832,7 +8872,7 @@ function setupSocketListeners() {
               } else {
                 window.location.reload();
               }
-            };
+            });
           }
         } else {
           // MULTIPLAYER MODE END GAME FLOW
@@ -8879,7 +8919,7 @@ function setupSocketListeners() {
     const bindRejoinBtn = (btnId) => {
       const btn = document.getElementById(btnId);
       if (btn) {
-        btn.onclick = () => {
+        addFastTapListener(btn, () => {
           if (currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-')) {
             sessionStorage.setItem('rejoinLobbyId', currentLobby.id);
             sessionStorage.setItem('rejoinUsername', currentLobby.players[myId]?.username || `Operative_${Math.floor(100 + Math.random() * 900)}`);
@@ -8896,7 +8936,7 @@ function setupSocketListeners() {
           } else {
             window.location.reload();
           }
-        };
+        });
       }
     };
 
@@ -8905,14 +8945,14 @@ function setupSocketListeners() {
 
     const capturedQuitBtn = document.getElementById('captured-quit-btn');
     if (capturedQuitBtn) {
-      capturedQuitBtn.onclick = () => {
+      addFastTapListener(capturedQuitBtn, () => {
         sessionStorage.clear();
         if (window.leaveGameWithAd) {
           window.leaveGameWithAd(() => window.location.reload());
         } else {
           window.location.reload();
         }
-      };
+      });
     }
 
     if (window.isEscaping) {

@@ -173,6 +173,26 @@ const classesData = {
 };
 window.classesData = classesData;
 
+// Universal fast button listener: fires immediately on pointerdown / touch (0ms delay)
+function addFastButtonListener(btn, callback) {
+  if (!btn) return;
+  let lastTrigger = 0;
+  const fire = (e) => {
+    if (e && e.cancelable && e.type === 'touchstart') e.preventDefault();
+    const now = performance.now();
+    if (now - lastTrigger < 120) return;
+    lastTrigger = now;
+    try {
+      callback(e);
+    } catch (err) {
+      console.error('[FAST-BTN] Error executing callback for element:', btn.id || btn, err);
+    }
+  };
+  btn.addEventListener('pointerdown', fire);
+  btn.addEventListener('click', fire);
+}
+window.addFastButtonListener = addFastButtonListener;
+
 // Pre-fill username from localStorage or random fallback
 const savedUsername = localStorage.getItem('manifestation_username');
 if (savedUsername && savedUsername.trim() !== '') {
@@ -649,14 +669,18 @@ function updateVipCustomerCenterUI() {
   }
 }
 
-vipStoreBtn.addEventListener('click', () => {
-  updateVipCustomerCenterUI();
-  vipPaywallModal.style.display = 'block';
-});
+if (vipStoreBtn) {
+  addFastButtonListener(vipStoreBtn, () => {
+    updateVipCustomerCenterUI();
+    vipPaywallModal.style.display = 'block';
+  });
+}
 
-closeVipBtn.addEventListener('click', () => {
-  vipPaywallModal.style.display = 'none';
-});
+if (closeVipBtn) {
+  addFastButtonListener(closeVipBtn, () => {
+    vipPaywallModal.style.display = 'none';
+  });
+}
 
 const grantVipAccess = () => {
   vipPaywallModal.style.display = 'none';
@@ -926,8 +950,8 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
     const secondsLeft = Math.max(0, Math.ceil((totalMs - elapsed) / 1000));
     if (adTimerCountdown) adTimerCountdown.textContent = `Entering in ${secondsLeft}s...`;
 
-    // Allow skipping interstitial ads after 3 seconds
-    if (!isRewarded && elapsed >= 3000 && adSkipBtn) {
+    // Allow skipping interstitial ads immediately (zero blocking delay)
+    if (!isRewarded && adSkipBtn) {
       adSkipBtn.style.display = 'inline-block';
     }
 
@@ -968,24 +992,14 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
 }
 
 window.showInterstitialAd = (onComplete) => {
-  if (window.isTutorialMatch || window.isTutorialMode) {
-    if (onComplete) onComplete();
-    return;
-  }
-  playAdSequence({ duration: 5, isRewarded: false, onComplete });
+  // Never freeze button responses or block match start / exit with 5s delay!
+  if (onComplete) onComplete();
 };
 
 window.leaveGameWithAd = (callback) => {
-  const isVip = (currentUser && currentUser.isVip) || (localStorage.getItem('manifestation_is_vip') === 'true');
-  if (isVip || window.isTutorialMatch || window.isTutorialMode) {
-    if (callback) callback();
-    else window.location.reload();
-    return;
-  }
-  window.showInterstitialAd(() => {
-    if (callback) callback();
-    else window.location.reload();
-  });
+  // Execute navigation/exit immediately with zero latency (0ms delay)
+  if (callback) callback();
+  else window.location.reload();
 };
 
 window.showRewardedAd = (onReward) => {
@@ -1004,17 +1018,22 @@ const buyCreditsBtns = document.querySelectorAll('.buy-credits-btn');
 let playerCredits = parseInt(localStorage.getItem('manifestation_credits') || '0');
 if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
 
-openSkinsBtn.addEventListener('click', () => {
-  skinsStoreModal.style.display = 'block';
-});
+if (openSkinsBtn) {
+  addFastButtonListener(openSkinsBtn, () => {
+    skinsStoreModal.style.display = 'block';
+  });
+}
 
-closeSkinsBtn.addEventListener('click', () => {
-  skinsStoreModal.style.display = 'none';
-});
+if (closeSkinsBtn) {
+  addFastButtonListener(closeSkinsBtn, () => {
+    skinsStoreModal.style.display = 'none';
+  });
+}
 
 // Rewarded Video Ad Button (+50 Credits)
-watchAdBtn.addEventListener('click', () => {
-  window.showRewardedAd(() => {
+if (watchAdBtn) {
+  addFastButtonListener(watchAdBtn, () => {
+    window.showRewardedAd(() => {
     playerCredits += 50;
     localStorage.setItem('manifestation_credits', playerCredits.toString());
     if (playerCreditsDisplay) playerCreditsDisplay.textContent = playerCredits;
@@ -1026,6 +1045,7 @@ watchAdBtn.addEventListener('click', () => {
     alert("Reward granted! +50 Credits added to your account.");
   });
 });
+}
 
 // Credit Packs Purchase (In-App Purchases)
 buyCreditsBtns.forEach(btn => {
@@ -1258,12 +1278,8 @@ function initializeSocketConnection() {
       uiOverlay.style.pointerEvents = 'none';
     }
 
-    // Step 1: Interstitial Ad (VIP bypasses instantly)
-    window.showInterstitialAd(() => {
-      // Step 2 & 3: Role Reveal and Gameplay initialization handled inside initGame
-      // Always pass isSolo=false, isTutorial=false for multiplayer lobby matches
-      initGame(socket, myId, matchConfig, false, false);
-    });
+    // Initialize match immediately with zero latency (0ms delay)
+    initGame(socket, myId, matchConfig, false, false);
   });
 
   socket.on('chat_broadcast', ({ username, msg, team }) => {
@@ -1300,19 +1316,6 @@ function getSkinId() {
   return localStorage.getItem('manifestation_equipped_skin') || 'skin_hazmat';
 }
 
-function addFastButtonListener(btn, callback) {
-  if (!btn) return;
-  let lastTrigger = 0;
-  const fire = (e) => {
-    if (e && e.cancelable && e.type === 'touchstart') e.preventDefault();
-    const now = performance.now();
-    if (now - lastTrigger < 150) return;
-    lastTrigger = now;
-    callback(e);
-  };
-  btn.addEventListener('pointerdown', fire);
-  btn.addEventListener('click', fire);
-}
 
 function startLocalSoloMatch(isTutorial = false) {
   isSoloMode = true;
@@ -1481,8 +1484,8 @@ function quitToMenu() {
   }
 }
 
-quitLobbyBtn.addEventListener('click', quitToMenu);
-quitGameBtn.addEventListener('click', quitToMenu);
+if (quitLobbyBtn) addFastButtonListener(quitLobbyBtn, quitToMenu);
+if (quitGameBtn) addFastButtonListener(quitGameBtn, quitToMenu);
 
 // ====== Lobby Interactions ======
 
@@ -1695,26 +1698,28 @@ roleModeSelect.addEventListener('change', () => {
   }
 });
 
-readyStartBtn.addEventListener('click', () => {
-  if (!currentLobby || !socket) return;
-  
-  // Robust player lookup by myId or by username
-  let myPlayer = currentLobby.players[myId];
-  if (!myPlayer) {
-    const uname = getUsername();
-    myPlayer = Object.values(currentLobby.players).find(p => p.username === uname);
-    if (myPlayer) myId = myPlayer.id;
-  }
-  if (!myPlayer) return;
+if (readyStartBtn) {
+  addFastButtonListener(readyStartBtn, () => {
+    if (!currentLobby || !socket) return;
+    
+    // Robust player lookup by myId or by username
+    let myPlayer = currentLobby.players[myId];
+    if (!myPlayer) {
+      const uname = getUsername();
+      myPlayer = Object.values(currentLobby.players).find(p => p.username === uname);
+      if (myPlayer) myId = myPlayer.id;
+    }
+    if (!myPlayer) return;
 
-  if (myPlayer.isHost) {
-    socket.emit('start_match');
-  } else {
-    socket.emit('update_player', {
-      isReady: !myPlayer.isReady
-    });
-  }
-});
+    if (myPlayer.isHost) {
+      socket.emit('start_match');
+    } else {
+      socket.emit('update_player', {
+        isReady: !myPlayer.isReady
+      });
+    }
+  });
+}
 
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
@@ -1838,14 +1843,14 @@ window.addEventListener('DOMContentLoaded', () => {
   const pauseSetBtn = document.getElementById('pause-settings-btn');
   const closeSetBtn = document.getElementById('close-settings-btn');
 
-  if (authSetBtn) authSetBtn.addEventListener('click', showSettings);
-  if (lobbySetBtn) lobbySetBtn.addEventListener('click', showSettings);
+  if (authSetBtn) addFastButtonListener(authSetBtn, showSettings);
+  if (lobbySetBtn) addFastButtonListener(lobbySetBtn, showSettings);
   if (pauseSetBtn) {
     pauseSetBtn.addEventListener('click', showSettings);
     pauseSetBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); showSettings(e); });
     pauseSetBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); showSettings(e); }, { passive: true });
   }
-  if (closeSetBtn) closeSetBtn.addEventListener('click', hideSettings);
+  if (closeSetBtn) addFastButtonListener(closeSetBtn, hideSettings);
 
   const rejoinRetrySoloStr = sessionStorage.getItem('rejoinRetrySolo');
   if (rejoinRetrySoloStr === 'true') {
