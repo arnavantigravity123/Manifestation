@@ -2115,101 +2115,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   if (showAriadneThread) {
     console.log("🌀 [ARIADNE PROTOCOL] Activated for developer/easter-egg operative", rawName);
-
-    // 1. Find nearest open corridor to start (camera position)
-    let closestStart = { x: camera.position.x, z: camera.position.z };
-    let minStartDist = Infinity;
-    for (const c of openCorridors) {
-      const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
-      if (d < minStartDist) {
-        minStartDist = d;
-        closestStart = c;
-      }
-    }
-
-    // 2. Find nearest open corridor to the vault gate
-    let closestEnd = { x: gateCoordinates.x, z: gateCoordinates.z };
-    let minEndDist = Infinity;
-    for (const c of openCorridors) {
-      const d = Math.hypot(c.x - gateCoordinates.x, c.z - gateCoordinates.z);
-      if (d < minEndDist) {
-        minEndDist = d;
-        closestEnd = c;
-      }
-    }
-
-    const startG = worldToGrid(closestStart.x, closestStart.z);
-    const endG = worldToGrid(closestEnd.x, closestEnd.z);
-    let path = bfsPath(startG.col, startG.row, endG.col, endG.row);
-
-    // If path is empty (or same cell), provide direct connection points
-    if (!path || path.length === 0) {
-      path = [
-        { x: camera.position.x, z: camera.position.z },
-        closestStart,
-        closestEnd,
-        { x: gateCoordinates.x, z: gateCoordinates.z }
-      ];
-    } else {
-      path.unshift({ x: camera.position.x, z: camera.position.z });
-      path.push({ x: gateCoordinates.x, z: gateCoordinates.z });
-    }
-
-    // 3. Render glowing Ariadne's Thread along every corridor segment
-    const threadGroup = new THREE.Group();
-    threadGroup.name = 'ariadneThreadGroup';
-
-    const threadMat = new THREE.MeshBasicMaterial({ 
-      color: 0x00ffff, 
-      transparent: true, 
-      opacity: 0.85, 
-      side: THREE.DoubleSide, 
-      depthWrite: false 
-    });
-
-    const orbGeo = new THREE.SphereGeometry(0.22, 12, 12);
-    const orbMat = new THREE.MeshBasicMaterial({ 
-      color: 0x38bdf8, 
-      transparent: true, 
-      opacity: 0.95, 
-      depthWrite: false 
-    });
-
-    window.ariadneOrbs = [];
-
-    for (let i = 0; i < path.length - 1; i++) {
-      const p1 = path[i];
-      const p2 = path[i + 1];
-      const dx = p2.x - p1.x;
-      const dz = p2.z - p1.z;
-      const segDist = Math.hypot(dx, dz);
-      if (segDist < 0.05) continue;
-
-      const angle = Math.atan2(dx, dz);
-      const segGeo = new THREE.PlaneGeometry(0.7, segDist);
-      const segMesh = new THREE.Mesh(segGeo, threadMat);
-      segMesh.rotation.x = -Math.PI / 2;
-      segMesh.rotation.z = -angle;
-      segMesh.position.set((p1.x + p2.x) / 2, 0.08, (p1.z + p2.z) / 2);
-      threadGroup.add(segMesh);
-
-      // Glowing waypoint orb (MeshBasicMaterial glows without any lights)
-      const orb = new THREE.Mesh(orbGeo, orbMat);
-      orb.position.set(p1.x, 0.35, p1.z);
-      threadGroup.add(orb);
-      window.ariadneOrbs.push(orb);
-    }
-
-    // Final guide beacon hovering at the top arch of the vault door
-    const finalOrb = new THREE.Mesh(orbGeo, orbMat);
-    finalOrb.position.set(gateCoordinates.x, 3.2, gateCoordinates.z + 0.3);
-    threadGroup.add(finalOrb);
-
-    const gateLight = new THREE.PointLight(0x00ffff, 1.5, 8.0);
-    gateLight.position.set(gateCoordinates.x, 3.2, gateCoordinates.z + 0.5);
-    threadGroup.add(gateLight);
-
-    scene.add(threadGroup);
+    buildAriadneThread({ x: camera.position.x, z: camera.position.z });
 
     if (isAriadne && !window.isTutorialMatch) {
       window.securityLockoutActive = false;
@@ -2708,7 +2614,7 @@ const _bfsParent = new Int32Array(MAX_BFS_NODES);
 const _bfsQueue = new Int32Array(MAX_BFS_NODES);
 let _bfsIterationToken = 1;
 
-function bfsPath(startCol, startRow, endCol, endRow, canPassDoors = true) {
+function bfsPath(startCol, startRow, endCol, endRow, canPassDoors = false) {
   if (startCol === endCol && startRow === endRow) {
     return [gridToWorld(endCol, endRow)];
   }
@@ -2788,6 +2694,144 @@ function bfsPath(startCol, startRow, endCol, endRow, canPassDoors = true) {
 
   return [];
 }
+
+// Ariadne's Thread: Dynamic Developer Navigation Ribbon to the Vault Gate
+function buildAriadneThread(fromPos = null) {
+  if (!window.isAriadneDev || !scene || !mazeLayout || !mazeLayout.length) return;
+
+  // 1. Cleanly dispose and remove existing thread group
+  const prevGroup = scene.getObjectByName('ariadneThreadGroup');
+  if (prevGroup) {
+    scene.remove(prevGroup);
+    prevGroup.traverse(child => {
+      if (child.isMesh || child.isLight) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      }
+    });
+  }
+  window.ariadneOrbs = [];
+
+  // 2. Identify start position
+  const pX = (fromPos && typeof fromPos.x === 'number') ? fromPos.x : (camera ? camera.position.x : 0);
+  const pZ = (fromPos && typeof fromPos.z === 'number') ? fromPos.z : (camera ? camera.position.z : 0);
+
+  // 3. Find vault end cell (strictly cellVal === 0)
+  let endCol = window.vaultC;
+  let endRow = window.vaultR;
+  if (typeof endCol !== 'number' || typeof endRow !== 'number' || !mazeLayout[endRow] || mazeLayout[endRow][endCol] !== 0) {
+    const targetGate = (typeof gateCoordinates !== 'undefined' && gateCoordinates) ? gateCoordinates : { x: 0, z: -35 };
+    let bestDist = Infinity;
+    for (let r = 0; r < mazeLayout.length; r++) {
+      for (let c = 0; c < mazeLayout[r].length; c++) {
+        if (mazeLayout[r][c] === 0) {
+          const w = gridToWorld(c, r);
+          const d = Math.hypot(w.x - targetGate.x, w.z - targetGate.z);
+          if (d < bestDist) {
+            bestDist = d;
+            endCol = c;
+            endRow = r;
+          }
+        }
+      }
+    }
+  }
+
+  // 4. Find nearest open corridor cell to current position (strictly cellVal === 0)
+  const startGrid = worldToGrid(pX, pZ);
+  let startCol = startGrid.col;
+  let startRow = startGrid.row;
+  if (!mazeLayout[startRow] || mazeLayout[startRow][startCol] !== 0) {
+    let bestDist = Infinity;
+    for (let r = 0; r < mazeLayout.length; r++) {
+      for (let c = 0; c < mazeLayout[r].length; c++) {
+        if (mazeLayout[r][c] === 0) {
+          const w = gridToWorld(c, r);
+          const d = Math.hypot(w.x - pX, w.z - pZ);
+          if (d < bestDist) {
+            bestDist = d;
+            startCol = c;
+            startRow = r;
+          }
+        }
+      }
+    }
+  }
+
+  if (typeof startCol !== 'number' || typeof endCol !== 'number') return;
+
+  // 5. BFS path strictly impassable to closed shifting walls (canPassDoors = false)
+  let path = bfsPath(startCol, startRow, endCol, endRow, false);
+  if (!path || path.length === 0) {
+    console.warn("🌀 [ARIADNE] No open corridor path currently available to vault gate without traversing closed shifting walls.");
+    return;
+  }
+
+  // Add the vault portal position as the terminal point
+  if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
+    path.push({ x: gateCoordinates.x, z: gateCoordinates.z });
+  }
+
+  // 6. Build the 3D ribbon and waypoint orbs along the corridor segments
+  const threadGroup = new THREE.Group();
+  threadGroup.name = 'ariadneThreadGroup';
+
+  const threadMat = new THREE.MeshBasicMaterial({ 
+    color: 0x00ffff, 
+    transparent: true, 
+    opacity: 0.85, 
+    side: THREE.DoubleSide, 
+    depthWrite: false 
+  });
+
+  const orbGeo = new THREE.SphereGeometry(0.22, 12, 12);
+  const orbMat = new THREE.MeshBasicMaterial({ 
+    color: 0x38bdf8, 
+    transparent: true, 
+    opacity: 0.95, 
+    depthWrite: false 
+  });
+
+  for (let i = 0; i < path.length - 1; i++) {
+    const p1 = path[i];
+    const p2 = path[i + 1];
+    const dx = p2.x - p1.x;
+    const dz = p2.z - p1.z;
+    const segDist = Math.hypot(dx, dz);
+    if (segDist < 0.05) continue;
+
+    const angle = Math.atan2(dx, dz);
+    const segGeo = new THREE.PlaneGeometry(0.7, segDist);
+    const segMesh = new THREE.Mesh(segGeo, threadMat);
+    segMesh.rotation.x = -Math.PI / 2;
+    segMesh.rotation.z = -angle;
+    segMesh.position.set((p1.x + p2.x) / 2, 0.08, (p1.z + p2.z) / 2);
+    threadGroup.add(segMesh);
+
+    // Glowing waypoint orb
+    const orb = new THREE.Mesh(orbGeo, orbMat);
+    orb.position.set(p1.x, 0.35, p1.z);
+    threadGroup.add(orb);
+    window.ariadneOrbs.push(orb);
+  }
+
+  if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
+    // Final guide beacon hovering at the top arch of the vault door
+    const finalOrb = new THREE.Mesh(orbGeo, orbMat);
+    finalOrb.position.set(gateCoordinates.x, 3.2, gateCoordinates.z + 0.3);
+    threadGroup.add(finalOrb);
+
+    const gateLight = new THREE.PointLight(0x00ffff, 1.5, 8.0);
+    gateLight.position.set(gateCoordinates.x, 3.2, gateCoordinates.z + 0.5);
+    threadGroup.add(gateLight);
+  }
+
+  scene.add(threadGroup);
+}
+window.buildAriadneThread = buildAriadneThread;
 
 // Ultra-Fast 2D Grid Raymarching for Bot Line of Sight (Zero 3D raycasting overhead)
 function hasGridLineOfSight(x1, z1, x2, z2) {
@@ -5374,6 +5418,11 @@ function realignMazeCorridors(realignmentState) {
     };
     anim();
   });
+
+  // Dynamically recalculate Ariadne's Thread around newly shifted corridors!
+  if (window.isAriadneDev && typeof buildAriadneThread === 'function') {
+    buildAriadneThread({ x: camera.position.x, z: camera.position.z });
+  }
 }
 
 function toggleCameraView() {
@@ -9029,7 +9078,7 @@ function triggerSoundPing(position, soundType) {
   // Calculate and draw glowing path to the source
   const startGrid = worldToGrid(camera.position.x, camera.position.z);
   const endGrid = worldToGrid(position.x, position.z);
-  const path = bfsPath(startGrid.col, startGrid.row, endGrid.col, endGrid.row);
+  const path = bfsPath(startGrid.col, startGrid.row, endGrid.col, endGrid.row, false);
   
   // Clean up any old path
   ghostPathMeshes.forEach(m => {
