@@ -636,6 +636,36 @@ export function loadHumanGLBAsset() {
   });
 }
 
+// Procedural Strafe Clip Generator: turns Hips into movement vector while counter-rotating Spine forward
+function createSoldierStrafeClip(baseClip, clipName, yawAngleRad) {
+  const strafeClip = baseClip.clone();
+  strafeClip.name = clipName;
+
+  const qHipsYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawAngleRad);
+  const qSpineYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -yawAngleRad);
+
+  strafeClip.tracks.forEach(track => {
+    if (track.name.endsWith('Hips.quaternion')) {
+      const vals = track.values;
+      const q = new THREE.Quaternion();
+      for (let i = 0; i < vals.length; i += 4) {
+        q.fromArray(vals, i);
+        q.multiply(qHipsYaw);
+        q.toArray(vals, i);
+      }
+    } else if (track.name.endsWith('Spine.quaternion')) {
+      const vals = track.values;
+      const q = new THREE.Quaternion();
+      for (let i = 0; i < vals.length; i += 4) {
+        q.fromArray(vals, i);
+        q.premultiply(qSpineYaw);
+        q.toArray(vals, i);
+      }
+    }
+  });
+  return strafeClip;
+}
+
 export function loadSoldierAsset() {
   loadLocomotionFBXClips();
   if (preloadedSoldierModel || isSoldierLoading) return;
@@ -697,9 +727,11 @@ export function loadSoldierAsset() {
         }
       });
       if (soldierNativeClips.walk) {
-        soldierNativeClips.walkBack = soldierNativeClips.walk;
-        soldierNativeClips.strafeLeft = soldierNativeClips.walk;
-        soldierNativeClips.strafeRight = soldierNativeClips.walk;
+        soldierNativeClips.walkBack = soldierNativeClips.walk.clone();
+        soldierNativeClips.walkBack.name = 'walkBack';
+        // Dedicated authentic sideways strafe cycles: hips angled 70 deg into movement direction, spine oriented forward!
+        soldierNativeClips.strafeLeft = createSoldierStrafeClip(soldierNativeClips.walk, 'strafeLeft', (70 * Math.PI) / 180);
+        soldierNativeClips.strafeRight = createSoldierStrafeClip(soldierNativeClips.walk, 'strafeRight', (-70 * Math.PI) / 180);
       }
     }
 
