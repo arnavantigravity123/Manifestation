@@ -1204,6 +1204,13 @@ let keysInMaze = [];
 let saltTraps = [];
 let circuitBreakers = [];
 let fixedBreakersCount = 0;
+let wasSoloPaused = false;
+let soloPauseStartTime = 0;
+let ghostsFrozenRemaining = 0;
+let alarmFlashRemaining = 0;
+window.siphonDurationTimer = 0;
+window.scrambleDurationTimer = 0;
+window.ghostsFrozenRemaining = 0;
 window.gameDifficulty = localStorage.getItem('manifestation_difficulty') || 'easy';
 let totalBreakersRequired = window.gameDifficulty === 'easy' ? 2 : (window.gameDifficulty === 'hard' ? 4 : (window.gameDifficulty === 'impossible' ? 6 : 3));
 
@@ -1557,6 +1564,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   // Remove any stale ghost bots from previous matches
   if (typeof ghosts3D !== 'undefined' && ghosts3D.length > 0) {
     ghosts3D.forEach(g => {
+      if (typeof revertMimicDisguise === 'function') revertMimicDisguise(g);
       if (scene) scene.remove(g);
       g.traverse(child => {
         if (child.geometry) child.geometry.dispose();
@@ -1593,6 +1601,16 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     clearTimeout(window._securityLockoutTimer);
     window._securityLockoutTimer = null;
   }
+  wasSoloPaused = false;
+  soloPauseStartTime = 0;
+  ghostsFrozenRemaining = 0;
+  alarmFlashRemaining = 0;
+  window.ghostsFrozen = false;
+  window.ghostsFrozenRemaining = 0;
+  window.flashlightDisabledBySiphon = false;
+  window.sensorsScrambled = false;
+  window.siphonDurationTimer = 0;
+  window.scrambleDurationTimer = 0;
   // Preload forest model and 3D lantern model in background during gameplay
   loadForestAsset();
   loadLanternAsset();
@@ -9841,28 +9859,49 @@ function triggerSoundPing(position, soundType) {
   animatePing();
 }
 
+function revertMimicDisguise(ghost) {
+  if (!ghost || !ghost.userData) return;
+  if (ghost.userData.mimicGroup) {
+    const mg = ghost.userData.mimicGroup;
+    if (mg.userData && mg.userData.animMixer) {
+      const idx = activeAnimationMixers.indexOf(mg.userData.animMixer);
+      if (idx !== -1) activeAnimationMixers.splice(idx, 1);
+    }
+    ghost.remove(mg);
+    mg.traverse(child => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+          else child.material.dispose();
+        }
+      } else if (child.isSprite) {
+        if (child.material) {
+          if (child.material.map) child.material.map.dispose();
+          child.material.dispose();
+        }
+      }
+    });
+    ghost.userData.mimicGroup = null;
+  }
+  ghost.userData.isMimicDisguised = false;
+  ghost.userData.mimicDurationTimer = 0;
+  ghost.children.forEach(c => { c.visible = true; });
+}
+
 function freezeGhosts() {
   window.ghostsFrozen = true;
+  ghostsFrozenRemaining = 10.0;
   ghosts3D.forEach(g => {
     g.children.forEach(c => { if (c.isPointLight) c.intensity = 0; });
   });
   triggerNotification("breaker remote used. ghosts frozen (10s).");
-  setTimeout(() => {
-    window.ghostsFrozen = false;
-    ghosts3D.forEach(g => {
-      g.children.forEach(c => { if (c.isPointLight) c.intensity = 80; });
-    });
-    triggerNotification("ghosts reactivated!");
-  }, 10000);
 }
 
 function triggerAlarmFlashing() {
   const flash = document.getElementById('alarm-flash');
-  flash.style.display = 'block';
-  
-  setTimeout(() => {
-    flash.style.display = 'none';
-  }, 10000); // Pulse alarm for 10 seconds
+  if (flash) flash.style.display = 'block';
+  alarmFlashRemaining = 10.0;
 }
 
 let notificationTimeout = null;
@@ -12191,13 +12230,7 @@ function checkChalkDecals(ghostPos) {
         }
         // Flash red to indicate detection, then fade away
         if (decal.material && decal.material.color) decal.material.color.setHex(0xff3333);
-        setTimeout(() => {
-          scene.remove(decal);
-          if (decal.geometry) decal.geometry.dispose();
-          if (decal.material) decal.material.dispose();
-          const idx = chalkDecals.indexOf(decal);
-          if (idx > -1) chalkDecals.splice(idx, 1);
-        }, 3000);
+        decal.userData.fadeTimer = 3.0; // Handled in animate loop via delta
       }
     }
   }
@@ -12225,6 +12258,130 @@ function animate() {
   const rawDelta = (time - prevTime) / 1000;
   prevTime = time;
   const delta = Math.min(0.05, Math.max(0.0001, rawDelta)); // Clamp delta to prevent time jumps
+
+  const keypadModalEl = document.getElementById('keypad-modal-ui');
+  const isKeypadOpen = Boolean(keypadModalEl && keypadModalEl.style.display !== 'none');
+  const isMinimapOpen = Boolean(isMinimapExpanded);
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  const isPauseMenuOpen = Boolean(ptrOverlay && ptrOverlay.style.display === 'flex');
+
+  // Interactive overlays (keypad terminal cipher, tactical minimap) are live in-game actions:
+  // AI ghosts must continue pathfinding, stalking, and attacking even while the player views these overlays!
+  const isInteractiveOverlay = isKeypadOpen || isMinimapOpen;
+
+  // Solo Offline Matches: Truly PAUSE game simulation ONLY when the dedicated pause menu is open.
+  // Never pause for in-game interactive terminals or tactical map, and never in multiplayer!
+  const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
+  const isSoloPaused = !isMultiplayer && isPauseMenuOpen && !isInteractiveOverlay && !window.isSpectating && window.gameReady;
+
+  if (isSoloPaused) {
+    if (!wasSoloPaused) {
+      wasSoloPaused = true;
+      soloPauseStartTime = performance.now();
+    }
+    resetPlayerMovementState();
+    const canvasContainer = document.getElementById('canvas-container');
+    if (canvasContainer) canvasContainer.style.filter = 'none';
+    document.body.style.filter = 'none';
+
+    if (activeViewCamera) renderer.render(scene, activeViewCamera);
+    else renderer.render(scene, camera);
+    return;
+  }
+
+  // Resume transition from solo pause: shift all real-time timestamp cooldowns forward
+  if (wasSoloPaused) {
+    wasSoloPaused = false;
+    const pauseDurationMs = performance.now() - soloPauseStartTime;
+    if (pauseDurationMs > 0) {
+      const now = Date.now();
+      for (const key in abilityCooldowns) {
+        if (typeof abilityCooldowns[key] === 'number' && abilityCooldowns[key] > (now - pauseDurationMs)) {
+          abilityCooldowns[key] += pauseDurationMs;
+        }
+      }
+      if (window.securityLockoutActive && window.securityLockoutEndTime > (performance.now() - pauseDurationMs)) {
+        window.securityLockoutEndTime += pauseDurationMs;
+        if (window._securityLockoutTimer) clearTimeout(window._securityLockoutTimer);
+        const remainingLockoutMs = Math.max(0, window.securityLockoutEndTime - performance.now());
+        window._securityLockoutTimer = setTimeout(() => {
+          if (window.securityLockoutActive) {
+            window.securityLockoutActive = false;
+            window.securityLockoutEndTime = 0;
+            triggerNotification('Terminal lockout ended. Keypad ready.');
+          }
+        }, remainingLockoutMs);
+      }
+    }
+  }
+
+  // Active gameplay timers (delta-decremented so they automatically pause when solo is paused)
+  if (window.ghostsFrozen) {
+    ghostsFrozenRemaining -= delta;
+    if (ghostsFrozenRemaining <= 0) {
+      window.ghostsFrozen = false;
+      ghostsFrozenRemaining = 0;
+      ghosts3D.forEach(g => {
+        g.children.forEach(c => { if (c.isPointLight) c.intensity = 80; });
+      });
+      triggerNotification("ghosts reactivated!");
+    }
+  }
+
+  if (alarmFlashRemaining > 0) {
+    alarmFlashRemaining -= delta;
+    if (alarmFlashRemaining <= 0) {
+      alarmFlashRemaining = 0;
+      const flash = document.getElementById('alarm-flash');
+      if (flash) flash.style.display = 'none';
+    }
+  }
+
+  if (window.flashlightDisabledBySiphon && typeof window.siphonDurationTimer === 'number') {
+    window.siphonDurationTimer -= delta;
+    if (window.siphonDurationTimer <= 0) {
+      window.flashlightDisabledBySiphon = false;
+      window.siphonDurationTimer = 0;
+    }
+  }
+
+  if (window.sensorsScrambled && typeof window.scrambleDurationTimer === 'number') {
+    window.scrambleDurationTimer -= delta;
+    if (window.scrambleDurationTimer <= 0) {
+      window.sensorsScrambled = false;
+      window.scrambleDurationTimer = 0;
+    }
+  }
+
+  if (saltTraps.length > 0) {
+    for (let sIdx = saltTraps.length - 1; sIdx >= 0; sIdx--) {
+      const sTrap = saltTraps[sIdx];
+      if (sTrap && sTrap.userData && sTrap.userData.triggered && typeof sTrap.userData.dissolveTimer === 'number') {
+        sTrap.userData.dissolveTimer -= delta;
+        if (sTrap.userData.dissolveTimer <= 0) {
+          scene.remove(sTrap);
+          if (sTrap.geometry) sTrap.geometry.dispose();
+          if (sTrap.material) sTrap.material.dispose();
+          saltTraps.splice(sIdx, 1);
+        }
+      }
+    }
+  }
+
+  if (typeof chalkDecals !== 'undefined' && chalkDecals.length > 0) {
+    for (let cIdx = chalkDecals.length - 1; cIdx >= 0; cIdx--) {
+      const cDecal = chalkDecals[cIdx];
+      if (cDecal && cDecal.userData && cDecal.userData.triggered && typeof cDecal.userData.fadeTimer === 'number') {
+        cDecal.userData.fadeTimer -= delta;
+        if (cDecal.userData.fadeTimer <= 0) {
+          scene.remove(cDecal);
+          if (cDecal.geometry) cDecal.geometry.dispose();
+          if (cDecal.material) cDecal.material.dispose();
+          chalkDecals.splice(cIdx, 1);
+        }
+      }
+    }
+  }
 
   // Update active 3D character animation mixers (e.g. Breathing Idle)
   if (activeAnimationMixers.length > 0) {
@@ -12278,32 +12435,6 @@ function animate() {
       k.mesh.rotation.y = time * 0.002 + i;
       k.mesh.position.y = 0.45 + Math.sin(t + i * 0.8) * 0.05;
     }
-  }
-
-  const keypadModalEl = document.getElementById('keypad-modal-ui');
-  const isKeypadOpen = Boolean(keypadModalEl && keypadModalEl.style.display !== 'none');
-  const isMinimapOpen = Boolean(isMinimapExpanded);
-  const ptrOverlay = document.getElementById('pointer-lock-overlay');
-  const isPauseMenuOpen = Boolean(ptrOverlay && ptrOverlay.style.display === 'flex');
-
-  // Interactive overlays (keypad terminal cipher, tactical minimap) are live in-game actions:
-  // AI ghosts must continue pathfinding, stalking, and attacking even while the player views these overlays!
-  const isInteractiveOverlay = isKeypadOpen || isMinimapOpen;
-
-  // Solo Offline Matches: Truly PAUSE game simulation ONLY when the dedicated pause menu is open.
-  // Never pause for in-game interactive terminals or tactical map, and never in multiplayer!
-  const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
-  const isSoloPaused = !isMultiplayer && isPauseMenuOpen && !isInteractiveOverlay && !window.isSpectating && window.gameReady;
-
-  if (isSoloPaused) {
-    resetPlayerMovementState();
-    const canvasContainer = document.getElementById('canvas-container');
-    if (canvasContainer) canvasContainer.style.filter = 'none';
-    document.body.style.filter = 'none';
-
-    if (activeViewCamera) renderer.render(scene, activeViewCamera);
-    else renderer.render(scene, camera);
-    return;
   }
 
   // Active controls: on desktop, allow movement physics if pointer lock is active OR if interacting with minimap OR unpaused in-game
@@ -12962,6 +13093,14 @@ function animate() {
 
     // 4. Update AI Bots pathing behaviors toward nearest human
     ghosts3D.forEach((ghost, idx) => {
+      // Handle Mimic disguise countdown (delta-based so it pauses cleanly in solo matches)
+      if (ghost.userData && ghost.userData.isMimicDisguised && typeof ghost.userData.mimicDurationTimer === 'number') {
+        ghost.userData.mimicDurationTimer -= delta;
+        if (ghost.userData.mimicDurationTimer <= 0) {
+          revertMimicDisguise(ghost);
+        }
+      }
+
       // Breaker Remote freezes all ghost movement
       if (window.ghostsFrozen) return;
 
@@ -13064,16 +13203,10 @@ function animate() {
           if (!trap.userData || !trap.userData.triggered) {
             trap.userData = trap.userData || {};
             trap.userData.triggered = true;
+            trap.userData.dissolveTimer = 3.0; // Dissolve handled in animate loop via delta
             if (myTeam === 'Human') {
               triggerNotification("Salt barrier disturbed by a ghost!");
             }
-            setTimeout(() => {
-              scene.remove(trap);
-              if (trap.geometry) trap.geometry.dispose();
-              if (trap.material) trap.material.dispose();
-              const idx = saltTraps.indexOf(trap);
-              if (idx > -1) saltTraps.splice(idx, 1);
-            }, 3000);
           }
         }
       }
@@ -13255,33 +13388,8 @@ function animate() {
                 }
               }
               
-              setTimeout(() => {
-                if (ghost.userData && ghost.userData.mimicGroup) {
-                  const mg = ghost.userData.mimicGroup;
-                  if (mg.userData && mg.userData.animMixer) {
-                    const idx = activeAnimationMixers.indexOf(mg.userData.animMixer);
-                    if (idx !== -1) activeAnimationMixers.splice(idx, 1);
-                  }
-                  ghost.remove(mg);
-                  mg.traverse(child => {
-                    if (child.isMesh) {
-                      if (child.geometry) child.geometry.dispose();
-                      if (child.material) {
-                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
-                        else child.material.dispose();
-                      }
-                    } else if (child.isSprite) {
-                      if (child.material) {
-                        if (child.material.map) child.material.map.dispose();
-                        child.material.dispose();
-                      }
-                    }
-                  });
-                  ghost.userData.mimicGroup = null;
-                }
-                if (ghost.userData) ghost.userData.isMimicDisguised = false;
-                ghost.children.forEach(c => { c.visible = true; });
-              }, gParams.cloneDuration);
+              // Disguise duration is decremented by delta in the ghost update loop (cleanly pauses in solo matches)
+              ghost.userData.mimicDurationTimer = gParams.cloneDuration / 1000;
             }
           } else if (gClass === 'Juggernaut') {
             if (myTeam === 'Human') triggerNotification(`A Juggernaut bot is enraged (${gParams.rageDurationBot}s)!`);
@@ -13330,14 +13438,14 @@ function animate() {
             if (dist <= gParams.siphonRadius && myTeam === 'Human' && !window.isSpectating) {
               triggerNotification(`Poltergeist bot deployed Breaker Siphon (${Math.round(gParams.siphonDuration / 1000)}s)!`);
               window.flashlightDisabledBySiphon = true;
-              setTimeout(() => { window.flashlightDisabledBySiphon = false; }, gParams.siphonDuration);
+              window.siphonDurationTimer = gParams.siphonDuration / 1000;
             }
           } else if (gClass === 'Banshee') {
             const dist = targetPos.distanceTo(ghost.position);
             if (dist <= gParams.scrambleRadius && myTeam === 'Human' && !window.isSpectating) {
               triggerNotification(`Banshee bot scrambled your sensors (${Math.round(gParams.scrambleDuration / 1000)}s)!`);
               window.sensorsScrambled = true;
-              setTimeout(() => { window.sensorsScrambled = false; }, gParams.scrambleDuration);
+              window.scrambleDurationTimer = gParams.scrambleDuration / 1000;
             }
           }
         }
