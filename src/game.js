@@ -3632,14 +3632,18 @@ function spawnDungeonProps(layout, blockSize) {
     return Math.hypot(x - gateCoordinates.x, z - gateCoordinates.z) < minDist;
   }
 
-  // Helper: prevent spawning any pillars or statues inside or near Light Sanctuaries
-  function isNearSanctuary(x, z, minDist = 4.5) {
-    return Array.isArray(sanctuaryZones) && sanctuaryZones.some(s => Math.hypot(s.x - x, s.z - z) < minDist);
+  // Helper: prevent spawning pillar or statue on top of a wall lantern sconce
+  function isBlockedByLantern(x, z, minDist = 1.3) {
+    return Array.isArray(sanctuaryZones) && sanctuaryZones.some(s => {
+      const lx = (s.lanternX !== undefined) ? s.lanternX : s.x;
+      const lz = (s.lanternZ !== undefined) ? s.lanternZ : s.z;
+      return Math.hypot(lx - x, lz - z) < minDist;
+    });
   }
 
   function spawnPillarMesh(px, pz) {
     if (placedPillars >= maxPillarsBudget) return false;
-    if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz) || isNearVaultDoorway(px, pz) || isNearSanctuary(px, pz, 4.5)) return false;
+    if (isBlockedByBreaker(px, pz) || isBlockedByLantern(px, pz, 1.3) || isNearSpawn(px, pz) || isNearVaultDoorway(px, pz)) return false;
     if (isNearStatue(px, pz, 0.75)) return false; // Never spawn pillar inside or overlapping a statue
     if (isNearPillar(px, pz, 1.8)) return false;
     pillarTransforms.push({ x: px, z: pz });
@@ -3650,7 +3654,7 @@ function spawnDungeonProps(layout, blockSize) {
 
   function spawnStatueMesh(sx, sz, rotY = 0) {
     if (placedStatues >= maxStatuesBudget) return false;
-    if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz) || isNearVaultDoorway(sx, sz) || isNearSanctuary(sx, sz, 4.5)) return false;
+    if (isBlockedByBreaker(sx, sz) || isBlockedByLantern(sx, sz, 1.4) || isNearSpawn(sx, sz) || isNearVaultDoorway(sx, sz)) return false;
     if (isNearStatue(sx, sz, 2.5)) return false;
     if (isNearPillar(sx, sz, 0.75)) return false; // Never spawn statue inside or overlapping an existing pillar
     statueTransforms.push({ x: sx, z: sz, rotY });
@@ -5958,26 +5962,26 @@ function generateLightSanctuaries() {
   });
 
   const chosenSanctuaries = [];
-  for (let sIdx = 0; sIdx < sanctuaryCount && sanctuaryCandidates.length > 0; sIdx++) {
-    const rIdx = Math.floor(seededRandom() * sanctuaryCandidates.length);
-    const pos = sanctuaryCandidates.splice(rIdx, 1)[0];
-    const tooClose = chosenSanctuaries.some(cs => Math.hypot(cs.x - pos.x, cs.z - pos.z) < (window.isTutorialMatch ? 8 : 16));
-    if (!tooClose || chosenSanctuaries.length === 0) {
-      chosenSanctuaries.push(pos);
-      claimSpawnLocation(pos.x, pos.z, window.isTutorialMatch ? 4.0 : 7.0, `Sanctuary_${sIdx}`);
-    }
-  }
-
-  // In Tutorial Mode, place a guaranteed Light Sanctuary in nearby corridors
-  if (window.isTutorialMatch && openCorridors.length > 0) {
+  if (window.isTutorialMatch) {
+    // In Tutorial Mode, place strictly ONE guaranteed Light Sanctuary near the player (no duplicate lights!)
     const nearCorridors = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
     const tutorialSanctuary = nearCorridors.find(c => {
       const d = Math.hypot(c.x, c.z);
       return d >= 6 && d <= 18 && !isLocationOccupied(c.x, c.z, 3.5);
     }) || nearCorridors[Math.min(2, nearCorridors.length - 1)];
-    if (tutorialSanctuary && !chosenSanctuaries.some(cs => Math.hypot(cs.x - tutorialSanctuary.x, cs.z - tutorialSanctuary.z) < 4.0)) {
-      chosenSanctuaries.unshift(tutorialSanctuary);
+    if (tutorialSanctuary) {
+      chosenSanctuaries.push(tutorialSanctuary);
       claimSpawnLocation(tutorialSanctuary.x, tutorialSanctuary.z, 5.0, 'Tutorial_Sanctuary');
+    }
+  } else {
+    for (let sIdx = 0; sIdx < sanctuaryCount && sanctuaryCandidates.length > 0; sIdx++) {
+      const rIdx = Math.floor(seededRandom() * sanctuaryCandidates.length);
+      const pos = sanctuaryCandidates.splice(rIdx, 1)[0];
+      const tooClose = chosenSanctuaries.some(cs => Math.hypot(cs.x - pos.x, cs.z - pos.z) < 16);
+      if (!tooClose || chosenSanctuaries.length === 0) {
+        chosenSanctuaries.push(pos);
+        claimSpawnLocation(pos.x, pos.z, 7.0, `Sanctuary_${sIdx}`);
+      }
     }
   }
 
@@ -6033,6 +6037,8 @@ function generateLightSanctuaries() {
       id: `sanctuary_${idx}`,
       x: pos.x,
       z: pos.z,
+      lanternX: pos.x + chosenWall.localX,
+      lanternZ: pos.z + chosenWall.localZ,
       radius: 4.5,
       group: group,
       light: sanctuaryLight
