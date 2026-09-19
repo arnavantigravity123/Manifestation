@@ -5253,18 +5253,51 @@ function generateCollectibles(keysCount) {
   codeClueNotes = [];
 
   // Guarantee isolated unique corridor positions for each key (no overlapping with other items or clues)
+  const realKeys = (functionalKeysRevealed && functionalKeysRevealed.length > 0)
+    ? functionalKeysRevealed
+    : ['Amber Key', 'Sapphire Key'];
+
   for (let i = 0; i < keysCount; i++) {
     const kt = KEY_TYPES[i % KEY_TYPES.length];
     const mesh = createKeyMeshGroup(kt.color, kt.emissive);
 
-    const available = shuffleArray(getAvailableCorridors(4.5));
-    const corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
+    // Dedicated gemstone radiance light hovering above the key
+    const keyLight = new THREE.PointLight(kt.color, 1.2, 5.0);
+    keyLight.position.set(0, 0.35, 0);
+    mesh.add(keyLight);
+
+    let corr;
+    if (window.isTutorialMatch) {
+      if (realKeys[0] && kt.label === realKeys[0]) {
+        // Place Key 1 along an accessible corridor (6m to 14m from spawn)
+        const nearCorrs = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+        corr = nearCorrs.find(c => {
+          const d = Math.hypot(c.x, c.z);
+          return d >= 6 && d <= 14 && !isLocationOccupied(c.x, c.z, 3.5);
+        }) || nearCorrs[0];
+      } else if (realKeys[1] && kt.label === realKeys[1] && gateCoordinates) {
+        // Place Key 2 near the Master Vault sector (6m to 16m from gate)
+        const gateCorrs = [...openCorridors].sort((a, b) => 
+          Math.hypot(a.x - gateCoordinates.x, a.z - gateCoordinates.z) - Math.hypot(b.x - gateCoordinates.x, b.z - gateCoordinates.z)
+        );
+        corr = gateCorrs.find(c => {
+          const d = Math.hypot(c.x - gateCoordinates.x, c.z - gateCoordinates.z);
+          return d >= 6 && d <= 16 && !isLocationOccupied(c.x, c.z, 3.5);
+        }) || gateCorrs[0];
+      } else {
+        const available = shuffleArray(getAvailableCorridors(3.5));
+        corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
+      }
+    } else {
+      const available = shuffleArray(getAvailableCorridors(4.5));
+      corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
+    }
     
     mesh.position.set(corr.x, 0.45, corr.z);
     mesh.userData.keyTypeLabel = kt.label;
     scene.add(mesh);
 
-    claimSpawnLocation(corr.x, corr.z, 4.5, `Key_${kt.label}`);
+    claimSpawnLocation(corr.x, corr.z, window.isTutorialMatch ? 3.5 : 4.5, `Key_${kt.label}`);
     keysInMaze.push({ id: 'key_' + i, mesh, symbol: kt.label, index: i, typeName: kt.label });
   }
 
@@ -7189,6 +7222,19 @@ function getBestInteractionTarget() {
             renderCarriedKeysHUD();
             checkWinCondition();
 
+            if (window.isTutorialMatch) {
+              if (tutorialStage === 4) {
+                advanceTutorialStage(5, `Secured ${key.typeName}! Next: Share Supplies & Keys`);
+              } else if (tutorialStage === 11) {
+                if (isReal) {
+                  triggerNotification(`🔑 Required Twin Key [${key.typeName}] Acquired! Bring it to the Master Vault Gate!`);
+                } else {
+                  triggerNotification(`⚠️ [${key.typeName}] is a Decoy! Gate requires: [${(functionalKeysRevealed || []).join(' & ')}]`);
+                }
+                updateTutorialQuestBanner();
+              }
+            }
+
             if (typeof socketClient !== 'undefined') {
               socketClient.emit('key_picked_up', { keyId: keyId });
               if (isNewKey) {
@@ -7378,6 +7424,9 @@ function getBestInteractionTarget() {
               socketClient.emit('insert_gate_key', { symbol: keyId });
             }
             triggerNotification(`🔑 Inserted [${keyId}] into Master Gate! (${insertedGateKeys.length}/2 installed)`);
+            if (window.isTutorialMatch) {
+              updateTutorialQuestBanner();
+            }
             checkWinCondition();
             return;
           }
@@ -7894,7 +7943,7 @@ function collectClueLocal(digitIndex) {
     }
     if (tutorialStage === 9) {
       if (fixedBreakersCount >= 1) {
-        advanceTutorialStage(10, `Power Restored & Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad!`);
+        advanceTutorialStage(10, `Power Restored & Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad to reveal the Twin Keys!`);
       } else {
         triggerNotification(`📝 Code Intel [ ${fullCode} ] Decoded! Next: Repair yellow Circuit Breaker (⚡) to power the vault terminal!`);
         updateTutorialQuestBanner();
@@ -8275,13 +8324,22 @@ function submitKeypadCode(code) {
         : ((currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.realKeySymbols) || ['Amber Key', 'Sapphire Key']);
       functionalKeysRevealed = realKeys;
 
+      const formattedKeys = realKeys.map(s => formatFunctionalKeyName(s));
+      triggerNotification(`🎉 CIPHER CRACKED! Twin functional keys revealed: [${formattedKeys.join(' & ')}]`);
+
       if (window.isTutorialMatch) {
-        insertedGateKeys = [...realKeys];
-        triggerNotification(`🎉 CIPHER CRACKED! [${targetCode}] Verified! Twin Extraction Keys Installed into Gate!`);
-        advanceTutorialStage(9, "Cipher Cracked! Master Gate Unlocked! Approach the Gate and Tap/Press INTERACT to Escape!");
-      } else {
-        const formattedKeys = realKeys.map(s => formatFunctionalKeyName(s));
-        triggerNotification(`🎉 CIPHER CRACKED! Twin functional keys revealed: [${formattedKeys.join(' & ')}]`);
+        // Automatically place beacon markers on tactical map for required keys so the operative can navigate to them
+        keysInMaze.forEach(k => {
+          if (realKeys.includes(k.symbol) && k.mesh) {
+            const c = Math.floor((k.mesh.position.x / mazeBlockSize) + (mazeSizeGlobal / 2));
+            const r = Math.floor((k.mesh.position.z / mazeBlockSize) + (mazeSizeGlobal / 2));
+            if (!mapMarks.some(m => m.r === r && m.c === c)) {
+              mapMarks.push({ r, c });
+            }
+          }
+        });
+        drawMinimap();
+        advanceTutorialStage(11, `Cipher Cracked! Master Gate requires [${formattedKeys.join(' & ')}]! Retrieve & insert them into the Gate!`);
       }
 
       // Close modal
@@ -8305,7 +8363,7 @@ function submitKeypadCode(code) {
       const cipherHUD = document.getElementById('hud-cipher-info');
       if (cipherHUD) {
         const cleanSymbols = realKeys.map(s => formatFunctionalKeyName(s));
-        cipherHUD.textContent = window.isTutorialMatch ? `GATE UNLOCKED` : `REQUIRED: ${cleanSymbols.join(' + ')}`;
+        cipherHUD.textContent = `REQUIRED: ${cleanSymbols.join(' + ')}`;
         cipherHUD.style.color = '#38bdf8';
       }
 
@@ -11524,7 +11582,7 @@ function updateTutorialQuestBanner() {
 
   switch (tutorialStage) {
     case 1:
-      stageInd.textContent = 'STAGE 1/10';
+      stageInd.textContent = 'STAGE 1/11';
       titleEl.textContent = 'LOCOMOTION CALIBRATION';
       descEl.innerHTML = isMobileDevice 
         ? 'Move through corridors using the <strong>Left Virtual Joystick</strong>.' 
@@ -11535,7 +11593,7 @@ function updateTutorialQuestBanner() {
       break;
 
     case 2:
-      stageInd.textContent = 'STAGE 2/10';
+      stageInd.textContent = 'STAGE 2/11';
       titleEl.textContent = 'TACTICAL SPRINT & STAMINA';
       descEl.innerHTML = isMobileDevice 
         ? 'Move using the <strong>Left Joystick</strong> and tap <span class="touch-badge">SPRINT</span> while moving to sprint. Notice your <strong>Stamina Bar</strong> drains!' 
@@ -11548,7 +11606,7 @@ function updateTutorialQuestBanner() {
       break;
 
     case 3:
-      stageInd.textContent = 'STAGE 3/10';
+      stageInd.textContent = 'STAGE 3/11';
       titleEl.textContent = 'ILLUMINATION & STEALTH';
       descEl.innerHTML = isMobileDevice 
         ? 'Tap <span class="touch-badge">USE</span> (with empty slot) to toggle flashlight. Turn it OFF to conserve battery or stealth!' 
@@ -11558,49 +11616,49 @@ function updateTutorialQuestBanner() {
       break;
 
     case 4:
-      stageInd.textContent = 'STAGE 4/10';
-      titleEl.textContent = 'SALVAGE SUPPLIES';
+      stageInd.textContent = 'STAGE 4/11';
+      titleEl.textContent = 'SALVAGE SUPPLIES & KEYS';
       descEl.innerHTML = isMobileDevice 
-        ? 'Approach a glowing supply on the floor (Battery or Medkit) and tap it directly on your screen.' 
-        : 'Find supplies on the corridor floor and press <kbd>E</kbd> to pick it up!';
-      progBar.style.width = '40%';
-      hintEl.textContent = 'Look on the corridor floor for glowing batteries or medkits';
+        ? 'Corridors contain supplies (<strong>Batteries</strong>, <strong>Medkits</strong>) and <strong>Gemstone Keys</strong> (Amber, Sapphire, Emerald, etc.). You can carry up to 3 keys on your key ring! Tap any glowing item or key on the floor.' 
+        : 'Corridors contain supplies (<strong>Batteries</strong>, <strong>Medkits</strong>) and <strong>Gemstone Keys</strong> (Amber, Sapphire, Emerald, etc.). You can carry up to 3 keys on your key ring! Press <kbd>E</kbd> on any glowing item or key on the floor to pick it up.';
+      progBar.style.width = '36%';
+      hintEl.textContent = 'Look on the corridor floor for glowing batteries, medkits, or gemstone keys';
       break;
 
     case 5:
-      stageInd.textContent = 'STAGE 5/10';
+      stageInd.textContent = 'STAGE 5/11';
       titleEl.textContent = 'SHARE SUPPLIES & KEYS';
       descEl.innerHTML = isMobileDevice 
-        ? 'Tap <span class="touch-badge">DROP ITEM</span> to drop held item for teammates. (Tap <span class="touch-badge">DROP KEY</span> to drop keys).' 
-        : 'Press <kbd>Q</kbd> to drop your held item on the floor for teammates! (Press <kbd>G</kbd> to drop carried keys).';
-      progBar.style.width = '55%';
-      hintEl.textContent = isMobileDevice ? 'Tap DROP ITEM to share gear' : 'Press [Q] to drop held item';
+        ? 'In multiplayer, sharing gear saves teams! Tap <span class="touch-badge">DROP ITEM</span> to drop held supplies. Tap <span class="touch-badge">DROP KEY</span> to drop keys when your key ring is full (max 3 keys).' 
+        : 'In multiplayer, sharing gear saves teams! Press <kbd>Q</kbd> to drop held supplies on the floor. Press <kbd>G</kbd> to drop carried keys when your key ring is full (max 3 keys).';
+      progBar.style.width = '45%';
+      hintEl.textContent = isMobileDevice ? 'Tap DROP ITEM or DROP KEY to share gear' : 'Press [Q] to drop held item or [G] to drop key';
       break;
 
     case 6:
-      stageInd.textContent = 'STAGE 6/10';
+      stageInd.textContent = 'STAGE 6/11';
       titleEl.textContent = 'TACTICAL MAP & BEACONS';
       descEl.innerHTML = isMobileDevice 
         ? 'Tap the top-right <strong>Radar Minimap</strong> to open the Tactical Map, then <strong>tap anywhere on the map grid</strong> to place a beacon marker pin!' 
         : 'Press <kbd>M</kbd> (or click the top-right radar) to open the Tactical Map, then <strong>click anywhere on the map grid</strong> to place a beacon marker pin!';
-      progBar.style.width = mapMarks.length > 0 ? '70%' : '60%';
+      progBar.style.width = mapMarks.length > 0 ? '70%' : '55%';
       hintEl.textContent = isMobileDevice 
         ? 'Tap Radar -> Tap map grid to drop beacon marker' 
         : 'Press [M] -> Click map grid to drop beacon marker';
       break;
 
     case 7:
-      stageInd.textContent = 'STAGE 7/10';
+      stageInd.textContent = 'STAGE 7/11';
       titleEl.textContent = 'UV LANTERN SANCTUARIES';
       descEl.innerHTML = isMobileDevice 
         ? 'Find a <strong>Warm Brass Ceiling Lantern</strong>. Standing in its light recovers <strong>Sanity (+8.5%/s)</strong> and shields you!' 
         : 'Find a <strong>Warm Brass Ceiling Lantern</strong>. Standing under it rapidly recovers <strong>Sanity (+8.5%/s)</strong>!';
-      progBar.style.width = '75%';
+      progBar.style.width = '64%';
       hintEl.textContent = 'Follow corridors toward the warm amber lantern glow';
       break;
 
     case 8:
-      stageInd.textContent = 'STAGE 8/10';
+      stageInd.textContent = 'STAGE 8/11';
       titleEl.textContent = 'GHOST SURVIVAL & OBJECTIVES';
       descEl.innerHTML = `
         <div style="display: flex; flex-direction: column; gap: 0.35rem; text-align: left; font-size: 0.78rem;">
@@ -11616,13 +11674,14 @@ function updateTutorialQuestBanner() {
           </div>
           <div style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 0.4rem 0.65rem;">
             <div style="color: #38bdf8; font-weight: 800; margin-bottom: 0.2rem; display: flex; align-items: center; gap: 0.3rem;">
-              <span>🎯</span> COMPLETE 4-STEP ESCAPE PLAN:
+              <span>🎯</span> COMPLETE 5-STEP ESCAPE PLAN:
             </div>
             <div style="color: #e0f2fe; line-height: 1.38;">
-              1️⃣ <strong>Breakers:</strong> Repair yellow wall panels ⚡ to restore grid power.<br>
-              2️⃣ <strong>Clue Notes:</strong> Inspect glowing parchment notes 📝 on the corridor floor to find the 4-digit code.<br>
-              3️⃣ <strong>Survive:</strong> Run to UV lanterns whenever ghosts chase you.<br>
-              4️⃣ <strong>Master Vault:</strong> Enter the 4-digit code at the exit gate 🌲 to escape!
+              1️⃣ <strong>Breakers:</strong> Repair yellow wall panels ⚡ to restore grid power to the vault.<br>
+              2️⃣ <strong>Clue Notes:</strong> Inspect glowing parchment notes 📝 on corridor floors to decode the 4-digit cipher.<br>
+              3️⃣ <strong>Crack Cipher:</strong> Enter the 4-digit code at the Keypad 🔢 to reveal <strong>WHICH 2 Twin Keys</strong> 🔑 are needed!<br>
+              4️⃣ <strong>Twin Keys:</strong> Locate the 2 matching gemstone keys 🔑 in the maze and insert them into the Master Gate sockets.<br>
+              5️⃣ <strong>Master Gate Escape:</strong> With power on and both keys installed, interact with the blast door 🌲 to escape!
             </div>
           </div>
         </div>
@@ -11648,7 +11707,7 @@ function updateTutorialQuestBanner() {
       break;
 
     case 9:
-      stageInd.textContent = 'STAGE 9/10';
+      stageInd.textContent = 'STAGE 9/11';
       titleEl.textContent = 'GRID POWER & CLUE NOTES';
       const fullCode9 = (window.cipherCodeDigits || []).join('');
       const hasClue9 = codeClueNotes && codeClueNotes.some(n => n.collected);
@@ -11663,7 +11722,7 @@ function updateTutorialQuestBanner() {
            📝 <strong>Clue Notes:</strong> Lying on the corridor floor — press <kbd>E</kbd> to decode code digits.`;
 
       let doneCount9 = (isBreakerDone9 ? 1 : 0) + (hasClue9 ? 1 : 0);
-      progBar.style.width = doneCount9 === 0 ? '80%' : (doneCount9 === 1 ? '90%' : '100%');
+      progBar.style.width = doneCount9 === 0 ? '75%' : (doneCount9 === 1 ? '80%' : '85%');
 
       if (!isBreakerDone9 && !hasClue9) {
         hintEl.textContent = `⚡ Breaker: [ 0/1 ] | 📝 Clue Notes: [ 0/1 ] — Search corridor floors`;
@@ -11677,21 +11736,57 @@ function updateTutorialQuestBanner() {
       break;
 
     case 10:
-      stageInd.textContent = 'STAGE 10/10';
-      titleEl.textContent = 'MASTER VAULT EXTRACTION';
+      stageInd.textContent = 'STAGE 10/11';
+      titleEl.textContent = 'CRACK KEYPAD CIPHER';
       const fullCode10 = (window.cipherCodeDigits || []).join('') || '4821';
-      if (!gateSolved) {
-        descEl.innerHTML = isMobileDevice 
-          ? `Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, tap it directly, and enter the code: <span style="color: #facc15; font-size: 0.95rem; font-weight: 900; letter-spacing: 2px; text-shadow: 0 0 8px rgba(250, 204, 21, 0.6); background: rgba(250, 204, 21, 0.15); padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid rgba(250, 204, 21, 0.4);">[ ${fullCode10} ]</span>` 
-          : `Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, press <kbd>E</kbd>, and enter the code: <span style="color: #facc15; font-size: 0.95rem; font-weight: 900; letter-spacing: 2px; text-shadow: 0 0 8px rgba(250, 204, 21, 0.6); background: rgba(250, 204, 21, 0.15); padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid rgba(250, 204, 21, 0.4);">[ ${fullCode10} ]</span>`;
-        progBar.style.width = '90%';
-        hintEl.textContent = `Type code [ ${fullCode10} ] at Master Vault Keypad terminal to unlock blast door!`;
+      descEl.innerHTML = isMobileDevice 
+        ? `Head to the <strong>Master Vault Keypad</strong> at the corridor terminus and enter the code: <span style="color: #facc15; font-size: 0.95rem; font-weight: 900; letter-spacing: 2px; text-shadow: 0 0 8px rgba(250, 204, 21, 0.6); background: rgba(250, 204, 21, 0.15); padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid rgba(250, 204, 21, 0.4);">[ ${fullCode10} ]</span>. The terminal will decrypt the gate locks and <strong>reveal WHICH 2 Twin Keys</strong> are required!` 
+        : `Head to the <strong>Master Vault Keypad</strong> at the corridor terminus and enter the code: <span style="color: #facc15; font-size: 0.95rem; font-weight: 900; letter-spacing: 2px; text-shadow: 0 0 8px rgba(250, 204, 21, 0.6); background: rgba(250, 204, 21, 0.15); padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid rgba(250, 204, 21, 0.4);">[ ${fullCode10} ]</span>. The terminal will decrypt the gate locks and <strong>reveal WHICH 2 Twin Keys</strong> are required!`;
+      progBar.style.width = '88%';
+      hintEl.textContent = `Enter code [ ${fullCode10} ] at Master Vault Keypad terminal to reveal Twin Keys!`;
+      break;
+
+    case 11:
+      stageInd.textContent = 'STAGE 11/11';
+      titleEl.textContent = 'TWIN EXTRACTION KEYS & ESCAPE';
+      const reqGems11 = (functionalKeysRevealed || []).map(f => formatFunctionalKeyName(f));
+      const reqText11 = reqGems11.join(' + ') || 'Twin Extraction Keys';
+      const installedCount11 = (insertedGateKeys || []).length;
+      const carriedReqKeys11 = carriedKeys.filter(k => isKeyFunctional(k) && !isKeyAlreadyInserted(k));
+
+      if (installedCount11 === 0) {
+        if (carriedReqKeys11.length > 0) {
+          const carriedName = carriedReqKeys11[0].typeName || carriedReqKeys11[0].symbol;
+          descEl.innerHTML = isMobileDevice
+            ? `You are carrying <strong>[${carriedName}]</strong>! Approach the Master Vault Gate and tap it to insert the key into the lock!`
+            : `You are carrying <strong>[${carriedName}]</strong>! Approach the Master Vault Gate and press <kbd>E</kbd> to insert the key into the lock!`;
+          hintEl.textContent = `Holding [${carriedName}]! Approach Master Gate to insert key (1/2)`;
+        } else {
+          descEl.innerHTML = `The Keypad decoded the lock! The Master Gate requires 2 Twin Keys: <span style="color: #38bdf8; font-weight: 800;">[ ${reqText11} ]</span>! Out of all keys in the maze, only these two fit. Check your <strong>Tactical Minimap</strong> (marked with beacon pins), collect the keys, and bring them to the Master Gate!`;
+          hintEl.textContent = `Keys: 0/2 Installed (${carriedKeys.length}/3 in hand) — Find & collect [${reqText11}]`;
+        }
+        progBar.style.width = carriedReqKeys11.length > 0 ? '94%' : '90%';
+      } else if (installedCount11 === 1) {
+        if (carriedReqKeys11.length > 0) {
+          const carriedName = carriedReqKeys11[0].typeName || carriedReqKeys11[0].symbol;
+          descEl.innerHTML = isMobileDevice
+            ? `First key installed! You have the second Twin Key <strong>[${carriedName}]</strong> in hand! Tap the Master Gate to insert it!`
+            : `First key installed! You have the second Twin Key <strong>[${carriedName}]</strong> in hand! Press <kbd>E</kbd> at the Master Gate to insert it!`;
+          hintEl.textContent = `Insert second Twin Key [${carriedName}] into Master Gate! (2/2)`;
+        } else {
+          const installedGems = (insertedGateKeys || []).map(ins => getCanonicalGemstone(ins)).filter(Boolean);
+          const missingGems = reqGems11.filter(r => !installedGems.some(ig => ig.toLowerCase() === r.toLowerCase()));
+          const missingName = missingGems[0] || 'Twin Key';
+          descEl.innerHTML = `First key installed into the gate (1/2)! Now search the corridors for the remaining Twin Key: <span style="color: #38bdf8; font-weight: 800;">[ ${missingName} ]</span>, bring it to the Master Gate, and insert it!`;
+          hintEl.textContent = `Keys: 1/2 Installed (${carriedKeys.length}/3 in hand) — Find remaining [${missingName}]`;
+        }
+        progBar.style.width = '96%';
       } else {
         descEl.innerHTML = isMobileDevice 
-          ? '🎉 <strong>CIPHER CRACKED! Master Gate Unlocked!</strong> Tap the blast door to escape into the pine forest!' 
-          : '🎉 <strong>CIPHER CRACKED! Master Gate Unlocked!</strong> Press <kbd>E</kbd> at the blast door to escape into the pine forest!';
+          ? '🎉 <strong>BOTH TWIN KEYS INSTALLED! Master Gate Unlocked!</strong> Tap the blast door to escape into the pine forest!' 
+          : '🎉 <strong>BOTH TWIN KEYS INSTALLED! Master Gate Unlocked!</strong> Press <kbd>E</kbd> at the blast door to escape into the pine forest!';
         progBar.style.width = '100%';
-        hintEl.textContent = isMobileDevice ? 'Gate Unlocked! Tap the blast door to Escape into the Forest!' : 'Gate Unlocked! Press E to Escape into the Forest!';
+        hintEl.textContent = isMobileDevice ? 'Gate Unlocked! Tap blast door to Escape into the Forest!' : 'Gate Unlocked! Press E to Escape into the Forest!';
       }
       break;
   }
@@ -11943,7 +12038,7 @@ function fixBreakerLocal(breakerId) {
       const fullCode = (window.cipherCodeDigits || []).join('');
       const hasClue = codeClueNotes && codeClueNotes.some(n => n.collected);
       if (hasClue) {
-        advanceTutorialStage(10, `Grid Power Restored & Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad!`);
+        advanceTutorialStage(10, `Grid Power Restored & Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad to reveal the Twin Keys!`);
       } else {
         triggerNotification(`⚡ Grid Power Restored! Next: Inspect glowing floor clue note (📝) to decode vault cipher!`);
         updateTutorialQuestBanner();
