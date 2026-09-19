@@ -13209,7 +13209,7 @@ function animate() {
               const chosenIsVip = Boolean(chosenTeammate.isVip);
 
               const mimicGroup = createHumanMeshGroup(chosenSkin, chosenUsername, chosenIsVip);
-              mimicGroup.rotation.y = 0; // Aligns human model facing forward (-Z) matching ghost movement direction
+              mimicGroup.rotation.y = Math.PI; // Aligns human model facing forward (+Z in ghost space) matching ghost lookAt direction
               
               // Thermal camera material setup (Cyan for teammates)
               const meshThermalMat = new THREE.MeshBasicMaterial({ 
@@ -13288,7 +13288,7 @@ function animate() {
             ghost.userData.speedBoostTimer = gParams.rageDurationBot;
           } else if (gClass === 'Phantom') {
             if (myTeam === 'Human') triggerNotification(`A Phantom bot used Vapor Leap (${gParams.leapDistanceBot}m)!`);
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(ghost.quaternion);
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(ghost.quaternion);
             const maxLeap = gParams.leapDistanceBot;
             const stepSize = 0.3;
             let safeLeapDist = 0;
