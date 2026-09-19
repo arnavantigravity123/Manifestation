@@ -5285,70 +5285,168 @@ function generateCodeClues() {
   });
   codeClueNotes = [];
 
-  const noteGeo = new THREE.BoxGeometry(0.55, 0.75, 0.04);
-  const noteMat = new THREE.MeshStandardMaterial({
-    color: 0xfef08a,
-    emissive: 0xeab308,
-    emissiveIntensity: 0.85,
-    roughness: 0.6,
-    metalness: 0.1
-  });
-
   const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
   const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : totalRows;
   const blockSize = mazeBlockSize || 6.0;
-  const wallOffset = (blockSize / 2) - 0.03; // Mount 3cm off wall face
+  // Wall brick surface is at (blockSize / 2) - 0.05 = 2.95m from cell center.
+  // 2.90m places the note's back flush with the wall face, protruding into the open corridor (never inside the wall!).
+  const wallFaceOffset = 2.90;
 
-  for (let i = 0; i < 4; i++) {
-    let corr;
-    if (window.isTutorialMatch && i === 0 && openCorridors.length > 0) {
-      const nearCorridors = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
-      corr = nearCorridors.find(c => {
-        const d = Math.hypot(c.x, c.z);
-        return d >= 6 && d <= 18 && !isLocationOccupied(c.x, c.z, 3.5);
-      }) || nearCorridors[Math.min(3, nearCorridors.length - 1)];
-    } else {
-      const available = shuffleArray(getAvailableCorridors(window.isTutorialMatch ? 2.0 : 4.5));
-      corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
-    }
+  // Gather all open corridor cells that have at least one adjacent static wall (mazeLayout === 1)
+  const wallCandidates = [];
+  for (let r = 1; r < totalRows - 1; r++) {
+    for (let c = 1; c < totalCols - 1; c++) {
+      if (!mazeLayout[r] || mazeLayout[r][c] !== 0) continue;
 
-    const noteGroup = new THREE.Group();
-    const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
-    noteGroup.add(noteMesh);
+      // Never mount in a cell touching a dynamic sliding door
+      const touchesSlidingDoor = [
+        [-1, 0], [1, 0], [0, -1], [0, 1]
+      ].some(([dr, dc]) => {
+        const ar = r + dr;
+        const ac = c + dc;
+        return mazeLayout[ar] && mazeLayout[ar][ac] === 2;
+      });
+      if (touchesSlidingDoor) continue;
 
-    // Dedicated subtle golden parchment point light
-    const clueLight = new THREE.PointLight(0xfef08a, 1.2, 5.0);
-    clueLight.position.set(0, 0, 0.2);
-    noteGroup.add(clueLight);
+      const corrX = (c - totalCols / 2) * blockSize + blockSize / 2;
+      const corrZ = (r - totalRows / 2) * blockSize + blockSize / 2;
 
-    // Try to mount against adjacent solid wall
-    const g = worldToGrid(corr.x, corr.z);
-    const dirs = [
-      { dc: 0, dr: -1, candX: corr.x, candZ: corr.z - wallOffset, rotY: 0 },          // North wall, faces South
-      { dc: 0, dr: 1,  candX: corr.x, candZ: corr.z + wallOffset, rotY: Math.PI },   // South wall, faces North
-      { dc: -1, dr: 0, candX: corr.x - wallOffset, candZ: corr.z, rotY: Math.PI / 2 }, // West wall, faces East
-      { dc: 1, dr: 0,  candX: corr.x + wallOffset, candZ: corr.z, rotY: -Math.PI / 2 } // East wall, faces West
-    ];
+      const dirs = [
+        { dc: 0, dr: -1, candX: corrX, candZ: corrZ - wallFaceOffset, rotY: 0 },          // North wall, faces South (+Z)
+        { dc: 0, dr: 1,  candX: corrX, candZ: corrZ + wallFaceOffset, rotY: Math.PI },   // South wall, faces North (-Z)
+        { dc: -1, dr: 0, candX: corrX - wallFaceOffset, candZ: corrZ, rotY: Math.PI / 2 }, // West wall, faces East (+X)
+        { dc: 1, dr: 0,  candX: corrX + wallFaceOffset, candZ: corrZ, rotY: -Math.PI / 2 } // East wall, faces West (-X)
+      ];
 
-    let mounted = false;
-    for (const d of dirs) {
-      const nr = g.row + d.dr;
-      const nc = g.col + d.dc;
-      if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout && mazeLayout[nr] && mazeLayout[nr][nc] === 1) {
-        noteGroup.position.set(d.candX, 1.45, d.candZ);
-        noteGroup.rotation.y = d.rotY;
-        mounted = true;
-        break;
+      for (const d of dirs) {
+        const nr = r + d.dr;
+        const nc = c + d.dc;
+        if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr][nc] === 1) {
+          if (mazeLayout[nr][nc] === 2) continue;
+
+          // Strictly avoid solid pillars and monk statues (minimum 1.8m clearance so it is NEVER hidden inside/behind a pillar!)
+          let collidesWithSolidProp = false;
+          if (dungeonPropGrid && dungeonPropGrid.size > 0) {
+            const candC = Math.floor((d.candX / blockSize) + (totalCols / 2));
+            const candR = Math.floor((d.candZ / blockSize) + (totalRows / 2));
+            for (let dr = -1; dr <= 1 && !collidesWithSolidProp; dr++) {
+              for (let dc = -1; dc <= 1 && !collidesWithSolidProp; dc++) {
+                const bucket = dungeonPropGrid.get(((candR + dr) * 1000) + (candC + dc));
+                if (bucket) {
+                  for (let pi = 0; pi < bucket.length; pi++) {
+                    const p = bucket[pi];
+                    if (Math.hypot(p.x - d.candX, p.z - d.candZ) < (p.radius + 1.25)) {
+                      collidesWithSolidProp = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          } else if (dungeonPropColliders && dungeonPropColliders.length > 0) {
+            collidesWithSolidProp = dungeonPropColliders.some(p => Math.hypot(p.x - d.candX, p.z - d.candZ) < (p.radius + 1.25));
+          }
+          if (collidesWithSolidProp) continue;
+
+          // Avoid circuit breakers so clue notes never overlap with electrical boxes
+          if (Array.isArray(circuitBreakers) && circuitBreakers.some(b => b.mesh && Math.hypot(b.mesh.position.x - d.candX, b.mesh.position.z - d.candZ) < 3.5)) {
+            continue;
+          }
+
+          // Avoid Master Vault Gate area
+          if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
+            if (Math.hypot(d.candX - gateCoordinates.x, d.candZ - gateCoordinates.z) < 6.0) continue;
+          }
+
+          // Avoid Human spawn center
+          const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+          const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+          if (Math.hypot(d.candX - sx, d.candZ - sz) < 5.0) continue;
+
+          // Avoid Light Sanctuary centers
+          if (typeof sanctuaryZones !== 'undefined' && Array.isArray(sanctuaryZones)) {
+            if (sanctuaryZones.some(s => Math.hypot(d.candX - s.x, d.candZ - s.z) < 5.0)) continue;
+          }
+
+          wallCandidates.push({
+            x: d.candX,
+            z: d.candZ,
+            rotY: d.rotY,
+            corrX,
+            corrZ
+          });
+        }
       }
     }
+  }
 
-    if (!mounted) {
-      noteGroup.position.set(corr.x, 1.35, corr.z);
-      noteGroup.rotation.y = seededRandom() * Math.PI;
+  // Shuffle candidates and pick 4 spatially separated wall spots
+  const shuffledCandidates = shuffleArray(wallCandidates);
+  const chosenCandidates = [];
+
+  if (window.isTutorialMatch) {
+    // For tutorial, sort by distance to spawn and pick an open wall candidate (6-16m) with zero obstruction
+    const sortedNear = [...wallCandidates].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+    const tutorialFirst = sortedNear.find(c => {
+      const d = Math.hypot(c.x, c.z);
+      return d >= 6.0 && d <= 16.0;
+    }) || sortedNear[0];
+    if (tutorialFirst) chosenCandidates.push(tutorialFirst);
+  }
+
+  for (const cand of shuffledCandidates) {
+    if (chosenCandidates.length >= 4) break;
+    const isFarEnough = chosenCandidates.every(chosen => Math.hypot(chosen.x - cand.x, chosen.z - cand.z) >= 6.0);
+    if (isFarEnough) {
+      chosenCandidates.push(cand);
     }
+  }
+
+  // Fallback if maze is very compact
+  while (chosenCandidates.length < 4 && shuffledCandidates.length > chosenCandidates.length) {
+    chosenCandidates.push(shuffledCandidates[chosenCandidates.length]);
+  }
+
+  // Backing wooden mounting plate (dark oak)
+  const boardGeo = new THREE.BoxGeometry(0.65, 0.85, 0.03);
+  const boardMat = new THREE.MeshStandardMaterial({
+    color: 0x3e2723,
+    roughness: 0.85,
+    metalness: 0.1
+  });
+
+  // Glowing parchment paper note
+  const paperGeo = new THREE.BoxGeometry(0.52, 0.72, 0.02);
+  const paperMat = new THREE.MeshStandardMaterial({
+    color: 0xfef08a,
+    emissive: 0xd97706,
+    emissiveIntensity: 0.9,
+    roughness: 0.5,
+    metalness: 0.05
+  });
+
+  for (let i = 0; i < 4; i++) {
+    const cand = chosenCandidates[i] || (wallCandidates[i % wallCandidates.length]) || { x: 0, z: 0, rotY: 0, corrX: 0, corrZ: 0 };
+    const noteGroup = new THREE.Group();
+
+    const boardMesh = new THREE.Mesh(boardGeo, boardMat.clone());
+    boardMesh.position.set(0, 0, 0);
+    noteGroup.add(boardMesh);
+
+    const paperMesh = new THREE.Mesh(paperGeo, paperMat.clone());
+    paperMesh.position.set(0, 0, 0.02);
+    noteGroup.add(paperMesh);
+
+    // Dedicated subtle golden parchment point light pointing forward into the corridor
+    const clueLight = new THREE.PointLight(0xfef08a, 1.4, 5.5);
+    clueLight.position.set(0, 0, 0.25);
+    noteGroup.add(clueLight);
+
+    noteGroup.position.set(cand.x, 1.45, cand.z);
+    noteGroup.rotation.y = cand.rotY;
 
     scene.add(noteGroup);
-    claimSpawnLocation(corr.x, corr.z, window.isTutorialMatch ? 2.5 : 4.5, `Clue_${i}`);
+    claimSpawnLocation(cand.x, cand.z, window.isTutorialMatch ? 2.5 : 4.5, `Clue_${i}`);
     codeClueNotes.push({ mesh: noteGroup, digitIndex: i, collected: false });
   }
 }
