@@ -2441,6 +2441,16 @@ function renderHUDInventory() {
   invGrid.innerHTML = '';
   const now = Date.now();
 
+  const isQM = inventory.length >= 10;
+  const isLarge = inventory.length > 6;
+  invGrid.classList.toggle('quartermaster-inventory', isQM);
+  invGrid.classList.toggle('large-inventory', isLarge);
+  const hotbarContainer = invGrid.closest('.sleek-hotbar-container');
+  if (hotbarContainer) {
+    hotbarContainer.classList.toggle('quartermaster-inventory', isQM);
+    hotbarContainer.classList.toggle('large-inventory', isLarge);
+  }
+
   // --- Class ability items ---
   inventory.forEach((item, index) => {
     const slot = document.createElement('div');
