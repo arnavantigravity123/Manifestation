@@ -1672,25 +1672,36 @@ function renderLobby() {
   const currentDiff = currentLobby.settings?.difficulty || 'medium';
   const formulaDisplay = document.getElementById('lobby-formula-display');
   if (formulaDisplay) {
-    if (currentDiff === 'easy') formulaDisplay.textContent = 'Formula: max(2, Humans × 1)';
-    else if (currentDiff === 'hard') formulaDisplay.textContent = 'Formula: max(6, Humans × 3)';
-    else if (currentDiff === 'impossible') formulaDisplay.textContent = 'Formula: max(8, Humans × 4)';
-    else formulaDisplay.textContent = 'Formula: max(3, Humans × 2)';
+    if (currentDiff === 'easy') {
+      formulaDisplay.textContent = 'Formula: max(2, Humans × 1) [EASY]';
+      formulaDisplay.style.color = '#4ade80';
+      formulaDisplay.style.textShadow = '0 0 10px rgba(74, 222, 128, 0.6)';
+    } else if (currentDiff === 'hard') {
+      formulaDisplay.textContent = 'Formula: max(6, Humans × 3) [HARD]';
+      formulaDisplay.style.color = '#f87171';
+      formulaDisplay.style.textShadow = '0 0 10px rgba(248, 113, 113, 0.6)';
+    } else if (currentDiff === 'impossible') {
+      formulaDisplay.textContent = 'Formula: max(8, Humans × 4) [IMPOSSIBLE]';
+      formulaDisplay.style.color = '#c084fc';
+      formulaDisplay.style.textShadow = '0 0 10px rgba(192, 132, 252, 0.6)';
+    } else {
+      formulaDisplay.textContent = 'Formula: max(3, Humans × 2) [MEDIUM]';
+      formulaDisplay.style.color = '#facc15';
+      formulaDisplay.style.textShadow = '0 0 10px rgba(250, 204, 21, 0.6)';
+    }
   }
 
   ['easy', 'medium', 'hard', 'impossible'].forEach(d => {
     const pill = document.getElementById(`formula-pill-${d}`);
     if (pill) {
       if (d === currentDiff) {
-        pill.style.transform = 'scale(1.05)';
-        pill.style.boxShadow = '0 0 10px rgba(56, 189, 248, 0.4)';
-        pill.style.borderColor = '#38bdf8';
-        pill.style.filter = 'brightness(1.2)';
+        pill.classList.add('is-active');
+        pill.style.cursor = myPlayer.isHost ? 'pointer' : 'default';
+        const badge = pill.querySelector('.pill-badge');
+        if (badge) badge.textContent = myPlayer.isHost ? '★ HOST ACTIVE' : '★ ACTIVE';
       } else {
-        pill.style.transform = 'none';
-        pill.style.boxShadow = 'none';
-        pill.style.borderColor = '';
-        pill.style.filter = 'none';
+        pill.classList.remove('is-active');
+        pill.style.cursor = myPlayer.isHost ? 'pointer' : 'default';
       }
     }
   });
@@ -1827,6 +1838,32 @@ lobbyDifficultySelect?.addEventListener('change', () => {
   if (soloDifficultySelect) soloDifficultySelect.value = diff;
   if (currentLobby && currentLobby.players[myId]?.isHost) {
     socket.emit('update_settings', { difficulty: diff });
+  }
+});
+
+// Interactive Difficulty Formula Pills (Direct Tap Selection for Host)
+['easy', 'medium', 'hard', 'impossible'].forEach(d => {
+  const pill = document.getElementById(`formula-pill-${d}`);
+  if (pill) {
+    addFastButtonListener(pill, () => {
+      if (!currentLobby) return;
+      const myPlayer = currentLobby.players[myId];
+      if (!myPlayer || !myPlayer.isHost) return;
+      
+      localStorage.setItem('manifestation_difficulty', d);
+      window.gameDifficulty = d;
+      if (typeof window.getMazeSizeForDifficulty === 'function') {
+        window.mazeSizeGlobal = window.getMazeSizeForDifficulty(d);
+      }
+      if (lobbyDifficultySelect) lobbyDifficultySelect.value = d;
+      if (soloDifficultySelect) soloDifficultySelect.value = d;
+      if (currentLobby.settings) currentLobby.settings.difficulty = d;
+      socket.emit('update_settings', { difficulty: d });
+      renderLobby();
+      if (window.audioManager && typeof window.audioManager.playUiClick === 'function') {
+        window.audioManager.playUiClick();
+      }
+    });
   }
 });
 

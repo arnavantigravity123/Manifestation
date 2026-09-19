@@ -406,6 +406,149 @@ input[type="text"]:focus {
   margin-top: 0.2rem;
 }
 
+/* Difficulty Breakdown Matrix & Active Host Selection */
+.formula-breakdown-table {
+  margin-top: 0.8rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.1);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.formula-pill {
+  position: relative;
+  padding: 0.5rem 0.25rem;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.38;
+  filter: grayscale(0.75) brightness(0.75);
+  transform: scale(0.96);
+  user-select: none;
+}
+
+.formula-pill:hover {
+  opacity: 0.85;
+  filter: grayscale(0.2) brightness(1.05);
+  transform: scale(0.99);
+}
+
+.formula-pill .pill-title {
+  font-weight: 800;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.4px;
+}
+
+.formula-pill .pill-formula {
+  font-size: 0.65rem;
+  margin-top: 2px;
+  color: #94a3b8;
+}
+
+.formula-pill .pill-badge {
+  display: none;
+  font-size: 0.58rem;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  margin-top: 4px;
+  text-transform: uppercase;
+}
+
+/* Active Highlight States - High Prominence */
+.formula-pill.is-active {
+  opacity: 1 !important;
+  filter: none !important;
+  transform: translateY(-3px) scale(1.06) !important;
+  z-index: 5;
+}
+
+.formula-pill.is-active .pill-title {
+  color: #ffffff !important;
+}
+
+.formula-pill.is-active .pill-formula {
+  color: #f8fafc !important;
+  font-weight: 700;
+}
+
+.formula-pill.is-active .pill-badge {
+  display: inline-block;
+}
+
+/* Specific Tiers - Active Neon Glows */
+.formula-pill.is-active.pill-easy {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.4) 0%, rgba(21, 128, 61, 0.7) 100%) !important;
+  border: 2px solid #4ade80 !important;
+  box-shadow: 0 0 20px rgba(74, 222, 128, 0.65), inset 0 0 10px rgba(74, 222, 128, 0.3) !important;
+}
+.formula-pill.is-active.pill-easy .pill-title {
+  text-shadow: 0 0 10px #4ade80;
+}
+.formula-pill.is-active.pill-easy .pill-badge {
+  background: rgba(21, 128, 61, 0.9);
+  color: #dcfce7;
+  border: 1px solid #4ade80;
+  box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+}
+
+.formula-pill.is-active.pill-medium {
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.4) 0%, rgba(161, 98, 7, 0.7) 100%) !important;
+  border: 2px solid #facc15 !important;
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.65), inset 0 0 10px rgba(250, 204, 21, 0.3) !important;
+}
+.formula-pill.is-active.pill-medium .pill-title {
+  text-shadow: 0 0 10px #facc15;
+}
+.formula-pill.is-active.pill-medium .pill-badge {
+  background: rgba(161, 98, 7, 0.9);
+  color: #fef08a;
+  border: 1px solid #facc15;
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.5);
+}
+
+.formula-pill.is-active.pill-hard {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.4) 0%, rgba(185, 28, 28, 0.7) 100%) !important;
+  border: 2px solid #f87171 !important;
+  box-shadow: 0 0 20px rgba(248, 113, 113, 0.65), inset 0 0 10px rgba(248, 113, 113, 0.3) !important;
+}
+.formula-pill.is-active.pill-hard .pill-title {
+  text-shadow: 0 0 10px #f87171;
+}
+.formula-pill.is-active.pill-hard .pill-badge {
+  background: rgba(185, 28, 28, 0.9);
+  color: #fee2e2;
+  border: 1px solid #f87171;
+  box-shadow: 0 0 8px rgba(248, 113, 113, 0.5);
+}
+
+.formula-pill.is-active.pill-impossible {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.45) 0%, rgba(126, 34, 206, 0.75) 100%) !important;
+  border: 2px solid #c084fc !important;
+  box-shadow: 0 0 22px rgba(192, 132, 252, 0.7), inset 0 0 10px rgba(192, 132, 252, 0.3) !important;
+}
+.formula-pill.is-active.pill-impossible .pill-title {
+  text-shadow: 0 0 10px #c084fc;
+}
+.formula-pill.is-active.pill-impossible .pill-badge {
+  background: rgba(126, 34, 206, 0.9);
+  color: #f3e8ff;
+  border: 1px solid #c084fc;
+  box-shadow: 0 0 8px rgba(192, 132, 252, 0.5);
+}
+
 /* Sidebar Customizer */
 .lobby-sidebar {
   display: flex;

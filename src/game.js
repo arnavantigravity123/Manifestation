@@ -3554,7 +3554,7 @@ function spawnDungeonProps(layout, blockSize) {
 
   const pillarTransforms = [];
   const statueTransforms = [];
-  const rugGeometries = [];
+  const rugBuckets = new Map();
 
   const totalCols = (layout && layout[0] && layout[0].length) ? layout[0].length : (layout ? layout.length : 21);
   const totalRows = layout ? layout.length : 21;
@@ -3680,13 +3680,10 @@ function spawnDungeonProps(layout, blockSize) {
     if (placedRugs >= maxRugsBudget) return;
     const baseGeo = geo || dungeonRugGeo;
     if (!baseGeo) return;
-    const g = baseGeo.clone();
-    _scratchDummy.position.set(rx, 0, rz);
-    _scratchDummy.rotation.set(0, rotY, 0);
-    _scratchDummy.scale.set(1, 1, 1);
-    _scratchDummy.updateMatrix();
-    g.applyMatrix4(_scratchDummy.matrix);
-    rugGeometries.push(g);
+    if (!rugBuckets.has(baseGeo)) {
+      rugBuckets.set(baseGeo, []);
+    }
+    rugBuckets.get(baseGeo).push({ x: rx, z: rz, rotY });
     placedRugs++;
   }
 
@@ -3999,21 +3996,33 @@ function spawnDungeonProps(layout, blockSize) {
     }
   }
 
-  // 7. Hardware Instancing & Geometry Merging (Consolidates 1,200+ draw calls into 3 single calls!)
-  // A. All Floor Runner Rugs -> 1 Single Merged Mesh Draw Call
-  if (rugGeometries.length > 0) {
-    const mergedRugGeo = BufferGeometryUtils.mergeGeometries(rugGeometries, false);
-    if (mergedRugGeo) {
-      const mergedRugMesh = new THREE.Mesh(mergedRugGeo, dungeonRugMat);
-      mergedRugMesh.receiveShadow = false; // Planar rugs don't need expensive multi-pass self-shadowing
-      mergedRugMesh.frustumCulled = false; // Always render floor rugs across whole labyrinth
-      mergedRugMesh.renderOrder = 2; // Guaranteed to render AFTER floorMesh (renderOrder=0) to eliminate any Z-fighting
-      mergedRugMesh.userData = { isDungeonProp: true, isRug: true };
-      scene.add(mergedRugMesh);
-      dungeonProps.push(mergedRugMesh);
+  // 7. Hardware Instancing (Consolidates 1,200+ draw calls into single InstancedMeshes with 0 CPU merging!)
+  // A. All Floor Runner Rugs -> Hardware Instanced Meshes
+  const dummyMatrix = new THREE.Matrix4();
+  const dummyEuler = new THREE.Euler();
+  const dummyQuat = new THREE.Quaternion();
+  const dummyPos = new THREE.Vector3();
+  const dummyScale = new THREE.Vector3(1, 1, 1);
+
+  rugBuckets.forEach((transforms, geo) => {
+    if (!transforms || transforms.length === 0 || !geo) return;
+    const instancedRug = new THREE.InstancedMesh(geo, dungeonRugMat, transforms.length);
+    for (let i = 0; i < transforms.length; i++) {
+      const t = transforms[i];
+      dummyPos.set(t.x, 0, t.z);
+      dummyEuler.set(0, t.rotY, 0);
+      dummyQuat.setFromEuler(dummyEuler);
+      dummyMatrix.compose(dummyPos, dummyQuat, dummyScale);
+      instancedRug.setMatrixAt(i, dummyMatrix);
     }
-    rugGeometries.forEach(g => g.dispose());
-  }
+    instancedRug.instanceMatrix.needsUpdate = true;
+    instancedRug.receiveShadow = false;
+    instancedRug.frustumCulled = false;
+    instancedRug.renderOrder = 2;
+    instancedRug.userData = { isDungeonProp: true, isRug: true };
+    scene.add(instancedRug);
+    dungeonProps.push(instancedRug);
+  });
 
   // B. All Ornate Columns -> 1 Single InstancedMesh Draw Call
   if (pillarTransforms.length > 0 && dungeonPillarGeo && dungeonPillarMat) {
@@ -4420,10 +4429,6 @@ function generateMaze(keysCount = 8) {
   // Clear any existing dungeon props and safely dispose their GPU memory
   dungeonProps.forEach(p => {
     scene.remove(p);
-    // Only dispose dynamically generated merged rug geometries, preserving cached shared assets
-    if (p.userData && p.userData.isRug && p.geometry) {
-      p.geometry.dispose();
-    }
     // Release instanced matrix buffers
     if (typeof p.dispose === 'function') {
       p.dispose();
@@ -4776,12 +4781,8 @@ function generateMaze(keysCount = 8) {
   }
 
   const wallHeight = isDungeon ? 3.5 : 4.5;
-  const wallGeo = isDungeon 
-    ? createDungeonWallBox(blockSize + 0.1, wallHeight, blockSize + 0.1) 
-    : new THREE.BoxGeometry(blockSize + 0.1, wallHeight, blockSize + 0.1);
-
   openCorridors = []; // Reset for new maze
-  const wallGeometries = [];
+  const wallTransforms = [];
 
   for (let r = 0; r < layout.length; r++) {
     for (let c = 0; c < layout[r].length; c++) {
@@ -4796,12 +4797,8 @@ function generateMaze(keysCount = 8) {
           // reinforced frame, door, and extraction chamber are built below.
           continue;
         }
-        // Static wall: create transformed geometry for single merged mesh
-        const singleGeo = isDungeon 
-          ? createDungeonWallBox(blockSize + 0.1, wallHeight, blockSize + 0.1) 
-          : new THREE.BoxGeometry(blockSize + 0.1, wallHeight, blockSize + 0.1);
-        singleGeo.translate(xPos, wallHeight / 2, zPos);
-        wallGeometries.push(singleGeo);
+        // Static wall: record transform for single GPU instanced mesh
+        wallTransforms.push({ x: xPos, y: wallHeight / 2, z: zPos });
       } else if (type === 2) {
         // Dynamic sliding door: Piece #1 (IndAssetWall) or matching procedural door barrier
         let wallMesh;
@@ -4853,17 +4850,25 @@ function generateMaze(keysCount = 8) {
     }
   }
 
-  // Build a single merged Mesh for ALL static walls (1 single draw call, native shadow & light support!)
-  if (wallGeometries.length > 0) {
-    const mergedGeo = BufferGeometryUtils.mergeGeometries(wallGeometries, false);
-    staticWallsMesh = new THREE.Mesh(mergedGeo, wallMat);
-    staticWallsMesh.castShadow = false; // Disable heavy shadow map depth pass for static walls
-    staticWallsMesh.receiveShadow = true;
-    staticWallsMesh.frustumCulled = false;
-    scene.add(staticWallsMesh);
-    
-    // Dispose intermediate individual geometries to free memory
-    wallGeometries.forEach(g => g.dispose());
+  // Build a single InstancedMesh for ALL static walls (1 single draw call, instantaneous loading!)
+  if (wallTransforms.length > 0) {
+    const singleWallGeo = isDungeon 
+      ? createDungeonWallBox(blockSize + 0.1, wallHeight, blockSize + 0.1) 
+      : new THREE.BoxGeometry(blockSize + 0.1, wallHeight, blockSize + 0.1);
+
+    const instancedWalls = new THREE.InstancedMesh(singleWallGeo, wallMat, wallTransforms.length);
+    const dummyMat = new THREE.Matrix4();
+    for (let i = 0; i < wallTransforms.length; i++) {
+      const wt = wallTransforms[i];
+      dummyMat.setPosition(wt.x, wt.y, wt.z);
+      instancedWalls.setMatrixAt(i, dummyMat);
+    }
+    instancedWalls.instanceMatrix.needsUpdate = true;
+    instancedWalls.castShadow = false; // Disable heavy shadow map depth pass for static walls
+    instancedWalls.receiveShadow = true;
+    instancedWalls.frustumCulled = false;
+    scene.add(instancedWalls);
+    staticWallsMesh = instancedWalls;
   }
 
   // Draw the Master Gate — Robust 3D Vault Portal & Extraction Gateway
@@ -5197,10 +5202,11 @@ function getAvailableCorridors(minDist = 4.0) {
 function createKeyMeshGroup(colorHex, emissiveHex) {
   const group = new THREE.Group();
   
+  const keyModel = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({
     color: colorHex,
     emissive: emissiveHex,
-    emissiveIntensity: 0.5,
+    emissiveIntensity: 0.6,
     metalness: 0.8,
     roughness: 0.25
   });
@@ -5209,22 +5215,38 @@ function createKeyMeshGroup(colorHex, emissiveHex) {
   const ringGeo = new THREE.TorusGeometry(0.18, 0.05, 8, 16);
   const ring = new THREE.Mesh(ringGeo, mat);
   ring.position.y = 0.25;
-  group.add(ring);
+  keyModel.add(ring);
 
   // 2. Stem/Shaft (Cylinder)
   const shaftGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.45, 8);
   const shaft = new THREE.Mesh(shaftGeo, mat);
   shaft.position.y = -0.05;
-  group.add(shaft);
+  keyModel.add(shaft);
 
   // 3. Tooth/Bit (Box)
   const bitGeo = new THREE.BoxGeometry(0.12, 0.15, 0.04);
   const bit = new THREE.Mesh(bitGeo, mat);
   bit.position.set(0.08, -0.2, 0);
-  group.add(bit);
+  keyModel.add(bit);
 
-  group.rotation.x = Math.PI / 4;
-  group.rotation.y = Math.PI / 6;
+  keyModel.rotation.x = Math.PI / 4;
+  keyModel.rotation.y = Math.PI / 6;
+  group.add(keyModel);
+
+  // 4. Ground illuminated beacon halo ring on floor/carpet (zero dynamic PointLight required, zero shader recompilation lag!)
+  const groundRingGeo = new THREE.RingGeometry(0.2, 0.5, 16);
+  const groundRingMat = new THREE.MeshBasicMaterial({
+    color: colorHex,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const beaconRing = new THREE.Mesh(groundRingGeo, groundRingMat);
+  beaconRing.rotation.x = -Math.PI / 2;
+  beaconRing.position.y = -0.42; // Sits at floor level
+  group.add(beaconRing);
 
   return group;
 }
@@ -5274,10 +5296,7 @@ function generateCollectibles(keysCount) {
     const kt = KEY_TYPES[i % KEY_TYPES.length];
     const mesh = createKeyMeshGroup(kt.color, kt.emissive);
 
-    // Dedicated gemstone radiance light hovering above the key
-    const keyLight = new THREE.PointLight(kt.color, 1.2, 5.0);
-    keyLight.position.set(0, 0.35, 0);
-    mesh.add(keyLight);
+    // Key has built-in emissive materials & additive ground beacon ring (zero shader recompilation on pickup)
 
     let corr;
     if (window.isTutorialMatch) {
@@ -5556,10 +5575,7 @@ function generateCodeClues() {
     ring.position.y = -0.615; // Local offset puts ring at world y = 0.035 (resting right on carpet)
     noteGroup.add(ring);
 
-    // Dedicated soft golden-white point light hovering with the note
-    const clueLight = new THREE.PointLight(0xfffbeb, 1.4, 4.5);
-    clueLight.position.set(0, 0, 0);
-    noteGroup.add(clueLight);
+    // Dedicated soft illumination provided by ground beacon ring and parchment emissive map (zero shader lag)
 
     noteGroup.userData.noteMesh = noteMesh;
     noteGroup.userData.ring = ring;
@@ -6312,23 +6328,8 @@ function realignMazeCorridors(realignmentState) {
       mazeLayout[row][col] = (targetY < -0.5) ? 0 : 2;
     }
 
-    // Cancel any ongoing animation on this segment
-    if (segment.userData && segment.userData.animId) {
-      cancelAnimationFrame(segment.userData.animId);
-      segment.userData.animId = null;
-    }
-
-    // Smooth sliding animation
-    const anim = () => {
-      if (Math.abs(segment.position.y - targetY) > 0.05) {
-        segment.position.y += (targetY - segment.position.y) * 0.1;
-        segment.userData.animId = requestAnimationFrame(anim);
-      } else {
-        segment.position.y = targetY;
-        segment.userData.animId = null;
-      }
-    };
-    anim();
+    // Set target Y position to be smoothly interpolated in the main animate() frame loop
+    segment.userData.targetY = targetY;
   });
 
   // Dynamically recalculate Ariadne's Thread around newly shifted corridors!
@@ -7641,12 +7642,6 @@ function getBestInteractionTarget() {
             }
 
             scene.remove(key.mesh);
-            key.mesh.traverse(child => {
-              if (child.isMesh) {
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) child.material.dispose();
-              }
-            });
             carriedKeys.push({ id: keyId, symbol: key.symbol, typeName: key.typeName });
             foundKeysList.push(key.symbol);
 
@@ -8289,12 +8284,6 @@ function handleDirectTapInteraction(clientX, clientY) {
             if (isNewKey) discoveredKeyIds.add(keyId);
 
             scene.remove(k.mesh);
-            k.mesh.traverse(child => {
-              if (child.isMesh) {
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) child.material.dispose();
-              }
-            });
             carriedKeys.push({ id: keyId, symbol: k.symbol, typeName: k.typeName });
             foundKeysList.push(k.symbol);
 
@@ -9926,12 +9915,6 @@ function setupSocketListeners() {
     if (idx !== -1) {
       const key = keysInMaze[idx];
       scene.remove(key.mesh);
-      key.mesh.traverse(child => {
-        if (child.isMesh) {
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) child.material.dispose();
-        }
-      });
       keysInMaze.splice(idx, 1);
     }
   });
@@ -10586,30 +10569,17 @@ function revertMimicDisguise(ghost) {
   if (!ghost || !ghost.userData) return;
   if (ghost.userData.mimicGroup) {
     const mg = ghost.userData.mimicGroup;
-    if (mg.userData && mg.userData.animMixer) {
-      const idx = activeAnimationMixers.indexOf(mg.userData.animMixer);
-      if (idx !== -1) activeAnimationMixers.splice(idx, 1);
+    if (mg.userData && mg.userData.animActions) {
+      if (mg.userData.animActions.walk) mg.userData.animActions.walk.stop();
+      if (mg.userData.animActions.idle) mg.userData.animActions.idle.stop();
     }
-    ghost.remove(mg);
-    mg.traverse(child => {
-      if (child.isMesh) {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-          if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
-          else child.material.dispose();
-        }
-      } else if (child.isSprite) {
-        if (child.material) {
-          if (child.material.map) child.material.map.dispose();
-          child.material.dispose();
-        }
-      }
-    });
-    ghost.userData.mimicGroup = null;
+    mg.visible = false;
   }
   ghost.userData.isMimicDisguised = false;
   ghost.userData.mimicDurationTimer = 0;
-  ghost.children.forEach(c => { c.visible = true; });
+  ghost.children.forEach(c => { 
+    if (c !== ghost.userData.mimicGroup) c.visible = true; 
+  });
 }
 
 function freezeGhosts() {
@@ -13134,6 +13104,23 @@ function animate() {
     }
   }
 
+  // Centralized smooth sliding door animation (zero competing requestAnimationFrame callbacks)
+  if (slidingWallSegments.length > 0) {
+    const slideSpeed = delta * 6.0;
+    for (let i = 0; i < slidingWallSegments.length; i++) {
+      const seg = slidingWallSegments[i];
+      if (seg.userData && seg.userData.targetY !== undefined) {
+        const diff = seg.userData.targetY - seg.position.y;
+        if (Math.abs(diff) > 0.02) {
+          seg.position.y += diff * Math.min(1.0, slideSpeed);
+        } else {
+          seg.position.y = seg.userData.targetY;
+          delete seg.userData.targetY;
+        }
+      }
+    }
+  }
+
   // Active gameplay timers (delta-decremented so they automatically pause when solo is paused)
   if (window.ghostsFrozen) {
     ghostsFrozenRemaining -= delta;
@@ -14181,35 +14168,40 @@ function animate() {
               const chosenUsername = chosenTeammate.username || 'Operative';
               const chosenIsVip = Boolean(chosenTeammate.isVip);
 
-              const mimicGroup = createHumanMeshGroup(chosenSkin, chosenUsername, chosenIsVip);
-              mimicGroup.rotation.y = Math.PI; // Aligns human model facing forward (+Z in ghost space) matching ghost lookAt direction
-              
-              // Thermal camera material setup (Cyan for teammates)
-              const meshThermalMat = new THREE.MeshBasicMaterial({ 
-                color: 0x38bdf8, 
-                fog: false, 
-                depthTest: false, 
-                side: THREE.DoubleSide 
-              });
-              mimicGroup.traverse(c => {
-                if (c.isMesh) {
-                  c.userData.normalMat = c.material;
-                  c.userData.thermalMat = meshThermalMat;
-                } else if (c.isSprite && !c.userData.isUsernameTag) {
-                  c.userData.normalMat = c.material;
-                  c.userData.thermalMat = new THREE.SpriteMaterial({
-                    map: c.material.map,
-                    color: 0x38bdf8,
-                    fog: false,
-                    depthTest: false,
-                    transparent: true,
-                    blending: THREE.AdditiveBlending
-                  });
-                }
-              });
+              let mimicGroup = ghost.userData.mimicGroup;
+              if (!mimicGroup) {
+                mimicGroup = createHumanMeshGroup(chosenSkin, chosenUsername, chosenIsVip);
+                mimicGroup.rotation.y = Math.PI; // Aligns human model facing forward (+Z in ghost space) matching ghost lookAt direction
+                
+                // Thermal camera material setup (Cyan for teammates)
+                const meshThermalMat = new THREE.MeshBasicMaterial({ 
+                  color: 0x38bdf8, 
+                  fog: false, 
+                  depthTest: false, 
+                  side: THREE.DoubleSide 
+                });
+                mimicGroup.traverse(c => {
+                  if (c.isMesh) {
+                    c.userData.normalMat = c.material;
+                    c.userData.thermalMat = meshThermalMat;
+                  } else if (c.isSprite && !c.userData.isUsernameTag) {
+                    c.userData.normalMat = c.material;
+                    c.userData.thermalMat = new THREE.SpriteMaterial({
+                      map: c.material.map,
+                      color: 0x38bdf8,
+                      fog: false,
+                      depthTest: false,
+                      transparent: true,
+                      blending: THREE.AdditiveBlending
+                    });
+                  }
+                });
 
-              ghost.add(mimicGroup);
-              ghost.userData.mimicGroup = mimicGroup;
+                ghost.add(mimicGroup);
+                ghost.userData.mimicGroup = mimicGroup;
+              } else {
+                mimicGroup.visible = true;
+              }
               
               // Hide the ghost aura lights and phantom meshes
               ghost.children.forEach(c => {

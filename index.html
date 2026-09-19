@@ -353,22 +353,26 @@
               </div>
             </div>
             <!-- Difficulty Formulas Guide Table -->
-            <div class="formula-breakdown-table" style="margin-top: 0.8rem; padding-top: 0.6rem; border-top: 1px dashed rgba(255, 255, 255, 0.1); display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; font-size: 0.75rem; text-align: center;">
-              <div id="formula-pill-easy" class="formula-pill" style="padding: 0.35rem 0.2rem; border-radius: 4px; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); color: #4ade80; transition: all 0.2s;">
-                <div style="font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 0.7rem;">🟢 EASY</div>
-                <div style="font-size: 0.68rem; margin-top: 2px;">max(2, H × 1)</div>
+            <div class="formula-breakdown-table">
+              <div id="formula-pill-easy" class="formula-pill pill-easy" data-difficulty="easy">
+                <div class="pill-title">🟢 EASY</div>
+                <div class="pill-formula">max(2, H × 1)</div>
+                <div class="pill-badge">★ ACTIVE</div>
               </div>
-              <div id="formula-pill-medium" class="formula-pill" style="padding: 0.35rem 0.2rem; border-radius: 4px; background: rgba(234, 179, 8, 0.08); border: 1px solid rgba(234, 179, 8, 0.25); color: #facc15; transition: all 0.2s;">
-                <div style="font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 0.7rem;">🟡 MEDIUM</div>
-                <div style="font-size: 0.68rem; margin-top: 2px;">max(3, H × 2)</div>
+              <div id="formula-pill-medium" class="formula-pill pill-medium" data-difficulty="medium">
+                <div class="pill-title">🟡 MEDIUM</div>
+                <div class="pill-formula">max(3, H × 2)</div>
+                <div class="pill-badge">★ ACTIVE</div>
               </div>
-              <div id="formula-pill-hard" class="formula-pill" style="padding: 0.35rem 0.2rem; border-radius: 4px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); color: #f87171; transition: all 0.2s;">
-                <div style="font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 0.7rem;">🔴 HARD</div>
-                <div style="font-size: 0.68rem; margin-top: 2px;">max(6, H × 3)</div>
+              <div id="formula-pill-hard" class="formula-pill pill-hard" data-difficulty="hard">
+                <div class="pill-title">🔴 HARD</div>
+                <div class="pill-formula">max(6, H × 3)</div>
+                <div class="pill-badge">★ ACTIVE</div>
               </div>
-              <div id="formula-pill-impossible" class="formula-pill" style="padding: 0.35rem 0.2rem; border-radius: 4px; background: rgba(168, 85, 247, 0.08); border: 1px solid rgba(168, 85, 247, 0.25); color: #c084fc; transition: all 0.2s;">
-                <div style="font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 0.7rem;">💀 IMPOSSIBLE</div>
-                <div style="font-size: 0.68rem; margin-top: 2px;">max(8, H × 4)</div>
+              <div id="formula-pill-impossible" class="formula-pill pill-impossible" data-difficulty="impossible">
+                <div class="pill-title">💀 IMPOSSIBLE</div>
+                <div class="pill-formula">max(8, H × 4)</div>
+                <div class="pill-badge">★ ACTIVE</div>
               </div>
             </div>
           </div>
