@@ -5322,14 +5322,24 @@ function generateCodeClues() {
   });
   codeClueNotes = [];
 
-  // Parchment note lying flat on the floor (like items and supplies)
-  const noteGeo = new THREE.BoxGeometry(0.65, 0.03, 0.85);
+  // Upright white rectangular note hovering in the middle of the path (like items)
+  const noteGeo = new THREE.BoxGeometry(0.55, 0.75, 0.03);
   const noteMat = new THREE.MeshStandardMaterial({
-    color: 0xfef08a,
-    emissive: 0xfde047,
-    emissiveIntensity: 0.9,
-    roughness: 0.5,
+    color: 0xffffff,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.35,
+    roughness: 0.35,
     metalness: 0.05
+  });
+
+  const ringGeo = new THREE.RingGeometry(0.12, 0.45, 24);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0xfde047,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.45,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
   });
 
   for (let i = 0; i < 4; i++) {
@@ -5345,19 +5355,32 @@ function generateCodeClues() {
       corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
     }
 
+    const noteGroup = new THREE.Group();
+    // Floating at waist height in the middle of the corridor path, exactly like items
+    noteGroup.position.set(corr.x, 0.65, corr.z);
+
     const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
-    // Lie flat slightly above floor (y = 0.05m) to avoid any z-fighting with carpets or stone tiles
-    noteMesh.position.set(corr.x, 0.05, corr.z);
-    noteMesh.rotation.y = seededRandom() * Math.PI;
+    noteMesh.position.set(0, 0, 0);
+    noteGroup.add(noteMesh);
 
-    // Dedicated subtle golden point light hovering slightly above the floor note
-    const clueLight = new THREE.PointLight(0xfef08a, 1.2, 4.5);
-    clueLight.position.set(0, 0.35, 0);
-    noteMesh.add(clueLight);
+    // Ground illuminated beacon halo ring on floor/carpet (like items)
+    const ring = new THREE.Mesh(ringGeo, ringMat.clone());
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = -0.615; // Local offset puts ring at world y = 0.035 (resting right on carpet)
+    noteGroup.add(ring);
 
-    scene.add(noteMesh);
+    // Dedicated soft golden-white point light hovering with the note
+    const clueLight = new THREE.PointLight(0xfffbeb, 1.4, 4.5);
+    clueLight.position.set(0, 0, 0);
+    noteGroup.add(clueLight);
+
+    noteGroup.userData.noteMesh = noteMesh;
+    noteGroup.userData.ring = ring;
+    noteGroup.userData.bobOffset = Math.random() * Math.PI * 2;
+
+    scene.add(noteGroup);
     claimSpawnLocation(corr.x, corr.z, window.isTutorialMatch ? 2.5 : 4.5, `Clue_${i}`);
-    codeClueNotes.push({ mesh: noteMesh, digitIndex: i, collected: false });
+    codeClueNotes.push({ mesh: noteGroup, digitIndex: i, collected: false });
   }
 }
 
@@ -8502,7 +8525,7 @@ function submitKeypadCode(code) {
       if (scr) scr.textContent = getKeypadDisplayString();
     } else {
       playWrongCodeAnimation();
-      triggerNotification(`❌ ACCESS DENIED: [${code}] is incorrect! Check glowing floor clue notes.`);
+      triggerNotification(`❌ ACCESS DENIED: [${code}] is incorrect! Check glowing white clue notes.`);
       codeEntered = '';
       const scr = document.getElementById('keypad-screen-display');
       if (scr) scr.textContent = getKeypadDisplayString();
@@ -11805,7 +11828,7 @@ function updateTutorialQuestBanner() {
             </div>
             <div style="color: #e0f2fe; line-height: 1.38;">
               1️⃣ <strong>Breakers:</strong> Repair yellow wall panels ⚡ to restore grid power to the vault.<br>
-              2️⃣ <strong>Clue Notes:</strong> Inspect glowing parchment notes 📝 on corridor floors to decode the 4-digit cipher.<br>
+              2️⃣ <strong>Clue Notes:</strong> Inspect glowing white notes 📝 in corridor paths to decode the 4-digit cipher.<br>
               3️⃣ <strong>Crack Cipher:</strong> Enter the 4-digit code at the Keypad 🔢 to reveal <strong>WHICH 2 Twin Keys</strong> 🔑 are needed!<br>
               4️⃣ <strong>Twin Keys:</strong> Locate the 2 matching gemstone keys 🔑 in the maze and insert them into the Master Gate sockets.<br>
               5️⃣ <strong>Master Gate Escape:</strong> With power on and both keys installed, interact with the blast door 🌲 to escape!
@@ -11843,18 +11866,18 @@ function updateTutorialQuestBanner() {
       descEl.innerHTML = isMobileDevice 
         ? `To escape, you must restore <strong>Grid Power</strong> and discover the <strong>4-Digit Cipher</strong>!<br>
            ⚡ <strong>Breaker:</strong> Locate the yellow breaker box on the wall and tap it.<br>
-           📝 <strong>Clue Notes:</strong> Lying on the corridor floor — tap to decode code digits.` 
+           📝 <strong>Clue Notes:</strong> Floating in the corridor path — tap to decode code digits.` 
         : `To escape, you must restore <strong>Grid Power</strong> and discover the <strong>4-Digit Cipher</strong>!<br>
            ⚡ <strong>Breaker:</strong> Locate the yellow breaker box on the wall and press <kbd>E</kbd>.<br>
-           📝 <strong>Clue Notes:</strong> Lying on the corridor floor — press <kbd>E</kbd> to decode code digits.`;
+           📝 <strong>Clue Notes:</strong> Floating in the corridor path — press <kbd>E</kbd> to decode code digits.`;
 
       let doneCount9 = (isBreakerDone9 ? 1 : 0) + (hasClue9 ? 1 : 0);
       progBar.style.width = doneCount9 === 0 ? '75%' : (doneCount9 === 1 ? '80%' : '85%');
 
       if (!isBreakerDone9 && !hasClue9) {
-        hintEl.textContent = `⚡ Breaker: [ 0/1 ] | 📝 Clue Notes: [ 0/1 ] — Search corridor floors`;
+        hintEl.textContent = `⚡ Breaker: [ 0/1 ] | 📝 Clue Notes: [ 0/1 ] — Search corridor paths`;
       } else if (isBreakerDone9 && !hasClue9) {
-        hintEl.textContent = `⚡ Grid Powered! Now find and inspect the glowing Floor Clue Note (📝)`;
+        hintEl.textContent = `⚡ Grid Powered! Now find and inspect the glowing Clue Note (📝)`;
       } else if (!isBreakerDone9 && hasClue9) {
         hintEl.textContent = `📝 Code Intel Decoded: [ ${fullCode9} ]! Now repair yellow Circuit Breaker (⚡)`;
       } else {
@@ -12852,6 +12875,20 @@ function animate() {
       if (!k || !k.mesh) continue;
       k.mesh.rotation.y = time * 0.002 + i;
       k.mesh.position.y = 0.45 + Math.sin(t + i * 0.8) * 0.05;
+    }
+  }
+
+  // Floating hover & smooth rotation for 3D code clue notes (white rectangle in the middle of the path like items)
+  if (codeClueNotes && codeClueNotes.length > 0) {
+    const t = time * 0.003;
+    for (let i = 0; i < codeClueNotes.length; i++) {
+      const n = codeClueNotes[i];
+      if (!n || !n.mesh) continue;
+      n.mesh.rotation.y = time * 0.0018 + i * 0.7;
+      n.mesh.position.y = 0.65 + Math.sin(t + (n.mesh.userData.bobOffset || i)) * 0.04;
+      if (n.mesh.userData.ring && n.mesh.userData.ring.material) {
+        n.mesh.userData.ring.material.opacity = 0.35 + Math.sin(time * 0.004 + i) * 0.15;
+      }
     }
   }
 
