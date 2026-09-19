@@ -2298,7 +2298,16 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   }
 
   // Store the cipher code digits (revealed one at a time by clue notes in the maze)
-  window.cipherCodeDigits = matchConfig.puzzleState.codeDigits || [null, null, null, null];
+  if (!matchConfig.puzzleState || !Array.isArray(matchConfig.puzzleState.codeDigits) || matchConfig.puzzleState.codeDigits.length < 4 || matchConfig.puzzleState.codeDigits.some(d => d === null || d === undefined)) {
+    window.cipherCodeDigits = [
+      Math.floor(seededRandom() * 10).toString(),
+      Math.floor(seededRandom() * 10).toString(),
+      Math.floor(seededRandom() * 10).toString(),
+      Math.floor(seededRandom() * 10).toString()
+    ];
+  } else {
+    window.cipherCodeDigits = matchConfig.puzzleState.codeDigits.map(d => String(d));
+  }
   window.gameDifficulty = (matchConfig.puzzleState && matchConfig.puzzleState.difficulty) || localStorage.getItem('manifestation_difficulty') || 'easy';
   const defaultBreakers = window.isTutorialMatch ? 1 : (window.gameDifficulty === 'easy' ? 2 : (window.gameDifficulty === 'hard' ? 4 : (window.gameDifficulty === 'impossible' ? 6 : 3)));
   totalBreakersRequired = window.isTutorialMatch ? 1 : ((matchConfig.puzzleState && matchConfig.puzzleState.totalBreakers) || defaultBreakers);
@@ -5305,6 +5314,179 @@ function generateCollectibles(keysCount) {
   generateCodeClues();
 }
 
+// --- 3D Code Clue Note Document Textures ---
+function createClueNoteCanvas(digitIndex, digitValue, isCollected = false) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 700;
+  const ctx = canvas.getContext('2d');
+
+  // Background
+  ctx.fillStyle = isCollected ? '#f0fdf4' : '#ffffff';
+  ctx.fillRect(0, 0, 512, 700);
+
+  // Outer bold border
+  ctx.strokeStyle = isCollected ? '#16a34a' : '#0f172a';
+  ctx.lineWidth = 14;
+  ctx.strokeRect(7, 7, 498, 686);
+
+  // Inner border
+  ctx.strokeStyle = isCollected ? '#86efac' : '#cbd5e1';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(22, 22, 468, 656);
+
+  // Top header banner
+  ctx.fillStyle = isCollected ? '#14532d' : '#0f172a';
+  ctx.fillRect(22, 22, 468, 104);
+
+  // Header Title
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '900 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Trebuchet MS", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('VAULT CIPHER INTEL', 256, 62);
+
+  // Subheader badge
+  ctx.fillStyle = isCollected ? '#86efac' : '#fbbf24';
+  ctx.font = '800 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('CLASSIFIED • MASTER VAULT GATE CODE', 256, 96);
+
+  // Middle section: Slot indicator
+  const digitNames = ['1ST', '2ND', '3RD', '4TH'];
+  const ord = digitNames[digitIndex] || `${digitIndex + 1}TH`;
+
+  ctx.fillStyle = isCollected ? '#15803d' : '#1e293b';
+  ctx.font = '900 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Trebuchet MS", sans-serif';
+  ctx.fillText(`CIPHER CLUE #${digitIndex + 1}`, 256, 162);
+
+  // Position pill
+  const pillW = 290, pillH = 38, pillX = (512 - pillW) / 2, pillY = 182;
+  ctx.fillStyle = isCollected ? '#dcfce7' : '#f1f5f9';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(pillX, pillY, pillW, pillH, 8);
+  else ctx.rect(pillX, pillY, pillW, pillH);
+  ctx.fill();
+  ctx.strokeStyle = isCollected ? '#86efac' : '#94a3b8';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = isCollected ? '#166534' : '#334155';
+  ctx.font = '800 17px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(`[ ${ord} DIGIT OF 4-DIGIT CODE ]`, 256, 207);
+
+  // Subtle separator line
+  ctx.strokeStyle = isCollected ? '#86efac' : '#cbd5e1';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(60, 240);
+  ctx.lineTo(452, 240);
+  ctx.stroke();
+
+  // Number label
+  ctx.fillStyle = isCollected ? '#15803d' : '#64748b';
+  ctx.font = '800 17px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('DECIPHERED DIGIT VALUE', 256, 272);
+
+  // Central Number Box Background
+  const boxW = 240, boxH = 220, boxX = (512 - boxW) / 2, boxY = 290;
+  ctx.fillStyle = isCollected ? '#dcfce7' : '#f8fafc';
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(boxX, boxY, boxW, boxH, 16);
+  else ctx.rect(boxX, boxY, boxW, boxH);
+  ctx.fill();
+  ctx.strokeStyle = isCollected ? '#22c55e' : '#cbd5e1';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+
+  // Giant central number!
+  ctx.font = '900 190px "Impact", "Arial Black", "Trebuchet MS", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = isCollected ? '#15803d' : '#0f172a';
+  ctx.fillText(String(digitValue), 256, 400);
+
+  // Reset baseline
+  ctx.textBaseline = 'alphabetic';
+
+  // Separator line
+  ctx.strokeStyle = isCollected ? '#86efac' : '#cbd5e1';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(60, 540);
+  ctx.lineTo(452, 540);
+  ctx.stroke();
+
+  // Bottom Status / Action Prompt
+  if (isCollected) {
+    ctx.fillStyle = '#15803d';
+    ctx.font = '900 21px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('✓ INTEL LOGGED TO HUD', 256, 580);
+  } else {
+    ctx.fillStyle = '#b45309';
+    ctx.font = '900 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText('★ PRESS [E] / TAP TO RECORD', 256, 580);
+  }
+
+  // Security barcode / document footer
+  ctx.fillStyle = '#64748b';
+  ctx.font = '700 12px monospace';
+  ctx.fillText(`SECURITY IDENT: SEC-CLUE-${digitIndex + 1}-AUTH`, 256, 618);
+
+  ctx.fillStyle = isCollected ? '#15803d' : '#334155';
+  for (let b = 0; b < 32; b++) {
+    const bx = 96 + b * 10;
+    const bh = (b % 4 === 0) ? 22 : ((b % 2 === 0) ? 16 : 10);
+    ctx.fillRect(bx, 634, (b % 3 === 0) ? 3 : 2, bh);
+  }
+
+  return canvas;
+}
+
+function applyClueNoteMaterials(noteMesh, digitIndex, digitValue, isCollected = false) {
+  if (!noteMesh) return;
+  const canvas = createClueNoteCanvas(digitIndex, digitValue, isCollected);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  texture.needsUpdate = true;
+
+  const edgeMat = new THREE.MeshStandardMaterial({
+    color: isCollected ? 0xa7f3d0 : 0xffffff,
+    emissive: isCollected ? 0x059669 : 0xffffff,
+    emissiveIntensity: isCollected ? 0.25 : 0.2,
+    roughness: 0.4
+  });
+
+  const faceMat = new THREE.MeshStandardMaterial({
+    map: texture,
+    color: 0xffffff,
+    emissive: 0xffffff,
+    emissiveIntensity: isCollected ? 0.45 : 0.35,
+    roughness: 0.35,
+    metalness: 0.05
+  });
+
+  if (Array.isArray(noteMesh.material)) {
+    noteMesh.material.forEach(m => {
+      if (m.map) m.map.dispose();
+      m.dispose();
+    });
+  }
+
+  // BoxGeometry face order: 0:+X, 1:-X, 2:+Y, 3:-Y, 4:+Z (front), 5:-Z (back)
+  noteMesh.material = [edgeMat, edgeMat, edgeMat, edgeMat, faceMat, faceMat];
+}
+
+function refreshAllClueNoteVisuals() {
+  if (!codeClueNotes || codeClueNotes.length === 0) return;
+  const digits = window.cipherCodeDigits || [];
+  codeClueNotes.forEach((clue) => {
+    if (!clue || !clue.mesh || !clue.mesh.userData || !clue.mesh.userData.noteMesh) return;
+    const digitVal = (digits[clue.digitIndex] !== undefined && digits[clue.digitIndex] !== null) ? digits[clue.digitIndex] : '?';
+    applyClueNoteMaterials(clue.mesh.userData.noteMesh, clue.digitIndex, digitVal, !!clue.collected);
+  });
+}
+window.refreshClueNotes = refreshAllClueNoteVisuals;
+
 function generateCodeClues() {
   codeClueNotes.forEach(n => {
     if (n.mesh) {
@@ -5324,13 +5506,6 @@ function generateCodeClues() {
 
   // Upright white rectangular note hovering in the middle of the path (like items)
   const noteGeo = new THREE.BoxGeometry(0.55, 0.75, 0.03);
-  const noteMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0xffffff,
-    emissiveIntensity: 0.35,
-    roughness: 0.35,
-    metalness: 0.05
-  });
 
   const ringGeo = new THREE.RingGeometry(0.12, 0.45, 24);
   const ringMat = new THREE.MeshBasicMaterial({
@@ -5341,6 +5516,10 @@ function generateCodeClues() {
     blending: THREE.AdditiveBlending,
     depthWrite: false
   });
+
+  const digits = (window.cipherCodeDigits && window.cipherCodeDigits.length >= 4)
+    ? window.cipherCodeDigits
+    : [null, null, null, null];
 
   for (let i = 0; i < 4; i++) {
     let corr;
@@ -5359,8 +5538,12 @@ function generateCodeClues() {
     // Floating at waist height in the middle of the corridor path, exactly like items
     noteGroup.position.set(corr.x, 0.65, corr.z);
 
-    const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
+    const noteMesh = new THREE.Mesh(noteGeo);
     noteMesh.position.set(0, 0, 0);
+
+    const digitVal = (digits[i] !== null && digits[i] !== undefined) ? digits[i] : '?';
+    applyClueNoteMaterials(noteMesh, i, digitVal, false);
+
     noteGroup.add(noteMesh);
 
     // Ground illuminated beacon halo ring on floor/carpet (like items)
@@ -7428,13 +7611,16 @@ function getBestInteractionTarget() {
       const res = evalInteractionCandidate(clue.mesh.position, 5.5);
       if (res.eligible && res.score < bestScore) {
         bestScore = res.score;
-        let prompt = "";
+        const digits = window.cipherCodeDigits || [];
+        const revealedDigit = (digits[clue.digitIndex] !== undefined && digits[clue.digitIndex] !== null) ? digits[clue.digitIndex] : '?';
+        const digitNames = ['1ST', '2ND', '3RD', '4TH'];
+        const ord = digitNames[clue.digitIndex] || `${clue.digitIndex + 1}TH`;
         if (clue.collected) {
-          const digits = window.cipherCodeDigits || [];
-          const revealedDigit = digits[clue.digitIndex] !== undefined ? digits[clue.digitIndex] : '?';
-          prompt = `Cipher Clue #${clue.digitIndex + 1}: [ ${revealedDigit} ] (Code Already Read)`;
+          prompt = `Cipher Clue #${clue.digitIndex + 1}: [ ${revealedDigit} ] (${ord} Digit - Already Recorded)`;
         } else {
-          prompt = isMobileDevice ? `Tap to inspect Cipher Clue #${clue.digitIndex + 1}` : `Press <kbd>E</kbd> to inspect Cipher Clue #${clue.digitIndex + 1}`;
+          prompt = isMobileDevice 
+            ? `Tap to record Clue #${clue.digitIndex + 1}: [ ${revealedDigit} ] (${ord} Digit)` 
+            : `Press <kbd>E</kbd> to record Clue #${clue.digitIndex + 1}: [ ${revealedDigit} ] (${ord} Digit)`;
         }
         bestCandidate = {
           type: 'clue',
@@ -8034,16 +8220,25 @@ function checkInteractions() {
 }
 
 function collectClueLocal(digitIndex) {
+  const digitNames = ['1ST', '2ND', '3RD', '4TH'];
+  const digits = window.cipherCodeDigits || [null, null, null, null];
+  const revealedDigit = (digits[digitIndex] !== undefined && digits[digitIndex] !== null) ? digits[digitIndex] : '?';
+
   const note = codeClueNotes.find(n => n.digitIndex === digitIndex);
   if (note && !note.collected) {
     note.collected = true;
     if (note.mesh) {
+      if (note.mesh.userData && note.mesh.userData.noteMesh) {
+        applyClueNoteMaterials(note.mesh.userData.noteMesh, digitIndex, revealedDigit, true);
+      }
+      if (note.mesh.userData && note.mesh.userData.ring && note.mesh.userData.ring.material) {
+        note.mesh.userData.ring.material.color.setHex(0x10b981);
+        note.mesh.userData.ring.material.opacity = 0.55;
+      }
       note.mesh.traverse(c => {
-        if (c.isMesh && c.material) {
-          if (c.material.emissiveIntensity !== undefined) c.material.emissiveIntensity = 0.1;
-        }
         if (c.isPointLight) {
-          c.intensity = 0.2;
+          c.color.setHex(0x6ee7b7);
+          c.intensity = 1.0;
         }
       });
     }
@@ -8055,13 +8250,10 @@ function collectClueLocal(digitIndex) {
       const sBar = document.getElementById('sanity-bar');
       if (sVal) sVal.textContent = `${Math.floor(currentSanity)}%`;
       if (sBar) sBar.style.width = `${currentSanity}%`;
-      triggerNotification(`📖 Lore Note Deciphered! (+15% Sanity — Cipher Clarity)`);
+      triggerNotification(`📖 Clue #${digitIndex + 1} Decoded! (+15% Sanity — Cipher Clarity)`);
     }
   }
 
-  const digitNames = ['1ST', '2ND', '3RD', '4TH'];
-  const digits = window.cipherCodeDigits || [null, null, null, null];
-  const revealedDigit = digits[digitIndex];
   const cipherHUD = document.getElementById('hud-cipher-info');
 
   if (window.gameDifficulty === 'impossible') {
