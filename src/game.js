@@ -1464,14 +1464,15 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     (sessionStorage.getItem('rejoinIsSolo') === 'true') ||
     (!matchConfig.isPublic && Object.keys(matchConfig.players || {}).length <= 1)
   );
+  // Info Screen (Breakers, Keys, and 4-Digit Code) must ALWAYS be visible across all modes!
+  const objBar = document.querySelector('.compact-objective-bar');
+  if (objBar) objBar.style.display = 'flex';
+
   if (window.isTutorialMatch) {
     totalBreakersRequired = 1;
   } else {
-    // Strictly hide tutorial training banner and display the 4-digit code / breakers objective bar
     const tutBanner = document.getElementById('tutorial-quest-banner');
     if (tutBanner) tutBanner.style.display = 'none';
-    const objBar = document.querySelector('.compact-objective-bar');
-    if (objBar) objBar.style.display = 'flex';
   }
 
   // Initialize seededRandom using server-provided mazeGeometrySeed
@@ -1742,15 +1743,15 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   // Initialize Controls Guide & Tutorial Quest engine
   setupControlsGuideModal();
+  // Info Screen (Breakers, Keys, and 4-Digit Code) must ALWAYS be visible across all modes!
+  if (objBar) objBar.style.display = 'flex';
+
   if (window.isTutorialMatch) {
     totalBreakersRequired = 1;
     initTutorialQuest();
   } else {
-    // Strictly hide tutorial training banner and display the 4-digit code / breakers objective bar
     const tutBanner = document.getElementById('tutorial-quest-banner');
     if (tutBanner) tutBanner.style.display = 'none';
-    const objBar = document.querySelector('.compact-objective-bar');
-    if (objBar) objBar.style.display = 'flex';
   }
 
   // Global helper to request pointer lock during active gameplay
@@ -8421,15 +8422,31 @@ function updateGateHUD() {
   }
   const lockLabel = document.getElementById('terminal-lock-label');
   if (lockLabel) {
-    if (gateSolved && insertedGateKeys.length >= 2 && fixedBreakersCount >= totalBreakersRequired) {
-      lockLabel.textContent = "GATE UNLOCKED — PRESS E TO ESCAPE";
-      lockLabel.style.color = "#10b981";
-    } else if (gateSolved) {
-      lockLabel.textContent = "CIPHER CRACKED — INSTALL 2 GATE KEYS";
-      lockLabel.style.color = "#38bdf8";
+    if (window.isTutorialMatch) {
+      if (gateSolved && fixedBreakersCount >= 1) {
+        lockLabel.textContent = "MASTER GATE UNLOCKED — ESCAPE TO FOREST!";
+        lockLabel.style.color = "#10b981";
+      } else if (gateSolved) {
+        lockLabel.textContent = "CIPHER CRACKED — REPAIR 1 BREAKER TO POWER GATE";
+        lockLabel.style.color = "#38bdf8";
+      } else if (fixedBreakersCount >= 1) {
+        lockLabel.textContent = "POWER RESTORED — ENTER 4-DIGIT CODE AT KEYPAD";
+        lockLabel.style.color = "#38bdf8";
+      } else {
+        lockLabel.textContent = "VAULT PROTOCOL: SECURED";
+        lockLabel.style.color = "var(--primary-accent)";
+      }
     } else {
-      lockLabel.textContent = "SECURED (3-TIER LOCK)";
-      lockLabel.style.color = "var(--primary-accent)";
+      if (gateSolved && insertedGateKeys.length >= 2 && fixedBreakersCount >= totalBreakersRequired) {
+        lockLabel.textContent = "GATE UNLOCKED — PRESS E TO ESCAPE";
+        lockLabel.style.color = "#10b981";
+      } else if (gateSolved) {
+        lockLabel.textContent = "CIPHER CRACKED — INSTALL 2 GATE KEYS";
+        lockLabel.style.color = "#38bdf8";
+      } else {
+        lockLabel.textContent = "SECURED (3-TIER LOCK)";
+        lockLabel.style.color = "var(--primary-accent)";
+      }
     }
   }
 }
@@ -10691,9 +10708,42 @@ function initTutorialQuest() {
   const banner = document.getElementById('tutorial-quest-banner');
   if (banner) banner.style.display = 'block';
 
-  // In Tutorial match, hide the redundant 0/3 breakers bar so the screen stays clean
+  // Info Screen (Breakers, Keys, Code) is ALWAYS visible in the tutorial!
   const objBar = document.querySelector('.compact-objective-bar');
-  if (objBar) objBar.style.display = 'none';
+  if (objBar) {
+    objBar.style.display = 'flex';
+    const breakersInfo = document.getElementById('hud-breakers-info');
+    if (breakersInfo) {
+      breakersInfo.textContent = `POWER: ${fixedBreakersCount}/${totalBreakersRequired} BREAKER`;
+      breakersInfo.style.color = '#f59e0b';
+    }
+    const cipherHUD = document.getElementById('hud-cipher-info');
+    if (cipherHUD) {
+      const code = (window.cipherCodeDigits || []).join('');
+      cipherHUD.textContent = code ? `CODE: ${code}` : `4-DIGIT CODE`;
+      cipherHUD.style.color = '#38bdf8';
+    }
+    const lockLabel = document.getElementById('terminal-lock-label');
+    if (lockLabel) {
+      lockLabel.textContent = "VAULT PROTOCOL: SECURED";
+      lockLabel.style.color = "var(--primary-accent)";
+    }
+  }
+
+  const minBtn = document.getElementById('tutorial-minimize-btn');
+  if (minBtn) {
+    minBtn.onclick = (e) => {
+      if (e) {
+        if (e.stopPropagation) e.stopPropagation();
+        if (e.preventDefault) e.preventDefault();
+      }
+      if (banner) {
+        banner.classList.toggle('minimized');
+        const isMin = banner.classList.contains('minimized');
+        minBtn.textContent = isMin ? '▲ EXP' : '▼ MIN';
+      }
+    };
+  }
 
   const abortBtn = document.getElementById('tutorial-abort-btn');
   if (abortBtn) {
@@ -10730,10 +10780,12 @@ function initTutorialQuest() {
 
 function updateTutorialQuestBanner() {
   const banner = document.getElementById('tutorial-quest-banner');
+  // Always keep the Info Screen (breakers, keys, code) active!
+  const objBar = document.querySelector('.compact-objective-bar');
+  if (objBar) objBar.style.display = 'flex';
+
   if (!banner || !window.isTutorialMatch) {
     if (banner) banner.style.display = 'none';
-    const objBar = document.querySelector('.compact-objective-bar');
-    if (objBar && !window.isTutorialMatch) objBar.style.display = 'flex';
     return;
   }
 
@@ -10870,24 +10922,25 @@ function updateTutorialQuestBanner() {
     case 9:
       stageInd.textContent = 'STAGE 9/10';
       titleEl.textContent = 'GRID POWER & CLUE NOTES';
+      const fullCode9 = (window.cipherCodeDigits || []).join('');
+      const codeMsg9 = fullCode9 ? `Vault Code: [ ${fullCode9} ]` : `Inspect wall notes for 4-digit code`;
       descEl.innerHTML = isMobileDevice 
-        ? 'Locate a yellow <strong>Circuit Breaker</strong> on the wall and tap it to power the vault, then tap wall clue notes!' 
-        : 'Locate a yellow <strong>Circuit Breaker</strong> on the wall, press <kbd>E</kbd> to power the vault, then inspect wall clue notes for the code!';
+        ? `Locate a yellow <strong>Circuit Breaker</strong> on the wall to power the vault, then inspect wall clue notes!<br><span style="color: #38bdf8; font-weight: bold; margin-top: 3px; display: inline-block;">📝 ${codeMsg9}</span>` 
+        : `Locate a yellow <strong>Circuit Breaker</strong> on the wall, press <kbd>E</kbd> to power the vault, then inspect wall clue notes!<br><span style="color: #38bdf8; font-weight: bold; margin-top: 3px; display: inline-block;">📝 ${codeMsg9}</span>`;
       progBar.style.width = fixedBreakersCount >= 1 ? '100%' : '85%';
-      hintEl.textContent = `Circuit Breakers: ${fixedBreakersCount} / 1 required`;
+      hintEl.textContent = `Circuit Breakers: ${fixedBreakersCount} / 1 required | ${codeMsg9}`;
       break;
 
     case 10:
       stageInd.textContent = 'STAGE 10/10';
       titleEl.textContent = 'MASTER VAULT EXTRACTION';
+      const fullCode10 = (window.cipherCodeDigits || []).join('') || '4821';
       if (!gateSolved) {
         descEl.innerHTML = isMobileDevice 
-          ? 'Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, tap it directly to open, and enter the 4-digit code!' 
-          : 'Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, press <kbd>E</kbd>, and enter the 4-digit code!';
+          ? `Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, tap it directly, and enter the code: <span style="color: #facc15; font-size: 0.95rem; font-weight: 900; letter-spacing: 2px; text-shadow: 0 0 8px rgba(250, 204, 21, 0.6); background: rgba(250, 204, 21, 0.15); padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid rgba(250, 204, 21, 0.4);">[ ${fullCode10} ]</span>` 
+          : `Head to the <strong>Master Vault Keypad</strong> at the corridor terminus, press <kbd>E</kbd>, and enter the code: <span style="color: #facc15; font-size: 0.95rem; font-weight: 900; letter-spacing: 2px; text-shadow: 0 0 8px rgba(250, 204, 21, 0.6); background: rgba(250, 204, 21, 0.15); padding: 0.1rem 0.45rem; border-radius: 4px; border: 1px solid rgba(250, 204, 21, 0.4);">[ ${fullCode10} ]</span>`;
         progBar.style.width = '90%';
-        hintEl.textContent = window.isAriadneDev
-          ? 'Follow radar or Ariadne thread to the Master Vault Keypad!'
-          : 'Follow radar or compass beacon to the Master Vault Keypad!';
+        hintEl.textContent = `Type code [ ${fullCode10} ] at Master Vault Keypad terminal to unlock blast door!`;
       } else {
         descEl.innerHTML = isMobileDevice 
           ? '🎉 <strong>CIPHER CRACKED! Master Gate Unlocked!</strong> Tap the blast door to escape into the pine forest!' 

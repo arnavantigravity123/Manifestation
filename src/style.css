@@ -643,14 +643,16 @@ input[type="text"]:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 0.45rem 1.25rem !important;
-  background: rgba(10, 15, 30, 0.92) !important;
-  border: 1px solid rgba(239, 68, 68, 0.35) !important;
+  gap: 4px;
+  padding: 0.35rem 1.0rem !important;
+  background: rgba(10, 15, 30, 0.94) !important;
+  border: 1px solid rgba(56, 189, 248, 0.45) !important;
   border-radius: 8px !important;
-  box-shadow: 0 0 18px rgba(0, 0, 0, 0.7) !important;
+  box-shadow: 0 0 16px rgba(0, 0, 0, 0.7) !important;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  max-width: 480px;
+  width: 90vw;
 }
 
 .compact-objective-bar .status-indicator {
@@ -2753,6 +2755,23 @@ kbd {
   letter-spacing: 0.5px;
 }
 
+.tutorial-quest-banner.minimized .tutorial-task-desc,
+.tutorial-quest-banner.minimized .tutorial-progress-track,
+.tutorial-quest-banner.minimized .tutorial-task-hint {
+  display: none !important;
+}
+
+.tutorial-quest-banner.minimized {
+  padding: 0.2rem 0.65rem !important;
+  margin-top: 2px !important;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2) !important;
+}
+
+.tutorial-quest-banner.minimized .tutorial-task-title {
+  font-size: 0.72rem !important;
+  margin-bottom: 0 !important;
+}
+
 /* Mobile Landscape Viewport Compact Tuning (<520px height) */
 @media (max-height: 520px) and (orientation: landscape) {
   .tutorial-quest-banner {
@@ -2777,7 +2796,7 @@ kbd {
     padding: 0.05rem 0.35rem;
   }
 
-  #tutorial-rules-btn, #tutorial-abort-btn {
+  #tutorial-rules-btn, #tutorial-abort-btn, #tutorial-minimize-btn {
     font-size: 0.58rem !important;
     padding: 0.08rem 0.35rem !important;
   }
