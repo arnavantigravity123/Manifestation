@@ -3420,6 +3420,10 @@ function spawnDungeonProps(layout, blockSize) {
   const totalCols = (layout && layout[0] && layout[0].length) ? layout[0].length : (layout ? layout.length : 21);
   const totalRows = layout ? layout.length : 21;
 
+  const maxPillarsBudget = Math.max(1200, Math.ceil(totalRows * totalCols * 1.6));
+  const maxStatuesBudget = Math.max(120, Math.ceil(totalRows * totalCols * 0.20));
+  const maxRugsBudget = Math.max(6000, Math.ceil(totalRows * totalCols * 3.5));
+
   const isPassable = (row, col) => {
     if (!layout[row] || layout[row][col] === undefined) return false;
     return layout[row][col] === 0 || layout[row][col] === 2;
@@ -3430,8 +3434,8 @@ function spawnDungeonProps(layout, blockSize) {
     return layout[row][col] === 1;
   };
 
-  function addPropCollider(px, pz, radius, slidingWallRef = null) {
-    const col = { x: px, z: pz, radius, slidingWallRef };
+  function addPropCollider(px, pz, radius, slidingWallRef = null, type = 'prop') {
+    const col = { x: px, z: pz, radius, slidingWallRef, isPillar: type === 'pillar', isStatue: type === 'statue' };
     dungeonPropColliders.push(col);
     const c = Math.floor((px / blockSize) + (totalCols / 2));
     const r = Math.floor((pz / blockSize) + (totalRows / 2));
@@ -3445,13 +3449,49 @@ function spawnDungeonProps(layout, blockSize) {
     return Array.isArray(circuitBreakers) && circuitBreakers.some(b => b.mesh && Math.hypot(b.mesh.position.x - x, b.mesh.position.z - z) < radius);
   }
 
-  // Helper: prevent spawning any column within collision radius of a statue
+  // Helper: prevent spawning any column within collision radius of a statue (O(1) local spatial bucket check)
   function isNearStatue(x, z, minDist = 2.8) {
-    return statueTransforms.some(s => Math.hypot(s.x - x, s.z - z) < minDist);
+    const c = Math.floor((x / blockSize) + (totalCols / 2));
+    const r = Math.floor((z / blockSize) + (totalRows / 2));
+    const minDistSq = minDist * minDist;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const bucket = dungeonPropGrid.get(((r + dr) * 1000) + (c + dc));
+        if (bucket) {
+          for (let i = 0; i < bucket.length; i++) {
+            const p = bucket[i];
+            if (p.isStatue) {
+              const dx = p.x - x;
+              const dz = p.z - z;
+              if (dx * dx + dz * dz < minDistSq) return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
   }
 
   function isNearPillar(x, z, minDist = 1.8) {
-    return pillarTransforms.some(p => Math.hypot(p.x - x, p.z - z) < minDist);
+    const c = Math.floor((x / blockSize) + (totalCols / 2));
+    const r = Math.floor((z / blockSize) + (totalRows / 2));
+    const minDistSq = minDist * minDist;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const bucket = dungeonPropGrid.get(((r + dr) * 1000) + (c + dc));
+        if (bucket) {
+          for (let i = 0; i < bucket.length; i++) {
+            const p = bucket[i];
+            if (p.isPillar) {
+              const dx = p.x - x;
+              const dz = p.z - z;
+              if (dx * dx + dz * dz < minDistSq) return true;
+            }
+          }
+        }
+      }
+    }
+    return false;
   }
 
   // Helper: prevent spawning props inside or within collision radius of player spawn hub
@@ -3467,29 +3507,29 @@ function spawnDungeonProps(layout, blockSize) {
   }
 
   function spawnPillarMesh(px, pz) {
-    if (placedPillars >= 800) return false; // Generous budget ensures all corridors are fully lined with columns
+    if (placedPillars >= maxPillarsBudget) return false;
     if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz) || isNearVaultDoorway(px, pz)) return false;
     if (isNearStatue(px, pz, 0.75)) return false; // Never spawn pillar inside or overlapping a statue
     if (isNearPillar(px, pz, 1.8)) return false;
     pillarTransforms.push({ x: px, z: pz });
-    addPropCollider(px, pz, 0.60);
+    addPropCollider(px, pz, 0.60, null, 'pillar');
     placedPillars++;
     return true;
   }
 
   function spawnStatueMesh(sx, sz, rotY = 0) {
-    if (placedStatues >= 60) return false; // Strict budget cap to prevent memory bloat on large maps
+    if (placedStatues >= maxStatuesBudget) return false;
     if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz) || isNearVaultDoorway(sx, sz)) return false;
     if (isNearStatue(sx, sz, 2.5)) return false;
     if (isNearPillar(sx, sz, 0.75)) return false; // Never spawn statue inside or overlapping an existing pillar
     statueTransforms.push({ x: sx, z: sz, rotY });
-    addPropCollider(sx, sz, 0.80);
+    addPropCollider(sx, sz, 0.80, null, 'statue');
     placedStatues++;
     return true;
   }
 
   function addRugTile(geo, rx, rz, rotY = 0) {
-    if (placedRugs >= 6000) return; // Full labyrinth budget ensures zero corridors are left bare
+    if (placedRugs >= maxRugsBudget) return;
     const baseGeo = geo || dungeonRugGeo;
     if (!baseGeo) return;
     const g = baseGeo.clone();
@@ -3709,10 +3749,10 @@ function spawnDungeonProps(layout, blockSize) {
         if (layout[r][c] === 0) {
           // Dead-End Protection: Dead ends are handled in section 3 with statue & flanking columns
           let openNeighbors = 0;
-          if (layout[r - 1] && layout[r - 1][c] === 0) openNeighbors++;
-          if (layout[r + 1] && layout[r + 1][c] === 0) openNeighbors++;
-          if (layout[r][c - 1] === 0) openNeighbors++;
-          if (layout[r][c + 1] === 0) openNeighbors++;
+          if (isPassable(r - 1, c)) openNeighbors++;
+          if (isPassable(r + 1, c)) openNeighbors++;
+          if (isPassable(r, c - 1)) openNeighbors++;
+          if (isPassable(r, c + 1)) openNeighbors++;
           if (openNeighbors <= 1) continue;
           // Shrines already have their own statue and flanking columns; skip placing additional columns here
           if (shrineCells.has(`${r},${c}`)) continue;
@@ -3908,7 +3948,7 @@ function spawnDungeonProps(layout, blockSize) {
         wallMesh.userData.decorations.push(statue);
 
         // Statue dynamic prop collider tied to sliding wall
-        addPropCollider(wx + localX, wz + localZ, 0.70, wallMesh);
+        addPropCollider(wx + localX, wz + localZ, 0.70, wallMesh, 'statue');
 
         // Flanking Ornate Columns (snug against wall at ±1.85m lateral)
         const flankDist = 1.85;
@@ -3925,7 +3965,7 @@ function spawnDungeonProps(layout, blockSize) {
           wallMesh.userData.decorations.push(pillar);
 
           // Pillar dynamic prop collider tied to sliding wall
-          addPropCollider(wx + pLocalX, wz + pLocalZ, 0.55, wallMesh);
+          addPropCollider(wx + pLocalX, wz + pLocalZ, 0.55, wallMesh, 'pillar');
         });
       };
 
@@ -5199,10 +5239,28 @@ function generateCircuitBreakers() {
           // Never mount on dynamic sliding doors
           if (mazeLayout[nr][nc] === 2) continue;
 
-          // Avoid solid pillars and monk statues
-          const collidesWithSolidProp = dungeonPropColliders.some(p => {
-            return Math.hypot(p.x - d.candX, p.z - d.candZ) < (p.radius + 0.85);
-          });
+          // Avoid solid pillars and monk statues (O(1) local spatial bucket check)
+          let collidesWithSolidProp = false;
+          if (dungeonPropGrid && dungeonPropGrid.size > 0) {
+            const candC = Math.floor((d.candX / blockSize) + (totalCols / 2));
+            const candR = Math.floor((d.candZ / blockSize) + (totalRows / 2));
+            for (let dr = -1; dr <= 1 && !collidesWithSolidProp; dr++) {
+              for (let dc = -1; dc <= 1 && !collidesWithSolidProp; dc++) {
+                const bucket = dungeonPropGrid.get(((candR + dr) * 1000) + (candC + dc));
+                if (bucket) {
+                  for (let pi = 0; pi < bucket.length; pi++) {
+                    const p = bucket[pi];
+                    if (Math.hypot(p.x - d.candX, p.z - d.candZ) < (p.radius + 0.85)) {
+                      collidesWithSolidProp = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          } else {
+            collidesWithSolidProp = dungeonPropColliders.some(p => Math.hypot(p.x - d.candX, p.z - d.candZ) < (p.radius + 0.85));
+          }
           if (collidesWithSolidProp) continue;
 
           // Avoid Master Vault Gate area
