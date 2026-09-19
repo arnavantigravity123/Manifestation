@@ -949,8 +949,9 @@ function addGLBModelToForest(forestContainer) {
   }
 }
 
-// Preload forest.glb immediately so it is ready before match escape
+// Preload forest.glb and latern.glb immediately so they are ready
 loadForestAsset();
+loadLanternAsset();
 
 export function attachForestToVault() {
   if (!vaultGroupRef) return;
@@ -1592,8 +1593,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     clearTimeout(window._securityLockoutTimer);
     window._securityLockoutTimer = null;
   }
-  // Preload forest model in background during gameplay
+  // Preload forest model and 3D lantern model in background during gameplay
   loadForestAsset();
+  loadLanternAsset();
   functionalKeysRevealed = [];
   foundKeysList = [];
   carriedKeys = [];
@@ -5098,6 +5100,7 @@ function generateMaze(keysCount = 8) {
   // Attach 3D Forest Environment directly outside the vault portal
   attachForestToVault();
   loadForestAsset();
+  loadLanternAsset();
 
   // 6. Invisible Collision Blocker volume preventing players from walking through the closed door
   let blockerSizeX = 4.5, blockerSizeZ = 0.8;
@@ -5600,8 +5603,190 @@ function generateConsumableItems() {
   }
 }
 
+// --- Feature 4: 3D Gothic UV Lantern Asset Loader (/assets/latern.glb) ---
+let preloadedLanternModel = null;
+let isLanternLoading = false;
+
+export function loadLanternAsset() {
+  if (preloadedLanternModel || isLanternLoading) return;
+  isLanternLoading = true;
+
+  gltfLoader.load('/assets/latern.glb', (gltf) => {
+    try {
+      const rawScene = gltf.scene;
+      rawScene.updateMatrixWorld(true);
+
+      // Analyze lantern cage vertices to find the true visual center and height
+      let cageMinX = Infinity, cageMaxX = -Infinity;
+      let cageMinY = Infinity, cageMaxY = -Infinity;
+      let cageMinZ = Infinity, cageMaxZ = -Infinity;
+
+      const tempV = new THREE.Vector3();
+      rawScene.traverse((child) => {
+        if (child.isMesh && child.geometry && child.geometry.attributes && child.geometry.attributes.position) {
+          const pos = child.geometry.attributes.position;
+          for (let i = 0; i < pos.count; i++) {
+            tempV.fromBufferAttribute(pos, i);
+            tempV.applyMatrix4(child.matrixWorld);
+            // Lantern cage vertices are in the forward chamber (Z <= -0.90 in world space)
+            if (tempV.z <= -0.90) {
+              if (tempV.x < cageMinX) cageMinX = tempV.x;
+              if (tempV.x > cageMaxX) cageMaxX = tempV.x;
+              if (tempV.y < cageMinY) cageMinY = tempV.y;
+              if (tempV.y > cageMaxY) cageMaxY = tempV.y;
+              if (tempV.z < cageMinZ) cageMinZ = tempV.z;
+              if (tempV.z > cageMaxZ) cageMaxZ = tempV.z;
+            }
+          }
+        }
+      });
+
+      let centerX, centerY, centerZ, targetScale;
+      if (Number.isFinite(cageMinY) && cageMaxY > cageMinY) {
+        centerX = (cageMinX + cageMaxX) / 2;
+        centerY = (cageMinY + cageMaxY) / 2;
+        centerZ = (cageMinZ + cageMaxZ) / 2;
+        const cageHeight = cageMaxY - cageMinY;
+        targetScale = 0.85 / cageHeight;
+      } else {
+        const box = new THREE.Box3().setFromObject(rawScene);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        centerX = center.x;
+        centerY = center.y;
+        centerZ = center.z;
+        targetScale = 0.85 / (size.y || 1.17);
+      }
+
+      // Create a centered, normalized master template group
+      const normalizedGroup = new THREE.Group();
+      normalizedGroup.name = 'lantern_master_template';
+
+      rawScene.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = false;
+          if (child.material) {
+            child.material.side = THREE.DoubleSide;
+            // Warm golden amber UV sanctuary glow
+            child.material.emissive = new THREE.Color(0xf59e0b);
+            child.material.emissiveIntensity = 2.4;
+            child.material.roughness = THREE.MathUtils.clamp(child.material.roughness || 0.45, 0.35, 0.7);
+            child.material.metalness = THREE.MathUtils.clamp(child.material.metalness || 0.7, 0.5, 0.9);
+            if (child.material.map) child.material.map.colorSpace = THREE.SRGBColorSpace;
+            if (child.material.emissiveMap) child.material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+          }
+        }
+      });
+
+      // Scale and offset rawScene so (0, 0, 0) is at the exact center of the glowing lantern cage
+      rawScene.scale.set(targetScale, targetScale, targetScale);
+      rawScene.position.set(-centerX * targetScale, -centerY * targetScale, -centerZ * targetScale);
+
+      normalizedGroup.add(rawScene);
+      preloadedLanternModel = normalizedGroup;
+      isLanternLoading = false;
+      console.log('[LANTERN] Authentic 3D UV Lantern model (/assets/latern.glb) loaded & normalized successfully!');
+
+      // Upgrade any sanctuary zones spawned before the GLB finished loading
+      upgradeExistingSanctuaryLanterns();
+    } catch (err) {
+      console.warn('[LANTERN] Error processing /assets/latern.glb:', err);
+      isLanternLoading = false;
+    }
+  }, undefined, (err) => {
+    console.warn('[LANTERN] Error loading /assets/latern.glb:', err);
+    isLanternLoading = false;
+  });
+}
+
+function createLanternInstance() {
+  const container = new THREE.Group();
+  container.name = 'sanctuary_lantern_container';
+
+  if (preloadedLanternModel) {
+    const glbClone = preloadedLanternModel.clone(true);
+    glbClone.position.y = 2.45;
+    glbClone.name = 'sanctuary_lantern_glb';
+    container.add(glbClone);
+  } else {
+    // Procedural Fallback while GLB loads
+    const lanternGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.45, 8);
+    const lanternMat = new THREE.MeshStandardMaterial({
+      color: 0xd97706,
+      roughness: 0.3,
+      metalness: 0.8,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.8
+    });
+    const fallbackMesh = new THREE.Mesh(lanternGeo, lanternMat);
+    fallbackMesh.position.y = 2.45;
+    fallbackMesh.name = 'sanctuary_lantern_fallback';
+    fallbackMesh.userData = { isProceduralFallback: true };
+    container.add(fallbackMesh);
+
+    const coreGeo = new THREE.SphereGeometry(0.12, 8, 8);
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb });
+    const core = new THREE.Mesh(coreGeo, coreMat);
+    core.name = 'sanctuary_lantern_fallback_core';
+    core.position.y = 2.45;
+    container.add(core);
+  }
+
+  // Heavy gothic wrought-iron ceiling chain and mounting flange (anchors lantern to 3.5m ceiling)
+  const chainGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.63, 6);
+  const ironMat = new THREE.MeshStandardMaterial({
+    color: 0x1f1f23,
+    roughness: 0.7,
+    metalness: 0.85
+  });
+  const chain = new THREE.Mesh(chainGeo, ironMat);
+  chain.position.y = 3.185;
+  chain.name = 'sanctuary_lantern_chain';
+  container.add(chain);
+
+  const flangeGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.03, 8);
+  const flange = new THREE.Mesh(flangeGeo, ironMat);
+  flange.position.y = 3.49;
+  flange.name = 'sanctuary_lantern_flange';
+  container.add(flange);
+
+  return container;
+}
+
+function upgradeExistingSanctuaryLanterns() {
+  if (!preloadedLanternModel || !Array.isArray(sanctuaryZones)) return;
+  sanctuaryZones.forEach((s) => {
+    if (s.group) {
+      const container = s.group.getObjectByName('sanctuary_lantern_container');
+      if (container) {
+        const fallback = container.getObjectByName('sanctuary_lantern_fallback');
+        if (fallback) {
+          container.remove(fallback);
+          if (fallback.geometry) fallback.geometry.dispose();
+          if (fallback.material) fallback.material.dispose();
+
+          const fallbackCore = container.getObjectByName('sanctuary_lantern_fallback_core');
+          if (fallbackCore) {
+            container.remove(fallbackCore);
+            if (fallbackCore.geometry) fallbackCore.geometry.dispose();
+            if (fallbackCore.material) fallbackCore.material.dispose();
+          }
+
+          const glbClone = preloadedLanternModel.clone(true);
+          glbClone.position.y = 2.45;
+          glbClone.name = 'sanctuary_lantern_glb';
+          container.add(glbClone);
+        }
+      }
+    }
+  });
+}
+
 // --- Feature 4: Light Sanctuaries (UV Lantern Zones) ---
 function generateLightSanctuaries() {
+  loadLanternAsset();
+
   sanctuaryZones.forEach(s => {
     if (s.group) scene.remove(s.group);
   });
@@ -5641,29 +5826,13 @@ function generateLightSanctuaries() {
     const group = new THREE.Group();
     group.position.set(pos.x, 0, pos.z);
 
-    // Warm Brass Lantern Frame
-    const lanternGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.45, 8);
-    const lanternMat = new THREE.MeshStandardMaterial({
-      color: 0xd97706,
-      roughness: 0.3,
-      metalness: 0.8,
-      emissive: 0xf59e0b,
-      emissiveIntensity: 0.8
-    });
-    const lantern = new THREE.Mesh(lanternGeo, lanternMat);
-    lantern.position.y = 2.4;
-    group.add(lantern);
+    // Authentic 3D UV Lantern Mesh (/assets/latern.glb with ceiling mounting)
+    const lanternContainer = createLanternInstance();
+    group.add(lanternContainer);
 
-    // Lantern glowing core
-    const coreGeo = new THREE.SphereGeometry(0.12, 8, 8);
-    const coreMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb });
-    const core = new THREE.Mesh(coreGeo, coreMat);
-    core.position.y = 2.4;
-    group.add(core);
-
-    // Warm Sanctuary Point Light
+    // Warm Sanctuary Point Light (aligned at lantern core height)
     const sanctuaryLight = new THREE.PointLight(0xf59e0b, 3.8, 10.0);
-    sanctuaryLight.position.y = 2.3;
+    sanctuaryLight.position.y = 2.4;
     group.add(sanctuaryLight);
 
     // Glowing floor sanctuary ring
