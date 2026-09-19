@@ -1045,8 +1045,23 @@ let velocity = new THREE.Vector3();
 let direction = new THREE.Vector3();
 let prevTime = performance.now();
 let localPlayerGroundSpeed = 0;
+export const currentlyHeldKeys = new Set();
+export let joystickTouchId = null;
 
-export function resetPlayerMovementState() {
+export function resetPlayerMovementState(force = false) {
+  // If player is actively using the mobile joystick (finger on screen), do NOT reset joystick unless forced (e.g. game paused, player captured)
+  const isHoldingJoy = (joystickTouchId !== null);
+  if (!force && isHoldingJoy && isMobileDevice) {
+    return;
+  }
+  if (!force && !isMobileDevice && currentlyHeldKeys.size > 0 && typeof document.hasFocus === 'function' && document.hasFocus()) {
+    // Re-verify keyboard state instead of resetting to false
+    moveForward = currentlyHeldKeys.has('KeyW') || currentlyHeldKeys.has('ArrowUp');
+    moveBackward = currentlyHeldKeys.has('KeyS') || currentlyHeldKeys.has('ArrowDown');
+    moveLeft = currentlyHeldKeys.has('KeyA') || currentlyHeldKeys.has('ArrowLeft');
+    moveRight = currentlyHeldKeys.has('KeyD') || currentlyHeldKeys.has('ArrowRight');
+    return;
+  }
   moveForward = false;
   moveBackward = false;
   moveLeft = false;
@@ -1056,6 +1071,19 @@ export function resetPlayerMovementState() {
   localPlayerGroundSpeed = 0;
   if (velocity) velocity.set(0, 0, 0);
   if (direction) direction.set(0, 0, 0);
+
+  const jb = document.getElementById('joystick-base');
+  const jk = document.getElementById('joystick-knob');
+  if (jb) jb.classList.remove('sprinting');
+  if (jk) {
+    jk.classList.remove('sprinting');
+    jk.style.transform = 'translate(0px, 0px)';
+  }
+  const sb = document.getElementById('btn-mobile-sprint');
+  if (sb) sb.classList.remove('sprinting');
+  if (force) {
+    joystickTouchId = null;
+  }
 
   if (typeof localPlayerVisual !== 'undefined' && localPlayerVisual) {
     if (localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
@@ -1860,7 +1888,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     const endEl = document.getElementById('end-game-overlay');
     if ((capturedEl && capturedEl.style.display === 'flex') || (endEl && endEl.style.display === 'flex')) return;
 
-    if (document.activeElement && document.activeElement.blur) {
+    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
       document.activeElement.blur();
     }
     const lockTarget = (renderer && renderer.domElement) || container || document.body;
@@ -1906,7 +1934,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     if (document.pointerLockElement) {
       ptrOverlay.style.display = 'none';
     } else {
-      resetPlayerMovementState();
+      resetPlayerMovementState(true);
       // Don't show pause overlay if dying, captured, escaping, keypad modal, minimap, settings modal, or game-over is open
       const keypadEl = document.getElementById('keypad-modal-ui');
       const isKeypadOpen = Boolean(keypadEl && keypadEl.style.display !== 'none');
@@ -1950,7 +1978,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   });
 
   window.addEventListener('blur', () => {
-    resetPlayerMovementState();
+    if (isMobileDevice) return;
+    if (typeof document.hasFocus === 'function' && document.hasFocus()) return;
+    currentlyHeldKeys.clear();
+    resetPlayerMovementState(true);
   });
 
   document.addEventListener('pointerlockerror', () => {
@@ -2549,6 +2580,12 @@ function renderHUDInventory() {
     slot.style.pointerEvents = 'auto';
     const selectSlot = (e) => {
       e.stopPropagation();
+      if (activeSlot === index) {
+        if (!isCaptured && !window.isSpectating) {
+          useActiveItem();
+        }
+        return;
+      }
       activeSlot = index;
       renderHUDInventory();
     };
@@ -5760,6 +5797,8 @@ function setupControls() {
 
   const container = document.getElementById('canvas-container');
   const onKeyDown = (event) => {
+    currentlyHeldKeys.add(event.code);
+
     // If keypad is open, intercept numeric keys and backspace
     const activeKeypad = document.getElementById('keypad-modal-ui');
     const isKeypadOpen = Boolean(activeKeypad && activeKeypad.style.display !== 'none');
@@ -5803,6 +5842,11 @@ function setupControls() {
       case 'ArrowRight':
       case 'KeyD':
         moveRight = true;
+        break;
+      case 'KeyR':
+        if (!isCaptured && !window.isSpectating) {
+          useActiveItem();
+        }
         break;
       case 'KeyE':
         // Interact key
@@ -5930,6 +5974,7 @@ function setupControls() {
   };
 
   const onKeyUp = (event) => {
+    currentlyHeldKeys.delete(event.code);
     switch (event.code) {
       case 'ArrowUp':
       case 'KeyW':
@@ -6218,7 +6263,7 @@ function setupControls() {
     // Joystick touch controls with responsive bounding box
     const joystickBase = document.getElementById('joystick-base');
     const joystickKnob = document.getElementById('joystick-knob');
-    let joystickTouchId = null;
+    joystickTouchId = null;
     let joyCenterX = 0;
     let joyCenterY = 0;
 
@@ -6364,6 +6409,7 @@ function setupControls() {
     // Helper for robust, instant tap response without double-fires or missed touches
     function addTapListener(el, callback) {
       if (!el) return;
+      el.setAttribute('tabindex', '-1');
       let lastTrigger = 0;
 
       const fire = (e) => {
@@ -12106,6 +12152,21 @@ function animate() {
   }
 
   if (isActive) {
+    if (!isMobileDevice) {
+      moveForward = currentlyHeldKeys.has('KeyW') || currentlyHeldKeys.has('ArrowUp');
+      moveBackward = currentlyHeldKeys.has('KeyS') || currentlyHeldKeys.has('ArrowDown');
+      moveLeft = currentlyHeldKeys.has('KeyA') || currentlyHeldKeys.has('ArrowLeft');
+      moveRight = currentlyHeldKeys.has('KeyD') || currentlyHeldKeys.has('ArrowRight');
+      if (myTeam === 'Human') {
+        const wantsSprint = currentlyHeldKeys.has('ShiftLeft') || currentlyHeldKeys.has('ShiftRight');
+        if (wantsSprint && !isSprintExhausted && stamina > 0) {
+          isSprinting = true;
+        } else if (!wantsSprint) {
+          isSprinting = false;
+        }
+      }
+    }
+
     // 1. Process movement physics with friction
     velocity.x -= velocity.x * 10.0 * delta;
     velocity.z -= velocity.z * 10.0 * delta;
