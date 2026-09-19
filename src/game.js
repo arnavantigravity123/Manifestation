@@ -7903,9 +7903,31 @@ function getBestInteractionTarget() {
             window.isEscaping = true;
 function awardMatchWinCredits() {
   if (matchCreditsAwardedThisSession) {
-    return { creditsAwarded: 0, rewardTitle: '', rewardSub: '', isOneTimeClaimed: false };
+    return { creditsAwarded: 0, rewardTitle: '', rewardSub: '', isOneTimeClaimed: false, requiresAccount: false };
   }
   matchCreditsAwardedThisSession = true;
+
+  const currentMode = window.isTutorialMatch 
+    ? 'tutorial' 
+    : (window.gameDifficulty || 'medium');
+
+  const modeTitles = {
+    tutorial: 'Training Protocol',
+    easy: 'Easy Mode Labyrinth',
+    medium: 'Standard Labyrinth',
+    hard: 'Hard Mode Labyrinth',
+    impossible: 'Impossible Labyrinth'
+  };
+  const modeTitle = modeTitles[currentMode] || 'Labyrinth Escape';
+
+  const modeCredits = {
+    tutorial: 20,
+    easy: 20,
+    medium: 50,
+    hard: 100,
+    impossible: 500
+  };
+  const baseRewardCredits = modeCredits[currentMode] !== undefined ? modeCredits[currentMode] : 50;
 
   const profileStr = localStorage.getItem('manifestation_user_profile');
   let profile = null;
@@ -7913,71 +7935,134 @@ function awardMatchWinCredits() {
     if (profileStr) profile = JSON.parse(profileStr);
   } catch(e) {}
 
-  let localCreds = parseInt(localStorage.getItem('manifestation_credits') || '0', 10);
+  const token = localStorage.getItem('manifestation_auth_token') || (typeof authToken !== 'undefined' ? authToken : null);
+  const username = localStorage.getItem('manifestation_username');
+  const hasAccount = !!(token && (profile || username));
+
+  // Check legacy keys for backward compatibility + unified completed modes key
+  const localClaimKey = `manifestation_mode_completed_${currentMode}`;
+  const isCompletedLegacy = (currentMode === 'tutorial' && localStorage.getItem('manifestation_reward_training_claimed') === 'true') ||
+                            (currentMode === 'impossible' && localStorage.getItem('manifestation_reward_impossible_claimed') === 'true');
+  const isCompletedLocally = localStorage.getItem(localClaimKey) === 'true' || isCompletedLegacy;
+  const isCompletedAccount = !!(profile && profile.completedModes && profile.completedModes[currentMode]);
+  const alreadyCompleted = isCompletedLocally || isCompletedAccount;
+
   let creditsAwarded = 0;
   let rewardTitle = '';
   let rewardSub = '';
   let isOneTimeClaimed = false;
+  let requiresAccount = false;
 
-  if (window.isTutorialMatch) {
-    const claimed = localStorage.getItem('manifestation_reward_training_claimed') === 'true';
-    if (!claimed) {
-      creditsAwarded = 20;
-      localStorage.setItem('manifestation_reward_training_claimed', 'true');
-      rewardTitle = '🏆 CERTIFICATION REWARD: +20 CREDITS';
-      rewardSub = 'First-time training protocol completion bonus!';
-    } else {
-      creditsAwarded = 0;
-      isOneTimeClaimed = true;
-      rewardTitle = '✅ CERTIFICATION COMPLETED';
-      rewardSub = 'First-time completion reward (+20 credits) already claimed.';
-    }
-  } else if (window.gameDifficulty === 'impossible') {
-    const claimed = localStorage.getItem('manifestation_reward_impossible_claimed') === 'true';
-    if (!claimed) {
-      creditsAwarded = 500;
-      localStorage.setItem('manifestation_reward_impossible_claimed', 'true');
-      rewardTitle = '🏆 IMPOSSIBLE SURVIVOR: +500 CREDITS';
-      rewardSub = 'One-time bonus for conquering the impossible labyrinth!';
-    } else {
-      creditsAwarded = 50;
-      isOneTimeClaimed = true;
-      rewardTitle = '🏆 EXTRACTION REWARD: +50 CREDITS';
-      rewardSub = 'Impossible mastery bonus (+500) already claimed.';
-    }
-  } else if (window.gameDifficulty === 'hard') {
-    creditsAwarded = 100;
-    rewardTitle = '🏆 HARD EXTRACTION: +100 CREDITS';
-    rewardSub = 'Hard mode labyrinth victory reward!';
-  } else if (window.gameDifficulty === 'easy') {
-    creditsAwarded = 20;
-    rewardTitle = '🏆 EASY EXTRACTION: +20 CREDITS';
-    rewardSub = 'Labyrinth escape victory reward!';
+  if (alreadyCompleted) {
+    // Mode has already been beaten!
+    creditsAwarded = 0;
+    isOneTimeClaimed = true;
+    rewardTitle = '✅ LEVEL PREVIOUSLY COMPLETED';
+    rewardSub = `You have already claimed the first-time completion reward for ${modeTitle}! Each mode only grants credits once.`;
   } else {
-    // Medium / Default
-    creditsAwarded = 50;
-    rewardTitle = '🏆 EXTRACTION REWARD: +50 CREDITS';
-    rewardSub = 'Standard labyrinth victory reward!';
+    // Eligible for first-time clear reward!
+    creditsAwarded = baseRewardCredits;
+
+    if (!hasAccount) {
+      // User is a Guest without an account!
+      requiresAccount = true;
+      const pendingReward = {
+        mode: currentMode,
+        credits: creditsAwarded,
+        modeTitle: modeTitle
+      };
+      localStorage.setItem('manifestation_pending_level_reward', JSON.stringify(pendingReward));
+
+      rewardTitle = `🎁 CREATE AN ACCOUNT TO CLAIM REWARD!`;
+      rewardSub = `Create a free account to claim your +${creditsAwarded} Level Credits + 100 Welcome Bonus (${100 + creditsAwarded} Credits total)!`;
+    } else {
+      // User has an account! Add credits directly to account
+      let localCreds = parseInt(localStorage.getItem('manifestation_credits') || '0', 10);
+      localCreds += creditsAwarded;
+      localStorage.setItem('manifestation_credits', localCreds.toString());
+
+      localStorage.setItem(localClaimKey, 'true');
+      if (profile) {
+        profile.credits = localCreds;
+        profile.completedModes = profile.completedModes || {};
+        profile.completedModes[currentMode] = true;
+        localStorage.setItem('manifestation_user_profile', JSON.stringify(profile));
+      }
+
+      const hudCreds = document.getElementById('player-credits-display');
+      if (hudCreds) hudCreds.textContent = localCreds;
+      const acctCreds = document.getElementById('account-credits-display');
+      if (acctCreds) acctCreds.textContent = `💰 ${localCreds}`;
+
+      if (token && socketClient && socketClient.emit) {
+        socketClient.emit('account_update_credits', { token, credits: localCreds });
+        socketClient.emit('account_update_completed_modes', { token, mode: currentMode });
+      }
+
+      rewardTitle = `🏆 FIRST CLEAR: +${creditsAwarded} CREDITS!`;
+      rewardSub = `First-time completion reward for ${modeTitle} successfully credited to your account!`;
+    }
   }
 
-  if (creditsAwarded > 0) {
-    localCreds += creditsAwarded;
-    localStorage.setItem('manifestation_credits', localCreds.toString());
-    if (profile) {
-      profile.credits = (profile.credits || 0) + creditsAwarded;
-      localStorage.setItem('manifestation_user_profile', JSON.stringify(profile));
-    }
-    const hudCreds = document.getElementById('player-credits-display');
-    if (hudCreds) hudCreds.textContent = localCreds;
-    const acctCreds = document.getElementById('account-credits-display');
-    if (acctCreds) acctCreds.textContent = `💰 ${localCreds}`;
-    const token = localStorage.getItem('manifestation_auth_token') || (typeof authToken !== 'undefined' ? authToken : null);
-    if (token && socketClient && socketClient.emit) {
-      socketClient.emit('account_update_credits', { token, credits: localCreds });
-    }
-  }
+  return { creditsAwarded, rewardTitle, rewardSub, isOneTimeClaimed, requiresAccount, currentMode, modeTitle, baseRewardCredits };
+}
 
-  return { creditsAwarded, rewardTitle, rewardSub, isOneTimeClaimed };
+function formatRewardCardHTML(rewardInfo) {
+  if (!rewardInfo) return '';
+  if (rewardInfo.requiresAccount) {
+    return `
+      <div style="margin-top: 1.2rem; padding: 1.1rem 1.4rem; background: linear-gradient(135deg, rgba(234, 179, 8, 0.22), rgba(15, 23, 42, 0.95)); border: 2px solid #eab308; border-radius: 12px; box-shadow: 0 0 25px rgba(234, 179, 8, 0.35); text-align: center;">
+        <div style="font-size: 1.15rem; font-weight: 900; color: #fde047; letter-spacing: 1.5px; margin-bottom: 0.5rem; text-shadow: 0 0 10px rgba(250, 204, 21, 0.6);">
+          🎁 CREATE AN ACCOUNT TO CLAIM REWARD!
+        </div>
+        <p style="color: #f1f5f9; font-size: 0.95rem; line-height: 1.5; margin-bottom: 1rem;">
+          You conquered <strong>${rewardInfo.modeTitle}</strong>! Create a free Operative Account now to claim your <strong>+${rewardInfo.baseRewardCredits} Level Credits</strong> plus a <strong>+100 Credits Welcome Bonus</strong> (Total: <span style="color: #38bdf8; font-weight: 900; font-size: 1.05rem;">${100 + rewardInfo.baseRewardCredits} Credits</span>)!
+        </p>
+        <button id="end-game-claim-account-btn" style="background: linear-gradient(135deg, #eab308, #ca8a04); color: #0f172a; font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 1rem; padding: 0.75rem 1.8rem; border: none; border-radius: 8px; cursor: pointer; box-shadow: 0 0 20px rgba(234, 179, 8, 0.6); pointer-events: auto; letter-spacing: 1px;">
+          ⭐ CREATE ACCOUNT & CLAIM ${100 + rewardInfo.baseRewardCredits} CREDITS
+        </button>
+      </div>
+    `;
+  } else if (rewardInfo.isOneTimeClaimed) {
+    return `
+      <div style="margin-top: 1rem; padding: 0.75rem 1.2rem; background: rgba(148, 163, 184, 0.15); border: 1.5px solid #64748b; border-radius: 10px; color: #cbd5e1; font-weight: bold; font-size: 0.92rem;">
+        ${rewardInfo.rewardTitle}<br>
+        <span style="font-size: 0.82rem; font-weight: normal; color: #94a3b8;">${rewardInfo.rewardSub}</span>
+      </div>
+    `;
+  } else {
+    return `
+      <div style="margin-top: 1rem; padding: 0.75rem 1.2rem; background: rgba(16, 185, 129, 0.18); border: 1.5px solid #10b981; border-radius: 10px; color: #6ee7b7; font-weight: bold; font-size: 0.95rem; box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);">
+        ${rewardInfo.rewardTitle}<br>
+        <span style="font-size: 0.82rem; font-weight: normal; color: #e2e8f0;">${rewardInfo.rewardSub}</span>
+      </div>
+    `;
+  }
+}
+
+function bindClaimAccountButton(rewardInfo) {
+  if (!rewardInfo || !rewardInfo.requiresAccount) return;
+  const claimBtn = document.getElementById('end-game-claim-account-btn');
+  if (claimBtn) {
+    addFastTapListener(claimBtn, () => {
+      if (typeof window.promptGuestToCreateAccount === 'function') {
+        window.promptGuestToCreateAccount(`Level Reward (+${rewardInfo.baseRewardCredits} Credits + 100 Welcome Bonus)`);
+      } else {
+        const modal = document.getElementById('account-auth-modal');
+        if (modal) {
+          modal.style.display = 'block';
+          modal.style.zIndex = '35000';
+          const regTab = document.getElementById('tab-register-btn');
+          if (regTab) regTab.click();
+          const msg = document.getElementById('auth-status-msg') || document.getElementById('auth-status-message');
+          if (msg) {
+            msg.className = 'auth-status-text';
+            msg.textContent = `🎁 Create an account to claim your +${rewardInfo.baseRewardCredits} Level Credits + 100 Welcome Bonus (${100 + rewardInfo.baseRewardCredits} Credits Total)!`;
+          }
+        }
+      }
+    });
+  }
 }
 
             playEscapeCinematic(() => {
@@ -7991,6 +8076,8 @@ function awardMatchWinCredits() {
                 if (title && details) {
                   endOverlay.style.display = 'flex';
                   const rewardInfo = awardMatchWinCredits();
+                  const rewardHTML = formatRewardCardHTML(rewardInfo);
+
                   if (window.isTutorialMatch) {
                     title.textContent = "🎓 CERTIFIED!";
                     title.style.color = "#38bdf8";
@@ -7998,10 +8085,7 @@ function awardMatchWinCredits() {
                     details.innerHTML = `
                       <div style="font-weight:bold; color: #38bdf8; margin-bottom: 0.8rem; font-size: 1.3rem;">TRAINING PROTOCOL CERTIFIED</div>
                       <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You successfully mastered movement, sprint boosters, flashlight operation, supply salvage, circuit breaker power restoration, and master vault keypad extraction!</p>
-                      <div style="margin-top: 1rem; padding: 0.6rem; background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; border-radius: 8px; color: #7dd3fc; font-weight: bold; font-size: 0.9rem;">
-                        ${rewardInfo.rewardTitle}<br>
-                        <span style="font-size: 0.8rem; font-weight: normal; color: #94a3b8;">${rewardInfo.rewardSub}</span>
-                      </div>
+                      ${rewardHTML}
                     `;
                   } else {
                     title.textContent = "ESCAPED!";
@@ -8010,12 +8094,11 @@ function awardMatchWinCredits() {
                     details.innerHTML = `
                       <div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div>
                       <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>
-                      <div style="margin-top: 1rem; padding: 0.6rem; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 8px; color: #6ee7b7; font-weight: bold; font-size: 0.9rem;">
-                        ${rewardInfo.rewardTitle}<br>
-                        <span style="font-size: 0.8rem; font-weight: normal; color: #94a3b8;">${rewardInfo.rewardSub}</span>
-                      </div>
+                      ${rewardHTML}
                     `;
                   }
+
+                  bindClaimAccountButton(rewardInfo);
 
                   const lobbyBtn = document.getElementById('end-game-lobby-btn');
                   if (lobbyBtn) {
@@ -10243,11 +10326,9 @@ function setupSocketListeners() {
             details.innerHTML = `
               <div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div>
               <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate!</p>
-              <div style="margin-top: 1rem; padding: 0.6rem; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 8px; color: #6ee7b7; font-weight: bold; font-size: 0.9rem;">
-                ${rewardInfo.rewardTitle}<br>
-                <span style="font-size: 0.8rem; font-weight: normal; color: #94a3b8;">${rewardInfo.rewardSub}</span>
-              </div>
+              ${formatRewardCardHTML(rewardInfo)}
             `;
+            bindClaimAccountButton(rewardInfo);
           } else {
             title.textContent = "YOU DIED";
             title.style.color = "#ef4444";

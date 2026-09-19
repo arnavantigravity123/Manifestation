@@ -163,6 +163,7 @@ const userSchema = new mongoose.Schema({
   salt: { type: String, required: true },
   isVip: { type: Boolean, default: false },
   credits: { type: Number, default: 100 },
+  completedModes: { type: mongoose.Schema.Types.Mixed, default: {} },
   unlockedSkins: { type: [String], default: ['skin_default'] },
   equippedSkin: { type: String, default: 'skin_default' },
   preferredClass: { type: String, default: 'Random' },
@@ -323,6 +324,7 @@ function sanitizeUser(u) {
     username: u.username,
     isVip: !!u.isVip,
     credits: u.credits !== undefined ? u.credits : 100,
+    completedModes: u.completedModes || {},
     unlockedSkins: Array.isArray(u.unlockedSkins) ? u.unlockedSkins : ['skin_default'],
     equippedSkin: u.equippedSkin || 'skin_default',
     preferredClass: u.preferredClass || 'Random',
@@ -455,7 +457,7 @@ io.on('connection', (socket) => {
   // ==========================================
   // Authentication & Persistent User Handlers
   // ==========================================
-  socket.on('auth_register', async ({ username, password }, callback) => {
+  socket.on('auth_register', async ({ username, password, bonusCredits }, callback) => {
     if (!username || !password || username.trim().length < 3 || password.length < 4) {
       return callback && callback({ success: false, msg: 'Call-sign must be at least 3 chars & password at least 4 chars.' });
     }
@@ -467,6 +469,9 @@ io.on('connection', (socket) => {
       return callback && callback({ success: false, msg: 'Call-sign is already registered. Please login.' });
     }
 
+    const bonus = Math.max(0, parseInt(bonusCredits) || 0);
+    const initialCredits = 100 + bonus;
+
     const salt = crypto.randomBytes(16).toString('hex');
     const passwordHash = hashPassword(password, salt);
     const newUser = {
@@ -475,7 +480,8 @@ io.on('connection', (socket) => {
       passwordHash,
       salt,
       isVip: false,
-      credits: 100, // Welcome headstart
+      credits: initialCredits, // 100 welcome bonus + level completion reward
+      completedModes: {},
       unlockedSkins: ['skin_default'],
       equippedSkin: 'skin_default',
       preferredClass: 'Random',
@@ -489,7 +495,7 @@ io.on('connection', (socket) => {
     activeSessions.set(token, lookupKey);
     saveSessionsLocal(activeSessions);
 
-    console.log(`[AUTH] New Operative registered (Saved to Database): ${cleanUsername}`);
+    console.log(`[AUTH] New Operative registered (Saved to Database): ${cleanUsername} with ${initialCredits} credits`);
     return callback && callback({ success: true, token, user: sanitizeUser(newUser) });
   });
 
@@ -562,6 +568,18 @@ io.on('connection', (socket) => {
     const newAmount = Math.max(0, parseInt(credits) || 0);
     await updateUser(lookupKey, { credits: newAmount });
     return callback && callback({ success: true, credits: newAmount });
+  });
+
+  socket.on('account_update_completed_modes', async ({ token, mode }, callback) => {
+    if (!token || !activeSessions.has(token) || !mode) return;
+    const lookupKey = activeSessions.get(token);
+    const user = await findUser(lookupKey);
+    if (user) {
+      const completedModes = user.completedModes || {};
+      completedModes[mode] = true;
+      const updated = await updateUser(lookupKey, { completedModes });
+      if (callback) callback({ success: true, completedModes: (updated && updated.completedModes) || completedModes });
+    }
   });
 
   socket.on('account_update_skin', async ({ token, unlockedSkins, equippedSkin }, callback) => {

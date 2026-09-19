@@ -413,6 +413,32 @@ function updateAccountUI() {
       callsignHint.style.color = "#38bdf8";
     }
     if (vipStoreBtn) vipStoreBtn.style.display = 'block';
+
+    // Check if guest has an unclaimed level completion reward
+    let pendingReward = null;
+    try {
+      const savedPending = localStorage.getItem('manifestation_pending_level_reward');
+      if (savedPending) pendingReward = JSON.parse(savedPending);
+    } catch (e) {}
+
+    if (openAuthModalBtn) {
+      if (pendingReward && pendingReward.credits > 0) {
+        openAuthModalBtn.textContent = `🎁 CLAIM +${pendingReward.credits} CREDITS`;
+        openAuthModalBtn.style.background = 'linear-gradient(135deg, #eab308, #ca8a04)';
+        openAuthModalBtn.style.color = '#0f172a';
+        openAuthModalBtn.style.fontWeight = '900';
+        openAuthModalBtn.style.boxShadow = '0 0 14px rgba(234, 179, 8, 0.7)';
+        openAuthModalBtn.style.border = '1px solid #fde047';
+      } else {
+        openAuthModalBtn.textContent = '🔑 LOGIN / REGISTER';
+        openAuthModalBtn.style.background = '';
+        openAuthModalBtn.style.color = '';
+        openAuthModalBtn.style.fontWeight = '';
+        openAuthModalBtn.style.boxShadow = '';
+        openAuthModalBtn.style.border = '';
+      }
+    }
+
     updateSkinButtons();
   }
 }
@@ -420,14 +446,34 @@ function updateAccountUI() {
 // Open / Close Auth Modal
 if (openAuthModalBtn) {
   openAuthModalBtn.addEventListener('click', () => {
-    if (authStatusMsg) authStatusMsg.textContent = '';
-    if (accountAuthModal) accountAuthModal.style.display = 'block';
+    let pendingReward = null;
+    try {
+      const savedPending = localStorage.getItem('manifestation_pending_level_reward');
+      if (savedPending) pendingReward = JSON.parse(savedPending);
+    } catch (e) {}
+
+    if (authStatusMsg) {
+      if (pendingReward && pendingReward.credits > 0) {
+        authStatusMsg.className = 'auth-status-text';
+        authStatusMsg.textContent = `🎁 Create an account to claim your +${pendingReward.credits} Level Credits + 100 Welcome Bonus (${100 + pendingReward.credits} Credits Total)!`;
+        if (tabRegisterBtn) tabRegisterBtn.click();
+      } else {
+        authStatusMsg.textContent = '';
+      }
+    }
+    if (accountAuthModal) {
+      accountAuthModal.style.display = 'block';
+      accountAuthModal.style.zIndex = '35000';
+    }
   });
 }
 
 if (closeAuthModalBtn) {
   closeAuthModalBtn.addEventListener('click', () => {
-    if (accountAuthModal) accountAuthModal.style.display = 'none';
+    if (accountAuthModal) {
+      accountAuthModal.style.display = 'none';
+      accountAuthModal.style.zIndex = '';
+    }
   });
 }
 
@@ -487,14 +533,45 @@ if (loginForm) {
           try { Purchases.logIn({ appUserID: currentUser.username }); } catch (err) {}
         }
 
+        // Check if there was a pending level completion reward from guest play
+        let pendingReward = null;
+        try {
+          const savedPending = localStorage.getItem('manifestation_pending_level_reward');
+          if (savedPending) pendingReward = JSON.parse(savedPending);
+        } catch (e) {}
+
+        let bonusMsg = '';
+        if (pendingReward && pendingReward.credits > 0 && pendingReward.mode) {
+          currentUser.completedModes = currentUser.completedModes || {};
+          if (!currentUser.completedModes[pendingReward.mode]) {
+            // Award the credits to this logged-in account
+            currentUser.credits = (currentUser.credits || 0) + pendingReward.credits;
+            currentUser.completedModes[pendingReward.mode] = true;
+            localStorage.setItem(`manifestation_mode_completed_${pendingReward.mode}`, 'true');
+            localStorage.setItem('manifestation_credits', currentUser.credits.toString());
+            playerCredits = currentUser.credits;
+            localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
+
+            sock.emit('account_update_credits', { token: authToken, credits: currentUser.credits });
+            sock.emit('account_update_completed_modes', { token: authToken, mode: pendingReward.mode });
+            bonusMsg = ` Claimed +${pendingReward.credits} Level Credits for ${pendingReward.modeTitle || pendingReward.mode}!`;
+          } else {
+            bonusMsg = ` (${pendingReward.modeTitle || pendingReward.mode} was already beaten on this account previously).`;
+          }
+          localStorage.removeItem('manifestation_pending_level_reward');
+        }
+
         if (authStatusMsg) {
           authStatusMsg.className = 'auth-status-text success';
-          authStatusMsg.textContent = `Welcome back, Operative ${currentUser.username}!`;
+          authStatusMsg.textContent = `Welcome back, Operative ${currentUser.username}!${bonusMsg}`;
         }
         setTimeout(() => {
-          if (accountAuthModal) accountAuthModal.style.display = 'none';
+          if (accountAuthModal) {
+            accountAuthModal.style.display = 'none';
+            accountAuthModal.style.zIndex = '';
+          }
           updateAccountUI();
-        }, 400);
+        }, 1200);
       } else {
         if (authStatusMsg) {
           authStatusMsg.className = 'auth-status-text error';
@@ -535,7 +612,16 @@ if (registerForm) {
       }
     }, 10000);
 
-    sock.emit('auth_register', { username, password }, (res) => {
+    // Read any pending level completion reward
+    let pendingReward = null;
+    try {
+      const savedPending = localStorage.getItem('manifestation_pending_level_reward');
+      if (savedPending) pendingReward = JSON.parse(savedPending);
+    } catch (e) {}
+
+    const bonusCredits = (pendingReward && typeof pendingReward.credits === 'number') ? pendingReward.credits : 0;
+
+    sock.emit('auth_register', { username, password, bonusCredits }, (res) => {
       finished = true;
       clearTimeout(timeoutTimer);
       if (res && res.success) {
@@ -545,8 +631,17 @@ if (registerForm) {
         localStorage.setItem('manifestation_username', currentUser.username);
 
         localStorage.setItem('manifestation_is_vip', currentUser.isVip ? 'true' : 'false');
-        localStorage.setItem('manifestation_credits', (currentUser.credits || 100).toString());
-        playerCredits = currentUser.credits || 100;
+        localStorage.setItem('manifestation_credits', (currentUser.credits || (100 + bonusCredits)).toString());
+        playerCredits = currentUser.credits || (100 + bonusCredits);
+
+        if (pendingReward && pendingReward.mode) {
+          currentUser.completedModes = currentUser.completedModes || {};
+          currentUser.completedModes[pendingReward.mode] = true;
+          localStorage.setItem(`manifestation_mode_completed_${pendingReward.mode}`, 'true');
+          sock.emit('account_update_completed_modes', { token: authToken, mode: pendingReward.mode });
+          localStorage.removeItem('manifestation_pending_level_reward');
+        }
+
         localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
 
         // Link to RevenueCat user ID on mobile platforms
@@ -556,12 +651,19 @@ if (registerForm) {
 
         if (authStatusMsg) {
           authStatusMsg.className = 'auth-status-text success';
-          authStatusMsg.textContent = `Account created! Logged in as ${currentUser.username}.`;
+          if (bonusCredits > 0) {
+            authStatusMsg.textContent = `Account created! Logged in as ${currentUser.username}. Claimed 100 Welcome + ${bonusCredits} Level Bonus (${currentUser.credits} Credits total)!`;
+          } else {
+            authStatusMsg.textContent = `Account created! Logged in as ${currentUser.username}. Claimed 100 Welcome Credits!`;
+          }
         }
         setTimeout(() => {
-          if (accountAuthModal) accountAuthModal.style.display = 'none';
+          if (accountAuthModal) {
+            accountAuthModal.style.display = 'none';
+            accountAuthModal.style.zIndex = '';
+          }
           updateAccountUI();
-        }, 400);
+        }, 1200);
       } else {
         if (authStatusMsg) {
           authStatusMsg.className = 'auth-status-text error';
@@ -647,13 +749,24 @@ function promptGuestToCreateAccount(featureName = 'VIP Pass') {
   if (skinsStoreModal) skinsStoreModal.style.display = 'none';
   if (accountAuthModal) {
     accountAuthModal.style.display = 'block';
+    accountAuthModal.style.zIndex = '35000';
     if (tabRegisterBtn) tabRegisterBtn.click();
     if (authStatusMsg) {
       authStatusMsg.className = 'auth-status-text';
-      authStatusMsg.textContent = `⚠️ Guest Mode: Please create an account to permanently save your ${featureName}!`;
+      let pendingReward = null;
+      try {
+        const saved = localStorage.getItem('manifestation_pending_level_reward');
+        if (saved) pendingReward = JSON.parse(saved);
+      } catch(e) {}
+      if (pendingReward && pendingReward.credits > 0) {
+        authStatusMsg.textContent = `🎁 Create an account to claim your +${pendingReward.credits} Level Credits + 100 Welcome Bonus (${100 + pendingReward.credits} Credits Total)!`;
+      } else {
+        authStatusMsg.textContent = `⚠️ Guest Mode: Please create an account to permanently save your ${featureName}!`;
+      }
     }
   }
 }
+window.promptGuestToCreateAccount = promptGuestToCreateAccount;
 
 function updateVipCustomerCenterUI() {
   const isVip = (currentUser && currentUser.isVip) || (localStorage.getItem('manifestation_is_vip') === 'true');
