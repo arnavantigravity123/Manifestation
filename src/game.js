@@ -3610,9 +3610,14 @@ function spawnDungeonProps(layout, blockSize) {
     return Math.hypot(x - gateCoordinates.x, z - gateCoordinates.z) < minDist;
   }
 
+  // Helper: prevent spawning any pillars or statues inside or near Light Sanctuaries
+  function isNearSanctuary(x, z, minDist = 4.5) {
+    return Array.isArray(sanctuaryZones) && sanctuaryZones.some(s => Math.hypot(s.x - x, s.z - z) < minDist);
+  }
+
   function spawnPillarMesh(px, pz) {
     if (placedPillars >= maxPillarsBudget) return false;
-    if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz) || isNearVaultDoorway(px, pz)) return false;
+    if (isBlockedByBreaker(px, pz) || isNearSpawn(px, pz) || isNearVaultDoorway(px, pz) || isNearSanctuary(px, pz, 4.5)) return false;
     if (isNearStatue(px, pz, 0.75)) return false; // Never spawn pillar inside or overlapping a statue
     if (isNearPillar(px, pz, 1.8)) return false;
     pillarTransforms.push({ x: px, z: pz });
@@ -3623,7 +3628,7 @@ function spawnDungeonProps(layout, blockSize) {
 
   function spawnStatueMesh(sx, sz, rotY = 0) {
     if (placedStatues >= maxStatuesBudget) return false;
-    if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz) || isNearVaultDoorway(sx, sz)) return false;
+    if (isBlockedByBreaker(sx, sz) || isNearSpawn(sx, sz) || isNearVaultDoorway(sx, sz) || isNearSanctuary(sx, sz, 4.5)) return false;
     if (isNearStatue(sx, sz, 2.5)) return false;
     if (isNearPillar(sx, sz, 0.75)) return false; // Never spawn statue inside or overlapping an existing pillar
     statueTransforms.push({ x: sx, z: sz, rotY });
@@ -3679,18 +3684,8 @@ function spawnDungeonProps(layout, blockSize) {
     addRugTile(dungeonRugCrestGeo || dungeonRugGeo, rugX, rugZ, rugRot);
   }
 
-  // 2. Pillars around Light Sanctuaries (Sanctuary Shrines)
-  if (Array.isArray(sanctuaryZones) && sanctuaryZones.length > 0) {
-    sanctuaryZones.forEach(s => {
-      const angles = [Math.PI * 0.25, Math.PI * 0.75, Math.PI * 1.25, Math.PI * 1.75];
-      const radius = 3.6;
-      angles.forEach(ang => {
-        const px = s.x + Math.cos(ang) * radius;
-        const pz = s.z + Math.sin(ang) * radius;
-        spawnPillarMesh(px, pz);
-      });
-    });
-  }
+  // 2. Light Sanctuaries (Zero Pillars — clean wall sconce clearance)
+  // Sanctuary corridors are kept 100% open with zero pillars or blocking statues!
 
   // 3. Statues at ALL Dead-Ends (facing down corridor on stone plinths)
   // 3. Statues at ALL Dead-Ends (facing down corridor on stone plinths with guaranteed solid back wall)
@@ -5603,7 +5598,7 @@ function generateConsumableItems() {
   }
 }
 
-// --- Feature 4: 3D Gothic UV Lantern Asset Loader (/assets/latern.glb) ---
+// --- Feature 4: 3D Gothic UV Lantern Wall Sconce Asset Loader (/assets/latern.glb) ---
 let preloadedLanternModel = null;
 let isLanternLoading = false;
 
@@ -5616,10 +5611,10 @@ export function loadLanternAsset() {
       const rawScene = gltf.scene;
       rawScene.updateMatrixWorld(true);
 
-      // Analyze lantern cage vertices to find the true visual center and height
-      let cageMinX = Infinity, cageMaxX = -Infinity;
-      let cageMinY = Infinity, cageMaxY = -Infinity;
-      let cageMinZ = Infinity, cageMaxZ = -Infinity;
+      // Find vertex bounds across the model
+      let minX = Infinity, maxX = -Infinity;
+      let minY = Infinity, maxY = -Infinity;
+      let minZ = Infinity, maxZ = -Infinity;
 
       const tempV = new THREE.Vector3();
       rawScene.traverse((child) => {
@@ -5628,37 +5623,25 @@ export function loadLanternAsset() {
           for (let i = 0; i < pos.count; i++) {
             tempV.fromBufferAttribute(pos, i);
             tempV.applyMatrix4(child.matrixWorld);
-            // Lantern cage vertices are in the forward chamber (Z <= -0.90 in world space)
-            if (tempV.z <= -0.90) {
-              if (tempV.x < cageMinX) cageMinX = tempV.x;
-              if (tempV.x > cageMaxX) cageMaxX = tempV.x;
-              if (tempV.y < cageMinY) cageMinY = tempV.y;
-              if (tempV.y > cageMaxY) cageMaxY = tempV.y;
-              if (tempV.z < cageMinZ) cageMinZ = tempV.z;
-              if (tempV.z > cageMaxZ) cageMaxZ = tempV.z;
-            }
+            if (tempV.x < minX) minX = tempV.x;
+            if (tempV.x > maxX) maxX = tempV.x;
+            if (tempV.y < minY) minY = tempV.y;
+            if (tempV.y > maxY) maxY = tempV.y;
+            if (tempV.z < minZ) minZ = tempV.z;
+            if (tempV.z > maxZ) maxZ = tempV.z;
           }
         }
       });
 
-      let centerX, centerY, centerZ, targetScale;
-      if (Number.isFinite(cageMinY) && cageMaxY > cageMinY) {
-        centerX = (cageMinX + cageMaxX) / 2;
-        centerY = (cageMinY + cageMaxY) / 2;
-        centerZ = (cageMinZ + cageMaxZ) / 2;
-        const cageHeight = cageMaxY - cageMinY;
-        targetScale = 0.85 / cageHeight;
-      } else {
-        const box = new THREE.Box3().setFromObject(rawScene);
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        centerX = center.x;
-        centerY = center.y;
-        centerZ = center.z;
-        targetScale = 0.85 / (size.y || 1.17);
-      }
+      const totalHeight = maxY - minY;
+      const targetScale = (totalHeight > 0) ? (0.90 / totalHeight) : 0.768;
 
-      // Create a centered, normalized master template group
+      // The rectangular mounting plate is flush at maxZ, centered at (minX + maxX)/2 horizontally, and plate Y at maxY - 0.109
+      const plateX = (minX + maxX) / 2;
+      const plateY = maxY - 0.109;
+      const plateZ = maxZ;
+
+      // Create a normalized master template group
       const normalizedGroup = new THREE.Group();
       normalizedGroup.name = 'lantern_master_template';
 
@@ -5679,14 +5662,14 @@ export function loadLanternAsset() {
         }
       });
 
-      // Scale and offset rawScene so (0, 0, 0) is at the exact center of the glowing lantern cage
+      // Scale and offset rawScene so (0, 0, 0) is the flush back surface center of the wall mounting plate
       rawScene.scale.set(targetScale, targetScale, targetScale);
-      rawScene.position.set(-centerX * targetScale, -centerY * targetScale, -centerZ * targetScale);
+      rawScene.position.set(-plateX * targetScale, -plateY * targetScale, -plateZ * targetScale);
 
       normalizedGroup.add(rawScene);
       preloadedLanternModel = normalizedGroup;
       isLanternLoading = false;
-      console.log('[LANTERN] Authentic 3D UV Lantern model (/assets/latern.glb) loaded & normalized successfully!');
+      console.log('[LANTERN] Authentic 3D UV Lantern wall sconce (/assets/latern.glb) loaded & normalized successfully!');
 
       // Upgrade any sanctuary zones spawned before the GLB finished loading
       upgradeExistingSanctuaryLanterns();
@@ -5706,12 +5689,29 @@ function createLanternInstance() {
 
   if (preloadedLanternModel) {
     const glbClone = preloadedLanternModel.clone(true);
-    glbClone.position.y = 2.45;
     glbClone.name = 'sanctuary_lantern_glb';
     container.add(glbClone);
   } else {
-    // Procedural Fallback while GLB loads
-    const lanternGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.45, 8);
+    // Procedural Fallback Wall Sconce while GLB loads
+    const fallbackGroup = new THREE.Group();
+    fallbackGroup.name = 'sanctuary_lantern_fallback';
+    fallbackGroup.userData = { isProceduralFallback: true };
+
+    // Wall mounting plate
+    const plateGeo = new THREE.BoxGeometry(0.2, 0.22, 0.04);
+    const ironMat = new THREE.MeshStandardMaterial({ color: 0x1f1f23, roughness: 0.7, metalness: 0.85 });
+    const plateMesh = new THREE.Mesh(plateGeo, ironMat);
+    plateMesh.position.set(0, 0, -0.02);
+    fallbackGroup.add(plateMesh);
+
+    // Horizontal arm reaching out into corridor
+    const armGeo = new THREE.BoxGeometry(0.04, 0.04, 0.38);
+    const armMesh = new THREE.Mesh(armGeo, ironMat);
+    armMesh.position.set(0, 0, -0.19);
+    fallbackGroup.add(armMesh);
+
+    // Hanging lantern cage
+    const lanternGeo = new THREE.CylinderGeometry(0.14, 0.16, 0.35, 8);
     const lanternMat = new THREE.MeshStandardMaterial({
       color: 0xd97706,
       roughness: 0.3,
@@ -5719,37 +5719,12 @@ function createLanternInstance() {
       emissive: 0xf59e0b,
       emissiveIntensity: 0.8
     });
-    const fallbackMesh = new THREE.Mesh(lanternGeo, lanternMat);
-    fallbackMesh.position.y = 2.45;
-    fallbackMesh.name = 'sanctuary_lantern_fallback';
-    fallbackMesh.userData = { isProceduralFallback: true };
-    container.add(fallbackMesh);
+    const lanternMesh = new THREE.Mesh(lanternGeo, lanternMat);
+    lanternMesh.position.set(0, -0.386, -0.395);
+    fallbackGroup.add(lanternMesh);
 
-    const coreGeo = new THREE.SphereGeometry(0.12, 8, 8);
-    const coreMat = new THREE.MeshBasicMaterial({ color: 0xfffbeb });
-    const core = new THREE.Mesh(coreGeo, coreMat);
-    core.name = 'sanctuary_lantern_fallback_core';
-    core.position.y = 2.45;
-    container.add(core);
+    container.add(fallbackGroup);
   }
-
-  // Heavy gothic wrought-iron ceiling chain and mounting flange (anchors lantern to 3.5m ceiling)
-  const chainGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.63, 6);
-  const ironMat = new THREE.MeshStandardMaterial({
-    color: 0x1f1f23,
-    roughness: 0.7,
-    metalness: 0.85
-  });
-  const chain = new THREE.Mesh(chainGeo, ironMat);
-  chain.position.y = 3.185;
-  chain.name = 'sanctuary_lantern_chain';
-  container.add(chain);
-
-  const flangeGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.03, 8);
-  const flange = new THREE.Mesh(flangeGeo, ironMat);
-  flange.position.y = 3.49;
-  flange.name = 'sanctuary_lantern_flange';
-  container.add(flange);
 
   return container;
 }
@@ -5763,18 +5738,9 @@ function upgradeExistingSanctuaryLanterns() {
         const fallback = container.getObjectByName('sanctuary_lantern_fallback');
         if (fallback) {
           container.remove(fallback);
-          if (fallback.geometry) fallback.geometry.dispose();
-          if (fallback.material) fallback.material.dispose();
-
-          const fallbackCore = container.getObjectByName('sanctuary_lantern_fallback_core');
-          if (fallbackCore) {
-            container.remove(fallbackCore);
-            if (fallbackCore.geometry) fallbackCore.geometry.dispose();
-            if (fallbackCore.material) fallbackCore.material.dispose();
-          }
+          disposeHierarchy(fallback);
 
           const glbClone = preloadedLanternModel.clone(true);
-          glbClone.position.y = 2.45;
           glbClone.name = 'sanctuary_lantern_glb';
           container.add(glbClone);
         }
@@ -5792,10 +5758,26 @@ function generateLightSanctuaries() {
   });
   sanctuaryZones = [];
 
+  const totalRows = (typeof mazeLayout !== 'undefined' && mazeLayout) ? mazeLayout.length : mazeSizeGlobal;
+  const totalCols = (typeof mazeLayout !== 'undefined' && mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : totalRows;
+  const blockSize = (typeof mazeBlockSize !== 'undefined' && mazeBlockSize) ? mazeBlockSize : 6.0;
+
   const sanctuaryCount = window.isTutorialMatch ? 1 : (mazeSizeGlobal >= 41 ? 3 : 2);
-  const sanctuaryCandidates = openCorridors.filter(c => {
-    const d = Math.sqrt(c.x * c.x + c.z * c.z);
-    return d > (window.isTutorialMatch ? 4 : 12) && d < (mazeSizeGlobal * 2.0) && !isLocationOccupied(c.x, c.z, window.isTutorialMatch ? 3.5 : 6.5);
+  const sanctuaryCandidates = openCorridors.filter(cand => {
+    const d = Math.sqrt(cand.x * cand.x + cand.z * cand.z);
+    if (d <= (window.isTutorialMatch ? 4 : 12) || d >= (mazeSizeGlobal * 2.0)) return false;
+    if (isLocationOccupied(cand.x, cand.z, window.isTutorialMatch ? 3.5 : 6.5)) return false;
+    // Guaranteed to have at least one adjacent static solid wall to mount onto
+    if (mazeLayout && mazeLayout.length > 0) {
+      const col = Math.floor((cand.x / blockSize) + (totalCols / 2));
+      const row = Math.floor((cand.z / blockSize) + (totalRows / 2));
+      const hasWall = [[-1, 0], [1, 0], [0, -1], [0, 1]].some(([dr, dc]) => {
+        const nr = row + dr, nc = col + dc;
+        return mazeLayout[nr] && mazeLayout[nr][nc] === 1;
+      });
+      if (!hasWall) return false;
+    }
+    return true;
   });
 
   const chosenSanctuaries = [];
@@ -5826,16 +5808,7 @@ function generateLightSanctuaries() {
     const group = new THREE.Group();
     group.position.set(pos.x, 0, pos.z);
 
-    // Authentic 3D UV Lantern Mesh (/assets/latern.glb with ceiling mounting)
-    const lanternContainer = createLanternInstance();
-    group.add(lanternContainer);
-
-    // Warm Sanctuary Point Light (aligned at lantern core height)
-    const sanctuaryLight = new THREE.PointLight(0xf59e0b, 3.8, 10.0);
-    sanctuaryLight.position.y = 2.4;
-    group.add(sanctuaryLight);
-
-    // Glowing floor sanctuary ring
+    // Glowing floor sanctuary ring (centered on the corridor floor)
     const circleGeo = new THREE.RingGeometry(0.3, 3.8, 24);
     const circleMat = new THREE.MeshBasicMaterial({
       color: 0xf59e0b,
@@ -5849,13 +5822,41 @@ function generateLightSanctuaries() {
     circle.position.y = 0.03;
     group.add(circle);
 
+    // Identify which adjacent wall to attach the 3D lantern wall sconce onto
+    const c = Math.floor((pos.x / blockSize) + (totalCols / 2));
+    const r = Math.floor((pos.z / blockSize) + (totalRows / 2));
+
+    const wallDirs = [
+      { dc: 0, dr: -1, localX: 0, localZ: -2.96, rotY: Math.PI },       // North wall, faces South (+Z into corridor)
+      { dc: 0, dr: 1,  localX: 0, localZ: 2.96,  rotY: 0 },             // South wall, faces North (-Z into corridor)
+      { dc: -1, dr: 0, localX: -2.96, localZ: 0, rotY: Math.PI / 2 },   // West wall, faces East (+X into corridor)
+      { dc: 1, dr: 0,  localX: 2.96,  localZ: 0, rotY: -Math.PI / 2 }   // East wall, faces West (-X into corridor)
+    ];
+
+    const chosenWall = wallDirs.find(d => {
+      const nr = r + d.dr;
+      const nc = c + d.dc;
+      return mazeLayout && mazeLayout[nr] && mazeLayout[nr][nc] === 1;
+    }) || wallDirs[0];
+
+    // Authentic 3D UV Lantern Wall Sconce (/assets/latern.glb attached directly to the wall)
+    const lanternContainer = createLanternInstance();
+    lanternContainer.position.set(chosenWall.localX, 2.35, chosenWall.localZ);
+    lanternContainer.rotation.y = chosenWall.rotY;
+    group.add(lanternContainer);
+
+    // Warm Sanctuary Point Light (aligned right inside the glowing glass lantern chamber)
+    const sanctuaryLight = new THREE.PointLight(0xf59e0b, 3.8, 10.0);
+    sanctuaryLight.position.set(0, -0.386, -0.395);
+    lanternContainer.add(sanctuaryLight);
+
     scene.add(group);
 
     sanctuaryZones.push({
       id: `sanctuary_${idx}`,
       x: pos.x,
       z: pos.z,
-      radius: 4.2,
+      radius: 4.5,
       group: group,
       light: sanctuaryLight
     });
