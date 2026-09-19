@@ -5289,169 +5289,42 @@ function generateCodeClues() {
   });
   codeClueNotes = [];
 
-  const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
-  const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : totalRows;
-  const blockSize = mazeBlockSize || 6.0;
-  // Wall brick surface is at (blockSize / 2) - 0.05 = 2.95m from cell center.
-  // 2.90m places the note's back flush with the wall face, protruding into the open corridor (never inside the wall!).
-  const wallFaceOffset = 2.90;
-
-  // Gather all open corridor cells that have at least one adjacent static wall (mazeLayout === 1)
-  const wallCandidates = [];
-  for (let r = 1; r < totalRows - 1; r++) {
-    for (let c = 1; c < totalCols - 1; c++) {
-      if (!mazeLayout[r] || mazeLayout[r][c] !== 0) continue;
-
-      // Never mount in a cell touching a dynamic sliding door
-      const touchesSlidingDoor = [
-        [-1, 0], [1, 0], [0, -1], [0, 1]
-      ].some(([dr, dc]) => {
-        const ar = r + dr;
-        const ac = c + dc;
-        return mazeLayout[ar] && mazeLayout[ar][ac] === 2;
-      });
-      if (touchesSlidingDoor) continue;
-
-      const corrX = (c - totalCols / 2) * blockSize + blockSize / 2;
-      const corrZ = (r - totalRows / 2) * blockSize + blockSize / 2;
-
-      const dirs = [
-        { dc: 0, dr: -1, candX: corrX, candZ: corrZ - wallFaceOffset, rotY: 0 },          // North wall, faces South (+Z)
-        { dc: 0, dr: 1,  candX: corrX, candZ: corrZ + wallFaceOffset, rotY: Math.PI },   // South wall, faces North (-Z)
-        { dc: -1, dr: 0, candX: corrX - wallFaceOffset, candZ: corrZ, rotY: Math.PI / 2 }, // West wall, faces East (+X)
-        { dc: 1, dr: 0,  candX: corrX + wallFaceOffset, candZ: corrZ, rotY: -Math.PI / 2 } // East wall, faces West (-X)
-      ];
-
-      for (const d of dirs) {
-        const nr = r + d.dr;
-        const nc = c + d.dc;
-        if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr][nc] === 1) {
-          if (mazeLayout[nr][nc] === 2) continue;
-
-          // Strictly avoid solid pillars and monk statues (minimum 1.8m clearance so it is NEVER hidden inside/behind a pillar!)
-          let collidesWithSolidProp = false;
-          if (dungeonPropGrid && dungeonPropGrid.size > 0) {
-            const candC = Math.floor((d.candX / blockSize) + (totalCols / 2));
-            const candR = Math.floor((d.candZ / blockSize) + (totalRows / 2));
-            for (let dr = -1; dr <= 1 && !collidesWithSolidProp; dr++) {
-              for (let dc = -1; dc <= 1 && !collidesWithSolidProp; dc++) {
-                const bucket = dungeonPropGrid.get(((candR + dr) * 1000) + (candC + dc));
-                if (bucket) {
-                  for (let pi = 0; pi < bucket.length; pi++) {
-                    const p = bucket[pi];
-                    if (Math.hypot(p.x - d.candX, p.z - d.candZ) < (p.radius + 1.25)) {
-                      collidesWithSolidProp = true;
-                      break;
-                    }
-                  }
-                }
-              }
-            }
-          } else if (dungeonPropColliders && dungeonPropColliders.length > 0) {
-            collidesWithSolidProp = dungeonPropColliders.some(p => Math.hypot(p.x - d.candX, p.z - d.candZ) < (p.radius + 1.25));
-          }
-          if (collidesWithSolidProp) continue;
-
-          // Avoid circuit breakers so clue notes never overlap with electrical boxes
-          if (Array.isArray(circuitBreakers) && circuitBreakers.some(b => b.mesh && Math.hypot(b.mesh.position.x - d.candX, b.mesh.position.z - d.candZ) < 3.5)) {
-            continue;
-          }
-
-          // Avoid Master Vault Gate area
-          if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
-            if (Math.hypot(d.candX - gateCoordinates.x, d.candZ - gateCoordinates.z) < 6.0) continue;
-          }
-
-          // Avoid Human spawn center
-          const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
-          const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
-          if (Math.hypot(d.candX - sx, d.candZ - sz) < 5.0) continue;
-
-          // Avoid Light Sanctuary centers
-          if (typeof sanctuaryZones !== 'undefined' && Array.isArray(sanctuaryZones)) {
-            if (sanctuaryZones.some(s => Math.hypot(d.candX - s.x, d.candZ - s.z) < 5.0)) continue;
-          }
-
-          wallCandidates.push({
-            x: d.candX,
-            z: d.candZ,
-            rotY: d.rotY,
-            corrX,
-            corrZ
-          });
-        }
-      }
-    }
-  }
-
-  // Shuffle candidates and pick 4 spatially separated wall spots
-  const shuffledCandidates = shuffleArray(wallCandidates);
-  const chosenCandidates = [];
-
-  if (window.isTutorialMatch) {
-    // For tutorial, sort by distance to spawn and pick an open wall candidate (6-16m) with zero obstruction
-    const sortedNear = [...wallCandidates].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
-    const tutorialFirst = sortedNear.find(c => {
-      const d = Math.hypot(c.x, c.z);
-      return d >= 6.0 && d <= 16.0;
-    }) || sortedNear[0];
-    if (tutorialFirst) chosenCandidates.push(tutorialFirst);
-  }
-
-  for (const cand of shuffledCandidates) {
-    if (chosenCandidates.length >= 4) break;
-    const isFarEnough = chosenCandidates.every(chosen => Math.hypot(chosen.x - cand.x, chosen.z - cand.z) >= 6.0);
-    if (isFarEnough) {
-      chosenCandidates.push(cand);
-    }
-  }
-
-  // Fallback if maze is very compact
-  while (chosenCandidates.length < 4 && shuffledCandidates.length > chosenCandidates.length) {
-    chosenCandidates.push(shuffledCandidates[chosenCandidates.length]);
-  }
-
-  // Backing wooden mounting plate (dark oak)
-  const boardGeo = new THREE.BoxGeometry(0.65, 0.85, 0.03);
-  const boardMat = new THREE.MeshStandardMaterial({
-    color: 0x3e2723,
-    roughness: 0.85,
-    metalness: 0.1
-  });
-
-  // Glowing parchment paper note
-  const paperGeo = new THREE.BoxGeometry(0.52, 0.72, 0.02);
-  const paperMat = new THREE.MeshStandardMaterial({
+  // Parchment note lying flat on the floor (like items and supplies)
+  const noteGeo = new THREE.BoxGeometry(0.65, 0.03, 0.85);
+  const noteMat = new THREE.MeshStandardMaterial({
     color: 0xfef08a,
-    emissive: 0xd97706,
+    emissive: 0xfde047,
     emissiveIntensity: 0.9,
     roughness: 0.5,
     metalness: 0.05
   });
 
   for (let i = 0; i < 4; i++) {
-    const cand = chosenCandidates[i] || (wallCandidates[i % wallCandidates.length]) || { x: 0, z: 0, rotY: 0, corrX: 0, corrZ: 0 };
-    const noteGroup = new THREE.Group();
+    let corr;
+    if (window.isTutorialMatch && i === 0 && openCorridors.length > 0) {
+      const nearCorridors = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+      corr = nearCorridors.find(c => {
+        const d = Math.hypot(c.x, c.z);
+        return d >= 6 && d <= 16 && !isLocationOccupied(c.x, c.z, 3.5);
+      }) || nearCorridors[Math.min(2, nearCorridors.length - 1)];
+    } else {
+      const available = shuffleArray(getAvailableCorridors(window.isTutorialMatch ? 2.5 : 4.5));
+      corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
+    }
 
-    const boardMesh = new THREE.Mesh(boardGeo, boardMat.clone());
-    boardMesh.position.set(0, 0, 0);
-    noteGroup.add(boardMesh);
+    const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
+    // Lie flat slightly above floor (y = 0.05m) to avoid any z-fighting with carpets or stone tiles
+    noteMesh.position.set(corr.x, 0.05, corr.z);
+    noteMesh.rotation.y = seededRandom() * Math.PI;
 
-    const paperMesh = new THREE.Mesh(paperGeo, paperMat.clone());
-    paperMesh.position.set(0, 0, 0.02);
-    noteGroup.add(paperMesh);
+    // Dedicated subtle golden point light hovering slightly above the floor note
+    const clueLight = new THREE.PointLight(0xfef08a, 1.2, 4.5);
+    clueLight.position.set(0, 0.35, 0);
+    noteMesh.add(clueLight);
 
-    // Dedicated subtle golden parchment point light pointing forward into the corridor
-    const clueLight = new THREE.PointLight(0xfef08a, 1.4, 5.5);
-    clueLight.position.set(0, 0, 0.25);
-    noteGroup.add(clueLight);
-
-    noteGroup.position.set(cand.x, 1.45, cand.z);
-    noteGroup.rotation.y = cand.rotY;
-
-    scene.add(noteGroup);
-    claimSpawnLocation(cand.x, cand.z, window.isTutorialMatch ? 2.5 : 4.5, `Clue_${i}`);
-    codeClueNotes.push({ mesh: noteGroup, digitIndex: i, collected: false });
+    scene.add(noteMesh);
+    claimSpawnLocation(corr.x, corr.z, window.isTutorialMatch ? 2.5 : 4.5, `Clue_${i}`);
+    codeClueNotes.push({ mesh: noteMesh, digitIndex: i, collected: false });
   }
 }
 
@@ -8444,7 +8317,7 @@ function submitKeypadCode(code) {
       if (scr) scr.textContent = getKeypadDisplayString();
     } else {
       playWrongCodeAnimation();
-      triggerNotification(`❌ ACCESS DENIED: [${code}] is incorrect! Check glowing wall clue notes.`);
+      triggerNotification(`❌ ACCESS DENIED: [${code}] is incorrect! Check glowing floor clue notes.`);
       codeEntered = '';
       const scr = document.getElementById('keypad-screen-display');
       if (scr) scr.textContent = getKeypadDisplayString();
@@ -11747,7 +11620,7 @@ function updateTutorialQuestBanner() {
             </div>
             <div style="color: #e0f2fe; line-height: 1.38;">
               1️⃣ <strong>Breakers:</strong> Repair yellow wall panels ⚡ to restore grid power.<br>
-              2️⃣ <strong>Clue Notes:</strong> Inspect glowing paper notes 📝 on walls to find the 4-digit code.<br>
+              2️⃣ <strong>Clue Notes:</strong> Inspect glowing parchment notes 📝 on the corridor floor to find the 4-digit code.<br>
               3️⃣ <strong>Survive:</strong> Run to UV lanterns whenever ghosts chase you.<br>
               4️⃣ <strong>Master Vault:</strong> Enter the 4-digit code at the exit gate 🌲 to escape!
             </div>
@@ -11784,18 +11657,18 @@ function updateTutorialQuestBanner() {
       descEl.innerHTML = isMobileDevice 
         ? `To escape, you must restore <strong>Grid Power</strong> and discover the <strong>4-Digit Cipher</strong>!<br>
            ⚡ <strong>Breaker:</strong> Locate the yellow breaker box on the wall and tap it.<br>
-           📝 <strong>Clue Notes:</strong> Pinned along corridor walls — tap to decode code digits.` 
+           📝 <strong>Clue Notes:</strong> Lying on the corridor floor — tap to decode code digits.` 
         : `To escape, you must restore <strong>Grid Power</strong> and discover the <strong>4-Digit Cipher</strong>!<br>
            ⚡ <strong>Breaker:</strong> Locate the yellow breaker box on the wall and press <kbd>E</kbd>.<br>
-           📝 <strong>Clue Notes:</strong> Pinned along corridor walls — press <kbd>E</kbd> to decode code digits.`;
+           📝 <strong>Clue Notes:</strong> Lying on the corridor floor — press <kbd>E</kbd> to decode code digits.`;
 
       let doneCount9 = (isBreakerDone9 ? 1 : 0) + (hasClue9 ? 1 : 0);
       progBar.style.width = doneCount9 === 0 ? '80%' : (doneCount9 === 1 ? '90%' : '100%');
 
       if (!isBreakerDone9 && !hasClue9) {
-        hintEl.textContent = `⚡ Breaker: [ 0/1 ] | 📝 Clue Notes: [ 0/1 ] — Search corridor walls`;
+        hintEl.textContent = `⚡ Breaker: [ 0/1 ] | 📝 Clue Notes: [ 0/1 ] — Search corridor floors`;
       } else if (isBreakerDone9 && !hasClue9) {
-        hintEl.textContent = `⚡ Grid Powered! Now find and inspect the glowing Wall Clue Note (📝)`;
+        hintEl.textContent = `⚡ Grid Powered! Now find and inspect the glowing Floor Clue Note (📝)`;
       } else if (!isBreakerDone9 && hasClue9) {
         hintEl.textContent = `📝 Code Intel Decoded: [ ${fullCode9} ]! Now repair yellow Circuit Breaker (⚡)`;
       } else {
@@ -12072,7 +11945,7 @@ function fixBreakerLocal(breakerId) {
       if (hasClue) {
         advanceTutorialStage(10, `Grid Power Restored & Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad!`);
       } else {
-        triggerNotification(`⚡ Grid Power Restored! Next: Inspect glowing wall clue note (📝) to decode vault cipher!`);
+        triggerNotification(`⚡ Grid Power Restored! Next: Inspect glowing floor clue note (📝) to decode vault cipher!`);
         updateTutorialQuestBanner();
       }
     }
