@@ -9192,63 +9192,6 @@ function setupSocketListeners() {
     }
   });
 
-  function showSoloDeathEndScreen() {
-    const ptrOverlay = document.getElementById('pointer-lock-overlay');
-    if (ptrOverlay) ptrOverlay.style.display = 'none';
-    const capOverlay = document.getElementById('captured-overlay');
-    if (capOverlay) capOverlay.style.display = 'none';
-    const hud = document.getElementById('hud-overlay');
-    if (hud) hud.style.display = 'none';
-    const mobileCtrl = document.getElementById('mobile-controls-container');
-    if (mobileCtrl) mobileCtrl.style.display = 'none';
-
-    const specHud = document.getElementById('spectator-hud');
-    if (specHud) specHud.style.display = 'none';
-
-    const overlay = document.getElementById('end-game-overlay');
-    const title = document.getElementById('end-game-title');
-    const details = document.getElementById('end-game-details');
-    const retryBtn = document.getElementById('end-game-retry-btn');
-    const lobbyBtn = document.getElementById('end-game-lobby-btn');
-
-    if (overlay && title && details) {
-      overlay.style.display = 'flex';
-      title.textContent = "YOU DIED";
-      title.style.color = "#ef4444";
-      title.style.textShadow = "0 0 30px rgba(239, 68, 68, 0.9)";
-      details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 0.8rem; font-size: 1.3rem;">CONSUMED BY THE VOID</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You were dragged into the darkness before completing the extraction sequence.</p>`;
-
-      if (retryBtn) {
-        retryBtn.style.display = 'inline-block';
-        addFastTapListener(retryBtn, () => {
-          sessionStorage.setItem('rejoinRetrySolo', 'true');
-          sessionStorage.setItem('rejoinIsSolo', 'true');
-          if (window.leaveGameWithAd) {
-            window.leaveGameWithAd(() => window.location.reload());
-          } else {
-            window.location.reload();
-          }
-        });
-      }
-
-      if (lobbyBtn) {
-        lobbyBtn.textContent = 'Main Menu';
-        addFastTapListener(lobbyBtn, () => {
-          sessionStorage.removeItem('rejoinLobbyId');
-          sessionStorage.removeItem('rejoinUsername');
-          sessionStorage.removeItem('rejoinIsPublic');
-          sessionStorage.removeItem('rejoinIsSolo');
-          sessionStorage.removeItem('rejoinRetrySolo');
-          if (window.leaveGameWithAd) {
-            window.leaveGameWithAd(() => window.location.reload());
-          } else {
-            window.location.reload();
-          }
-        });
-      }
-    }
-  }
-
   socketClient.on('human_captured', (data) => {
     const { targetId, position, rotation, username, characterClass, skinId } = data || {};
     if (currentLobby && currentLobby.players && currentLobby.players[targetId]) {
@@ -11934,6 +11877,70 @@ function applyGhostDamageToHuman(ghostPos, delta) {
     }
   }
 }
+
+export function showSoloDeathEndScreen() {
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  if (ptrOverlay) ptrOverlay.style.display = 'none';
+  if (document.pointerLockElement) {
+    try { document.exitPointerLock(); } catch(_) {}
+  }
+  window.mobileGameActive = false;
+  window.gameReady = false;
+
+  const capOverlay = document.getElementById('captured-overlay');
+  if (capOverlay) capOverlay.style.display = 'none';
+  const hud = document.getElementById('hud-overlay');
+  if (hud) hud.style.display = 'none';
+  const mobileCtrl = document.getElementById('mobile-controls-container');
+  if (mobileCtrl) mobileCtrl.style.display = 'none';
+
+  const specHud = document.getElementById('spectator-hud');
+  if (specHud) specHud.style.display = 'none';
+
+  const overlay = document.getElementById('end-game-overlay');
+  const title = document.getElementById('end-game-title');
+  const details = document.getElementById('end-game-details');
+  const retryBtn = document.getElementById('end-game-retry-btn');
+  const lobbyBtn = document.getElementById('end-game-lobby-btn');
+
+  if (overlay && title && details) {
+    overlay.style.display = 'flex';
+    title.textContent = "YOU DIED";
+    title.style.color = "#ef4444";
+    title.style.textShadow = "0 0 30px rgba(239, 68, 68, 0.9)";
+    details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 0.8rem; font-size: 1.3rem;">CONSUMED BY THE VOID</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You were dragged into the darkness before completing the extraction sequence.</p>`;
+
+    if (retryBtn) {
+      retryBtn.style.display = 'inline-block';
+      addFastTapListener(retryBtn, () => {
+        sessionStorage.setItem('rejoinRetrySolo', 'true');
+        sessionStorage.setItem('rejoinIsSolo', 'true');
+        if (window.leaveGameWithAd) {
+          window.leaveGameWithAd(() => window.location.reload());
+        } else {
+          window.location.reload();
+        }
+      });
+    }
+
+    if (lobbyBtn) {
+      lobbyBtn.textContent = 'Main Menu';
+      addFastTapListener(lobbyBtn, () => {
+        sessionStorage.removeItem('rejoinLobbyId');
+        sessionStorage.removeItem('rejoinUsername');
+        sessionStorage.removeItem('rejoinIsPublic');
+        sessionStorage.removeItem('rejoinIsSolo');
+        sessionStorage.removeItem('rejoinRetrySolo');
+        if (window.leaveGameWithAd) {
+          window.leaveGameWithAd(() => window.location.reload());
+        } else {
+          window.location.reload();
+        }
+      });
+    }
+  }
+}
+window.showSoloDeathEndScreen = showSoloDeathEndScreen;
 
 function triggerLocalPlayerCapture() {
   if (isCaptured) return;
