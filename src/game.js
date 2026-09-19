@@ -2556,12 +2556,24 @@ function renderCarriedKeysHUD() {
     'Sapphire Key':  '#60a5fa',
     'Violet Key':    '#c084fc',
     'Emerald Key':   '#34d399',
+    'Ruby Key':      '#ef4444',
+    'Topaz Key':     '#fbbf24',
+    'Opal Key':      '#38bdf8',
+    'Quartz Key':    '#e2e8f0',
+    'Onyx Key':      '#64748b',
+    'Pearl Key':     '#fbcfe8',
   };
   const keyIcons = {
     'Amber Key':     '🔑',
     'Sapphire Key':  '🗝️',
     'Violet Key':    '🗝️',
     'Emerald Key':   '🔑',
+    'Ruby Key':      '🗝️',
+    'Topaz Key':     '🔑',
+    'Opal Key':      '🗝️',
+    'Quartz Key':    '🔑',
+    'Onyx Key':      '🗝️',
+    'Pearl Key':     '🗝️',
   };
 
   // Show 3 slots always (empty ones greyed out)
@@ -5014,12 +5026,18 @@ function createKeyMeshGroup(colorHex, emissiveHex) {
   return group;
 }
 
-// 4 distinct key type definitions: shape + color + name
+// 10 distinct key type definitions matching server gemstone registry: shape + color + name
 const KEY_TYPES = [
   { color: 0xf59e0b, emissive: 0xf59e0b, label: 'Amber Key'   },
   { color: 0x60a5fa, emissive: 0x3b82f6, label: 'Sapphire Key' },
-  { color: 0xa78bfa, emissive: 0x7c3aed, label: 'Violet Key' },
+  { color: 0xa78bfa, emissive: 0x7c3aed, label: 'Violet Key'   },
   { color: 0x34d399, emissive: 0x10b981, label: 'Emerald Key'  },
+  { color: 0xef4444, emissive: 0xdc2626, label: 'Ruby Key'     },
+  { color: 0xfbbf24, emissive: 0xd97706, label: 'Topaz Key'    },
+  { color: 0x38bdf8, emissive: 0x0284c7, label: 'Opal Key'     },
+  { color: 0xe2e8f0, emissive: 0x94a3b8, label: 'Quartz Key'   },
+  { color: 0x64748b, emissive: 0x475569, label: 'Onyx Key'     },
+  { color: 0xfbcfe8, emissive: 0xf472b6, label: 'Pearl Key'    },
 ];
 
 function generateCollectibles(keysCount) {
@@ -6534,10 +6552,28 @@ const KEY_NAME_CANONICAL = {
   'pearl key': 'Pearl Key'
 };
 
+function getCanonicalGemstone(keyOrName) {
+  if (!keyOrName) return '';
+  const str = typeof keyOrName === 'object'
+    ? (keyOrName.typeName || keyOrName.symbol || keyOrName.label || '')
+    : String(keyOrName);
+  const lower = str.toLowerCase().trim();
+  if (lower.includes('amber') || lower.includes('alpha')) return 'Amber Key';
+  if (lower.includes('sapphire') || lower.includes('beta')) return 'Sapphire Key';
+  if (lower.includes('violet') || lower.includes('gamma')) return 'Violet Key';
+  if (lower.includes('emerald') || lower.includes('delta')) return 'Emerald Key';
+  if (lower.includes('ruby')) return 'Ruby Key';
+  if (lower.includes('topaz')) return 'Topaz Key';
+  if (lower.includes('opal')) return 'Opal Key';
+  if (lower.includes('quartz')) return 'Quartz Key';
+  if (lower.includes('onyx')) return 'Onyx Key';
+  if (lower.includes('pearl')) return 'Pearl Key';
+  return KEY_NAME_CANONICAL[lower] || str;
+}
+
 function normalizeKeySymbol(sym) {
   if (!sym) return '';
-  const lower = String(sym).toLowerCase().trim();
-  return KEY_NAME_CANONICAL[lower] || sym;
+  return getCanonicalGemstone(sym);
 }
 
 function formatFunctionalKeyName(sym) {
@@ -6547,24 +6583,26 @@ function formatFunctionalKeyName(sym) {
 
 function isKeyFunctional(k) {
   if (!k || !functionalKeysRevealed || functionalKeysRevealed.length === 0) return false;
-  const kId = normalizeKeySymbol(k.typeName || k.symbol).toLowerCase();
+  const kGem = getCanonicalGemstone(k);
+  if (!kGem) return false;
   return functionalKeysRevealed.some(f => {
-    const fNorm = normalizeKeySymbol(f).toLowerCase();
-    return fNorm === kId || fNorm.includes(kId) || kId.includes(fNorm);
+    const fGem = getCanonicalGemstone(f);
+    return fGem && fGem.toLowerCase() === kGem.toLowerCase();
   });
 }
 
 function getKeyIdentifier(k) {
   if (!k) return '';
-  return normalizeKeySymbol(k.typeName || k.symbol);
+  return getCanonicalGemstone(k);
 }
 
 function isKeyAlreadyInserted(k) {
   if (!k || !insertedGateKeys || insertedGateKeys.length === 0) return false;
-  const kId = normalizeKeySymbol(getKeyIdentifier(k)).toLowerCase();
+  const kGem = getCanonicalGemstone(k);
+  if (!kGem) return false;
   return insertedGateKeys.some(ins => {
-    const insNorm = normalizeKeySymbol(ins).toLowerCase();
-    return insNorm === kId || insNorm.includes(kId) || kId.includes(insNorm);
+    const insGem = getCanonicalGemstone(ins);
+    return insGem && insGem.toLowerCase() === kGem.toLowerCase();
   });
 }
 
@@ -6864,7 +6902,18 @@ function getBestInteractionTarget() {
             prompt = isMobileDevice ? "Tap to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
           }
         } else {
-          prompt = `ACCESS DENIED: ${insertedGateKeys.length}/2 Keys Installed into Gate`;
+          const installedGems = (insertedGateKeys || []).map(ins => getCanonicalGemstone(ins)).filter(Boolean);
+          const requiredGems = (functionalKeysRevealed || []).map(f => getCanonicalGemstone(f)).filter(Boolean);
+          const missingGems = requiredGems.filter(r => !installedGems.some(ig => ig.toLowerCase() === r.toLowerCase()));
+          const carriedInstalledKey = carriedKeys.find(k => isKeyAlreadyInserted(k));
+          if (carriedInstalledKey) {
+            const gemName = getCanonicalGemstone(carriedInstalledKey);
+            prompt = `[${gemName}] ALREADY INSTALLED — NEED: ${missingGems.join(' + ') || 'Twin Key'}`;
+          } else if (insertedGateKeys.length > 0) {
+            prompt = `GATE KEYS: ${insertedGateKeys.length}/2 INSTALLED — NEED: ${missingGems.join(' + ') || 'Twin Key'}`;
+          } else {
+            prompt = `GATE LOCKED: Insert 2 Twin Extraction Keys`;
+          }
         }
       }
 
@@ -6912,9 +6961,22 @@ function getBestInteractionTarget() {
             return;
           }
 
-          if (carriedKeys.length > 0 && insertedGateKeys.length < 2) {
-            triggerNotification(`Key does not fit! [${carriedKeys[0].typeName || 'Key'}] is not one of the twin gate keys.`);
-            return;
+          if (insertedGateKeys.length < 2) {
+            const installedGems = (insertedGateKeys || []).map(ins => getCanonicalGemstone(ins)).filter(Boolean);
+            const requiredGems = (functionalKeysRevealed || []).map(f => getCanonicalGemstone(f)).filter(Boolean);
+            const missingGems = requiredGems.filter(r => !installedGems.some(ig => ig.toLowerCase() === r.toLowerCase()));
+            const carriedAlreadyInstalled = carriedKeys.find(k => isKeyAlreadyInserted(k));
+            if (carriedAlreadyInstalled) {
+              const gemName = getCanonicalGemstone(carriedAlreadyInstalled);
+              triggerNotification(`⚠️ [${gemName}] is already installed in the Gate! Seek the remaining twin key: [${missingGems.join(' & ')}]`);
+              return;
+            }
+            if (carriedKeys.length > 0) {
+              const nonFuncKey = carriedKeys.find(k => !isKeyFunctional(k)) || carriedKeys[0];
+              const keyName = nonFuncKey ? (nonFuncKey.typeName || nonFuncKey.symbol || 'Key') : 'Carried Key';
+              triggerNotification(`❌ [${keyName}] does not fit! Gate requires: [${missingGems.join(' & ')}]`);
+              return;
+            }
           }
 
           const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
@@ -7162,7 +7224,7 @@ function handleDirectTapInteraction(clientX, clientY) {
               }
             });
             carriedKeys.push({ id: keyId, symbol: k.symbol, typeName: k.typeName });
-            foundKeysList.push(key.symbol);
+            foundKeysList.push(k.symbol);
 
             const isReal = gateSolved && isKeyFunctional(k);
             if (isNewKey) {
@@ -7696,7 +7758,9 @@ function submitKeypadCode(code) {
 
     if (code === targetCode) {
       gateSolved = true;
-      const realKeys = (currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.realKeySymbols) || ['Amber Key', 'Sapphire Key'];
+      const realKeys = (functionalKeysRevealed && functionalKeysRevealed.length > 0)
+        ? functionalKeysRevealed
+        : ((currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.realKeySymbols) || ['Amber Key', 'Sapphire Key']);
       functionalKeysRevealed = realKeys;
 
       if (window.isTutorialMatch) {
@@ -7733,6 +7797,7 @@ function submitKeypadCode(code) {
         cipherHUD.style.color = '#38bdf8';
       }
 
+      renderCarriedKeysHUD();
       updateGateHUD();
       checkWinCondition();
       codeEntered = '';
@@ -8709,6 +8774,7 @@ function setupSocketListeners() {
       cipherHUD.style.color = '#38bdf8';
     }
     
+    renderCarriedKeysHUD();
     updateGateHUD();
     checkWinCondition();
   });
