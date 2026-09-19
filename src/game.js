@@ -1458,12 +1458,13 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     (matchConfig && matchConfig.id && matchConfig.id.startsWith('tutorial-')) ||
     (matchConfig && matchConfig.settings && matchConfig.settings.isTutorial)
   );
+  const humanPlayersCount = Object.values(matchConfig.players || {}).filter(p => p.team === 'Human').length;
   window.isSoloMatch = Boolean(
     isSolo ||
     window.isTutorialMatch ||
     (matchConfig && matchConfig.id && matchConfig.id.startsWith('solo-')) ||
     (sessionStorage.getItem('rejoinIsSolo') === 'true') ||
-    (!matchConfig.isPublic && Object.keys(matchConfig.players || {}).length <= 1)
+    humanPlayersCount <= 1
   );
   // Info Screen (Breakers, Keys, and 4-Digit Code) must ALWAYS be visible across all modes!
   const objBar = document.querySelector('.compact-objective-bar');
@@ -1581,16 +1582,39 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   nextDecoyTimer = 15;
   nextMirageTimer = 20;
 
+  const exitToLobbyOrMenu = () => {
+    if (currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-')) {
+      sessionStorage.setItem('rejoinLobbyId', currentLobby.id);
+      sessionStorage.setItem('rejoinUsername', (currentLobby.players && currentLobby.players[myId]?.username) || `Operative_${Math.floor(100 + Math.random() * 900)}`);
+      sessionStorage.setItem('rejoinIsPublic', currentLobby.isPublic ? 'true' : 'false');
+      sessionStorage.setItem('rejoinIsSolo', 'false');
+    } else {
+      sessionStorage.removeItem('rejoinLobbyId');
+      sessionStorage.removeItem('rejoinUsername');
+      sessionStorage.removeItem('rejoinIsPublic');
+      sessionStorage.removeItem('rejoinIsSolo');
+    }
+    if (window.leaveGameWithAd) {
+      window.leaveGameWithAd(() => window.location.reload());
+    } else {
+      window.location.reload();
+    }
+  };
+
   const spectateBtn = document.getElementById('spectate-btn');
   if (spectateBtn) {
     spectateBtn.onclick = () => {
-      document.getElementById('captured-overlay').style.display = 'none';
+      const capOverlay = document.getElementById('captured-overlay');
+      if (capOverlay) capOverlay.style.display = 'none';
       window.isSpectating = true;
       camera.position.y = Math.max(camera.position.y, 5.0);
       updateEnvironmentLighting();
-      
+
+      const specHud = document.getElementById('spectator-hud');
+      if (specHud) specHud.style.display = 'flex';
+
       const resumeTarget = document.getElementById('resume-click-target');
-      if (resumeTarget) resumeTarget.textContent = 'CLICK TO RESUME SPECTATING';
+      if (resumeTarget) resumeTarget.textContent = isMobileDevice ? '▶ TAP TO RESUME SPECTATING' : '▶ CLICK TO RESUME SPECTATING';
 
       if (isMobileDevice) {
         window.mobileGameActive = true;
@@ -1602,8 +1626,37 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
           lockTarget.requestPointerLock();
         }
       }
-      triggerNotification("SPECTATOR MODE: Roam with WASD. Click anywhere to relink mouse.");
+      triggerNotification("SPECTATOR MODE: Roam with WASD. Tap Menu/Pause to Abort.");
     };
+  }
+
+  const capturedLobbyBtn = document.getElementById('captured-lobby-btn');
+  if (capturedLobbyBtn) {
+    addFastTapListener(capturedLobbyBtn, exitToLobbyOrMenu);
+  }
+
+  const capturedQuitBtn = document.getElementById('captured-quit-btn');
+  if (capturedQuitBtn) {
+    addFastTapListener(capturedQuitBtn, () => {
+      sessionStorage.clear();
+      if (window.leaveGameWithAd) {
+        window.leaveGameWithAd(() => window.location.reload());
+      } else {
+        window.location.reload();
+      }
+    });
+  }
+
+  const spectatorPauseBtn = document.getElementById('spectator-pause-btn');
+  if (spectatorPauseBtn) {
+    addFastTapListener(spectatorPauseBtn, (e) => {
+      if (window.togglePauseMenu) window.togglePauseMenu(e);
+    });
+  }
+
+  const spectatorAbortBtn = document.getElementById('spectator-abort-btn');
+  if (spectatorAbortBtn) {
+    addFastTapListener(spectatorAbortBtn, exitToLobbyOrMenu);
   }
 
   setupMinimap();
@@ -1678,7 +1731,21 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       return; // Discard trailing touches / synthetic clicks from the tap that opened pause
     }
     resetPlayerMovementState();
-    if (window.isEscaping || isCaptured || window.isCapturedAnimation || window.isSpectating || !window.gameReady) {
+    if (window.isSpectating) {
+      if (ptrOverlay) ptrOverlay.style.display = 'none';
+      const specHud = document.getElementById('spectator-hud');
+      if (specHud) specHud.style.display = 'flex';
+      if (isMobileDevice) {
+        window.mobileGameActive = true;
+        const mobileCtrl = document.getElementById('mobile-controls-container');
+        if (mobileCtrl) mobileCtrl.style.display = 'flex';
+      } else {
+        const lockTarget = (renderer && renderer.domElement) || container;
+        if (lockTarget && lockTarget.requestPointerLock) lockTarget.requestPointerLock();
+      }
+      return;
+    }
+    if (window.isEscaping || isCaptured || window.isCapturedAnimation || !window.gameReady) {
       if (ptrOverlay) ptrOverlay.style.display = 'none';
       return;
     }
@@ -1779,7 +1846,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   // Global helper to request pointer lock during active gameplay
   window.requestGamePointerLock = () => {
-    if (isMobileDevice || !window.gameReady || window.isSpectating || window.isEscaping || isCaptured || window.isCapturedAnimation) return;
+    if (isMobileDevice || (!window.gameReady && !window.isSpectating) || window.isEscaping || (isCaptured && !window.isSpectating) || window.isCapturedAnimation) return;
     if (document.pointerLockElement) return;
     if (ptrOverlay && ptrOverlay.style.display === 'flex') return;
     const settingsModal = document.getElementById('settings-modal');
@@ -1807,19 +1874,19 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   // Global click & pointerdown to relock mouse anytime desktop player clicks during gameplay
   window.addEventListener('click', (e) => {
-    if (isMobileDevice || window.isEscaping || isCaptured || window.isCapturedAnimation || window.isSpectating || !window.gameReady) return;
+    if (isMobileDevice || window.isEscaping || (isCaptured && !window.isSpectating) || window.isCapturedAnimation || (!window.gameReady && !window.isSpectating)) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
-    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('#controls-guide-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions')) return;
+    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('#controls-guide-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions') || e.target.closest('#spectator-hud')) return;
     if (ptrOverlay.style.display !== 'flex') {
       window.requestGamePointerLock();
     }
   });
   window.addEventListener('pointerdown', (e) => {
-    if (isMobileDevice || window.isEscaping || isCaptured || window.isCapturedAnimation || window.isSpectating || !window.gameReady) return;
+    if (isMobileDevice || window.isEscaping || (isCaptured && !window.isSpectating) || window.isCapturedAnimation || (!window.gameReady && !window.isSpectating)) return;
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
-    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('#controls-guide-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions')) return;
+    if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('#controls-guide-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#mobile-controls-container') || e.target.closest('.mobile-action-btn') || e.target.closest('#mobile-actions') || e.target.closest('#spectator-hud')) return;
     if (ptrOverlay.style.display !== 'flex') {
       window.requestGamePointerLock();
     }
@@ -1829,10 +1896,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     if (
       isMobileDevice || 
       window.isEscaping || 
-      isCaptured || 
+      (isCaptured && !window.isSpectating) || 
       window.isCapturedAnimation || 
-      window.isSpectating || 
-      !window.gameReady
+      (!window.gameReady && !window.isSpectating)
     ) {
       ptrOverlay.style.display = 'none';
       return;
@@ -1841,7 +1907,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       ptrOverlay.style.display = 'none';
     } else {
       resetPlayerMovementState();
-      // Don't show pause overlay if dying, captured, escaping, spectating, keypad modal, minimap, settings modal, or game-over is open
+      // Don't show pause overlay if dying, captured, escaping, keypad modal, minimap, settings modal, or game-over is open
       const keypadEl = document.getElementById('keypad-modal-ui');
       const isKeypadOpen = Boolean(keypadEl && keypadEl.style.display !== 'none');
       const settingsModal = document.getElementById('settings-modal');
@@ -1860,11 +1926,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
         isCapturedOpen || 
         isEndOpen || 
         isCaptureAnimOpen || 
-        isCaptured || 
+        (isCaptured && !window.isSpectating) || 
         window.isCapturedAnimation || 
-        window.isSpectating || 
         window.isEscaping || 
-        !window.gameReady
+        (!window.gameReady && !window.isSpectating)
       ) {
         ptrOverlay.style.display = 'none';
       } else {
@@ -6437,7 +6502,7 @@ function setupControls() {
         if (e.stopPropagation) e.stopPropagation();
         if (e.preventDefault && e.cancelable) e.preventDefault();
       }
-      if (isCaptured || window.isCapturedAnimation || window.isEscaping || !window.gameReady) return;
+      if ((isCaptured && !window.isSpectating) || window.isCapturedAnimation || window.isEscaping || (!window.gameReady && !window.isSpectating)) return;
 
       const overlay = ptrOverlay || document.getElementById('pointer-lock-overlay');
       if (overlay && overlay.style.display === 'flex') {
@@ -6457,7 +6522,9 @@ function setupControls() {
 
       const resumeTarget = document.getElementById('resume-click-target');
       if (resumeTarget) {
-        resumeTarget.textContent = isMobileDevice ? '▶ TAP TO RESUME LABYRINTH' : '▶ CLICK TO RESUME LABYRINTH';
+        resumeTarget.textContent = window.isSpectating
+          ? (isMobileDevice ? '▶ TAP TO RESUME SPECTATING' : '▶ CLICK TO RESUME SPECTATING')
+          : (isMobileDevice ? '▶ TAP TO RESUME LABYRINTH' : '▶ CLICK TO RESUME LABYRINTH');
       }
 
       const canvasContainer = document.getElementById('canvas-container');
@@ -9089,6 +9156,9 @@ function setupSocketListeners() {
     const mobileCtrl = document.getElementById('mobile-controls-container');
     if (mobileCtrl) mobileCtrl.style.display = 'none';
 
+    const specHud = document.getElementById('spectator-hud');
+    if (specHud) specHud.style.display = 'none';
+
     const overlay = document.getElementById('end-game-overlay');
     const title = document.getElementById('end-game-title');
     const details = document.getElementById('end-game-details');
@@ -9153,11 +9223,12 @@ function setupSocketListeners() {
           document.getElementById('hud-overlay').style.display = 'none';
           const mobileCtrl = document.getElementById('mobile-controls-container');
           if (mobileCtrl) mobileCtrl.style.display = 'none';
-          if (!window.isSoloMatch) {
+          const otherLivingHumans = Object.values((currentLobby && currentLobby.players) || {}).filter(p => p.id !== myId && p.team === 'Human' && !p.isCaptured);
+          if (window.isSoloMatch || otherLivingHumans.length === 0) {
+            showSoloDeathEndScreen();
+          } else {
             const capOverlay = document.getElementById('captured-overlay');
             if (capOverlay) capOverlay.style.display = 'flex';
-          } else {
-            showSoloDeathEndScreen();
           }
         });
       }
@@ -9335,6 +9406,8 @@ function setupSocketListeners() {
       if (hud) hud.style.display = 'none';
       const mobileCtrl = document.getElementById('mobile-controls-container');
       if (mobileCtrl) mobileCtrl.style.display = 'none';
+      const specHud = document.getElementById('spectator-hud');
+      if (specHud) specHud.style.display = 'none';
 
       // Show the End Game Overlay
       const overlay = document.getElementById('end-game-overlay');
@@ -9346,7 +9419,9 @@ function setupSocketListeners() {
       if (overlay && title && details) {
         overlay.style.display = 'flex';
 
-        if (window.isSoloMatch) {
+        const otherLivingHumans = Object.values((currentLobby && currentLobby.players) || {}).filter(p => p.id !== myId && p.team === 'Human' && !p.isCaptured);
+        const isSoloGame = window.isSoloMatch || otherLivingHumans.length === 0;
+        if (isSoloGame) {
           // SOLO MODE END GAME FLOW
           const isEscapeWin = (winner === 'Human' || window.isEscaping);
           if (isEscapeWin) {
@@ -11870,11 +11945,12 @@ function triggerLocalPlayerCapture() {
     if (hud) hud.style.display = 'none';
     const mobileCtrl = document.getElementById('mobile-controls-container');
     if (mobileCtrl) mobileCtrl.style.display = 'none';
-    if (!window.isSoloMatch) {
+    const otherLivingHumans = Object.values((currentLobby && currentLobby.players) || {}).filter(p => p.id !== myId && p.team === 'Human' && !p.isCaptured);
+    if (window.isSoloMatch || otherLivingHumans.length === 0) {
+      showSoloDeathEndScreen();
+    } else {
       const capOverlay = document.getElementById('captured-overlay');
       if (capOverlay) capOverlay.style.display = 'flex';
-    } else {
-      showSoloDeathEndScreen();
     }
   });
 }

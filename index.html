@@ -688,6 +688,13 @@
         </div>
       </div>
 
+      <!-- Dedicated Spectator Control Bar -->
+      <div id="spectator-hud" style="display: none; position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 26000; background: rgba(15, 23, 42, 0.9); border: 1.5px solid #38bdf8; border-radius: 999px; padding: 8px 20px; align-items: center; gap: 14px; backdrop-filter: blur(12px); box-shadow: 0 0 25px rgba(56, 189, 248, 0.35); pointer-events: auto;">
+        <span style="font-family: 'Orbitron', sans-serif; font-size: 0.9rem; color: #38bdf8; font-weight: 800; letter-spacing: 2px;">👁️ SPECTATING</span>
+        <button id="spectator-pause-btn" style="background: rgba(56, 189, 248, 0.2); border: 1px solid #38bdf8; color: #e0f2fe; font-size: 0.8rem; border-radius: 999px; padding: 6px 14px; cursor: pointer; font-family: 'Orbitron', sans-serif; font-weight: 700; pointer-events: auto;">⏸️ MENU</button>
+        <button id="spectator-abort-btn" style="background: rgba(239, 68, 68, 0.3); border: 1px solid #ef4444; color: #fecaca; font-size: 0.8rem; border-radius: 999px; padding: 6px 14px; cursor: pointer; font-family: 'Orbitron', sans-serif; font-weight: 700; pointer-events: auto;">🚨 ABORT MATCH</button>
+      </div>
+
       <!-- 6. End Game Screen Overlay -->
       <div id="end-game-overlay" style="display: none; position: fixed; inset: 0; width:100vw; height:100vh; background: rgba(0,0,0,0.92); z-index: 30000; flex-direction: column; justify-content: center; align-items: center; color: white; backdrop-filter: blur(15px); pointer-events: auto;">
         <h1 id="end-game-title" style="font-family: 'Orbitron', sans-serif; font-size: 4rem; letter-spacing: 6px; margin-bottom: 1.5rem; text-transform: uppercase;">MATCH OVER</h1>
