@@ -882,6 +882,22 @@ io.on('connection', (socket) => {
     if (lobby.settings.isTutorial) {
       lobby.settings.ghostsCount = 0;
       lobby.settings.botGhostsCount = 0;
+    } else {
+      const playersList = Object.values(lobby.players);
+      const humanCount = playersList.filter(p => p.team === 'Human').length;
+      const ghostCount = playersList.filter(p => p.team === 'Ghost').length;
+      const requiredGhosts = calculateRequiredGhosts(humanCount, lobby.settings.botsEnabled, diff);
+      lobby.settings.minGhostsRequired = requiredGhosts;
+      let activeGhosts = ghostCount;
+      let botGhosts = 0;
+      if (lobby.settings.botsEnabled) {
+        if (activeGhosts < requiredGhosts) {
+          botGhosts = requiredGhosts - activeGhosts;
+          activeGhosts = requiredGhosts;
+        }
+      }
+      lobby.settings.ghostsCount = activeGhosts;
+      lobby.settings.botGhostsCount = botGhosts;
     }
     const mazeSize = calculateMazeSize(diff);
 

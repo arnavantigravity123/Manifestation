@@ -2074,6 +2074,28 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       window.tpToLastKey();
     }
   };
+  window.circuitBreakers = circuitBreakers;
+  window.tpToBreaker = (idx) => {
+    const list = (window.circuitBreakers && window.circuitBreakers.length > 0) ? window.circuitBreakers : circuitBreakers;
+    const unfixed = list.filter(b => !b.isFixed && b.mesh);
+    const target = (idx !== undefined && list[idx] && list[idx].mesh) 
+      ? list[idx] 
+      : (unfixed[unfixed.length - 1] || list[list.length - 1]);
+    if (target && target.mesh && window.camera) {
+      window.camera.position.set(target.mesh.position.x, 1.6, target.mesh.position.z);
+      console.log(`%c[TELEPORT] Teleported to breaker ${target.id} at [${target.mesh.position.x.toFixed(1)}, ${target.mesh.position.z.toFixed(1)}]`, 'color: #10b981; font-weight: bold;');
+    } else {
+      console.warn("No circuit breakers found or all fixed!");
+    }
+  };
+  window.teleportToBreaker = window.tpToBreaker;
+  window.pullBreakers = () => {
+    const list = (window.circuitBreakers && window.circuitBreakers.length > 0) ? window.circuitBreakers : circuitBreakers;
+    list.filter(b => !b.isFixed && b.mesh).forEach((b, i) => {
+      b.mesh.position.set(window.camera.position.x - 1 + (i * 1.5), 1.2, window.camera.position.z - 2);
+      console.log(`%c[PULL] Pulled ${b.id} to your location`, 'color: #38bdf8;');
+    });
+  };
 
   // 3. Renderer cleanup & setup
   if (animationFrameId !== null) {
@@ -2159,8 +2181,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   // Store the cipher code digits (revealed one at a time by clue notes in the maze)
   window.cipherCodeDigits = matchConfig.puzzleState.codeDigits || [null, null, null, null];
   window.gameDifficulty = (matchConfig.puzzleState && matchConfig.puzzleState.difficulty) || localStorage.getItem('manifestation_difficulty') || 'easy';
-  const defaultBreakers = window.gameDifficulty === 'easy' ? 2 : (window.gameDifficulty === 'hard' ? 4 : (window.gameDifficulty === 'impossible' ? 6 : 3));
-  totalBreakersRequired = (matchConfig.puzzleState && matchConfig.puzzleState.totalBreakers) || defaultBreakers;
+  const defaultBreakers = window.isTutorialMatch ? 1 : (window.gameDifficulty === 'easy' ? 2 : (window.gameDifficulty === 'hard' ? 4 : (window.gameDifficulty === 'impossible' ? 6 : 3)));
+  totalBreakersRequired = window.isTutorialMatch ? 1 : ((matchConfig.puzzleState && matchConfig.puzzleState.totalBreakers) || defaultBreakers);
   mazeSizeGlobal = window.isTutorialMatch ? 11 : ((matchConfig.puzzleState && matchConfig.puzzleState.mazeSize) || getMazeSizeForDifficulty(window.gameDifficulty));
   window.mazeSizeGlobal = mazeSizeGlobal;
 
@@ -2171,6 +2193,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   // Create Labyrinth
   generateMaze(matchConfig.puzzleState.keysCount);
+  updateGateHUD();
 
   // Set spawn positions (All Humans spawn together at center (0, 1.6, 0))
   if (myTeam === 'Ghost') {
@@ -8595,6 +8618,17 @@ function processFlashlightBattery(delta) {
 let exitGateShown = false;
 
 function updateGateHUD() {
+  const breakersInfo = document.getElementById('hud-breakers-info');
+  if (breakersInfo) {
+    if (window.isTutorialMatch) {
+      breakersInfo.textContent = `POWER: ${fixedBreakersCount}/${totalBreakersRequired} BREAKER`;
+      breakersInfo.style.color = fixedBreakersCount >= totalBreakersRequired ? '#10b981' : '#f59e0b';
+    } else {
+      breakersInfo.textContent = `⚡ ${fixedBreakersCount}/${totalBreakersRequired} BREAKERS`;
+      breakersInfo.style.color = fixedBreakersCount >= totalBreakersRequired ? '#10b981' : '#f59e0b';
+    }
+  }
+
   const keysHud = document.getElementById('keys-hud-info');
   if (keysHud) {
     if (insertedGateKeys.length >= 2) {
@@ -11376,14 +11410,7 @@ function fixBreakerLocal(breakerId) {
   
   updateEnvironmentLighting();
 
-  const breakersInfo = document.getElementById('hud-breakers-info');
-  if (breakersInfo) {
-    breakersInfo.textContent = `POWER: ${fixedBreakersCount}/${totalBreakersRequired} BREAKERS`;
-    if (fixedBreakersCount >= totalBreakersRequired) {
-      breakersInfo.style.color = '#10b981';
-      breakersInfo.textContent = 'POWER: RESTORED';
-    }
-  }
+  updateGateHUD();
 
   if (fixedBreakersCount >= totalBreakersRequired) {
     triggerNotification(`⚡ ALL BREAKERS REPAIRED! Keypad terminal is now powered online.`);
@@ -13318,9 +13345,15 @@ function animate() {
     
     // Count real players on Ghost team
     const playerGhostCount = Object.values(currentLobby.players || {}).filter(p => p.team === 'Ghost').length;
+    let diffGhostTarget = 3;
+    if (window.isTutorialMatch) diffGhostTarget = 0;
+    else if (window.gameDifficulty === 'easy') diffGhostTarget = 2;
+    else if (window.gameDifficulty === 'hard') diffGhostTarget = 6;
+    else if (window.gameDifficulty === 'impossible') diffGhostTarget = 8;
+
     const totalTargetGhosts = (currentLobby.settings && currentLobby.settings.ghostsCount !== undefined) 
       ? currentLobby.settings.ghostsCount 
-      : 3;
+      : diffGhostTarget;
     
     // Calculate how many AI bot ghosts are needed so Total Ghosts == totalTargetGhosts exactly
     let botGhostsToSpawn = (currentLobby.settings && currentLobby.settings.botGhostsCount !== undefined)

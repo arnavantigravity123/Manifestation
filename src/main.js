@@ -1217,7 +1217,7 @@ function initializeSocketConnection() {
 
   socket.on('joined_room_success', ({ roomId, isPublic }) => {
     if (isSoloMode) {
-      const selectedDiff = isTutorialMode ? 'easy' : ((soloDifficultySelect && soloDifficultySelect.value) || 'medium');
+      const selectedDiff = isTutorialMode ? 'easy' : ((soloDifficultySelect && soloDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy');
       const soloHumanClasses = ['Locksmith', 'Trapper', 'Scout', 'Medic', 'Flashlight Expert', 'Quartermaster'];
       const chosenSoloSetting = isTutorialMode ? 'Locksmith' : ((soloClassSelect && soloClassSelect.value) || localStorage.getItem('manifestation_solo_class') || 'Random');
       
@@ -1371,6 +1371,14 @@ function startLocalSoloMatch(isTutorial = false) {
       : (selectedDiff === 'easy' ? 21 : (selectedDiff === 'hard' ? 41 : (selectedDiff === 'impossible' ? 51 : 31))));
   window.mazeSizeGlobal = mazeSize;
 
+  const targetGhosts = isTutorial ? 0 : (
+    selectedDiff === 'easy' ? 2 : (
+      selectedDiff === 'hard' ? 6 : (
+        selectedDiff === 'impossible' ? 8 : 3
+      )
+    )
+  );
+
   const matchConfig = {
     id: roomId,
     isPublic: false,
@@ -1379,6 +1387,9 @@ function startLocalSoloMatch(isTutorial = false) {
       botsEnabled: !isTutorial,
       difficulty: selectedDiff,
       totalBreakers: totalBreakers,
+      ghostsCount: targetGhosts,
+      botGhostsCount: targetGhosts,
+      minGhostsRequired: targetGhosts,
       roleSelectionMode: 'manual'
     },
     players: {
@@ -1395,6 +1406,7 @@ function startLocalSoloMatch(isTutorial = false) {
       mazeGeometrySeed: Math.random(),
       difficulty: selectedDiff,
       totalBreakers: totalBreakers,
+      ghostsCount: targetGhosts,
       mazeSize: mazeSize,
       keysCount: 4,
       codeDigits: codeDigits,
@@ -1687,6 +1699,9 @@ soloDifficultySelect?.addEventListener('change', () => {
     window.mazeSizeGlobal = window.getMazeSizeForDifficulty(diff);
   }
   if (lobbyDifficultySelect) lobbyDifficultySelect.value = diff;
+  if (currentLobby && currentLobby.players[myId]?.isHost) {
+    socket.emit('update_settings', { difficulty: diff });
+  }
 });
 
 lobbyDifficultySelect?.addEventListener('change', () => {
