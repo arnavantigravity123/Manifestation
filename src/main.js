@@ -1352,7 +1352,7 @@ function startLocalSoloMatch(isTutorial = false) {
     const idx = Math.floor(Math.random() * keysCount);
     if (!realKeyIndexes.includes(idx)) realKeyIndexes.push(idx);
   }
-  const keyNames = ['Alpha', 'Beta', 'Gamma', 'Delta'];
+  const keyNames = ['Amber Key', 'Sapphire Key', 'Violet Key', 'Emerald Key'];
   const realKeySymbols = realKeyIndexes.map(i => keyNames[i]);
 
   const mazeSize = isTutorial

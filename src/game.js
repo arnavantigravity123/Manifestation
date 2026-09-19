@@ -2528,8 +2528,8 @@ function renderCarriedKeysHUD() {
 
     if (i < carriedKeys.length) {
       const k = carriedKeys[i];
-      const isReal = gateSolved && functionalKeysRevealed.includes(k.symbol);
-      const typeName = k.typeName || 'Unknown Key';
+      const isReal = gateSolved && isKeyFunctional(k);
+      const typeName = normalizeKeySymbol(k.typeName || k.symbol || 'Unknown Key');
       const color = keyColors[typeName] || '#ffffff';
       slot.style.borderColor = color;
       slot.style.background = `${color}18`;
@@ -6436,18 +6436,69 @@ function isLookingAtTarget(targetPos, maxDist = 4.5, maxAngle = 0.7) {
   return { looking, dist };
 }
 
+const KEY_NAME_CANONICAL = {
+  'alpha': 'Amber Key',
+  'alpha key': 'Amber Key',
+  'amber': 'Amber Key',
+  'amber key': 'Amber Key',
+  'beta': 'Sapphire Key',
+  'beta key': 'Sapphire Key',
+  'sapphire': 'Sapphire Key',
+  'sapphire key': 'Sapphire Key',
+  'gamma': 'Violet Key',
+  'gamma key': 'Violet Key',
+  'violet': 'Violet Key',
+  'violet key': 'Violet Key',
+  'delta': 'Emerald Key',
+  'delta key': 'Emerald Key',
+  'emerald': 'Emerald Key',
+  'emerald key': 'Emerald Key',
+  'ruby': 'Ruby Key',
+  'ruby key': 'Ruby Key',
+  'topaz': 'Topaz Key',
+  'topaz key': 'Topaz Key',
+  'opal': 'Opal Key',
+  'opal key': 'Opal Key',
+  'quartz': 'Quartz Key',
+  'quartz key': 'Quartz Key',
+  'onyx': 'Onyx Key',
+  'onyx key': 'Onyx Key',
+  'pearl': 'Pearl Key',
+  'pearl key': 'Pearl Key'
+};
+
+function normalizeKeySymbol(sym) {
+  if (!sym) return '';
+  const lower = String(sym).toLowerCase().trim();
+  return KEY_NAME_CANONICAL[lower] || sym;
+}
+
+function formatFunctionalKeyName(sym) {
+  const norm = normalizeKeySymbol(sym);
+  return String(norm).replace(/ Key$/i, '');
+}
+
 function isKeyFunctional(k) {
-  if (!k) return false;
-  return functionalKeysRevealed.some(f => 
-    f === k.symbol || 
-    f === k.typeName || 
-    (k.typeName && f.toLowerCase().includes(k.typeName.toLowerCase())) ||
-    (k.symbol && f.toLowerCase().includes(k.symbol.toLowerCase()))
-  );
+  if (!k || !functionalKeysRevealed || functionalKeysRevealed.length === 0) return false;
+  const kId = normalizeKeySymbol(k.typeName || k.symbol).toLowerCase();
+  return functionalKeysRevealed.some(f => {
+    const fNorm = normalizeKeySymbol(f).toLowerCase();
+    return fNorm === kId || fNorm.includes(kId) || kId.includes(fNorm);
+  });
 }
 
 function getKeyIdentifier(k) {
-  return k.typeName || k.symbol;
+  if (!k) return '';
+  return normalizeKeySymbol(k.typeName || k.symbol);
+}
+
+function isKeyAlreadyInserted(k) {
+  if (!k || !insertedGateKeys || insertedGateKeys.length === 0) return false;
+  const kId = normalizeKeySymbol(getKeyIdentifier(k)).toLowerCase();
+  return insertedGateKeys.some(ins => {
+    const insNorm = normalizeKeySymbol(ins).toLowerCase();
+    return insNorm === kId || insNorm.includes(kId) || kId.includes(insNorm);
+  });
 }
 
 // Interaction Candidate Evaluator: Determines the best object under player's crosshair or immediate reach
@@ -6602,7 +6653,7 @@ function getBestInteractionTarget() {
             carriedKeys.push({ id: keyId, symbol: key.symbol, typeName: key.typeName });
             foundKeysList.push(key.symbol);
 
-            const isReal = gateSolved && functionalKeysRevealed.includes(key.symbol);
+            const isReal = gateSolved && isKeyFunctional(key);
             if (isNewKey) {
               triggerNotification(`Discovered NEW [${key.typeName}]! The labyrinth shifts! (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
             } else {
@@ -6731,7 +6782,7 @@ function getBestInteractionTarget() {
         }
       } else {
         const uninsertedKeyIndex = carriedKeys.findIndex(k => 
-          isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
+          isKeyFunctional(k) && !isKeyAlreadyInserted(k)
         );
 
         if (uninsertedKeyIndex !== -1) {
@@ -6775,13 +6826,13 @@ function getBestInteractionTarget() {
           }
 
           const uninsertedKeyIndex = carriedKeys.findIndex(k => 
-            isKeyFunctional(k) && !insertedGateKeys.includes(getKeyIdentifier(k))
+            isKeyFunctional(k) && !isKeyAlreadyInserted(k)
           );
 
           if (uninsertedKeyIndex !== -1) {
             const poppedKey = carriedKeys.splice(uninsertedKeyIndex, 1)[0];
             const keyId = getKeyIdentifier(poppedKey);
-            if (!insertedGateKeys.includes(keyId)) {
+            if (!isKeyAlreadyInserted(poppedKey)) {
               insertedGateKeys.push(keyId);
             }
             renderCarriedKeysHUD();
@@ -7046,7 +7097,7 @@ function handleDirectTapInteraction(clientX, clientY) {
             carriedKeys.push({ id: keyId, symbol: k.symbol, typeName: k.typeName });
             foundKeysList.push(key.symbol);
 
-            const isReal = gateSolved && functionalKeysRevealed.includes(key.symbol);
+            const isReal = gateSolved && isKeyFunctional(k);
             if (isNewKey) {
               triggerNotification(`Discovered NEW [${k.typeName}]! The labyrinth shifts! (${carriedKeys.length}/${MAX_CARRIED_KEYS})`);
             } else {
@@ -7578,7 +7629,7 @@ function submitKeypadCode(code) {
 
     if (code === targetCode) {
       gateSolved = true;
-      const realKeys = (currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.realKeySymbols) || ['Alpha', 'Beta'];
+      const realKeys = (currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.realKeySymbols) || ['Amber Key', 'Sapphire Key'];
       functionalKeysRevealed = realKeys;
 
       if (window.isTutorialMatch) {
@@ -7586,7 +7637,8 @@ function submitKeypadCode(code) {
         triggerNotification(`🎉 CIPHER CRACKED! [${targetCode}] Verified! Twin Extraction Keys Installed into Gate!`);
         advanceTutorialStage(9, "Cipher Cracked! Master Gate Unlocked! Approach the Gate and Tap/Press INTERACT to Escape!");
       } else {
-        triggerNotification(`🎉 CIPHER CRACKED! Twin functional keys revealed: [${realKeys.join(' & ')}]`);
+        const formattedKeys = realKeys.map(s => formatFunctionalKeyName(s));
+        triggerNotification(`🎉 CIPHER CRACKED! Twin functional keys revealed: [${formattedKeys.join(' & ')}]`);
       }
 
       // Close modal
@@ -7609,7 +7661,7 @@ function submitKeypadCode(code) {
 
       const cipherHUD = document.getElementById('hud-cipher-info');
       if (cipherHUD) {
-        const cleanSymbols = realKeys.map(s => String(s).replace(/ Key$/i, ''));
+        const cleanSymbols = realKeys.map(s => formatFunctionalKeyName(s));
         cipherHUD.textContent = window.isTutorialMatch ? `GATE UNLOCKED` : `REQUIRED: ${cleanSymbols.join(' + ')}`;
         cipherHUD.style.color = '#38bdf8';
       }
@@ -7762,7 +7814,7 @@ function dropKey() {
   // Try to find a fake key to drop first
   let dropIndex = -1;
   for (let i = carriedKeys.length - 1; i >= 0; i--) {
-    if (!functionalKeysRevealed.includes(carriedKeys[i].symbol)) {
+    if (!isKeyFunctional(carriedKeys[i])) {
       dropIndex = i;
       break;
     }
@@ -8585,7 +8637,7 @@ function setupSocketListeners() {
 
     const cipherHUD = document.getElementById('hud-cipher-info');
     if (cipherHUD) {
-      const cleanSymbols = realKeySymbols.map(s => String(s).replace(/ Key$/i, ''));
+      const cleanSymbols = realKeySymbols.map(s => formatFunctionalKeyName(s));
       cipherHUD.textContent = `REQUIRED: ${cleanSymbols.join(' + ')}`;
       cipherHUD.style.color = '#38bdf8';
     }
