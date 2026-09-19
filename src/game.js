@@ -1397,6 +1397,7 @@ let discoveredKeyIds = new Set(); // Tracks unique key IDs discovered to prevent
 const MAX_CARRIED_KEYS = 3;
 let insertedGateKeys = []; // Keys installed into the Master Gate
 let codeClueNotes = []; // Clue objects in the maze
+let pauseOpenedTime = 0; // Timestamp when pause menu is opened to block instant ghost resumes
 
 // Audio variables for EMF & static
 let audioCtx = null;
@@ -1672,6 +1673,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   }
 
   const handleEnterGame = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (performance.now() - pauseOpenedTime < 400) {
+      return; // Discard trailing touches / synthetic clicks from the tap that opened pause
+    }
     resetPlayerMovementState();
     if (window.isEscaping || isCaptured || window.isCapturedAnimation || window.isSpectating || !window.gameReady) {
       if (ptrOverlay) ptrOverlay.style.display = 'none';
@@ -1726,19 +1731,37 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   };
 
   ptrOverlay.addEventListener('click', (e) => {
+    if (isMobileDevice) return; // On mobile devices, do not resume by clicking empty overlay background!
+    if (performance.now() - pauseOpenedTime < 400) return;
     if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('.glass-panel')) return;
     handleEnterGame(e);
   });
-  container.addEventListener('click', handleEnterGame);
+  if (!isMobileDevice) {
+    container.addEventListener('click', handleEnterGame);
+  }
   const resumeBtn = document.getElementById('resume-click-target');
   if (resumeBtn) {
-    resumeBtn.addEventListener('click', handleEnterGame);
-    resumeBtn.addEventListener('touchstart', handleEnterGame, { passive: false });
+    resumeBtn.addEventListener('click', (e) => {
+      if (performance.now() - pauseOpenedTime < 400) return;
+      handleEnterGame(e);
+    });
+    resumeBtn.addEventListener('touchend', (e) => {
+      if (performance.now() - pauseOpenedTime < 400) return;
+      if (e.cancelable) e.preventDefault();
+      handleEnterGame(e);
+    }, { passive: false });
   }
   const pauseResumeBtn = document.getElementById('pause-resume-btn');
   if (pauseResumeBtn) {
-    pauseResumeBtn.addEventListener('click', handleEnterGame);
-    pauseResumeBtn.addEventListener('touchstart', handleEnterGame, { passive: false });
+    pauseResumeBtn.addEventListener('click', (e) => {
+      if (performance.now() - pauseOpenedTime < 400) return;
+      handleEnterGame(e);
+    });
+    pauseResumeBtn.addEventListener('touchend', (e) => {
+      if (performance.now() - pauseOpenedTime < 400) return;
+      if (e.cancelable) e.preventDefault();
+      handleEnterGame(e);
+    }, { passive: false });
   }
 
   // Initialize Controls Guide & Tutorial Quest engine
@@ -2170,8 +2193,18 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   // Pause buttons remain active in all modes to access In-Game Menu & Settings
   const mobilePauseBtn = document.getElementById('btn-mobile-pause');
   const globalPauseBtn = document.getElementById('global-pause-btn');
-  if (mobilePauseBtn) mobilePauseBtn.style.display = '';
-  if (globalPauseBtn) globalPauseBtn.style.display = '';
+  if (mobilePauseBtn) {
+    mobilePauseBtn.style.display = '';
+    mobilePauseBtn.onclick = (e) => {
+      if (window.togglePauseMenu) window.togglePauseMenu(e);
+    };
+  }
+  if (globalPauseBtn) {
+    globalPauseBtn.style.display = '';
+    globalPauseBtn.onclick = (e) => {
+      if (window.togglePauseMenu) window.togglePauseMenu(e);
+    };
+  }
 
   // Easter Egg: Ariadne's Thread to the Vault (Path through labyrinth corridors for Ariadne_999 / Aridane_999)
   const myPlayer = (currentLobby && currentLobby.players) ? currentLobby.players[myId] : null;
@@ -6289,9 +6322,24 @@ function setupControls() {
       });
     }
 
-    const handlePause = () => {
+    const handlePause = (e) => {
+      if (e) {
+        if (e.stopPropagation) e.stopPropagation();
+        if (e.preventDefault && e.cancelable) e.preventDefault();
+      }
       if (isCaptured || window.isCapturedAnimation || window.isEscaping || !window.gameReady) return;
+
+      const overlay = ptrOverlay || document.getElementById('pointer-lock-overlay');
+      if (overlay && overlay.style.display === 'flex') {
+        if (performance.now() - pauseOpenedTime > 350) {
+          handleEnterGame(e);
+        }
+        return;
+      }
+
       window.mobileGameActive = false;
+      pauseOpenedTime = performance.now();
+      resetPlayerMovementState();
 
       const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
       const warnEl = document.getElementById('multiplayer-pause-warning');
@@ -6306,14 +6354,23 @@ function setupControls() {
       if (canvasContainer) canvasContainer.style.filter = 'none';
       document.body.style.filter = 'none';
 
-      if (ptrOverlay) ptrOverlay.style.display = 'flex';
+      if (overlay) overlay.style.display = 'flex';
       if (document.exitPointerLock && document.pointerLockElement) {
         document.exitPointerLock();
       }
     };
 
-    if (pauseBtn) addTapListener(pauseBtn, handlePause);
-    if (globalPauseBtn) addTapListener(globalPauseBtn, handlePause);
+    window.togglePauseMenu = handlePause;
+    window.openPauseMenu = handlePause;
+
+    if (pauseBtn) {
+      addTapListener(pauseBtn, handlePause);
+      pauseBtn.onclick = handlePause;
+    }
+    if (globalPauseBtn) {
+      addTapListener(globalPauseBtn, handlePause);
+      globalPauseBtn.onclick = handlePause;
+    }
 
     const pauseSettingsBtn = document.getElementById('pause-settings-btn');
     if (pauseSettingsBtn) {

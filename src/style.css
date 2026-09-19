@@ -550,7 +550,7 @@ input[type="text"]:focus {
   width: 100%;
   padding: 0.4rem 0.6rem;
   pointer-events: none;
-  z-index: 40;
+  z-index: 160;
 }
 
 .hud-left-column {
@@ -1155,7 +1155,7 @@ input[type="text"]:focus {
   -webkit-backdrop-filter: blur(6px);
   user-select: none;
   pointer-events: auto !important;
-  touch-action: none !important;
+  touch-action: manipulation !important;
 }
 
 .unified-cam-btn {
@@ -1358,6 +1358,7 @@ body.is-mobile .btn-special {
     align-items: flex-start;
     width: 100%;
     pointer-events: none;
+    z-index: 160;
   }
 
   .hud-left-column {
@@ -1385,21 +1386,37 @@ body.is-mobile .btn-special {
 
   .top-center-hud {
     position: absolute;
-    top: 6px;
+    top: max(8px, env(safe-area-inset-top));
     left: 50%;
     transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
-    pointer-events: auto;
-    z-index: 50;
+    gap: 4px;
+    pointer-events: auto !important;
+    z-index: 250 !important;
     max-width: 88vw;
     width: auto;
   }
 
   .top-controls-group {
-    gap: 6px;
+    gap: 8px;
+    pointer-events: auto !important;
+    z-index: 250 !important;
+  }
+
+  .unified-pause-btn,
+  .unified-cam-btn,
+  .unified-controls-btn {
+    min-height: 38px;
+    min-width: 68px;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.72rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation !important;
+    pointer-events: auto !important;
   }
 
   .compact-objective-bar {
