@@ -1145,8 +1145,10 @@ window.isLowEndHardware = isLowEndHardware;
 
 if (isMobileDevice) {
   document.body.classList.add('is-mobile');
+  document.body.classList.remove('is-pc');
 } else {
   document.body.classList.remove('is-mobile');
+  document.body.classList.add('is-pc');
 }
 
 export function setMobileMode(mode) {
@@ -1165,6 +1167,7 @@ export function setMobileMode(mode) {
   const mobileCtrl = document.getElementById('mobile-controls-container');
   if (isMobileDevice) {
     document.body.classList.add('is-mobile');
+    document.body.classList.remove('is-pc');
     if (document.pointerLockElement) {
       document.exitPointerLock();
     }
@@ -1177,6 +1180,7 @@ export function setMobileMode(mode) {
     if (subtext) subtext.textContent = '(Drag Screen to Look | Joystick to Move | Tap UI to Act)';
   } else {
     document.body.classList.remove('is-mobile');
+    document.body.classList.add('is-pc');
     if (mobileCtrl) {
       mobileCtrl.style.display = 'none';
     }

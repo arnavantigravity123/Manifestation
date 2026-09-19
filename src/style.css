@@ -2990,3 +2990,311 @@ kbd {
     max-width: 70vw;
   }
 }
+
+/* ==========================================================================
+   DESKTOP PC ONLY - PROPORTIONATE HIGH-VISIBILITY HUD SCALING
+   Applied exclusively to desktop/PC monitors (>= 1024px, pointer: fine).
+   Guaranteed ZERO impact on mobile phones, tablets, or Capacitor apps!
+   ========================================================================== */
+@media screen and (min-width: 1024px) and (pointer: fine) {
+  body.is-pc:not(.is-mobile) .hud-top,
+  body:not(.is-mobile) .hud-top {
+    padding: 0.8rem 1.2rem;
+  }
+
+  /* 1. Top-Left Vitals (Health, Sanity, Battery, Stamina) */
+  body.is-pc:not(.is-mobile) .vitals-box,
+  body:not(.is-mobile) .vitals-box {
+    min-width: 320px;
+    max-width: 370px;
+    padding: 0.95rem 1.25rem;
+    gap: 0.65rem;
+    border-radius: 10px;
+    border-width: 1.5px;
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.85), 0 0 14px rgba(239, 68, 68, 0.25);
+  }
+
+  body.is-pc:not(.is-mobile) .gauge-row,
+  body:not(.is-mobile) .gauge-row {
+    gap: 0.3rem;
+  }
+
+  body.is-pc:not(.is-mobile) .gauge-label,
+  body:not(.is-mobile) .gauge-label {
+    font-size: 0.92rem;
+    letter-spacing: 1.2px;
+    font-weight: 700;
+  }
+
+  body.is-pc:not(.is-mobile) .gauge-label span:last-child,
+  body:not(.is-mobile) .gauge-label span:last-child {
+    font-size: 0.95rem;
+    font-weight: 900;
+  }
+
+  body.is-pc:not(.is-mobile) .gauge-bar-bg,
+  body:not(.is-mobile) .gauge-bar-bg {
+    height: 12px;
+    border-radius: 6px;
+  }
+
+  /* 2. Top-Center Controls (Pause, Cam, Guide) */
+  body.is-pc:not(.is-mobile) .top-center-hud,
+  body:not(.is-mobile) .top-center-hud {
+    top: 14px;
+    gap: 8px;
+    max-width: min(820px, 90vw);
+  }
+
+  body.is-pc:not(.is-mobile) .top-controls-group,
+  body:not(.is-mobile) .top-controls-group {
+    gap: 10px;
+  }
+
+  body.is-pc:not(.is-mobile) .unified-pause-btn,
+  body.is-pc:not(.is-mobile) .unified-cam-btn,
+  body.is-pc:not(.is-mobile) .unified-controls-btn,
+  body:not(.is-mobile) .unified-pause-btn,
+  body:not(.is-mobile) .unified-cam-btn,
+  body:not(.is-mobile) .unified-controls-btn {
+    font-size: 0.88rem;
+    padding: 0.5rem 1.15rem;
+    min-height: 42px;
+    border-radius: 8px;
+    font-weight: 800;
+    letter-spacing: 1.2px;
+  }
+
+  /* 3. Top-Center Master Gate Objective Ribbon */
+  body.is-pc:not(.is-mobile) .compact-objective-bar,
+  body:not(.is-mobile) .compact-objective-bar {
+    max-width: 660px;
+    padding: 0.65rem 1.6rem !important;
+    gap: 6px;
+    border-radius: 10px !important;
+    border-width: 1.5px !important;
+  }
+
+  body.is-pc:not(.is-mobile) .compact-objective-bar .status-indicator,
+  body:not(.is-mobile) .compact-objective-bar .status-indicator {
+    font-size: 1.15rem;
+    letter-spacing: 2px;
+    font-weight: 900;
+  }
+
+  body.is-pc:not(.is-mobile) .objective-inline-stats,
+  body:not(.is-mobile) .objective-inline-stats {
+    font-size: 0.95rem;
+    gap: 22px;
+    font-weight: 800;
+  }
+
+  /* 4. Notification / Announcement Toast */
+  body.is-pc:not(.is-mobile) .notification-box,
+  body:not(.is-mobile) .notification-box {
+    top: 68px;
+    font-size: 1.05rem;
+    padding: 0.75rem 2.2rem;
+    border-radius: 8px;
+    letter-spacing: 1.2px;
+    max-width: 80vw;
+  }
+
+  /* 5. Top-Right Sensor Radar & Minimap */
+  body.is-pc:not(.is-mobile) .top-right-hud,
+  body:not(.is-mobile) .top-right-hud {
+    gap: 0.8rem;
+  }
+
+  body.is-pc:not(.is-mobile) .sensor-widget,
+  body:not(.is-mobile) .sensor-widget {
+    width: 62px;
+    height: 62px;
+  }
+
+  body.is-pc:not(.is-mobile) .radar-blip,
+  body:not(.is-mobile) .radar-blip {
+    width: 7px;
+    height: 7px;
+  }
+
+  body.is-pc:not(.is-mobile) #minimap-wrapper:not(.expanded),
+  body:not(.is-mobile) #minimap-wrapper:not(.expanded) {
+    padding: 0.7rem;
+    border-radius: 10px;
+    border-width: 1.5px;
+  }
+
+  body.is-pc:not(.is-mobile) #minimap-wrapper:not(.expanded) #minimap-header,
+  body:not(.is-mobile) #minimap-wrapper:not(.expanded) #minimap-header {
+    font-size: 0.88rem;
+    font-weight: 800;
+    margin-bottom: 0.55rem;
+  }
+
+  body.is-pc:not(.is-mobile) #minimap-wrapper:not(.expanded) #minimap-header span,
+  body:not(.is-mobile) #minimap-wrapper:not(.expanded) #minimap-header span {
+    font-size: 0.72rem;
+  }
+
+  body.is-pc:not(.is-mobile) #minimap-wrapper:not(.expanded) #minimap-container,
+  body:not(.is-mobile) #minimap-wrapper:not(.expanded) #minimap-container {
+    width: 240px;
+    height: 240px;
+  }
+
+  body.is-pc:not(.is-mobile) #minimap-wrapper:not(.expanded) #minimap-canvas,
+  body:not(.is-mobile) #minimap-wrapper:not(.expanded) #minimap-canvas {
+    width: 240px;
+    height: 240px;
+  }
+
+  body.is-pc:not(.is-mobile) #minimap-wrapper.expanded #minimap-container,
+  body:not(.is-mobile) #minimap-wrapper.expanded #minimap-container {
+    width: min(75vh, 75vw, 500px);
+    height: min(75vh, 75vw, 500px);
+  }
+
+  body.is-pc:not(.is-mobile) .minimap-btn,
+  body:not(.is-mobile) .minimap-btn {
+    font-size: 0.82rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: 6px;
+  }
+
+  /* 6. Bottom Hotbar & Key Pocket */
+  body.is-pc:not(.is-mobile) .hud-bottom,
+  body:not(.is-mobile) .hud-bottom {
+    bottom: 24px;
+  }
+
+  body.is-pc:not(.is-mobile) .sleek-hotbar-container,
+  body:not(.is-mobile) .sleek-hotbar-container {
+    padding: 0.6rem 1.1rem !important;
+    gap: 0.85rem !important;
+    border-radius: 12px !important;
+    border-width: 2px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.9) !important;
+  }
+
+  body.is-pc:not(.is-mobile) .inventory-grid,
+  body:not(.is-mobile) .inventory-grid {
+    gap: 0.55rem;
+  }
+
+  body.is-pc:not(.is-mobile) .inventory-slot,
+  body:not(.is-mobile) .inventory-slot {
+    width: 64px;
+    height: 64px;
+    min-width: 64px;
+    border-radius: 10px;
+    border-width: 2px;
+  }
+
+  body.is-pc:not(.is-mobile) .inventory-slot-index,
+  body:not(.is-mobile) .inventory-slot-index {
+    top: 4px;
+    left: 5px;
+    font-size: 0.72rem;
+    font-weight: 900;
+  }
+
+  body.is-pc:not(.is-mobile) .inventory-slot .item-label,
+  body.is-pc:not(.is-mobile) .inventory-slot span:not(.inventory-slot-index),
+  body:not(.is-mobile) .inventory-slot .item-label,
+  body:not(.is-mobile) .inventory-slot span:not(.inventory-slot-index) {
+    font-size: 0.74rem !important;
+    font-weight: 900;
+    letter-spacing: 0.6px;
+    margin-top: 5px;
+  }
+
+  body.is-pc:not(.is-mobile) .inventory-item-icon,
+  body:not(.is-mobile) .inventory-item-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  body.is-pc:not(.is-mobile) .slot-cooldown-text,
+  body:not(.is-mobile) .slot-cooldown-text {
+    font-size: 1.05rem;
+  }
+
+  body.is-pc:not(.is-mobile) .inline-key-pocket,
+  body:not(.is-mobile) .inline-key-pocket {
+    gap: 0.55rem;
+    padding-left: 0.9rem;
+    border-left-width: 2px;
+  }
+
+  body.is-pc:not(.is-mobile) .key-pocket-label,
+  body:not(.is-mobile) .key-pocket-label {
+    font-size: 0.8rem;
+    letter-spacing: 1.2px;
+    font-weight: 800;
+  }
+
+  body.is-pc:not(.is-mobile) .key-pocket-grid,
+  body:not(.is-mobile) .key-pocket-grid {
+    gap: 0.4rem;
+  }
+
+  body.is-pc:not(.is-mobile) .key-slot,
+  body:not(.is-mobile) .key-slot {
+    width: 48px;
+    height: 48px;
+    font-size: 1.4rem;
+    border-radius: 8px;
+    border-width: 1.5px;
+  }
+
+  /* 7. Interaction Prompt */
+  body.is-pc:not(.is-mobile) #interaction-prompt,
+  body:not(.is-mobile) #interaction-prompt {
+    font-size: 1.15rem;
+    padding: 0.85rem 1.8rem;
+    border-radius: 8px;
+    border-width: 2px;
+    letter-spacing: 1.2px;
+  }
+
+  body.is-pc:not(.is-mobile) #interaction-prompt kbd,
+  body:not(.is-mobile) #interaction-prompt kbd {
+    font-size: 1.05rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 5px;
+    border-bottom-width: 3px;
+  }
+
+  /* 8. Tutorial Quest Banner (Training Mode) */
+  body.is-pc:not(.is-mobile) .tutorial-quest-banner,
+  body:not(.is-mobile) .tutorial-quest-banner {
+    max-width: 740px;
+    padding: 0.75rem 1.5rem;
+    border-radius: 10px;
+  }
+
+  body.is-pc:not(.is-mobile) .tutorial-task-title,
+  body:not(.is-mobile) .tutorial-task-title {
+    font-size: 1.1rem;
+  }
+
+  body.is-pc:not(.is-mobile) .tutorial-task-desc,
+  body:not(.is-mobile) .tutorial-task-desc {
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+
+  body.is-pc:not(.is-mobile) .tutorial-task-hint,
+  body:not(.is-mobile) .tutorial-task-hint {
+    font-size: 0.9rem;
+  }
+
+  body.is-pc:not(.is-mobile) .tutorial-step,
+  body.is-pc:not(.is-mobile) .tutorial-badge,
+  body:not(.is-mobile) .tutorial-step,
+  body:not(.is-mobile) .tutorial-badge {
+    font-size: 0.85rem;
+  }
+}
+
