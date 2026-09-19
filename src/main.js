@@ -1329,7 +1329,10 @@ function startLocalSoloMatch(isTutorial = false) {
   const startScreen = document.getElementById('start-screen');
   if (startScreen) startScreen.style.display = 'none';
 
-  const selectedDiff = isTutorial ? 'easy' : ((soloDifficultySelect && soloDifficultySelect.value) || 'medium');
+  const savedDiff = localStorage.getItem('manifestation_difficulty') || 'easy';
+  const selectedDiff = isTutorial ? 'easy' : ((soloDifficultySelect && soloDifficultySelect.value) || savedDiff || 'easy');
+  window.gameDifficulty = selectedDiff;
+
   const soloHumanClasses = ['Locksmith', 'Trapper', 'Scout', 'Medic', 'Flashlight Expert', 'Quartermaster'];
   const chosenSoloSetting = isTutorial ? 'Locksmith' : ((soloClassSelect && soloClassSelect.value) || localStorage.getItem('manifestation_solo_class') || 'Random');
   let chosenClass = chosenSoloSetting;
@@ -1355,11 +1358,18 @@ function startLocalSoloMatch(isTutorial = false) {
   const keyNames = ['Amber Key', 'Sapphire Key', 'Violet Key', 'Emerald Key'];
   const realKeySymbols = realKeyIndexes.map(i => keyNames[i]);
 
+  let totalBreakers = 3;
+  if (isTutorial) totalBreakers = 1;
+  else if (selectedDiff === 'easy') totalBreakers = 2;
+  else if (selectedDiff === 'hard') totalBreakers = 4;
+  else if (selectedDiff === 'impossible') totalBreakers = 6;
+
   const mazeSize = isTutorial
     ? 11
     : ((typeof window.getMazeSizeForDifficulty === 'function')
       ? window.getMazeSizeForDifficulty(selectedDiff)
       : (selectedDiff === 'easy' ? 21 : (selectedDiff === 'hard' ? 41 : (selectedDiff === 'impossible' ? 51 : 31))));
+  window.mazeSizeGlobal = mazeSize;
 
   const matchConfig = {
     id: roomId,
@@ -1368,6 +1378,7 @@ function startLocalSoloMatch(isTutorial = false) {
       isTutorial,
       botsEnabled: !isTutorial,
       difficulty: selectedDiff,
+      totalBreakers: totalBreakers,
       roleSelectionMode: 'manual'
     },
     players: {
@@ -1383,7 +1394,7 @@ function startLocalSoloMatch(isTutorial = false) {
     puzzleState: {
       mazeGeometrySeed: Math.random(),
       difficulty: selectedDiff,
-      totalBreakers: isTutorial ? 1 : 3,
+      totalBreakers: totalBreakers,
       mazeSize: mazeSize,
       keysCount: 4,
       codeDigits: codeDigits,
@@ -1435,7 +1446,8 @@ addFastButtonListener(createPublicBtn, () => {
   resetLobbyRoleToHumanLocksmith();
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: true, isVip: isVipActive() });
+  const preferredDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
+  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: true, isVip: isVipActive(), difficulty: preferredDiff });
 });
 
 addFastButtonListener(joinPublicBtn, () => {
@@ -1452,7 +1464,8 @@ addFastButtonListener(createPrivateBtn, () => {
   resetLobbyRoleToHumanLocksmith();
   const s = initializeSocketConnection();
   const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
+  const preferredDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
+  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive(), difficulty: preferredDiff });
 });
 
 addFastButtonListener(joinPrivateBtn, () => {
@@ -1465,7 +1478,8 @@ addFastButtonListener(joinPrivateBtn, () => {
   isTutorialMode = false;
   resetLobbyRoleToHumanLocksmith();
   const s = initializeSocketConnection();
-  s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive() });
+  const preferredDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
+  s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive(), difficulty: preferredDiff });
 });
 
 // ====== Quit Handlers ======
@@ -1650,9 +1664,13 @@ const savedRoleMode = localStorage.getItem('manifestation_role_mode');
 if (savedRoleMode) {
   roleModeSelect.value = savedRoleMode;
 }
-const savedDifficulty = localStorage.getItem('manifestation_difficulty') || 'medium';
+const savedDifficulty = localStorage.getItem('manifestation_difficulty') || 'easy';
 if (soloDifficultySelect) soloDifficultySelect.value = savedDifficulty;
 if (lobbyDifficultySelect) lobbyDifficultySelect.value = savedDifficulty;
+window.gameDifficulty = savedDifficulty;
+if (typeof window.getMazeSizeForDifficulty === 'function') {
+  window.mazeSizeGlobal = window.getMazeSizeForDifficulty(savedDifficulty);
+}
 
 const savedSoloClass = localStorage.getItem('manifestation_solo_class') || 'Random';
 if (soloClassSelect) soloClassSelect.value = savedSoloClass;
@@ -1712,6 +1730,10 @@ if (readyStartBtn) {
     if (!myPlayer) return;
 
     if (myPlayer.isHost) {
+      const activeDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
+      if (currentLobby.settings?.difficulty !== activeDiff) {
+        socket.emit('update_settings', { difficulty: activeDiff });
+      }
       socket.emit('start_match');
     } else {
       socket.emit('update_player', {

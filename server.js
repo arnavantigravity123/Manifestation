@@ -687,7 +687,7 @@ io.on('connection', (socket) => {
     joinRoomHandler(socket, data);
   });
 
-  function joinRoomHandler(socket, { roomId, username, skinId = null, isPublic = false, isVip = false }) {
+  function joinRoomHandler(socket, { roomId, username, skinId = null, isPublic = false, isVip = false, difficulty = 'easy' }) {
     if (socket.roomId && socket.roomId !== roomId && lobbies[socket.roomId]) {
       delete lobbies[socket.roomId].players[socket.id];
       socket.leave(socket.roomId);
@@ -697,12 +697,14 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     
     if (!lobbies[roomId]) {
+      const validDiffs = ['easy', 'medium', 'hard', 'impossible'];
+      const chosenDiff = (difficulty && validDiffs.includes(difficulty)) ? difficulty : 'easy';
       lobbies[roomId] = {
         id: roomId,
         isPublic: isPublic,
         players: {},
         settings: {
-          difficulty: 'medium',
+          difficulty: chosenDiff,
           botsEnabled: true,
           roleSelectionMode: 'manual', // 'manual', 'random', 'hidden'
           minGhostsRequired: 3,

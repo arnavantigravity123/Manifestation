@@ -1175,8 +1175,8 @@ let keysInMaze = [];
 let saltTraps = [];
 let circuitBreakers = [];
 let fixedBreakersCount = 0;
-let totalBreakersRequired = 3;
-window.gameDifficulty = localStorage.getItem('manifestation_difficulty') || 'medium';
+window.gameDifficulty = localStorage.getItem('manifestation_difficulty') || 'easy';
+let totalBreakersRequired = window.gameDifficulty === 'easy' ? 2 : (window.gameDifficulty === 'hard' ? 4 : (window.gameDifficulty === 'impossible' ? 6 : 3));
 
 function getMazeSizeForDifficulty(difficulty = window.gameDifficulty || 'medium') {
   if (window.isTutorialMatch) return 11;
@@ -2158,8 +2158,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   // Store the cipher code digits (revealed one at a time by clue notes in the maze)
   window.cipherCodeDigits = matchConfig.puzzleState.codeDigits || [null, null, null, null];
-  window.gameDifficulty = (matchConfig.puzzleState && matchConfig.puzzleState.difficulty) || 'medium';
-  totalBreakersRequired = (matchConfig.puzzleState && matchConfig.puzzleState.totalBreakers) || 3;
+  window.gameDifficulty = (matchConfig.puzzleState && matchConfig.puzzleState.difficulty) || localStorage.getItem('manifestation_difficulty') || 'easy';
+  const defaultBreakers = window.gameDifficulty === 'easy' ? 2 : (window.gameDifficulty === 'hard' ? 4 : (window.gameDifficulty === 'impossible' ? 6 : 3));
+  totalBreakersRequired = (matchConfig.puzzleState && matchConfig.puzzleState.totalBreakers) || defaultBreakers;
   mazeSizeGlobal = window.isTutorialMatch ? 11 : ((matchConfig.puzzleState && matchConfig.puzzleState.mazeSize) || getMazeSizeForDifficulty(window.gameDifficulty));
   window.mazeSizeGlobal = mazeSizeGlobal;
 
