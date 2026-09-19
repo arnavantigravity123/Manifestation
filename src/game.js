@@ -5770,6 +5770,127 @@ export function loadLanternAsset() {
   });
 }
 
+// --- Feature 4: 3D Gothic UV Ceiling Lantern & Wall Sconce Asset System ---
+function createCeilingLanternGroup() {
+  const lanternGroup = new THREE.Group();
+  lanternGroup.name = 'ceiling_sanctuary_lantern';
+
+  // Materials
+  const ironMat = new THREE.MeshStandardMaterial({
+    color: 0x1f242d,
+    roughness: 0.65,
+    metalness: 0.85
+  });
+
+  const brassMat = new THREE.MeshStandardMaterial({
+    color: 0xd97706,
+    emissive: 0xb45309,
+    emissiveIntensity: 0.4,
+    roughness: 0.35,
+    metalness: 0.85
+  });
+
+  const amberGlassMat = new THREE.MeshStandardMaterial({
+    color: 0xf59e0b,
+    emissive: 0xf59e0b,
+    emissiveIntensity: 1.8,
+    roughness: 0.2,
+    metalness: 0.1,
+    transparent: true,
+    opacity: 0.85
+  });
+
+  const flameMat = new THREE.MeshBasicMaterial({
+    color: 0xfef08a
+  });
+
+  // 1. Ceiling Rosette Mounting Plate at Y = 3.47 (flush with ceiling at 3.5m)
+  const rosetteGeo = new THREE.CylinderGeometry(0.28, 0.32, 0.05, 16);
+  const rosetteMesh = new THREE.Mesh(rosetteGeo, ironMat);
+  rosetteMesh.position.y = 3.47;
+  lanternGroup.add(rosetteMesh);
+
+  // 2. Ceiling Hook
+  const hookGeo = new THREE.TorusGeometry(0.06, 0.02, 8, 16);
+  const hookMesh = new THREE.Mesh(hookGeo, ironMat);
+  hookMesh.position.y = 3.42;
+  hookMesh.rotation.x = Math.PI / 2;
+  lanternGroup.add(hookMesh);
+
+  // 3. Hanging Chain (Interlocking links between Y = 3.40 and Y = 2.65)
+  const chainStemGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.75, 8);
+  const chainStemMesh = new THREE.Mesh(chainStemGeo, ironMat);
+  chainStemMesh.position.y = 3.02;
+  lanternGroup.add(chainStemMesh);
+
+  for (let y = 3.35; y >= 2.70; y -= 0.14) {
+    const linkGeo = new THREE.TorusGeometry(0.045, 0.015, 6, 12);
+    const linkMesh = new THREE.Mesh(linkGeo, ironMat);
+    linkMesh.position.y = y;
+    linkMesh.rotation.y = (y % 0.28 === 0) ? 0 : Math.PI / 2;
+    lanternGroup.add(linkMesh);
+  }
+
+  // 4. Lantern Top Finial Ring at Y = 2.62
+  const topRingGeo = new THREE.TorusGeometry(0.055, 0.018, 8, 16);
+  const topRingMesh = new THREE.Mesh(topRingGeo, brassMat);
+  topRingMesh.position.y = 2.62;
+  lanternGroup.add(topRingMesh);
+
+  // 5. Gothic Octagonal Brass Hood / Roof (Y = 2.48 to 2.58)
+  const roofGeo = new THREE.ConeGeometry(0.32, 0.16, 8);
+  const roofMesh = new THREE.Mesh(roofGeo, brassMat);
+  roofMesh.position.y = 2.50;
+  lanternGroup.add(roofMesh);
+
+  // 6. Octagonal Upper Collar Rim
+  const topCollarGeo = new THREE.CylinderGeometry(0.30, 0.30, 0.04, 8);
+  const topCollarMesh = new THREE.Mesh(topCollarGeo, ironMat);
+  topCollarMesh.position.y = 2.42;
+  lanternGroup.add(topCollarMesh);
+
+  // 7. Radiant Amber Glass Chamber (Y = 2.22)
+  const glassGeo = new THREE.CylinderGeometry(0.24, 0.21, 0.38, 8);
+  const glassMesh = new THREE.Mesh(glassGeo, amberGlassMat);
+  glassMesh.position.y = 2.22;
+  lanternGroup.add(glassMesh);
+
+  // 8. 8 Vertical Wrought-Iron Struts / Cage Bars
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const rTop = 0.28, rBot = 0.25;
+    const barGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.38, 6);
+    const barMesh = new THREE.Mesh(barGeo, ironMat);
+    barMesh.position.set(Math.cos(angle) * ((rTop + rBot) / 2), 2.22, Math.sin(angle) * ((rTop + rBot) / 2));
+    lanternGroup.add(barMesh);
+  }
+
+  // 9. Octagonal Lower Collar Rim & Bottom Finial
+  const botCollarGeo = new THREE.CylinderGeometry(0.25, 0.25, 0.04, 8);
+  const botCollarMesh = new THREE.Mesh(botCollarGeo, ironMat);
+  botCollarMesh.position.y = 2.02;
+  lanternGroup.add(botCollarMesh);
+
+  const baseConeGeo = new THREE.ConeGeometry(0.24, 0.10, 8);
+  const baseConeMesh = new THREE.Mesh(baseConeGeo, brassMat);
+  baseConeMesh.position.y = 1.96;
+  baseConeMesh.rotation.x = Math.PI;
+  lanternGroup.add(baseConeMesh);
+
+  const bottomDropGeo = new THREE.SphereGeometry(0.035, 8, 8);
+  const bottomDropMesh = new THREE.Mesh(bottomDropGeo, brassMat);
+  bottomDropMesh.position.y = 1.88;
+  lanternGroup.add(bottomDropMesh);
+
+  // 10. Incandescent Core / Flame
+  const flameGeo = new THREE.SphereGeometry(0.08, 12, 12);
+  const flameMesh = new THREE.Mesh(flameGeo, flameMat);
+  flameMesh.position.y = 2.22;
+  lanternGroup.add(flameMesh);
+
+  return lanternGroup;
+}
+
 function createLanternInstance() {
   const container = new THREE.Group();
   container.name = 'sanctuary_lantern_container';
@@ -5920,22 +6041,28 @@ function generateLightSanctuaries() {
       { dc: 1, dr: 0,  localX: 2.96,  localZ: 0, rotY: -Math.PI / 2 }   // East wall, faces West (-X into corridor)
     ];
 
+    // 1. Gorgeous 3D Gothic Ceiling Lantern suspended directly over the center of the Sanctuary Zone
+    const ceilingLantern = createCeilingLanternGroup();
+    group.add(ceilingLantern);
+
+    // 2. Warm Sanctuary Point Light directly inside the hanging lantern casting illumination down onto the floor ring
+    const sanctuaryLight = new THREE.PointLight(0xf59e0b, 4.2, 12.0);
+    sanctuaryLight.position.set(0, 2.22, 0);
+    group.add(sanctuaryLight);
+
+    // 3. If an adjacent solid wall is present, also mount an authentic wall sconce for extra architectural detail
     const chosenWall = wallDirs.find(d => {
       const nr = r + d.dr;
       const nc = c + d.dc;
       return mazeLayout && mazeLayout[nr] && mazeLayout[nr][nc] === 1;
-    }) || wallDirs[0];
+    });
 
-    // Authentic 3D UV Lantern Wall Sconce (/assets/latern.glb attached directly to the wall)
-    const lanternContainer = createLanternInstance();
-    lanternContainer.position.set(chosenWall.localX, 2.35, chosenWall.localZ);
-    lanternContainer.rotation.y = chosenWall.rotY;
-    group.add(lanternContainer);
-
-    // Warm Sanctuary Point Light (aligned right inside the glowing glass lantern chamber)
-    const sanctuaryLight = new THREE.PointLight(0xf59e0b, 3.8, 10.0);
-    sanctuaryLight.position.set(0, -0.386, -0.395);
-    lanternContainer.add(sanctuaryLight);
+    if (chosenWall) {
+      const lanternContainer = createLanternInstance();
+      lanternContainer.position.set(chosenWall.localX, 2.35, chosenWall.localZ);
+      lanternContainer.rotation.y = chosenWall.rotY;
+      group.add(lanternContainer);
+    }
 
     scene.add(group);
 
@@ -5943,8 +6070,8 @@ function generateLightSanctuaries() {
       id: `sanctuary_${idx}`,
       x: pos.x,
       z: pos.z,
-      lanternX: pos.x + chosenWall.localX,
-      lanternZ: pos.z + chosenWall.localZ,
+      lanternX: pos.x,
+      lanternZ: pos.z,
       radius: 4.5,
       group: group,
       light: sanctuaryLight
