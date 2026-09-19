@@ -8170,6 +8170,88 @@ function dissolveMirageItem(mirage) {
   }
 }
 
+let lastHeartbeatAudioTime = 0;
+function processGhostProximityAudio(distToGhost) {
+  if (distToGhost > 14.0 || window.isSpectating || isCaptured) return;
+  const now = performance.now();
+  // Dynamic heartbeat interval: 450ms when close, 1200ms at 14m perimeter
+  const interval = 450 + (distToGhost / 14.0) * 750;
+  if (now - lastHeartbeatAudioTime < interval) return;
+  lastHeartbeatAudioTime = now;
+
+  try {
+    if (!audioCtx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) audioCtx = new AudioContextClass();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    if (!audioCtx) return;
+
+    const t = audioCtx.currentTime;
+    const vol = Math.max(0.04, Math.min(0.24, (1.0 - distToGhost / 14.0) * 0.24));
+
+    // Beat 1 (lub): 60Hz -> 35Hz
+    const osc1 = audioCtx.createOscillator();
+    const gain1 = audioCtx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(60, t);
+    osc1.frequency.exponentialRampToValueAtTime(35, t + 0.11);
+    gain1.gain.setValueAtTime(vol, t);
+    gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+    osc1.connect(gain1);
+    gain1.connect(audioCtx.destination);
+    osc1.start(t);
+    osc1.stop(t + 0.11);
+
+    // Beat 2 (dub): 48Hz -> 28Hz
+    const osc2 = audioCtx.createOscillator();
+    const gain2 = audioCtx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(48, t + 0.12);
+    osc2.frequency.exponentialRampToValueAtTime(28, t + 0.22);
+    gain2.gain.setValueAtTime(vol * 0.75, t + 0.12);
+    gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    osc2.connect(gain2);
+    gain2.connect(audioCtx.destination);
+    osc2.start(t + 0.12);
+    osc2.stop(t + 0.22);
+  } catch(e) {}
+}
+
+function updateGhostProximityVignette(distToGhost, inSanctuary) {
+  let vig = document.getElementById('ghost-proximity-vignette');
+  if (!vig) {
+    vig = document.createElement('div');
+    vig.id = 'ghost-proximity-vignette';
+    vig.style.position = 'fixed';
+    vig.style.top = '0';
+    vig.style.left = '0';
+    vig.style.width = '100vw';
+    vig.style.height = '100vh';
+    vig.style.pointerEvents = 'none';
+    vig.style.zIndex = '45';
+    vig.style.transition = 'opacity 0.25s ease-out';
+    document.body.appendChild(vig);
+  }
+
+  if (window.isSpectating || isCaptured || distToGhost > 14.0) {
+    vig.style.opacity = '0';
+    return;
+  }
+
+  if (inSanctuary) {
+    // Warm golden amber sanctuary shield vignette
+    vig.style.background = 'radial-gradient(ellipse at center, transparent 65%, rgba(251, 191, 36, 0.25) 100%)';
+    vig.style.opacity = '1';
+  } else {
+    // Eerie pulsing purple threat vignette
+    const intensity = Math.max(0.18, (1.0 - distToGhost / 14.0) * 0.65);
+    const pulse = 0.85 + Math.sin(performance.now() * 0.008) * 0.15;
+    vig.style.background = `radial-gradient(ellipse at center, transparent 55%, rgba(147, 51, 234, ${intensity * pulse}) 100%)`;
+    vig.style.opacity = '1';
+  }
+}
+
 // Proximity micro-vibrations and sanity regression
 function processSanity(delta) {
   const canvasContainer = document.getElementById('canvas-container');
@@ -8180,6 +8262,7 @@ function processSanity(delta) {
   if (myTeam !== 'Human' || window.isSpectating || isPauseActive || isCaptured) {
     if (canvasContainer) canvasContainer.style.filter = 'none';
     document.body.style.filter = 'none';
+    updateGhostProximityVignette(999, false);
     return;
   }
 
@@ -8195,14 +8278,27 @@ function processSanity(delta) {
   // If near any active ghost (AI or player ghost), sanity decays!
   const gParams = getGhostAbilityParams();
   let nearGhost = false;
-  ghosts3D.forEach(g => {
-    if (camera.position.distanceTo(g.position) < 8) nearGhost = true;
-  });
-  Object.values(players3D).forEach(p => {
-    if (p.userData && p.userData.type === 'Ghost' && camera.position.distanceTo(p.position) < 8) {
-      nearGhost = true;
-    }
-  });
+  let minGhostDist = Infinity;
+  if (typeof ghosts3D !== 'undefined') {
+    ghosts3D.forEach(g => {
+      const d = camera.position.distanceTo(g.position);
+      if (d < minGhostDist) minGhostDist = d;
+      if (d < 8) nearGhost = true;
+    });
+  }
+  if (typeof players3D !== 'undefined') {
+    Object.values(players3D).forEach(p => {
+      if (p.userData && p.userData.type === 'Ghost') {
+        const d = camera.position.distanceTo(p.position);
+        if (d < minGhostDist) minGhostDist = d;
+        if (d < 8) nearGhost = true;
+      }
+    });
+  }
+
+  // Dynamic heartbeat audio and atmospheric proximity vignette
+  processGhostProximityAudio(minGhostDist);
+  updateGhostProximityVignette(minGhostDist, inSanctuary);
 
   if (inSanctuary) {
     // Steadily restore sanity inside warm Light Sanctuaries (+8.5%/s)
@@ -10385,6 +10481,7 @@ let tutorialGhostDrillTimer = 0;
 let tutorialLastPlayerPos = null;
 
 function removePracticeGhost() {
+  updateGhostProximityVignette(999, false);
   for (let i = ghosts3D.length - 1; i >= 0; i--) {
     const g = ghosts3D[i];
     if (g && g.userData && g.userData.isPracticeGhost) {
@@ -10401,33 +10498,155 @@ function removePracticeGhost() {
   }
 }
 
+function createPracticeGhostBillboard() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 160;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = 'rgba(24, 10, 40, 0.92)';
+  ctx.strokeStyle = '#d946ef';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  if (ctx.roundRect) {
+    ctx.roundRect(8, 8, 496, 144, 16);
+  } else {
+    ctx.rect(8, 8, 496, 144);
+  }
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#f0abfc';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('👻 TRAINING GHOST', 256, 52);
+
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.fillText('STALKER ENTITY (DRILL)', 256, 104);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(2.8, 0.9, 1.0);
+  sprite.position.set(0, 3.4, 0);
+  return sprite;
+}
+
+function createPracticeGhostGroundRing() {
+  const geo = new THREE.RingGeometry(0.8, 1.3, 32);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xd946ef,
+    transparent: true,
+    opacity: 0.85,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.y = 0.06;
+  return mesh;
+}
+
 function spawnPracticeGhost() {
   removePracticeGhost();
 
+  const pX = camera.position.x;
+  const pZ = camera.position.z;
+  const camDir = new THREE.Vector3();
+  camera.getWorldDirection(camDir);
+  camDir.y = 0;
+  camDir.normalize();
+
   let targetPos = null;
+
   if (openCorridors && openCorridors.length > 0) {
-    const candidates = openCorridors.filter(c => {
-      const d = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
-      return d >= 8.0 && d <= 18.0;
+    const losCandidates = [];
+    const fallbackCandidates = [];
+
+    openCorridors.forEach(c => {
+      const dx = c.x - pX;
+      const dz = c.z - pZ;
+      const d = Math.hypot(dx, dz);
+      if (d >= 5.5 && d <= 15.0) {
+        const dot = (camDir.lengthSq() > 0.01) ? (dx * camDir.x + dz * camDir.z) / d : 0;
+        const hasLos = hasGridLineOfSight(pX, pZ, c.x, c.z);
+        if (hasLos) {
+          losCandidates.push({ x: c.x, z: c.z, dist: d, dot });
+        } else {
+          fallbackCandidates.push({ x: c.x, z: c.z, dist: d, dot });
+        }
+      }
     });
-    if (candidates.length > 0) {
-      targetPos = candidates[0];
-    } else {
-      targetPos = openCorridors[Math.min(2, openCorridors.length - 1)];
+
+    if (losCandidates.length > 0) {
+      // Prioritize directly down the player's forward corridor view (dot > 0.1), closest to ~9.0m
+      losCandidates.sort((a, b) => {
+        const aFront = a.dot > 0.1 ? 1 : 0;
+        const bFront = b.dot > 0.1 ? 1 : 0;
+        if (aFront !== bFront) return bFront - aFront;
+        return Math.abs(a.dist - 9.0) - Math.abs(b.dist - 9.0);
+      });
+      targetPos = losCandidates[0];
+    } else if (fallbackCandidates.length > 0) {
+      fallbackCandidates.sort((a, b) => {
+        const aFront = a.dot > 0.1 ? 1 : 0;
+        const bFront = b.dot > 0.1 ? 1 : 0;
+        if (aFront !== bFront) return bFront - aFront;
+        return Math.abs(a.dist - 9.0) - Math.abs(b.dist - 9.0);
+      });
+      targetPos = fallbackCandidates[0];
     }
   }
+
   if (!targetPos) {
-    targetPos = { x: camera.position.x + 8.0, z: camera.position.z + 8.0 };
+    const fX = (camDir.lengthSq() > 0.01) ? camDir.x : 0;
+    const fZ = (camDir.lengthSq() > 0.01) ? camDir.z : 1;
+    targetPos = { x: pX + fX * 8.0, z: pZ + fZ * 8.0 };
   }
 
   const ghostGroup = createGhostMeshGroup('skin_ghost');
   ghostGroup.position.set(targetPos.x, 0, targetPos.z);
   ghostGroup.userData.isPracticeGhost = true;
   ghostGroup.userData.ghostClass = 'Stalker';
+  ghostGroup.userData.aiState = 'CHASE';
+
+  // Face the player directly upon spawning
+  ghostGroup.lookAt(pX, ghostGroup.position.y, pZ);
+
+  // Dedicated bright purple illumination light (lights up walls and floors)
+  const drillLight = new THREE.PointLight(0xd946ef, 3.8, 16.0);
+  drillLight.position.set(0, 2.0, 0);
+  ghostGroup.add(drillLight);
+  ghostGroup.userData.drillLight = drillLight;
+
+  // Floating 3D billboard header
+  const billboard = createPracticeGhostBillboard();
+  ghostGroup.add(billboard);
+
+  // Pulsing floor ring
+  const ring = createPracticeGhostGroundRing();
+  ghostGroup.add(ring);
+  ghostGroup.userData.groundRing = ring;
+
+  // Enhance emissive glow on meshes so it stands out distinctly
+  ghostGroup.traverse(child => {
+    if (child.isMesh && child.material) {
+      if (child.material.emissive) {
+        child.material.emissive.setHex(0x581c87);
+      }
+      child.material.opacity = 0.95;
+      child.material.transparent = true;
+    }
+  });
+
   scene.add(ghostGroup);
   ghosts3D.push(ghostGroup);
 
-  triggerNotification("👻 SPECTRAL THREAT DRILL: Training Ghost manifested! Keep distance or seek shelter!");
+  triggerNotification("👻 GHOST DRILL: Training Ghost manifested down the corridor! Observe UV protection!");
 }
 
 function isInsideSanctuary(pos) {
@@ -10602,22 +10821,50 @@ function updateTutorialQuestBanner() {
 
     case 8:
       stageInd.textContent = 'STAGE 8/10';
-      titleEl.textContent = 'CORE OBJECTIVES & GHOST DRILL';
+      titleEl.textContent = 'GHOST SURVIVAL & OBJECTIVES';
       descEl.innerHTML = `
-        <div style="margin-bottom: 0.35rem; color: #7dd3fc; font-size: 0.8rem; line-height: 1.35;">
-          <strong>MISSION OBJECTIVES:</strong><br>
-          1️⃣ <strong>Restore Power:</strong> Repair yellow Circuit Breakers ⚡<br>
-          2️⃣ <strong>Find Cipher:</strong> Inspect glowing Clue Notes on walls 📝<br>
-          3️⃣ <strong>Survive Entity:</strong> Evade the Ghost (shelter in Lanterns) 👻<br>
-          4️⃣ <strong>Escape:</strong> Crack Keypad & exit through Master Vault 🌲
-        </div>
-        <div style="border-top: 1px solid rgba(168,85,247,0.3); padding-top: 0.3rem; color: #e9d5ff;">
-          👻 <strong>GHOST DRILL:</strong> A training ghost has spawned! Notice the purple aura & heartbeat. Practice evading it or taking shelter under a UV Lantern!
+        <div style="display: flex; flex-direction: column; gap: 0.35rem; text-align: left; font-size: 0.78rem;">
+          <div style="background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.45); border-radius: 6px; padding: 0.4rem 0.65rem;">
+            <div style="color: #c084fc; font-weight: 800; margin-bottom: 0.2rem; display: flex; align-items: center; gap: 0.3rem;">
+              <span>👻</span> GHOST SURVIVAL DRILL:
+            </div>
+            <div style="color: #f3e8ff; line-height: 1.38;">
+              • <strong>Heartbeat & Purple Aura:</strong> Fast heartbeats mean an entity is hunting near you.<br>
+              • <strong>UV Sanctuaries:</strong> Stand under the brass ceiling lantern — <strong>ghosts cannot enter UV light!</strong><br>
+              • <strong>Stealth:</strong> Turn off your flashlight and walk quietly to evade detection.
+            </div>
+          </div>
+          <div style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 0.4rem 0.65rem;">
+            <div style="color: #38bdf8; font-weight: 800; margin-bottom: 0.2rem; display: flex; align-items: center; gap: 0.3rem;">
+              <span>🎯</span> COMPLETE 4-STEP ESCAPE PLAN:
+            </div>
+            <div style="color: #e0f2fe; line-height: 1.38;">
+              1️⃣ <strong>Breakers:</strong> Repair yellow wall panels ⚡ to restore grid power.<br>
+              2️⃣ <strong>Clue Notes:</strong> Inspect glowing paper notes 📝 on walls to find the 4-digit code.<br>
+              3️⃣ <strong>Survive:</strong> Run to UV lanterns whenever ghosts chase you.<br>
+              4️⃣ <strong>Master Vault:</strong> Enter the 4-digit code at the exit gate 🌲 to escape!
+            </div>
+          </div>
         </div>
       `;
-      const drillPct = Math.min(100, Math.floor((tutorialGhostDrillTimer / 7.0) * 100));
+      const drillDuration = 12.0;
+      const drillPct = Math.min(100, Math.floor((tutorialGhostDrillTimer / drillDuration) * 100));
       progBar.style.width = `${drillPct}%`;
-      hintEl.textContent = `Survive & practice for ${Math.max(0, 7.0 - tutorialGhostDrillTimer).toFixed(1)}s (Shelter under UV Lanterns to speed up!)`;
+
+      const practiceGhost = (typeof ghosts3D !== 'undefined') ? ghosts3D.find(g => g && g.userData && g.userData.isPracticeGhost) : null;
+      const distToPractice = practiceGhost ? Math.hypot(practiceGhost.position.x - camera.position.x, practiceGhost.position.z - camera.position.z) : 999;
+      const inSanc = isInsideSanctuary(camera.position);
+      const remainingSecs = Math.max(0, drillDuration - tutorialGhostDrillTimer).toFixed(1);
+
+      if (inSanc) {
+        if (practiceGhost && practiceGhost.userData && practiceGhost.userData.isBlockedBySanctuary) {
+          hintEl.textContent = `🛡️ UV Shield Repelling Ghost! (${remainingSecs}s) — Ghosts cannot enter UV light!`;
+        } else {
+          hintEl.textContent = `👀 Watch the ghost approach down the hall (${distToPractice.toFixed(1)}m)! UV light protects you (${remainingSecs}s)`;
+        }
+      } else {
+        hintEl.textContent = `⚠️ Outside Safe Zone! (${distToPractice.toFixed(1)}m) — Return under the UV Lantern! (${remainingSecs}s)`;
+      }
       break;
 
     case 9:
@@ -11109,6 +11356,36 @@ function drawMinimap() {
       ctx.arc(0, 0, cellSize * 0.4, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+    });
+  }
+
+  // Draw Training Practice Ghost on minimap during training drill so player can immediately locate it
+  if (window.isTutorialMatch && typeof ghosts3D !== 'undefined') {
+    ghosts3D.forEach(g => {
+      if (g && g.userData && g.userData.isPracticeGhost) {
+        const gc = (g.position.x / blockSize) + (totalCols / 2);
+        const gr = (g.position.z / blockSize) + (totalRows / 2);
+        ctx.save();
+        ctx.translate(gc * cellSize, gr * cellSize);
+
+        // Pulsing radar ping ring
+        const pingRadius = cellSize * (0.6 + Math.sin(performance.now() * 0.008) * 0.3);
+        ctx.strokeStyle = 'rgba(217, 70, 239, 0.85)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, pingRadius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Bright magenta ghost core with crisp white border
+        ctx.fillStyle = '#e879f9';
+        ctx.beginPath();
+        ctx.arc(0, 0, cellSize * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.restore();
+      }
     });
   }
 
@@ -12118,8 +12395,7 @@ function animate() {
 
       let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? juggernautSpeed : baseMoveSpeed;
       if (ghost.userData && ghost.userData.isPracticeGhost) {
-        const isProtected = isInsideSanctuary(camera.position);
-        moveSpeed = isProtected ? 0.35 : 2.0;
+        moveSpeed = 2.2;
       }
 
       // In Impossible and Hard modes, ghosts can trigger occasional speed surges
@@ -12603,6 +12879,22 @@ function animate() {
 
       // Final robust grid-plane, corner, dynamic door, and prop collision enforcement
       resolveGhostCollision(ghost);
+
+      // UV Sanctuary barrier enforcement for Training Practice Ghost (demonstrates sanctuary shield)
+      if (ghost.userData && ghost.userData.isPracticeGhost && Array.isArray(sanctuaryZones)) {
+        sanctuaryZones.forEach(s => {
+          const dS = Math.hypot(ghost.position.x - s.x, ghost.position.z - s.z);
+          const safeBoundary = (s.radius || 4.5) + 0.6;
+          if (dS < safeBoundary) {
+            const angle = Math.atan2(ghost.position.z - s.z, ghost.position.x - s.x);
+            ghost.position.x = s.x + Math.cos(angle) * safeBoundary;
+            ghost.position.z = s.z + Math.sin(angle) * safeBoundary;
+            ghost.userData.isBlockedBySanctuary = true;
+          } else {
+            ghost.userData.isBlockedBySanctuary = false;
+          }
+        });
+      }
     });
 
 
@@ -12710,11 +13002,16 @@ function animate() {
     const glitchBurst = Math.random() < 0.003 ? 0.25 : 0;
     const targetOpacity = Math.max(0.35, Math.min(0.7, 0.5 + flickerPhase * 0.15 + glitchBurst));
     
-    g.children.forEach(c => {
-      if (c.isMesh && c.material && c.material.transparent) {
-        c.material.opacity = Math.min(targetOpacity, c.material.opacity + 0.4);
-      }
-    });
+    if (!g.userData || !g.userData.isPracticeGhost) {
+      g.children.forEach(c => {
+        if (c.isMesh && c.material && c.material.transparent) {
+          c.material.opacity = Math.min(targetOpacity, c.material.opacity + 0.4);
+        }
+      });
+    } else if (g.userData && g.userData.groundRing) {
+      const ringScale = 1.0 + Math.sin(time * 0.006) * 0.15;
+      g.userData.groundRing.scale.set(ringScale, ringScale, 1);
+    }
 
     // Arm sway
     g.children.forEach(c => {
@@ -12827,11 +13124,11 @@ function animate() {
         }
       }
     } else if (tutorialStage === 8) {
-      const inSanctuary = isInsideSanctuary(camera.position);
-      tutorialGhostDrillTimer += delta * (inSanctuary ? 2.0 : 1.0);
+      tutorialGhostDrillTimer += delta;
       updateTutorialQuestBanner();
-      if (tutorialGhostDrillTimer >= 7.0) {
+      if (tutorialGhostDrillTimer >= 12.0) {
         removePracticeGhost();
+        updateGhostProximityVignette(999, false);
         advanceTutorialStage(9, "Objectives Understood & Ghost Repelled! Next: Restore Grid Power & Inspect Clues");
       }
     }
