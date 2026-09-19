@@ -1211,6 +1211,7 @@ let alarmFlashRemaining = 0;
 window.siphonDurationTimer = 0;
 window.scrambleDurationTimer = 0;
 window.ghostsFrozenRemaining = 0;
+let matchCreditsAwardedThisSession = false;
 window.gameDifficulty = localStorage.getItem('manifestation_difficulty') || 'easy';
 let totalBreakersRequired = window.gameDifficulty === 'easy' ? 2 : (window.gameDifficulty === 'hard' ? 4 : (window.gameDifficulty === 'impossible' ? 6 : 3));
 
@@ -1521,6 +1522,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   // Reset core game state variables for clean start/re-entry
   currentViewIndex = 0;
   activeViewCamera = null;
+  matchCreditsAwardedThisSession = false;
   if (localPlayerVisual) {
     if (localPlayerVisual.parent) localPlayerVisual.parent.remove(localPlayerVisual);
     else if (scene) scene.remove(localPlayerVisual);
@@ -1611,6 +1613,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   window.sensorsScrambled = false;
   window.siphonDurationTimer = 0;
   window.scrambleDurationTimer = 0;
+  matchCreditsAwardedThisSession = false;
   // Preload forest model and 3D lantern model in background during gameplay
   loadForestAsset();
   loadLanternAsset();
@@ -3108,14 +3111,15 @@ window.buildAriadneThread = buildAriadneThread;
 // Ultra-Fast 2D Grid Raymarching for Bot Line of Sight (Zero 3D raycasting overhead)
 function hasGridLineOfSight(x1, z1, x2, z2) {
   if (!mazeLayout || !mazeLayout[0]) return true;
-  const blockSize = mazeBlockSize || 4.5;
   const totalCols = mazeLayout[0].length;
   const totalRows = mazeLayout.length;
 
-  const c1 = Math.floor((x1 / blockSize) + totalCols / 2);
-  const r1 = Math.floor((z1 / blockSize) + totalRows / 2);
-  const c2 = Math.floor((x2 / blockSize) + totalCols / 2);
-  const r2 = Math.floor((z2 / blockSize) + totalRows / 2);
+  const g1 = worldToGrid(x1, z1);
+  const g2 = worldToGrid(x2, z2);
+  const c1 = g1.col;
+  const r1 = g1.row;
+  const c2 = g2.col;
+  const r2 = g2.row;
 
   let dx = Math.abs(c2 - c1);
   let dz = Math.abs(r2 - r1);
@@ -5265,12 +5269,37 @@ function generateCollectibles(keysCount) {
 }
 
 function generateCodeClues() {
-  const noteGeo = new THREE.BoxGeometry(0.6, 0.8, 0.08);
-  const noteMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xfde047, emissiveIntensity: 0.9, roughness: 0.5 });
+  codeClueNotes.forEach(n => {
+    if (n.mesh) {
+      scene.remove(n.mesh);
+      n.mesh.traverse(child => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      });
+    }
+  });
+  codeClueNotes = [];
+
+  const noteGeo = new THREE.BoxGeometry(0.55, 0.75, 0.04);
+  const noteMat = new THREE.MeshStandardMaterial({
+    color: 0xfef08a,
+    emissive: 0xeab308,
+    emissiveIntensity: 0.85,
+    roughness: 0.6,
+    metalness: 0.1
+  });
+
+  const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
+  const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : totalRows;
+  const blockSize = mazeBlockSize || 6.0;
+  const wallOffset = (blockSize / 2) - 0.03; // Mount 3cm off wall face
 
   for (let i = 0; i < 4; i++) {
-    const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
-    
     let corr;
     if (window.isTutorialMatch && i === 0 && openCorridors.length > 0) {
       const nearCorridors = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
@@ -5283,12 +5312,44 @@ function generateCodeClues() {
       corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
     }
 
-    noteMesh.position.set(corr.x, 1.0, corr.z);
-    noteMesh.rotation.y = seededRandom() * Math.PI;
-    scene.add(noteMesh);
+    const noteGroup = new THREE.Group();
+    const noteMesh = new THREE.Mesh(noteGeo, noteMat.clone());
+    noteGroup.add(noteMesh);
 
+    // Dedicated subtle golden parchment point light
+    const clueLight = new THREE.PointLight(0xfef08a, 1.2, 5.0);
+    clueLight.position.set(0, 0, 0.2);
+    noteGroup.add(clueLight);
+
+    // Try to mount against adjacent solid wall
+    const g = worldToGrid(corr.x, corr.z);
+    const dirs = [
+      { dc: 0, dr: -1, candX: corr.x, candZ: corr.z - wallOffset, rotY: 0 },          // North wall, faces South
+      { dc: 0, dr: 1,  candX: corr.x, candZ: corr.z + wallOffset, rotY: Math.PI },   // South wall, faces North
+      { dc: -1, dr: 0, candX: corr.x - wallOffset, candZ: corr.z, rotY: Math.PI / 2 }, // West wall, faces East
+      { dc: 1, dr: 0,  candX: corr.x + wallOffset, candZ: corr.z, rotY: -Math.PI / 2 } // East wall, faces West
+    ];
+
+    let mounted = false;
+    for (const d of dirs) {
+      const nr = g.row + d.dr;
+      const nc = g.col + d.dc;
+      if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout && mazeLayout[nr] && mazeLayout[nr][nc] === 1) {
+        noteGroup.position.set(d.candX, 1.45, d.candZ);
+        noteGroup.rotation.y = d.rotY;
+        mounted = true;
+        break;
+      }
+    }
+
+    if (!mounted) {
+      noteGroup.position.set(corr.x, 1.35, corr.z);
+      noteGroup.rotation.y = seededRandom() * Math.PI;
+    }
+
+    scene.add(noteGroup);
     claimSpawnLocation(corr.x, corr.z, window.isTutorialMatch ? 2.5 : 4.5, `Clue_${i}`);
-    codeClueNotes.push({ mesh: noteMesh, digitIndex: i, collected: false });
+    codeClueNotes.push({ mesh: noteGroup, digitIndex: i, collected: false });
   }
 }
 
@@ -7373,6 +7434,85 @@ function getBestInteractionTarget() {
             }
             isCaptured = true;
             window.isEscaping = true;
+function awardMatchWinCredits() {
+  if (matchCreditsAwardedThisSession) {
+    return { creditsAwarded: 0, rewardTitle: '', rewardSub: '', isOneTimeClaimed: false };
+  }
+  matchCreditsAwardedThisSession = true;
+
+  const profileStr = localStorage.getItem('manifestation_user_profile');
+  let profile = null;
+  try {
+    if (profileStr) profile = JSON.parse(profileStr);
+  } catch(e) {}
+
+  let localCreds = parseInt(localStorage.getItem('manifestation_credits') || '0', 10);
+  let creditsAwarded = 0;
+  let rewardTitle = '';
+  let rewardSub = '';
+  let isOneTimeClaimed = false;
+
+  if (window.isTutorialMatch) {
+    const claimed = localStorage.getItem('manifestation_reward_training_claimed') === 'true';
+    if (!claimed) {
+      creditsAwarded = 20;
+      localStorage.setItem('manifestation_reward_training_claimed', 'true');
+      rewardTitle = '🏆 CERTIFICATION REWARD: +20 CREDITS';
+      rewardSub = 'First-time training protocol completion bonus!';
+    } else {
+      creditsAwarded = 0;
+      isOneTimeClaimed = true;
+      rewardTitle = '✅ CERTIFICATION COMPLETED';
+      rewardSub = 'First-time completion reward (+20 credits) already claimed.';
+    }
+  } else if (window.gameDifficulty === 'impossible') {
+    const claimed = localStorage.getItem('manifestation_reward_impossible_claimed') === 'true';
+    if (!claimed) {
+      creditsAwarded = 500;
+      localStorage.setItem('manifestation_reward_impossible_claimed', 'true');
+      rewardTitle = '🏆 IMPOSSIBLE SURVIVOR: +500 CREDITS';
+      rewardSub = 'One-time bonus for conquering the impossible labyrinth!';
+    } else {
+      creditsAwarded = 50;
+      isOneTimeClaimed = true;
+      rewardTitle = '🏆 EXTRACTION REWARD: +50 CREDITS';
+      rewardSub = 'Impossible mastery bonus (+500) already claimed.';
+    }
+  } else if (window.gameDifficulty === 'hard') {
+    creditsAwarded = 100;
+    rewardTitle = '🏆 HARD EXTRACTION: +100 CREDITS';
+    rewardSub = 'Hard mode labyrinth victory reward!';
+  } else if (window.gameDifficulty === 'easy') {
+    creditsAwarded = 20;
+    rewardTitle = '🏆 EASY EXTRACTION: +20 CREDITS';
+    rewardSub = 'Labyrinth escape victory reward!';
+  } else {
+    // Medium / Default
+    creditsAwarded = 50;
+    rewardTitle = '🏆 EXTRACTION REWARD: +50 CREDITS';
+    rewardSub = 'Standard labyrinth victory reward!';
+  }
+
+  if (creditsAwarded > 0) {
+    localCreds += creditsAwarded;
+    localStorage.setItem('manifestation_credits', localCreds.toString());
+    if (profile) {
+      profile.credits = (profile.credits || 0) + creditsAwarded;
+      localStorage.setItem('manifestation_user_profile', JSON.stringify(profile));
+    }
+    const hudCreds = document.getElementById('player-credits-display');
+    if (hudCreds) hudCreds.textContent = localCreds;
+    const acctCreds = document.getElementById('account-credits-display');
+    if (acctCreds) acctCreds.textContent = `💰 ${localCreds}`;
+    const token = localStorage.getItem('manifestation_auth_token') || (typeof authToken !== 'undefined' ? authToken : null);
+    if (token && socketClient && socketClient.emit) {
+      socketClient.emit('account_update_credits', { token, credits: localCreds });
+    }
+  }
+
+  return { creditsAwarded, rewardTitle, rewardSub, isOneTimeClaimed };
+}
+
             playEscapeCinematic(() => {
               document.getElementById('hud-overlay').style.display = 'none';
               if (document.pointerLockElement) document.exitPointerLock();
@@ -7383,6 +7523,7 @@ function getBestInteractionTarget() {
                 const details = document.getElementById('end-game-details');
                 if (title && details) {
                   endOverlay.style.display = 'flex';
+                  const rewardInfo = awardMatchWinCredits();
                   if (window.isTutorialMatch) {
                     title.textContent = "🎓 CERTIFIED!";
                     title.style.color = "#38bdf8";
@@ -7391,24 +7532,22 @@ function getBestInteractionTarget() {
                       <div style="font-weight:bold; color: #38bdf8; margin-bottom: 0.8rem; font-size: 1.3rem;">TRAINING PROTOCOL CERTIFIED</div>
                       <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You successfully mastered movement, sprint boosters, flashlight operation, supply salvage, circuit breaker power restoration, and master vault keypad extraction!</p>
                       <div style="margin-top: 1rem; padding: 0.6rem; background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; border-radius: 8px; color: #7dd3fc; font-weight: bold; font-size: 0.9rem;">
-                        🏆 CERTIFICATION REWARD: +500 TRAINING CREDITS
+                        ${rewardInfo.rewardTitle}<br>
+                        <span style="font-size: 0.8rem; font-weight: normal; color: #94a3b8;">${rewardInfo.rewardSub}</span>
                       </div>
                     `;
-                    try {
-                      const profileStr = localStorage.getItem('manifestation_user_profile');
-                      if (profileStr) {
-                        const profile = JSON.parse(profileStr);
-                        profile.credits = (profile.credits || 0) + 500;
-                        localStorage.setItem('manifestation_user_profile', JSON.stringify(profile));
-                      }
-                      const localCreds = parseInt(localStorage.getItem('manifestation_credits') || '0', 10);
-                      localStorage.setItem('manifestation_credits', (localCreds + 500).toString());
-                    } catch(e) {}
                   } else {
                     title.textContent = "ESCAPED!";
                     title.style.color = "#10b981";
                     title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
-                    details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>`;
+                    details.innerHTML = `
+                      <div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div>
+                      <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>
+                      <div style="margin-top: 1rem; padding: 0.6rem; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 8px; color: #6ee7b7; font-weight: bold; font-size: 0.9rem;">
+                        ${rewardInfo.rewardTitle}<br>
+                        <span style="font-size: 0.8rem; font-weight: normal; color: #94a3b8;">${rewardInfo.rewardSub}</span>
+                      </div>
+                    `;
                   }
 
                   const lobbyBtn = document.getElementById('end-game-lobby-btn');
@@ -7722,7 +7861,16 @@ function collectClueLocal(digitIndex) {
   const note = codeClueNotes.find(n => n.digitIndex === digitIndex);
   if (note && !note.collected) {
     note.collected = true;
-    note.mesh.material.emissiveIntensity = 0.1;
+    if (note.mesh) {
+      note.mesh.traverse(c => {
+        if (c.isMesh && c.material) {
+          if (c.material.emissiveIntensity !== undefined) c.material.emissiveIntensity = 0.1;
+        }
+        if (c.isPointLight) {
+          c.intensity = 0.2;
+        }
+      });
+    }
 
     // Feature 1: Lore Journal & Cipher Clarity (+15% Sanity boost)
     if (myTeam === 'Human') {
@@ -7763,13 +7911,17 @@ function collectClueLocal(digitIndex) {
 
   if (window.isTutorialMatch) {
     const fullCode = (window.cipherCodeDigits || []).join('');
-    triggerNotification(`🎓 TUTORIAL INTEL: Wall Clue Decoded! Master Vault Code is [ ${fullCode} ]!`);
     if (cipherHUD) {
       cipherHUD.textContent = `VAULT CODE: ${fullCode}`;
       cipherHUD.style.color = '#38bdf8';
     }
-    if (tutorialStage === 9 && fixedBreakersCount >= 1) {
-      advanceTutorialStage(10, `Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad!`);
+    if (tutorialStage === 9) {
+      if (fixedBreakersCount >= 1) {
+        advanceTutorialStage(10, `Power Restored & Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad!`);
+      } else {
+        triggerNotification(`📝 Code Intel [ ${fullCode} ] Decoded! Next: Repair yellow Circuit Breaker (⚡) to power the vault terminal!`);
+        updateTutorialQuestBanner();
+      }
     }
   }
 
@@ -9602,10 +9754,18 @@ function setupSocketListeners() {
           // SOLO MODE END GAME FLOW
           const isEscapeWin = (winner === 'Human' || window.isEscaping);
           if (isEscapeWin) {
+            const rewardInfo = awardMatchWinCredits();
             title.textContent = "ESCAPED!";
             title.style.color = "#10b981";
             title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
-            details.innerHTML = `<div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate!</p>`;
+            details.innerHTML = `
+              <div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div>
+              <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate!</p>
+              <div style="margin-top: 1rem; padding: 0.6rem; background: rgba(16, 185, 129, 0.15); border: 1px solid #10b981; border-radius: 8px; color: #6ee7b7; font-weight: bold; font-size: 0.9rem;">
+                ${rewardInfo.rewardTitle}<br>
+                <span style="font-size: 0.8rem; font-weight: normal; color: #94a3b8;">${rewardInfo.rewardSub}</span>
+              </div>
+            `;
           } else {
             title.textContent = "YOU DIED";
             title.style.color = "#ef4444";
@@ -11124,56 +11284,64 @@ function spawnPracticeGhost() {
 
   const pX = camera.position.x;
   const pZ = camera.position.z;
+  const pG = worldToGrid(pX, pZ);
   const camDir = new THREE.Vector3();
   camera.getWorldDirection(camDir);
   camDir.y = 0;
   camDir.normalize();
 
   let targetPos = null;
+  let initialPath = null;
 
   if (openCorridors && openCorridors.length > 0) {
-    const losCandidates = [];
-    const fallbackCandidates = [];
+    const candidates = [];
 
     openCorridors.forEach(c => {
       const dx = c.x - pX;
       const dz = c.z - pZ;
       const d = Math.hypot(dx, dz);
-      if (d >= 5.5 && d <= 15.0) {
-        const dot = (camDir.lengthSq() > 0.01) ? (dx * camDir.x + dz * camDir.z) / d : 0;
-        const hasLos = hasGridLineOfSight(pX, pZ, c.x, c.z);
-        if (hasLos) {
-          losCandidates.push({ x: c.x, z: c.z, dist: d, dot });
-        } else {
-          fallbackCandidates.push({ x: c.x, z: c.z, dist: d, dot });
+      if (d >= 5.5 && d <= 14.0) {
+        const cG = worldToGrid(c.x, c.z);
+        const path = bfsPath(cG.col, cG.row, pG.col, pG.row, false);
+        if (path && path.length > 0) {
+          const dot = (camDir.lengthSq() > 0.01) ? (dx * camDir.x + dz * camDir.z) / d : 0;
+          const hasLos = hasGridLineOfSight(pX, pZ, c.x, c.z);
+          candidates.push({ x: c.x, z: c.z, dist: d, dot, hasLos, path });
         }
       }
     });
 
-    if (losCandidates.length > 0) {
-      // Prioritize directly down the player's forward corridor view (dot > 0.1), closest to ~9.0m
-      losCandidates.sort((a, b) => {
+    if (candidates.length > 0) {
+      candidates.sort((a, b) => {
+        if (a.hasLos !== b.hasLos) return a.hasLos ? -1 : 1;
         const aFront = a.dot > 0.1 ? 1 : 0;
         const bFront = b.dot > 0.1 ? 1 : 0;
         if (aFront !== bFront) return bFront - aFront;
-        return Math.abs(a.dist - 9.0) - Math.abs(b.dist - 9.0);
+        return Math.abs(a.dist - 8.5) - Math.abs(b.dist - 8.5);
       });
-      targetPos = losCandidates[0];
-    } else if (fallbackCandidates.length > 0) {
-      fallbackCandidates.sort((a, b) => {
-        const aFront = a.dot > 0.1 ? 1 : 0;
-        const bFront = b.dot > 0.1 ? 1 : 0;
-        if (aFront !== bFront) return bFront - aFront;
-        return Math.abs(a.dist - 9.0) - Math.abs(b.dist - 9.0);
+      targetPos = candidates[0];
+      initialPath = targetPos.path;
+    } else {
+      // Fallback: any reachable corridor cell
+      const backup = [];
+      openCorridors.forEach(c => {
+        const d = Math.hypot(c.x - pX, c.z - pZ);
+        if (d >= 4.0) {
+          const cG = worldToGrid(c.x, c.z);
+          const path = bfsPath(cG.col, cG.row, pG.col, pG.row, false);
+          if (path && path.length > 0) backup.push({ x: c.x, z: c.z, dist: d, path });
+        }
       });
-      targetPos = fallbackCandidates[0];
+      if (backup.length > 0) {
+        backup.sort((a, b) => Math.abs(a.dist - 8.5) - Math.abs(b.dist - 8.5));
+        targetPos = backup[0];
+        initialPath = targetPos.path;
+      }
     }
   }
 
   if (!targetPos) {
-    const fX = (camDir.lengthSq() > 0.01) ? camDir.x : 0;
-    const fZ = (camDir.lengthSq() > 0.01) ? camDir.z : 1;
-    targetPos = { x: pX + fX * 8.0, z: pZ + fZ * 8.0 };
+    targetPos = gridToWorld(pG.col, pG.row);
   }
 
   const ghostGroup = createGhostMeshGroup('skin_ghost');
@@ -11181,6 +11349,13 @@ function spawnPracticeGhost() {
   ghostGroup.userData.isPracticeGhost = true;
   ghostGroup.userData.ghostClass = 'Stalker';
   ghostGroup.userData.aiState = 'CHASE';
+  ghostGroup.userData.loseSightTimer = 0;
+  ghostGroup.userData.chasedTargetId = myId || 'local_human';
+  if (initialPath && initialPath.length > 0) {
+    ghostGroup.userData.path = initialPath;
+    ghostGroup.userData.pathIdx = 1;
+    ghostGroup.userData.pathTime = performance.now();
+  }
 
   // Face the player directly upon spawning
   ghostGroup.lookAt(pX, ghostGroup.position.y, pZ);
@@ -11254,6 +11429,9 @@ function initTutorialQuest() {
   tutorialSprintTime = 0;
   tutorialGhostDrillTimer = 0;
   removePracticeGhost();
+  if (codeClueNotes && codeClueNotes.length > 0) {
+    codeClueNotes.forEach(n => n.collected = false);
+  }
   tutorialLastPlayerPos = (camera && camera.position) ? camera.position.clone() : new THREE.Vector3(0, 1.6, 0);
 
   const banner = document.getElementById('tutorial-quest-banner');
@@ -11270,9 +11448,8 @@ function initTutorialQuest() {
     }
     const cipherHUD = document.getElementById('hud-cipher-info');
     if (cipherHUD) {
-      const code = (window.cipherCodeDigits || []).join('');
-      cipherHUD.textContent = code ? `CODE: ${code}` : `4-DIGIT CODE`;
-      cipherHUD.style.color = '#38bdf8';
+      cipherHUD.textContent = `VAULT CODE: _ _ _ _`;
+      cipherHUD.style.color = '#94a3b8';
     }
     const lockLabel = document.getElementById('terminal-lock-label');
     if (lockLabel) {
@@ -11333,7 +11510,26 @@ function updateTutorialQuestBanner() {
   const banner = document.getElementById('tutorial-quest-banner');
   // Always keep the Info Screen (breakers, keys, code) active!
   const objBar = document.querySelector('.compact-objective-bar');
-  if (objBar) objBar.style.display = 'flex';
+  if (objBar) {
+    objBar.style.display = 'flex';
+    const breakersInfo = document.getElementById('hud-breakers-info');
+    if (breakersInfo) {
+      breakersInfo.textContent = `POWER: ${fixedBreakersCount}/${totalBreakersRequired} BREAKER`;
+      breakersInfo.style.color = fixedBreakersCount >= 1 ? '#10b981' : '#f59e0b';
+    }
+    const cipherHUD = document.getElementById('hud-cipher-info');
+    if (cipherHUD) {
+      const hasClue = codeClueNotes && codeClueNotes.some(n => n.collected);
+      if (hasClue) {
+        const code = (window.cipherCodeDigits || []).join('');
+        cipherHUD.textContent = `CODE: ${code}`;
+        cipherHUD.style.color = '#38bdf8';
+      } else {
+        cipherHUD.textContent = `VAULT CODE: _ _ _ _`;
+        cipherHUD.style.color = '#94a3b8';
+      }
+    }
+  }
 
   if (!banner || !window.isTutorialMatch) {
     if (banner) banner.style.display = 'none';
@@ -11365,11 +11561,13 @@ function updateTutorialQuestBanner() {
       stageInd.textContent = 'STAGE 2/10';
       titleEl.textContent = 'TACTICAL SPRINT & STAMINA';
       descEl.innerHTML = isMobileDevice 
-        ? 'Tap the <span class="touch-badge">SPRINT</span> button to sprint. Notice your <strong>Stamina Bar</strong> drains!' 
-        : 'Hold <kbd>SHIFT</kbd> to sprint. Keep an eye on your <strong>Stamina Gauge</strong>!';
+        ? 'Move using the <strong>Left Joystick</strong> and tap <span class="touch-badge">SPRINT</span> while moving to sprint. Notice your <strong>Stamina Bar</strong> drains!' 
+        : 'Move using <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> and hold <kbd>SHIFT</kbd> while moving to sprint. Keep an eye on your <strong>Stamina Gauge</strong>!';
       const pct2 = Math.min(100, Math.floor((tutorialSprintTime / 1.5) * 100));
       progBar.style.width = `${pct2}%`;
-      hintEl.textContent = `Sprint time: ${tutorialSprintTime.toFixed(1)}s / 1.5s`;
+      hintEl.textContent = isMobileDevice 
+        ? `Move Joystick + Tap SPRINT: ${tutorialSprintTime.toFixed(1)}s / 1.5s`
+        : `Move W/A/S/D + Hold SHIFT: ${tutorialSprintTime.toFixed(1)}s / 1.5s`;
       break;
 
     case 3:
@@ -11406,10 +11604,12 @@ function updateTutorialQuestBanner() {
       stageInd.textContent = 'STAGE 6/10';
       titleEl.textContent = 'TACTICAL MAP & BEACONS';
       descEl.innerHTML = isMobileDevice 
-        ? 'Tap the top-right <strong>Radar Minimap</strong> to open full Tactical Map, then tap anywhere to drop a ping!' 
-        : 'Press <kbd>M</kbd> (or click radar) to open full Tactical Map. Click anywhere to place a beacon ping!';
-      progBar.style.width = '65%';
-      hintEl.textContent = isMobileDevice ? 'Tap Radar to expand map & drop a ping' : 'Press [M] to open map & click to drop a ping';
+        ? 'Tap the top-right <strong>Radar Minimap</strong> to open the Tactical Map, then <strong>tap anywhere on the map grid</strong> to place a beacon marker pin!' 
+        : 'Press <kbd>M</kbd> (or click the top-right radar) to open the Tactical Map, then <strong>click anywhere on the map grid</strong> to place a beacon marker pin!';
+      progBar.style.width = mapMarks.length > 0 ? '70%' : '60%';
+      hintEl.textContent = isMobileDevice 
+        ? 'Tap Radar -> Tap map grid to drop beacon marker' 
+        : 'Press [M] -> Click map grid to drop beacon marker';
       break;
 
     case 7:
@@ -11474,12 +11674,29 @@ function updateTutorialQuestBanner() {
       stageInd.textContent = 'STAGE 9/10';
       titleEl.textContent = 'GRID POWER & CLUE NOTES';
       const fullCode9 = (window.cipherCodeDigits || []).join('');
-      const codeMsg9 = fullCode9 ? `Vault Code: [ ${fullCode9} ]` : `Inspect wall notes for 4-digit code`;
+      const hasClue9 = codeClueNotes && codeClueNotes.some(n => n.collected);
+      const isBreakerDone9 = fixedBreakersCount >= 1;
+      
       descEl.innerHTML = isMobileDevice 
-        ? `Locate a yellow <strong>Circuit Breaker</strong> on the wall to power the vault, then inspect wall clue notes!<br><span style="color: #38bdf8; font-weight: bold; margin-top: 3px; display: inline-block;">📝 ${codeMsg9}</span>` 
-        : `Locate a yellow <strong>Circuit Breaker</strong> on the wall, press <kbd>E</kbd> to power the vault, then inspect wall clue notes!<br><span style="color: #38bdf8; font-weight: bold; margin-top: 3px; display: inline-block;">📝 ${codeMsg9}</span>`;
-      progBar.style.width = fixedBreakersCount >= 1 ? '100%' : '85%';
-      hintEl.textContent = `Circuit Breakers: ${fixedBreakersCount} / 1 required | ${codeMsg9}`;
+        ? `To escape, you must restore <strong>Grid Power</strong> and discover the <strong>4-Digit Cipher</strong>!<br>
+           ⚡ <strong>Breaker:</strong> Locate the yellow breaker box on the wall and tap it.<br>
+           📝 <strong>Clue Notes:</strong> Pinned along corridor walls — tap to decode code digits.` 
+        : `To escape, you must restore <strong>Grid Power</strong> and discover the <strong>4-Digit Cipher</strong>!<br>
+           ⚡ <strong>Breaker:</strong> Locate the yellow breaker box on the wall and press <kbd>E</kbd>.<br>
+           📝 <strong>Clue Notes:</strong> Pinned along corridor walls — press <kbd>E</kbd> to decode code digits.`;
+
+      let doneCount9 = (isBreakerDone9 ? 1 : 0) + (hasClue9 ? 1 : 0);
+      progBar.style.width = doneCount9 === 0 ? '80%' : (doneCount9 === 1 ? '90%' : '100%');
+
+      if (!isBreakerDone9 && !hasClue9) {
+        hintEl.textContent = `⚡ Breaker: [ 0/1 ] | 📝 Clue Notes: [ 0/1 ] — Search corridor walls`;
+      } else if (isBreakerDone9 && !hasClue9) {
+        hintEl.textContent = `⚡ Grid Powered! Now find and inspect the glowing Wall Clue Note (📝)`;
+      } else if (!isBreakerDone9 && hasClue9) {
+        hintEl.textContent = `📝 Code Intel Decoded: [ ${fullCode9} ]! Now repair yellow Circuit Breaker (⚡)`;
+      } else {
+        hintEl.textContent = `✅ Ready! Code [ ${fullCode9} ] Intel Acquired & Grid Powered!`;
+      }
       break;
 
     case 10:
@@ -11566,10 +11783,6 @@ function setupMinimap() {
     if (titleText) titleText.textContent = 'TACTICAL MAP';
     if (document.pointerLockElement) document.exitPointerLock();
     drawMinimap();
-
-    if (window.isTutorialMatch && tutorialStage === 6) {
-      advanceTutorialStage(7, "Tactical Navigation Calibrated! Next: UV Lantern Sanctuaries");
-    }
   };
 
   const handleMapMark = (clientX, clientY) => {
@@ -11597,7 +11810,7 @@ function setupMinimap() {
       drawMinimap();
 
       if (window.isTutorialMatch && tutorialStage === 6) {
-        advanceTutorialStage(7, "Tactical Navigation Calibrated! Next: UV Lantern Sanctuaries");
+        advanceTutorialStage(7, "Tactical Beacon Placed! Markers help your team navigate. Next: UV Lantern Sanctuaries");
       }
     }
   };
@@ -11751,7 +11964,13 @@ function fixBreakerLocal(breakerId) {
     }
     if (window.isTutorialMatch) {
       const fullCode = (window.cipherCodeDigits || []).join('');
-      advanceTutorialStage(10, `Grid Power Restored! Master Vault Powered! Code Intel: [${fullCode}]. Head to Keypad!`);
+      const hasClue = codeClueNotes && codeClueNotes.some(n => n.collected);
+      if (hasClue) {
+        advanceTutorialStage(10, `Grid Power Restored & Code Intel [${fullCode}] Acquired! Head to Master Vault Keypad!`);
+      } else {
+        triggerNotification(`⚡ Grid Power Restored! Next: Inspect glowing wall clue note (📝) to decode vault cipher!`);
+        updateTutorialQuestBanner();
+      }
     }
   } else {
     triggerNotification(`Circuit breaker repaired! (${fixedBreakersCount}/${totalBreakersRequired})`);
@@ -13172,7 +13391,7 @@ function animate() {
 
       let moveSpeed = (ghost.userData.ghostClass === 'Juggernaut') ? juggernautSpeed : baseMoveSpeed;
       if (ghost.userData && ghost.userData.isPracticeGhost) {
-        moveSpeed = 2.2;
+        moveSpeed = 2.8;
       }
 
       // In Impossible and Hard modes, ghosts can trigger occasional speed surges
@@ -13252,6 +13471,13 @@ function animate() {
             ghost.userData.chasedTargetId = null;
           }
         }
+      }
+
+      // Practice Ghost in Training Drill strictly locks to CHASE mode targeting the player
+      if (ghost.userData && ghost.userData.isPracticeGhost) {
+        ghost.userData.aiState = 'CHASE';
+        ghost.userData.loseSightTimer = 0;
+        ghost.userData.chasedTargetId = closestHumanId;
       }
 
       // Execute Bot Abilities on human targets
@@ -13630,7 +13856,7 @@ function animate() {
       if (ghost.userData && ghost.userData.isPracticeGhost && Array.isArray(sanctuaryZones)) {
         sanctuaryZones.forEach(s => {
           const dS = Math.hypot(ghost.position.x - s.x, ghost.position.z - s.z);
-          const safeBoundary = (s.radius || 4.5) + 0.6;
+          const safeBoundary = 3.6; // Right at the visual glowing edge of the sanctuary light circle
           if (dS < safeBoundary) {
             const angle = Math.atan2(ghost.position.z - s.z, ghost.position.x - s.x);
             ghost.position.x = s.x + Math.cos(angle) * safeBoundary;
