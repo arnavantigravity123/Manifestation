@@ -7117,13 +7117,114 @@ function setupControls() {
     }
 
     if (specialBtn) {
-      addTapListener(specialBtn, () => {
+      specialBtn.setAttribute('tabindex', '-1');
+      let specialHoldTimer = null;
+      let specialHoldProgressInterval = null;
+      let specialHoldTriggered = false;
+      let holdStartTime = 0;
+      const defaultSpecialText = 'SPECIAL';
+
+      const resetSpecialButtonState = () => {
+        if (specialHoldTimer) {
+          clearTimeout(specialHoldTimer);
+          specialHoldTimer = null;
+        }
+        if (specialHoldProgressInterval) {
+          clearInterval(specialHoldProgressInterval);
+          specialHoldProgressInterval = null;
+        }
+        specialBtn.textContent = defaultSpecialText;
+        specialBtn.style.background = '';
+        specialBtn.style.boxShadow = '';
+      };
+
+      const startSpecialHold = (e) => {
         if (isCaptured) return;
-        if (isPanicked) {
-          triggerNotification("Ability active: Invisibility engaged!");
+        specialHoldTriggered = false;
+        holdStartTime = performance.now();
+
+        // 4-second hold timer to turn off / toggle flashlight on mobile
+        specialHoldTimer = setTimeout(() => {
+          specialHoldTriggered = true;
+          resetSpecialButtonState();
+
+          // Execute flashlight toggle on mobile
+          toggleFlashlight();
+          if (navigator.vibrate) {
+            try { navigator.vibrate([40, 40, 80]); } catch (err) {}
+          }
+        }, 4000);
+
+        // Visual countdown and fill animation on the button while holding
+        specialHoldProgressInterval = setInterval(() => {
+          const elapsed = performance.now() - holdStartTime;
+          const pct = Math.min(100, Math.floor((elapsed / 4000) * 100));
+          const remainingSec = Math.max(1, Math.ceil((4000 - elapsed) / 1000));
+          specialBtn.textContent = `FLASHLIGHT: ${remainingSec}s`;
+          specialBtn.style.background = `linear-gradient(90deg, rgba(234, 179, 8, 0.75) ${pct}%, rgba(15, 23, 42, 0.9) ${pct}%)`;
+          specialBtn.style.boxShadow = `0 0 ${8 + (pct * 0.15)}px rgba(234, 179, 8, 0.8)`;
+        }, 100);
+      };
+
+      const endSpecialHold = (e) => {
+        const wasTriggered = specialHoldTriggered;
+        const holdDuration = performance.now() - holdStartTime;
+        resetSpecialButtonState();
+
+        if (wasTriggered) {
+          specialHoldTriggered = false;
           return;
         }
-        triggerPanicHide();
+
+        // If held between 1s and 4s, user was trying to toggle flashlight but released early
+        if (holdDuration >= 1000) {
+          triggerNotification("Flashlight toggle cancelled (hold for full 4 seconds)");
+          return;
+        }
+
+        // Quick tap (< 1000ms): regular special class ability
+        if (holdDuration < 1000) {
+          if (isCaptured) return;
+          if (isPanicked) {
+            triggerNotification("Ability active: Invisibility engaged!");
+            return;
+          }
+          triggerPanicHide();
+        }
+      };
+
+      specialBtn.addEventListener('touchstart', (e) => {
+        if (e.cancelable) e.preventDefault();
+        startSpecialHold(e);
+      }, { passive: false });
+
+      specialBtn.addEventListener('touchend', (e) => {
+        if (e.cancelable) e.preventDefault();
+        endSpecialHold(e);
+      }, { passive: false });
+
+      specialBtn.addEventListener('touchcancel', () => {
+        resetSpecialButtonState();
+        specialHoldTriggered = false;
+      }, { passive: true });
+
+      specialBtn.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch' || isMobileDevice) {
+          startSpecialHold(e);
+        }
+      });
+
+      specialBtn.addEventListener('pointerup', (e) => {
+        if (e.pointerType === 'touch' || isMobileDevice) {
+          endSpecialHold(e);
+        }
+      });
+
+      specialBtn.addEventListener('pointercancel', () => {
+        if (isMobileDevice) {
+          resetSpecialButtonState();
+          specialHoldTriggered = false;
+        }
       });
     }
 
@@ -11955,10 +12056,10 @@ function updateTutorialQuestBanner() {
       stageInd.textContent = 'STAGE 3/11';
       titleEl.textContent = 'ILLUMINATION & STEALTH';
       descEl.innerHTML = isMobileDevice 
-        ? 'Tap <span class="touch-badge">USE</span> (with empty slot) to toggle flashlight. Turn it OFF to conserve battery or stealth!' 
+        ? 'Hold <span class="touch-badge">SPECIAL</span> for 4 seconds to toggle your Flashlight. Turn it OFF to conserve battery or stealth!' 
         : 'Press <kbd>F</kbd> to toggle your Flashlight. Turn it OFF to conserve battery or hide from entities!';
       progBar.style.width = isFlashlightToggledOn ? '50%' : '100%';
-      hintEl.textContent = isMobileDevice ? 'Tap USE to cycle beam' : 'Press [F] to toggle beam';
+      hintEl.textContent = isMobileDevice ? 'Hold SPECIAL for 4s to toggle beam' : 'Press [F] to toggle beam';
       break;
 
     case 4:
