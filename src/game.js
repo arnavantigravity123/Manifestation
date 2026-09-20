@@ -14425,7 +14425,7 @@ function animate() {
       }
 
       // Check Sound Beacons (human noise)
-      if (latestSoundBeacon && latestSoundBeacon.time > ghost.userData.lastSoundTime && ghost.userData.aiState !== 'CHASE') {
+      if (latestSoundBeacon && latestSoundBeacon.time > (ghost.userData.lastSoundTime || 0)) {
         const distToSound = ghost.position.distanceTo(new THREE.Vector3(latestSoundBeacon.position.x, ghost.position.y, latestSoundBeacon.position.z));
         let hearingRadius = 0;
         if (latestSoundBeacon.volume <= 1.0) hearingRadius = gParams.hearingWalking * mazeBlockSize; // Walking
@@ -14436,10 +14436,25 @@ function animate() {
         if (ghost.userData.aiState === 'INVESTIGATE') hearingRadius *= 1.35; // Heightened hearing when already investigating
 
         if (distToSound <= hearingRadius) {
-          ghost.userData.aiState = 'INVESTIGATE';
-          ghost.userData.targetGrid = worldToGrid(latestSoundBeacon.position.x, latestSoundBeacon.position.z);
-          ghost.userData.investigateSearchTimer = 5.0; // Reset search timer with fresh noise clue
-          ghost.userData.pathTime = 0; // Force immediate repath
+          const soundGrid = worldToGrid(latestSoundBeacon.position.x, latestSoundBeacon.position.z);
+          // If close enough to hear speech direction clearly (under 8m) or has direct LOS: engage CHASE!
+          if (distToSound < 8.0 || hasDirectLos) {
+            ghost.userData.aiState = 'CHASE';
+            ghost.userData.loseSightTimer = 0;
+            ghost.userData.chasedTargetId = closestHumanId;
+            ghost.userData.lastKnownTargetPos = { x: latestSoundBeacon.position.x, z: latestSoundBeacon.position.z };
+            ghost.userData.targetGrid = soundGrid;
+            ghost.userData.investigateSearchTimer = 0;
+            ghost.userData.pathTime = 0; // Force immediate chase path toward speech
+          } else if (ghost.userData.aiState !== 'CHASE') {
+            ghost.userData.aiState = 'INVESTIGATE';
+            ghost.userData.investigateSearchTimer = 5.0; // Reset search timer with fresh noise clue
+            // Only force repath if target grid actually changed or we don't have an active path
+            if (!ghost.userData.targetGrid || ghost.userData.targetGrid.col !== soundGrid.col || ghost.userData.targetGrid.row !== soundGrid.row || !ghost.userData.path) {
+              ghost.userData.targetGrid = soundGrid;
+              ghost.userData.pathTime = 0;
+            }
+          }
         }
         ghost.userData.lastSoundTime = latestSoundBeacon.time;
       }
@@ -14592,9 +14607,23 @@ function animate() {
             ghost.userData.pathTime = 0;
             ghost.userData.path = null;
           }
-        } else {
-          // Finished patrol / investigate path: clear to repath smoothly
-          if (ghost.userData.aiState === 'INVESTIGATE') {
+        } else if (ghost.userData.aiState === 'INVESTIGATE') {
+          const gGrid = worldToGrid(ghost.position.x, ghost.position.z);
+          const tGrid = targetPos ? worldToGrid(targetPos.x, targetPos.z) : null;
+          const inSameCell = Boolean(tGrid && gGrid.col === tGrid.col && gGrid.row === tGrid.row);
+
+          // If the player is right in front of the investigating ghost or within close proximity (<= 4.5m) with direct LOS or in same cell:
+          if (targetPos && (hasDirectLos || inSameCell || distToPlayer < 4.5)) {
+            ghost.userData.aiState = 'CHASE';
+            ghost.userData.loseSightTimer = 0;
+            ghost.userData.chasedTargetId = closestHumanId;
+            ghost.userData.lastKnownTargetPos = { x: targetPos.x, z: targetPos.z };
+            ghost.userData.investigateSearchTimer = 0;
+            _scratchVec3_1.set(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
+            ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
+            resolveGhostCollision(ghost);
+          } else {
+            // Searching empty area:
             if (!ghost.userData.investigateSearchTimer || ghost.userData.investigateSearchTimer <= 0) {
               ghost.userData.investigateSearchTimer = 5.0; // 5 seconds of active search
             }
@@ -14609,11 +14638,11 @@ function animate() {
               ghost.rotation.y += Math.sin(time * 0.005) * 0.04;
               ghost.userData.pathTime = time; // Hold path time so it doesn't immediately repath away
             }
-          } else {
-            ghost.userData.targetGrid = null;
-            ghost.userData.path = null;
-            ghost.userData.pathTime = 0;
           }
+        } else {
+          ghost.userData.targetGrid = null;
+          ghost.userData.path = null;
+          ghost.userData.pathTime = 0;
         }
       }
       
@@ -14683,12 +14712,16 @@ function animate() {
         const avgVolume = sum / audioDataArray.length;
         
         if (avgVolume > 20) { // Threshold for talking/yelling
-          socketClient.emit('sound_produced', {
-            volume: avgVolume,
-            position: { x: camera.position.x, z: camera.position.z }
-          });
-          // Immediately alert local ghost AI
-          latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, volume: avgVolume, time: performance.now() };
+          const now = performance.now();
+          if (!window._lastVoiceBeaconTime || (now - window._lastVoiceBeaconTime > 250)) {
+            window._lastVoiceBeaconTime = now;
+            socketClient.emit('sound_produced', {
+              volume: avgVolume,
+              position: { x: camera.position.x, z: camera.position.z }
+            });
+            // Immediately alert local ghost AI
+            latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, volume: avgVolume, time: now };
+          }
         }
       }
     }
