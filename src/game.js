@@ -10290,7 +10290,6 @@ function setupSocketListeners() {
       
       if (applyEffect) {
         window.flashlightDisabledBySiphon = true;
-        triggerNotification(`Breaker Siphon! Flashlights disrupted (${Math.round(gParams.siphonDuration / 1000)}s)`);
         setTimeout(() => {
           window.flashlightDisabledBySiphon = false;
         }, gParams.siphonDuration);
@@ -10310,7 +10309,6 @@ function setupSocketListeners() {
 
       if (applyEffect) {
         window.sensorsScrambled = true;
-        triggerNotification(`Signal scrambled! Sensors offline (${Math.round(gParams.scrambleDuration / 1000)}s)`);
         setTimeout(() => {
           window.sensorsScrambled = false;
         }, gParams.scrambleDuration);
@@ -14196,14 +14194,12 @@ function animate() {
           const gClass = ghost.userData.ghostClass;
           
           if (gClass === 'Stalker') {
-            if (myTeam === 'Human') triggerNotification("A Stalker bot caught your scent!");
             ghost.userData.aiState = 'CHASE';
             ghost.userData.targetGrid = worldToGrid(targetPos.x, targetPos.z);
             ghost.userData.pathTime = 0;
           } else if (gClass === 'Mimic') {
             if (!ghost.userData.isMimicDisguised) {
               ghost.userData.isMimicDisguised = true;
-              if (myTeam === 'Human') triggerNotification(`A Mimic bot is disguising itself (${Math.round(gParams.cloneDuration / 1000)}s)!`);
               
               // Exclude the closest person to the bot AND the person it is actively chasing
               const excludedIds = new Set();
@@ -14329,10 +14325,8 @@ function animate() {
               ghost.userData.mimicDurationTimer = gParams.cloneDuration / 1000;
             }
           } else if (gClass === 'Juggernaut') {
-            if (myTeam === 'Human') triggerNotification(`A Juggernaut bot is enraged (${gParams.rageDurationBot}s)!`);
             ghost.userData.speedBoostTimer = gParams.rageDurationBot;
           } else if (gClass === 'Phantom') {
-            if (myTeam === 'Human') triggerNotification(`A Phantom bot used Vapor Leap (${gParams.leapDistanceBot}m)!`);
             const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(ghost.quaternion);
             const maxLeap = gParams.leapDistanceBot;
             const stepSize = 0.3;
@@ -14373,14 +14367,12 @@ function animate() {
           } else if (gClass === 'Poltergeist') {
             const dist = targetPos.distanceTo(ghost.position);
             if (dist <= gParams.siphonRadius && myTeam === 'Human' && !window.isSpectating) {
-              triggerNotification(`Poltergeist bot deployed Breaker Siphon (${Math.round(gParams.siphonDuration / 1000)}s)!`);
               window.flashlightDisabledBySiphon = true;
               window.siphonDurationTimer = gParams.siphonDuration / 1000;
             }
           } else if (gClass === 'Banshee') {
             const dist = targetPos.distanceTo(ghost.position);
             if (dist <= gParams.scrambleRadius && myTeam === 'Human' && !window.isSpectating) {
-              triggerNotification(`Banshee bot scrambled your sensors (${Math.round(gParams.scrambleDuration / 1000)}s)!`);
               window.sensorsScrambled = true;
               window.scrambleDurationTimer = gParams.scrambleDuration / 1000;
             }
