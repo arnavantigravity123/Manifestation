@@ -1740,6 +1740,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   const me = matchConfig.players[myId];
   myTeam = me.team;
   myClass = me.characterClass;
+  if (typeof updateNametagVisibility === 'function') {
+    updateNametagVisibility();
+  }
 
   if (localStorage.getItem('manifestation_equipped_skin') === 'skin_rogue') {
     localStorage.setItem('manifestation_equipped_skin', 'skin_hazmat');
@@ -9802,6 +9805,13 @@ function setupSocketListeners() {
       if (isVipPlayer && glowPref) {
         applyVipGlow(capMesh, true);
       }
+      if (myTeam === 'Ghost') {
+        capMesh.traverse(c => {
+          if (c.userData && c.userData.isUsernameTag) {
+            c.visible = false;
+          }
+        });
+      }
       
       // Setup thermal camera support (Cyan for teammates, Red for ghosts)
       const meshThermalMat = new THREE.MeshBasicMaterial({ 
@@ -10048,6 +10058,13 @@ function setupSocketListeners() {
         if (players3D[targetId].userData) {
           players3D[targetId].userData.isCaptured = false;
         }
+        if (myTeam === 'Ghost') {
+          players3D[targetId].traverse(c => {
+            if (c.userData && c.userData.isUsernameTag) {
+              c.visible = false;
+            }
+          });
+        }
         players3D[targetId].position.set(spawnX, 0, spawnZ);
       } else {
         const pSkinId = (currentLobby && currentLobby.players && currentLobby.players[targetId] && currentLobby.players[targetId].skinId) || null;
@@ -10057,6 +10074,13 @@ function setupSocketListeners() {
         revivedMesh.userData.id = targetId;
         revivedMesh.userData.isCaptured = false;
         revivedMesh.userData.type = 'Human';
+        if (myTeam === 'Ghost') {
+          revivedMesh.traverse(c => {
+            if (c.userData && c.userData.isUsernameTag) {
+              c.visible = false;
+            }
+          });
+        }
         revivedMesh.position.set(spawnX, 0, spawnZ);
         scene.add(revivedMesh);
         players3D[targetId] = revivedMesh;
@@ -11233,6 +11257,9 @@ function createHumanMeshGroup(skinId, username, isVip) {
     textSprite.scale.set(1.5, 0.375, 1);
     textSprite.position.y = 2.8; // Place it well above the head
     textSprite.userData = { isUsernameTag: true };
+    if (typeof myTeam !== 'undefined' && myTeam === 'Ghost') {
+      textSprite.visible = false;
+    }
     
     // We add it to the group, but ThreeJS sprites always face the camera automatically
     group.add(textSprite);
@@ -11254,6 +11281,20 @@ function createHumanMeshGroup(skinId, username, isVip) {
   }
 
   return group;
+}
+
+export function updateNametagVisibility() {
+  const show = (typeof myTeam === 'undefined' || myTeam !== 'Ghost');
+  if (typeof players3D !== 'undefined') {
+    Object.values(players3D).forEach(p => {
+      if (!p) return;
+      p.traverse(c => {
+        if (c.userData && c.userData.isUsernameTag) {
+          c.visible = show;
+        }
+      });
+    });
+  }
 }
 
 export function removeCorpse(targetId) {
@@ -14623,6 +14664,13 @@ function animate() {
         }
       });
     } else if (p.userData && (p.userData.type === 'Human' || !p.userData.type)) {
+      if (myTeam === 'Ghost') {
+        p.children.forEach(c => {
+          if (c.userData && c.userData.isUsernameTag && c.visible) {
+            c.visible = false;
+          }
+        });
+      }
       // Calculate delta movement to drive the locomotion state & walk cycle without GC churn
       if (!p.userData.lastPosition) {
         p.userData.lastPosition = new THREE.Vector3().copy(p.position);
