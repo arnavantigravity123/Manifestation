@@ -14007,6 +14007,35 @@ function animate() {
       // Breaker Remote freezes all ghost movement
       if (window.ghostsFrozen) return;
 
+      // Anti-stuck watchdog: detects ghosts jammed in indents/corners for > 1.2s and ejects them to open corridors
+      if (!ghost.userData.lastMoveCheckPos) {
+        ghost.userData.lastMoveCheckPos = new THREE.Vector3().copy(ghost.position);
+        ghost.userData.stuckTimer = 0;
+      } else {
+        const movedDist = ghost.position.distanceTo(ghost.userData.lastMoveCheckPos);
+        if (movedDist < 0.08) {
+          ghost.userData.stuckTimer = (ghost.userData.stuckTimer || 0) + delta;
+          if (ghost.userData.stuckTimer > 1.2) {
+            ghost.userData.stuckTimer = 0;
+            ghost.userData.path = null;
+            ghost.userData.pathTime = 0;
+            ghost.userData.targetGrid = null;
+            ghost.userData.aiState = 'WANDER';
+            ghost.userData.investigateSearchTimer = 0;
+            ghost.userData.unreachableCooldown = 3.0;
+            const g = worldToGrid(ghost.position.x, ghost.position.z);
+            const center = gridToWorld(g.col, g.row);
+            ghost.position.x = center.x;
+            ghost.position.z = center.z;
+            ghost.userData.lastMoveCheckPos.copy(ghost.position);
+            resolveGhostCollision(ghost);
+          }
+        } else {
+          ghost.userData.stuckTimer = 0;
+          ghost.userData.lastMoveCheckPos.copy(ghost.position);
+        }
+      }
+
       const prevGhostX = ghost.position.x;
       const prevGhostZ = ghost.position.z;
 
@@ -14139,8 +14168,17 @@ function animate() {
       if (isFlashlightActive) proximityRange += 4.0;
       if (ghost.userData.aiState === 'INVESTIGATE') proximityRange += 3.0; // Heightened senses while actively searching!
       
+      const ghostGrid = worldToGrid(ghost.position.x, ghost.position.z);
+      const targetGrid = targetPos ? worldToGrid(targetPos.x, targetPos.z) : null;
+      const sameCell = Boolean(targetGrid && ghostGrid.col === targetGrid.col && ghostGrid.row === targetGrid.row);
       const inProximity = Boolean(targetPos && distToPlayer < proximityRange);
-      const canSeePlayer = Boolean(targetPos && (hasDirectLos || inProximity));
+      // Seeing the player requires unblocked Line of Sight (LOS) or sharing the exact corridor cell!
+      const canSeePlayer = Boolean(targetPos && (hasDirectLos || sameCell));
+
+      // Unreachable target cooldown ticker
+      if (ghost.userData.unreachableCooldown > 0) {
+        ghost.userData.unreachableCooldown -= delta;
+      }
 
       // State Transitions
       if (canSeePlayer && targetPos) {
@@ -14175,6 +14213,12 @@ function animate() {
             ghost.userData.chasedTargetId = null;
           }
         }
+      } else if (inProximity && ghost.userData.aiState === 'WANDER' && targetGrid && (!ghost.userData.unreachableCooldown || ghost.userData.unreachableCooldown <= 0)) {
+        // Ghost catches human scent through nearby corridors: switch to INVESTIGATE to pathfind towards them
+        ghost.userData.aiState = 'INVESTIGATE';
+        ghost.userData.targetGrid = targetGrid;
+        ghost.userData.investigateSearchTimer = 5.0;
+        ghost.userData.pathTime = 0; // Force immediate path calculation towards the scented area
       }
 
       // Practice Ghost in Training Drill strictly locks to CHASE mode targeting the player
@@ -14498,20 +14542,21 @@ function animate() {
           const generatedPath = bfsPath(ghostGrid.col, ghostGrid.row, destGrid.col, destGrid.row, false);
           if (generatedPath && generatedPath.length > 0) {
             ghost.userData.path = generatedPath;
-            ghost.userData.pathIdx = 1; // Skip start cell waypoint
+            ghost.userData.pathIdx = (generatedPath.length > 1) ? 1 : 0; // If single node, start at 0 so it walks to center
           } else {
-            // If path could not be found to destGrid (e.g. target behind closed sliding door), switch to WANDER so it roams and doesn't lock up against the door!
+            // If path could not be found to destGrid (e.g. target behind closed sliding door or solid wall), switch to WANDER so it roams and doesn't lock up against the door/wall!
             ghost.userData.aiState = 'WANDER';
             ghost.userData.targetGrid = null;
             ghost.userData.path = null;
             ghost.userData.pathTime = 0;
+            ghost.userData.unreachableCooldown = 3.0; // Prevent instant aggro re-lock on unreachable target
           }
         }
       }
 
       // Follow the path waypoints
       const path = ghost.userData.path;
-      const pathIdx = ghost.userData.pathIdx || 1;
+      const pathIdx = (typeof ghost.userData.pathIdx === 'number') ? ghost.userData.pathIdx : 0;
 
       if (path && path.length > 0 && pathIdx < path.length) {
         const waypoint = path[pathIdx];
@@ -14530,17 +14575,20 @@ function animate() {
       } else {
         // Arrived at final waypoint or navigating inside destination cell
         if (ghost.userData.aiState === 'CHASE' && distToPlayer > 0.5 && targetPos) {
-          const ghostGrid = worldToGrid(ghost.position.x, ghost.position.z);
-          const targetGrid = worldToGrid(targetPos.x, targetPos.z);
-          const sameCell = (ghostGrid.col === targetGrid.col && ghostGrid.row === targetGrid.row);
+          const gGrid = worldToGrid(ghost.position.x, ghost.position.z);
+          const tGrid = worldToGrid(targetPos.x, targetPos.z);
+          const inSameCell = (gGrid.col === tGrid.col && gGrid.row === tGrid.row);
 
           // Only move straight toward human target if in the same cell or has unblocked direct Line of Sight!
-          if (sameCell || hasDirectLos) {
+          if (inSameCell || hasDirectLos) {
             _scratchVec3_1.set(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
             ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
             resolveGhostCollision(ghost);
           } else {
-            // Separated by a wall! Immediately force BFS repath around corridor rather than driving into the wall
+            // Reached end of corridor path but separated by a wall: switch to INVESTIGATE to search area instead of clearing and freezing!
+            ghost.userData.aiState = 'INVESTIGATE';
+            ghost.userData.targetGrid = tGrid;
+            ghost.userData.investigateSearchTimer = 4.0;
             ghost.userData.pathTime = 0;
             ghost.userData.path = null;
           }
