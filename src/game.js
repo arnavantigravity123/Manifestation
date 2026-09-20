@@ -1499,13 +1499,13 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     (matchConfig && matchConfig.id && matchConfig.id.startsWith('tutorial-')) ||
     (matchConfig && matchConfig.settings && matchConfig.settings.isTutorial)
   );
-  const humanPlayersCount = Object.values(matchConfig.players || {}).filter(p => p.team === 'Human').length;
+  const totalPlayersCount = Object.keys(matchConfig.players || {}).length;
   window.isSoloMatch = Boolean(
     isSolo ||
     window.isTutorialMatch ||
     (matchConfig && matchConfig.id && matchConfig.id.startsWith('solo-')) ||
     (sessionStorage.getItem('rejoinIsSolo') === 'true') ||
-    humanPlayersCount <= 1
+    totalPlayersCount <= 1
   );
   // Info Screen (Breakers, Keys, and 4-Digit Code) must ALWAYS be visible across all modes!
   const objBar = document.querySelector('.compact-objective-bar');
@@ -10100,8 +10100,7 @@ function setupSocketListeners() {
           document.getElementById('hud-overlay').style.display = 'none';
           const mobileCtrl = document.getElementById('mobile-controls-container');
           if (mobileCtrl) mobileCtrl.style.display = 'none';
-          const otherLivingHumans = Object.values((currentLobby && currentLobby.players) || {}).filter(p => p.id !== myId && p.team === 'Human' && !p.isCaptured);
-          if (window.isSoloMatch || otherLivingHumans.length === 0) {
+          if (window.isSoloMatch) {
             showSoloDeathEndScreen();
           } else {
             const capOverlay = document.getElementById('captured-overlay');
@@ -10272,7 +10271,9 @@ function setupSocketListeners() {
     if (document.pointerLockElement) document.exitPointerLock();
     window.mobileGameActive = false;
     window.gameReady = false;
-    isCaptured = true;
+    if (myTeam === 'Human') {
+      isCaptured = true;
+    }
 
     const renderOverlay = () => {
       // Hide active in-game overlays so they never overlap with the end screen
@@ -10296,13 +10297,21 @@ function setupSocketListeners() {
       if (overlay && title && details) {
         overlay.style.display = 'flex';
 
-        const otherLivingHumans = Object.values((currentLobby && currentLobby.players) || {}).filter(p => p.id !== myId && p.team === 'Human' && !p.isCaptured);
-        const isSoloGame = window.isSoloMatch || otherLivingHumans.length === 0;
-        if (isSoloGame) {
-          // SOLO MODE END GAME FLOW
-          const isEscapeWin = (winner === 'Human' || window.isEscaping);
-          if (isEscapeWin) {
-            const rewardInfo = awardMatchWinCredits();
+        const isSoloGame = Boolean(window.isSoloMatch || (currentLobby && currentLobby.id && currentLobby.id.startsWith('solo-')));
+        const isMyWin = (myTeam === winner);
+
+        if (isMyWin) {
+          const rewardInfo = awardMatchWinCredits();
+          if (myTeam === 'Ghost') {
+            title.textContent = "VICTORY";
+            title.style.color = "#a855f7";
+            title.style.textShadow = "0 0 25px rgba(168, 85, 247, 0.8)";
+            details.innerHTML = `
+              <div style="font-weight:bold; color: #a855f7; margin-bottom: 0.8rem; font-size: 1.3rem;">GHOSTS TRIUMPH</div>
+              <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">All human operatives were hunted down and consumed by the void! The labyrinth belongs to the spirits.</p>
+              ${formatRewardCardHTML(rewardInfo)}
+            `;
+          } else {
             title.textContent = "ESCAPED!";
             title.style.color = "#10b981";
             title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
@@ -10311,14 +10320,45 @@ function setupSocketListeners() {
               <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate!</p>
               ${formatRewardCardHTML(rewardInfo)}
             `;
-            bindClaimAccountButton(rewardInfo);
+          }
+          bindClaimAccountButton(rewardInfo);
+        } else {
+          if (myTeam === 'Ghost') {
+            title.textContent = "DEFEAT";
+            title.style.color = "#ef4444";
+            title.style.textShadow = "0 0 30px rgba(239, 68, 68, 0.9)";
+            details.innerHTML = `
+              <div style="font-weight:bold; color: #ef4444; margin-bottom: 0.8rem; font-size: 1.3rem;">SURVIVORS ESCAPED</div>
+              <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">The human operatives cracked the cipher and escaped through the Master Gate before you could harvest them.</p>
+            `;
           } else {
             title.textContent = "YOU DIED";
             title.style.color = "#ef4444";
             title.style.textShadow = "0 0 30px rgba(239, 68, 68, 0.9)";
-            details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 0.8rem; font-size: 1.3rem;">CONSUMED BY THE VOID</div><p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You were dragged into the darkness before completing the extraction sequence.</p>`;
+            details.innerHTML = `
+              <div style="font-weight:bold; color: #ef4444; margin-bottom: 0.8rem; font-size: 1.3rem;">CONSUMED BY THE VOID</div>
+              <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You were dragged into the darkness before completing the extraction sequence.</p>
+            `;
           }
+        }
 
+        // Multiplayer Player Summary List
+        if (!isSoloGame && Array.isArray(summary) && summary.length > 0) {
+          let summaryHTML = `<div style="margin-top: 1rem; text-align: left; font-size: 0.9rem; line-height: 1.6; max-height: 160px; overflow-y: auto; padding: 0.5rem 0.8rem; background: rgba(0,0,0,0.35); border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">`;
+          summary.forEach(p => {
+            const teamColor = p.team === 'Ghost' ? '#a855f7' : '#3b82f6';
+            const statusText = p.team === 'Ghost' ? 'Spectral Threat' : (p.isCaptured ? 'Captured' : 'Escaped');
+            const statusColor = p.team === 'Ghost' ? '#a855f7' : (p.isCaptured ? '#ef4444' : '#10b981');
+            summaryHTML += `<div style="display:flex; justify-content:space-between; margin-bottom:0.3rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom:0.2rem;">
+              <span style="font-weight: bold; color: ${teamColor};">${p.username}</span> 
+              <span style="font-weight: bold; color: ${statusColor};">${statusText.toUpperCase()}</span>
+            </div>`;
+          });
+          summaryHTML += `</div>`;
+          details.innerHTML += summaryHTML;
+        }
+
+        if (isSoloGame) {
           if (retryBtn) {
             retryBtn.style.display = 'inline-block';
             addFastTapListener(retryBtn, () => {
@@ -10331,7 +10371,6 @@ function setupSocketListeners() {
               }
             });
           }
-
           if (lobbyBtn) {
             lobbyBtn.textContent = 'Main Menu';
             addFastTapListener(lobbyBtn, () => {
@@ -10348,38 +10387,6 @@ function setupSocketListeners() {
             });
           }
         } else {
-          // MULTIPLAYER MODE END GAME FLOW
-          const isMyWin = (myTeam === winner);
-          if (isMyWin) {
-            title.textContent = "VICTORY";
-            title.style.color = myTeam === 'Ghost' ? "#a855f7" : "#10b981";
-            title.style.textShadow = myTeam === 'Ghost' ? "0 0 20px rgba(168, 85, 247, 0.7)" : "0 0 20px rgba(16, 185, 129, 0.7)";
-            const victoryMsg = myTeam === 'Ghost' ? "ALL SURVIVORS HARVESTED!" : "SURVIVORS ESCAPED!";
-            details.innerHTML = `<div style="font-weight:bold; color: ${title.style.color}; margin-bottom: 1rem; font-size: 1.3rem;">${victoryMsg}</div>`;
-          } else {
-            title.textContent = "DEFEAT";
-            title.style.color = "#ef4444";
-            title.style.textShadow = "0 0 20px rgba(239, 68, 68, 0.6)";
-            const defeatMsg = myTeam === 'Ghost' ? "SURVIVORS ESCAPED THE LABYRINTH!" : "ALL SURVIVORS ELIMINATED!";
-            details.innerHTML = `<div style="font-weight:bold; color: #ef4444; margin-bottom: 1rem; font-size: 1.3rem;">${defeatMsg}</div>`;
-          }
-
-          // Add detailed player status list
-          let summaryHTML = `<div style="text-align: left; font-size: 0.95rem; line-height: 1.6; max-height: 200px; overflow-y: auto; padding-right: 10px;">`;
-          if (Array.isArray(summary)) {
-            summary.forEach(p => {
-              const teamColor = p.team === 'Ghost' ? '#a855f7' : '#3b82f6';
-              const statusText = p.team === 'Ghost' ? 'Spectral Threat' : (p.isCaptured ? 'Captured' : 'Escaped');
-              const statusColor = p.team === 'Ghost' ? '#a855f7' : (p.isCaptured ? '#ef4444' : '#10b981');
-              summaryHTML += `<div style="display:flex; justify-content:space-between; margin-bottom:0.4rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom:0.2rem;">
-                <span style="font-weight: bold; color: ${teamColor};">${p.username}</span> 
-                <span style="font-weight: bold; color: ${statusColor};">${statusText.toUpperCase()}</span>
-              </div>`;
-            });
-          }
-          summaryHTML += `</div>`;
-          details.innerHTML += summaryHTML;
-
           if (retryBtn) retryBtn.style.display = 'none';
           if (lobbyBtn) {
             lobbyBtn.textContent = 'Return to Lobby';
@@ -12996,8 +13003,7 @@ function triggerLocalPlayerCapture() {
     if (hud) hud.style.display = 'none';
     const mobileCtrl = document.getElementById('mobile-controls-container');
     if (mobileCtrl) mobileCtrl.style.display = 'none';
-    const otherLivingHumans = Object.values((currentLobby && currentLobby.players) || {}).filter(p => p.id !== myId && p.team === 'Human' && !p.isCaptured);
-    if (window.isSoloMatch || otherLivingHumans.length === 0) {
+    if (window.isSoloMatch) {
       showSoloDeathEndScreen();
     } else {
       const capOverlay = document.getElementById('captured-overlay');
