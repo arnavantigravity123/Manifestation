@@ -14213,12 +14213,15 @@ function animate() {
             ghost.userData.chasedTargetId = null;
           }
         }
-      } else if (inProximity && ghost.userData.aiState === 'WANDER' && targetGrid && (!ghost.userData.unreachableCooldown || ghost.userData.unreachableCooldown <= 0)) {
-        // Ghost catches human scent through nearby corridors: switch to INVESTIGATE to pathfind towards them
-        ghost.userData.aiState = 'INVESTIGATE';
-        ghost.userData.targetGrid = targetGrid;
-        ghost.userData.investigateSearchTimer = 5.0;
-        ghost.userData.pathTime = 0; // Force immediate path calculation towards the scented area
+      } else if (inProximity && (ghost.userData.aiState === 'WANDER' || ghost.userData.aiState === 'INVESTIGATE') && targetGrid && (!ghost.userData.unreachableCooldown || ghost.userData.unreachableCooldown <= 0)) {
+        // Ghost catches human scent through nearby corridors: keep tracking towards them even if silent!
+        if (ghost.userData.aiState === 'WANDER' || !ghost.userData.targetGrid || ghost.userData.targetGrid.col !== targetGrid.col || ghost.userData.targetGrid.row !== targetGrid.row) {
+          ghost.userData.aiState = 'INVESTIGATE';
+          ghost.userData.targetGrid = targetGrid;
+          ghost.userData.investigateSearchTimer = 6.0;
+          ghost.userData.path = null;
+          ghost.userData.pathTime = 0; // Fresh path directly toward the scented corridor
+        }
       }
 
       // Practice Ghost in Training Drill strictly locks to CHASE mode targeting the player
@@ -14437,21 +14440,25 @@ function animate() {
 
         if (distToSound <= hearingRadius) {
           const soundGrid = worldToGrid(latestSoundBeacon.position.x, latestSoundBeacon.position.z);
-          // If close enough to hear speech direction clearly (under 8m) or has direct LOS: engage CHASE!
-          if (distToSound < 8.0 || hasDirectLos) {
+          const isLoudScream = (latestSoundBeacon.volume > 35);
+          // If loud scream (under 18m), or speech (under 10m), or has direct LOS: engage CHASE!
+          if ((isLoudScream && distToSound < 18.0) || distToSound < 10.0 || hasDirectLos) {
             ghost.userData.aiState = 'CHASE';
             ghost.userData.loseSightTimer = 0;
             ghost.userData.chasedTargetId = closestHumanId;
             ghost.userData.lastKnownTargetPos = { x: latestSoundBeacon.position.x, z: latestSoundBeacon.position.z };
             ghost.userData.targetGrid = soundGrid;
             ghost.userData.investigateSearchTimer = 0;
+            ghost.userData.path = null;
             ghost.userData.pathTime = 0; // Force immediate chase path toward speech
           } else if (ghost.userData.aiState !== 'CHASE') {
             ghost.userData.aiState = 'INVESTIGATE';
-            ghost.userData.investigateSearchTimer = 5.0; // Reset search timer with fresh noise clue
-            // Only force repath if target grid actually changed or we don't have an active path
-            if (!ghost.userData.targetGrid || ghost.userData.targetGrid.col !== soundGrid.col || ghost.userData.targetGrid.row !== soundGrid.row || !ghost.userData.path) {
+            ghost.userData.investigateSearchTimer = isLoudScream ? 8.0 : 5.0; // Spend longer actively searching screams
+            const isPathFinished = !ghost.userData.path || !ghost.userData.path.length || (ghost.userData.pathIdx && ghost.userData.pathIdx >= ghost.userData.path.length);
+            // Force repath if target grid changed or path is already finished
+            if (!ghost.userData.targetGrid || ghost.userData.targetGrid.col !== soundGrid.col || ghost.userData.targetGrid.row !== soundGrid.row || isPathFinished) {
               ghost.userData.targetGrid = soundGrid;
+              ghost.userData.path = null;
               ghost.userData.pathTime = 0;
             }
           }
@@ -14612,8 +14619,8 @@ function animate() {
           const tGrid = targetPos ? worldToGrid(targetPos.x, targetPos.z) : null;
           const inSameCell = Boolean(tGrid && gGrid.col === tGrid.col && gGrid.row === tGrid.row);
 
-          // If the player is right in front of the investigating ghost or within close proximity (<= 4.5m) with direct LOS or in same cell:
-          if (targetPos && (hasDirectLos || inSameCell || distToPlayer < 4.5)) {
+          // If the player is right in front of the investigating ghost or within close proximity (<= 7.5m) with direct LOS or in same cell:
+          if (targetPos && (hasDirectLos || inSameCell || distToPlayer < 7.5)) {
             ghost.userData.aiState = 'CHASE';
             ghost.userData.loseSightTimer = 0;
             ghost.userData.chasedTargetId = closestHumanId;
@@ -14704,24 +14711,23 @@ function animate() {
     if (myTeam === 'Human' && audioAnalyser && !isCaptured) {
       const timeSinceEmfBeep = performance.now() - (window.lastEmfBeepTime || 0);
       
-      // Only process microphone if EMF hasn't beeped in the last 450ms (prevents speaker-to-mic feedback)
-      if (timeSinceEmfBeep > 450) {
-        audioAnalyser.getByteFrequencyData(audioDataArray);
-        let sum = 0;
-        for(let i=0; i<audioDataArray.length; i++) sum += audioDataArray[i];
-        const avgVolume = sum / audioDataArray.length;
-        
-        if (avgVolume > 20) { // Threshold for talking/yelling
-          const now = performance.now();
-          if (!window._lastVoiceBeaconTime || (now - window._lastVoiceBeaconTime > 250)) {
-            window._lastVoiceBeaconTime = now;
-            socketClient.emit('sound_produced', {
-              volume: avgVolume,
-              position: { x: camera.position.x, z: camera.position.z }
-            });
-            // Immediately alert local ghost AI
-            latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, volume: avgVolume, time: now };
-          }
+      audioAnalyser.getByteFrequencyData(audioDataArray);
+      let sum = 0;
+      for(let i=0; i<audioDataArray.length; i++) sum += audioDataArray[i];
+      const avgVolume = sum / audioDataArray.length;
+      
+      // Filter out low-volume speaker feedback from EMF beeps, but never block real speech or screaming
+      const isEmfFeedback = (timeSinceEmfBeep < 220 && avgVolume < 35);
+      if (!isEmfFeedback && avgVolume > 14) { // Highly reliable threshold for talking/screaming
+        const now = performance.now();
+        if (!window._lastVoiceBeaconTime || (now - window._lastVoiceBeaconTime > 250)) {
+          window._lastVoiceBeaconTime = now;
+          socketClient.emit('sound_produced', {
+            volume: avgVolume,
+            position: { x: camera.position.x, z: camera.position.z }
+          });
+          // Immediately alert local ghost AI
+          latestSoundBeacon = { position: { x: camera.position.x, z: camera.position.z }, volume: avgVolume, time: now };
         }
       }
     }
