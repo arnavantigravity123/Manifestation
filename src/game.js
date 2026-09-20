@@ -1490,6 +1490,29 @@ function shuffleArray(array) {
   return array;
 }
 
+export function getFarGhostSpawnPool(minDistOverride) {
+  const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+  const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+  const mazeDim = (typeof mazeSizeGlobal !== 'undefined' ? mazeSizeGlobal : 15);
+  const bSize = (window.mazeBlockSize || 6.0);
+  const mazeRadius = (mazeDim / 2) * bSize;
+  const defaultMinDist = Math.max(30.0, mazeRadius * 0.65);
+  const targetMinDist = minDistOverride || defaultMinDist;
+
+  if (typeof openCorridors === 'undefined' || !openCorridors || openCorridors.length === 0) {
+    return [{ x: sx + targetMinDist, z: sz + targetMinDist }];
+  }
+
+  // Filter corridors that are at least targetMinDist Euclidean distance away from human spawn
+  let far = openCorridors.filter(c => Math.hypot(c.x - sx, c.z - sz) >= targetMinDist);
+  if (far.length === 0) {
+    // Fallback: sort all corridors by distance from humans descending, take furthest 25%
+    const sorted = [...openCorridors].sort((a, b) => Math.hypot(b.x - sx, b.z - sz) - Math.hypot(a.x - sx, a.z - sz));
+    far = sorted.slice(0, Math.max(1, Math.floor(sorted.length * 0.25)));
+  }
+  return far;
+}
+
 export function initGame(socket, socketId, matchConfig, isSolo = false, isTutorial = false) {
   socketClient = socket;
   myId = socketId;
@@ -2331,21 +2354,16 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   updateGateHUD();
 
   // Set spawn positions (All Humans spawn together at center (0, 1.6, 0))
+  const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+  const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+
   if (myTeam === 'Ghost') {
-    // Pick a deterministic open corridor far from the center
-    const minFarDist = Math.max(10, mazeSizeGlobal * 4.5 * 0.25);
-    const farCorridors = openCorridors.filter(c => Math.abs(c.x) > minFarDist || Math.abs(c.z) > minFarDist);
-    if (farCorridors.length > 0) {
-      const spawnIdx = Math.floor(seededRandom() * farCorridors.length);
-      const spawnNode = farCorridors[spawnIdx];
-      camera.position.set(spawnNode.x, 1.6, spawnNode.z);
-    } else {
-      camera.position.set(minFarDist, 1.6, minFarDist);
-    }
+    const farCorridors = getFarGhostSpawnPool();
+    const spawnIdx = Math.floor(seededRandom() * farCorridors.length);
+    const spawnNode = farCorridors[spawnIdx];
+    camera.position.set(spawnNode.x, 1.6, spawnNode.z);
   } else {
     // All humans spawn together at the exact same labyrinth entrance (guaranteed open corridor hub)
-    const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
-    const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
     camera.position.set(sx, 1.6, sz);
   }
 
@@ -2466,15 +2484,12 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       let spawnX = sx;
       let spawnZ = sz;
       if (isGhost) {
-        const farCorridors = openCorridors.filter(c => Math.hypot(c.x - sx, c.z - sz) > 15);
-        if (farCorridors.length > 0) {
-          const spawnNode = farCorridors[0];
-          spawnX = spawnNode.x;
-          spawnZ = spawnNode.z;
-        } else {
-          spawnX = sx + 20;
-          spawnZ = sz + 20;
-        }
+        const farCorridors = getFarGhostSpawnPool();
+        let pHash = 0;
+        for (let ch = 0; ch < pId.length; ch++) pHash = (pHash * 31 + pId.charCodeAt(ch)) >>> 0;
+        const spawnNode = farCorridors[pHash % farCorridors.length];
+        spawnX = spawnNode.x;
+        spawnZ = spawnNode.z;
       } else {
         const angle = (peerSpawnIndex * Math.PI * 2) / Math.max(2, Object.keys(matchConfig.players).length);
         spawnX = sx + Math.cos(angle) * 1.2;
@@ -11575,6 +11590,9 @@ function spawnGhostAIs(count) {
   });
   ghosts3D = [];
 
+  const usedGhostSpawns = [];
+  const farPool = getFarGhostSpawnPool();
+
   for (let i = 0; i < count; i++) {
     const ghostGroup = createGhostMeshGroup();
     
@@ -11599,16 +11617,12 @@ function spawnGhostAIs(count) {
       }
     });
 
-    // Spawn in deterministic open corridor cells away from Human Spawn (0, 0)
-    let spawnPos = { x: 10, z: 10 };
-    const candidates = openCorridors.filter(c => {
-      // Deterministic distance relative to human spawn point (0, 0)
-      const d = Math.sqrt(c.x * c.x + c.z * c.z);
-      return d > 15 && d < 55;
-    });
-    if (candidates.length > 0) {
-      spawnPos = candidates[Math.floor(seededRandom() * candidates.length)];
-    }
+    // Pick from far corridor pool, preferring candidates spaced out from already placed ghosts (> 12m)
+    const spaced = farPool.filter(c => usedGhostSpawns.every(u => Math.hypot(c.x - u.x, c.z - u.z) > 12.0));
+    const selectFrom = spaced.length > 0 ? spaced : farPool;
+    const spawnPos = selectFrom[Math.floor(seededRandom() * selectFrom.length)] || { x: 10, z: 10 };
+    usedGhostSpawns.push(spawnPos);
+
     ghostGroup.position.set(spawnPos.x, 0, spawnPos.z);
     scene.add(ghostGroup);
 
@@ -13953,7 +13967,8 @@ function animate() {
       ghost.position.x = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, ghost.position.x));
       ghost.position.z = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, ghost.position.z));
       if (isNaN(ghost.position.x) || isNaN(ghost.position.z) || ghost.position.y < -2.0) {
-        const spawnCell = openCorridors && openCorridors.length > 0 ? openCorridors[0] : { x: 0, z: 0 };
+        const farPool = getFarGhostSpawnPool();
+        const spawnCell = farPool[Math.floor(Math.random() * farPool.length)] || { x: 0, z: 0 };
         ghost.position.set(spawnCell.x, 0.35, spawnCell.z);
       }
     }
