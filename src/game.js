@@ -1261,13 +1261,13 @@ function getGhostAbilityParams(difficulty = window.gameDifficulty || 'medium') {
         // Bot Combat & Perception
         botAbilityCooldownMin: 22.0,
         botAbilityCooldownMax: 32.0,
-        botSightRange: 9.0, // ~2 blocks
-        botLoseSightDuration: 2.0,
+        botSightRange: 18.0, // 3 blocks
+        botLoseSightDuration: 4.5,
         // Hearing radii multipliers (in block lengths)
-        hearingWalking: 3.5,
-        hearingSprinting: 6.0,
-        hearingWhisper: 10.0,
-        hearingScream: 25.0,
+        hearingWalking: 4.5,
+        hearingSprinting: 8.0,
+        hearingWhisper: 12.0,
+        hearingScream: 30.0,
         // Sanity proximity drain rate per second
         sanityDrainRate: 2.5
       };
@@ -1301,13 +1301,13 @@ function getGhostAbilityParams(difficulty = window.gameDifficulty || 'medium') {
         // Bot Combat & Perception
         botAbilityCooldownMin: 10.0,
         botAbilityCooldownMax: 16.0,
-        botSightRange: 18.0, // 4 blocks
-        botLoseSightDuration: 5.5,
+        botSightRange: 30.0, // 5 blocks
+        botLoseSightDuration: 7.5,
         // Hearing radii multipliers
-        hearingWalking: 7.0,
-        hearingSprinting: 12.0,
-        hearingWhisper: 18.0,
-        hearingScream: 45.0,
+        hearingWalking: 7.5,
+        hearingSprinting: 13.0,
+        hearingWhisper: 20.0,
+        hearingScream: 50.0,
         // Sanity proximity drain rate per second
         sanityDrainRate: 6.0
       };
@@ -1341,13 +1341,13 @@ function getGhostAbilityParams(difficulty = window.gameDifficulty || 'medium') {
         // Bot Combat & Perception
         botAbilityCooldownMin: 6.0,
         botAbilityCooldownMax: 10.0,
-        botSightRange: 24.0, // 5.3 blocks
-        botLoseSightDuration: 8.0,
+        botSightRange: 36.0, // 6 blocks
+        botLoseSightDuration: 9.0,
         // Hearing radii multipliers
-        hearingWalking: 9.0,
-        hearingSprinting: 16.0,
-        hearingWhisper: 24.0,
-        hearingScream: 60.0,
+        hearingWalking: 9.5,
+        hearingSprinting: 17.0,
+        hearingWhisper: 26.0,
+        hearingScream: 65.0,
         // Sanity proximity drain rate per second
         sanityDrainRate: 8.5
       };
@@ -1382,13 +1382,13 @@ function getGhostAbilityParams(difficulty = window.gameDifficulty || 'medium') {
         // Bot Combat & Perception
         botAbilityCooldownMin: 16.0,
         botAbilityCooldownMax: 24.0,
-        botSightRange: 13.5, // 3 blocks
-        botLoseSightDuration: 3.5,
+        botSightRange: 24.0, // 4 blocks
+        botLoseSightDuration: 6.0,
         // Hearing radii multipliers
-        hearingWalking: 5.0,
-        hearingSprinting: 9.0,
-        hearingWhisper: 14.0,
-        hearingScream: 35.0,
+        hearingWalking: 6.0,
+        hearingSprinting: 11.0,
+        hearingWhisper: 16.0,
+        hearingScream: 40.0,
         // Sanity proximity drain rate per second
         sanityDrainRate: 4.0
       };
@@ -3151,6 +3151,29 @@ function hasGridLineOfSight(x1, z1, x2, z2) {
   const r1 = g1.row;
   const c2 = g2.col;
   const r2 = g2.row;
+
+  // Same cell is always direct line of sight
+  if (c1 === c2 && r1 === r2) return true;
+
+  // Straight line in same column (vertical corridor)
+  if (c1 === c2) {
+    const minR = Math.min(r1, r2);
+    const maxR = Math.max(r1, r2);
+    for (let r = minR + 1; r < maxR; r++) {
+      if (mazeLayout[r] && (mazeLayout[r][c1] === 1 || mazeLayout[r][c1] === 2)) return false;
+    }
+    return true;
+  }
+
+  // Straight line in same row (horizontal corridor)
+  if (r1 === r2) {
+    const minC = Math.min(c1, c2);
+    const maxC = Math.max(c1, c2);
+    for (let c = minC + 1; c < maxC; c++) {
+      if (mazeLayout[r1] && (mazeLayout[r1][c] === 1 || mazeLayout[r1][c] === 2)) return false;
+    }
+    return true;
+  }
 
   let dx = Math.abs(c2 - c1);
   let dz = Math.abs(r2 - r1);
@@ -14106,17 +14129,28 @@ function animate() {
 
       // High-Performance Grid-Based Line of Sight (LOS) + Spectral Proximity Scent
       let hasDirectLos = false;
-      if (targetPos && distToPlayer < gParams.botSightRange) {
+      const isFlashlightActive = Boolean(typeof isFlashlightToggledOn !== 'undefined' && isFlashlightToggledOn && flashLight && flashLight.intensity > 10);
+      const effectiveSightRange = isFlashlightActive ? gParams.botSightRange * 1.5 : gParams.botSightRange;
+      if (targetPos && distToPlayer < effectiveSightRange) {
         hasDirectLos = hasGridLineOfSight(ghost.position.x, ghost.position.z, targetPos.x, targetPos.z);
       }
-      // Direct visual line of sight OR spectral proximity scent within 8.0m
-      const canSeePlayer = hasDirectLos || (targetPos && distToPlayer < 8.0);
+      
+      // Spectral proximity scent: 10m base (~1.7 blocks). Boosted if player is sprinting, flashlight is on, or ghost is investigating
+      let proximityRange = 10.0;
+      if (typeof isSprinting !== 'undefined' && isSprinting) proximityRange += 4.0;
+      if (isFlashlightActive) proximityRange += 4.0;
+      if (ghost.userData.aiState === 'INVESTIGATE') proximityRange += 3.0; // Heightened senses while actively searching!
+      
+      const inProximity = Boolean(targetPos && distToPlayer < proximityRange);
+      const canSeePlayer = Boolean(targetPos && (hasDirectLos || inProximity));
 
       // State Transitions
       if (canSeePlayer && targetPos) {
         ghost.userData.aiState = 'CHASE';
         ghost.userData.loseSightTimer = 0;
         ghost.userData.chasedTargetId = closestHumanId;
+        ghost.userData.lastKnownTargetPos = { x: targetPos.x, z: targetPos.z };
+        ghost.userData.investigateSearchTimer = 0;
       } else if (ghost.userData.aiState === 'CHASE') {
         if (!targetPos) {
           ghost.userData.aiState = 'WANDER';
@@ -14127,10 +14161,19 @@ function animate() {
         } else {
           ghost.userData.loseSightTimer += delta;
           if (ghost.userData.loseSightTimer > gParams.botLoseSightDuration) {
-            ghost.userData.aiState = 'WANDER'; // Lost player
-            ghost.userData.targetGrid = null;
-            ghost.userData.path = null;
-            ghost.userData.pathTime = 0;
+            // Lost direct line of sight! Switch to INVESTIGATE at the human's Last Known Position
+            if (ghost.userData.lastKnownTargetPos) {
+              ghost.userData.aiState = 'INVESTIGATE';
+              ghost.userData.targetGrid = worldToGrid(ghost.userData.lastKnownTargetPos.x, ghost.userData.lastKnownTargetPos.z);
+              ghost.userData.investigateSearchTimer = 5.0; // Spend 5 seconds searching near the corner/door
+              ghost.userData.pathTime = 0;
+              ghost.userData.path = null;
+            } else {
+              ghost.userData.aiState = 'WANDER';
+              ghost.userData.targetGrid = null;
+              ghost.userData.path = null;
+              ghost.userData.pathTime = 0;
+            }
             ghost.userData.chasedTargetId = null;
           }
         }
@@ -14354,9 +14397,12 @@ function animate() {
         else if (latestSoundBeacon.volume <= 35) hearingRadius = gParams.hearingWhisper * mazeBlockSize; // Whisper
         else hearingRadius = gParams.hearingScream * mazeBlockSize; // Scream
 
+        if (ghost.userData.aiState === 'INVESTIGATE') hearingRadius *= 1.35; // Heightened hearing when already investigating
+
         if (distToSound <= hearingRadius) {
           ghost.userData.aiState = 'INVESTIGATE';
           ghost.userData.targetGrid = worldToGrid(latestSoundBeacon.position.x, latestSoundBeacon.position.z);
+          ghost.userData.investigateSearchTimer = 5.0; // Reset search timer with fresh noise clue
           ghost.userData.pathTime = 0; // Force immediate repath
         }
         ghost.userData.lastSoundTime = latestSoundBeacon.time;
@@ -14380,9 +14426,18 @@ function animate() {
           destGrid = ghost.userData.targetGrid;
           if (!destGrid) destGrid = ghostGrid;
           if (ghostGrid.col === destGrid.col && ghostGrid.row === destGrid.row) {
-             ghost.userData.aiState = 'WANDER';
-             ghost.userData.targetGrid = null;
-             destGrid = null;
+            // Reached sound destination: stay alert and search the area rather than instantly wandering off!
+            if (!ghost.userData.investigateSearchTimer || ghost.userData.investigateSearchTimer <= 0) {
+              ghost.userData.investigateSearchTimer = 5.0;
+            }
+            ghost.userData.investigateSearchTimer -= delta;
+            if (ghost.userData.investigateSearchTimer <= 0) {
+              ghost.userData.aiState = 'WANDER';
+              ghost.userData.targetGrid = null;
+              destGrid = null;
+            } else {
+              destGrid = ghostGrid;
+            }
           }
         } 
 
@@ -14499,17 +14554,31 @@ function animate() {
           }
         } else {
           // Finished patrol / investigate path: clear to repath smoothly
-          ghost.userData.targetGrid = null;
-          ghost.userData.path = null;
-          ghost.userData.pathTime = 0;
           if (ghost.userData.aiState === 'INVESTIGATE') {
-            ghost.userData.aiState = 'WANDER';
+            if (!ghost.userData.investigateSearchTimer || ghost.userData.investigateSearchTimer <= 0) {
+              ghost.userData.investigateSearchTimer = 5.0; // 5 seconds of active search
+            }
+            ghost.userData.investigateSearchTimer -= delta;
+            if (ghost.userData.investigateSearchTimer <= 0) {
+              ghost.userData.aiState = 'WANDER';
+              ghost.userData.targetGrid = null;
+              ghost.userData.path = null;
+              ghost.userData.pathTime = 0;
+            } else {
+              // During active search: rotate slightly to scan the dark corridors
+              ghost.rotation.y += Math.sin(time * 0.005) * 0.04;
+              ghost.userData.pathTime = time; // Hold path time so it doesn't immediately repath away
+            }
+          } else {
+            ghost.userData.targetGrid = null;
+            ghost.userData.path = null;
+            ghost.userData.pathTime = 0;
           }
         }
       }
       
-      // Face the human player if chasing AND has direct line of sight, otherwise face movement direction / waypoint
-      if (ghost.userData.aiState === 'CHASE' && targetPos && hasDirectLos) {
+      // Face the human player if chasing OR investigating with sight/proximity, otherwise face movement direction / waypoint
+      if ((ghost.userData.aiState === 'CHASE' || ghost.userData.aiState === 'INVESTIGATE') && targetPos && (hasDirectLos || inProximity)) {
         ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
       } else if (path && path.length > 0 && pathIdx < path.length) {
         ghost.lookAt(path[pathIdx].x, ghost.position.y, path[pathIdx].z);
