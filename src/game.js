@@ -845,8 +845,8 @@ export function loadGhostGLBAsset() {
 
   gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
     preloadedGhostModel = gltf.scene;
-    // Scale 1.75 (~3.5m tall, 3.4m wingspan) gives a terrifying, menacing spectral presence filling the 6m corridor
-    const ghostScale = 1.75;
+    // Scale 1.42 (~2.85m tall, 2.8m wingspan): towering, imposing entity that fits comfortably beneath the 3.5m ceiling
+    const ghostScale = 1.42;
     preloadedGhostModel.scale.set(ghostScale, ghostScale, ghostScale);
 
     // Center the model's pivot point so it rotates in place instead of sweeping
@@ -855,7 +855,7 @@ export function loadGhostGLBAsset() {
 
     preloadedGhostModel.position.x = -center.x;
     preloadedGhostModel.position.z = -center.z;
-    preloadedGhostModel.position.y = -box.min.y + 0.10; // Ground base slightly above carpet
+    preloadedGhostModel.position.y = -box.min.y + 0.05; // Hem floats right above carpet
     
     preloadedGhostModel.traverse((child) => {
       if (child.isMesh) {
@@ -15875,8 +15875,8 @@ function animate() {
   // Bob AI ghosts + flickering visibility + fluid spectral levitation hover
   ghosts3D.forEach(g => {
     const acc = g.userData.bobAccumulator || 0;
-    // Multi-frequency harmonic eerie floating bobbing (safe height clamped between 0.02m and 0.23m)
-    const hoverY = 0.12 + Math.sin(time * 0.0022 + acc) * 0.08 + Math.sin(time * 0.0045 + acc * 1.5) * 0.03;
+    // Multi-frequency harmonic eerie floating bobbing (height strictly clamped between 0.01m and 0.105m, keeping head well below 3.5m ceiling)
+    const hoverY = 0.05 + Math.sin(time * 0.0022 + acc) * 0.04 + Math.sin(time * 0.0045 + acc * 1.5) * 0.015;
     g.position.y = hoverY;
 
     // Subtle spectral roll and pitch float sway
@@ -15916,7 +15916,7 @@ function animate() {
     
     if (p.userData.type === 'Ghost') {
       const acc = p.userData.bobAccumulator || 0;
-      const hoverY = 0.12 + Math.sin(time * 0.0022 + acc) * 0.08 + Math.sin(time * 0.0045 + acc * 1.5) * 0.03;
+      const hoverY = 0.05 + Math.sin(time * 0.0022 + acc) * 0.04 + Math.sin(time * 0.0045 + acc * 1.5) * 0.015;
       p.position.y = hoverY;
       p.rotation.z = Math.sin(time * 0.0018 + acc) * 0.045;
       p.rotation.x = Math.cos(time * 0.0014 + acc) * 0.035;
