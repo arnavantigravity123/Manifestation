@@ -989,6 +989,7 @@ function addGLBModelToForest(forestContainer) {
         child.frustumCulled = false;
         if (child.material) {
           child.material.side = THREE.DoubleSide;
+          child.material.fog = false; // Ensures vibrant outdoor colors are never blacked out by dungeon fog
           if (child.material.transparent) {
             child.material.alphaTest = 0.35;
             child.material.depthWrite = true;
@@ -1042,19 +1043,23 @@ export function loadVaultDoorAsset() {
 export function attachVaultDoorModel(vaultGroup) {
   if (!preloadedVaultModel || !vaultGroup) return;
 
-  // Remove existing vault door instance if any
-  if (vaultDoorMeshRef && vaultDoorMeshRef.parent) {
-    vaultDoorMeshRef.parent.remove(vaultDoorMeshRef);
-    disposeHierarchy(vaultDoorMeshRef);
-    vaultDoorMeshRef = null;
+  // Remove any existing vault door or fallback box instance
+  for (let i = vaultGroup.children.length - 1; i >= 0; i--) {
+    const c = vaultGroup.children[i];
+    if (c && (c.name === 'animated_vault_door_glb' || c.name === 'fallback_vault_box' || c === vaultDoorMeshRef || c === gateMeshRef)) {
+      vaultGroup.remove(c);
+      disposeHierarchy(c);
+    }
   }
+  vaultDoorMeshRef = null;
+  gateMeshRef = null;
 
   const doorScene = preloadedVaultModel.clone(true);
   doorScene.name = 'animated_vault_door_glb';
   doorScene.rotation.y = -Math.PI / 2;
   const scale = 3.4;
   doorScene.scale.set(scale, scale, scale);
-  doorScene.position.set(0, 1.53, -1.43);
+  doorScene.position.set(0, 1.55, -1.4327);
 
   doorScene.traverse(child => {
     if (child.isMesh) {
@@ -5450,6 +5455,7 @@ function generateMaze(keysCount = 8) {
       doorBackMat
     ];
     const gateMesh = new THREE.Mesh(doorGeo, doorMaterials);
+    gateMesh.name = 'fallback_vault_box';
     gateMesh.position.set(0, 1.55, 0);
     gateMesh.castShadow = true;
     gateMesh.receiveShadow = true;
@@ -9263,18 +9269,66 @@ function openVaultDoorAnimated() {
   playTutorialChime();
   triggerNotification("🔓 MASTER VAULT ACCESS GRANTED — Unlocking mechanism engaged...");
 
-  // Mandatory 1.2s dramatic tension delay before gears rotate and heavy steel door swings open!
+  // Reveal the outdoor sunny forest, daylight sky, and sunbeams IMMEDIATELY as mechanism unlocks!
+  if (scene) {
+    scene.background = new THREE.Color(0x6bb5ea); // Clear azure blue sky!
+    if (scene.fog) {
+      scene.fog.color.setHex(0x9fd2ee); // Soft aerial horizon mist
+      scene.fog.density = 0.005; // Expansive outdoor sightlines
+    }
+  }
+  if (ambientLight) {
+    ambientLight.intensity = Math.max(ambientLight.intensity, 1.8);
+  }
+  if (forestSceneInstance) {
+    forestSceneInstance.visible = true;
+    if (forestSceneInstance.userData.outdoorSun) forestSceneInstance.userData.outdoorSun.visible = true;
+    if (forestSceneInstance.userData.skyHemisphere) forestSceneInstance.userData.skyHemisphere.visible = true;
+  }
+
+  // Remove any fallback 2D box immediately so it NEVER covers or obscures the 3D animated door
+  if (vaultGroupRef) {
+    for (let i = vaultGroupRef.children.length - 1; i >= 0; i--) {
+      const c = vaultGroupRef.children[i];
+      if (c && c.name === 'fallback_vault_box') {
+        vaultGroupRef.remove(c);
+        disposeHierarchy(c);
+      }
+    }
+  }
+
+  // Mandatory 0.8s dramatic tension delay before gears rotate and heavy steel door swings open!
   setTimeout(() => {
     // Play 3D model opening animation (Take 001: gear spin, bolt retract, door swing)
     if (vaultOpenAction) {
       vaultOpenAction.reset();
-      vaultOpenAction.timeScale = 1.5; // Smooth cinematic pace (~8s total sequence)
+      vaultOpenAction.timeScale = 3.2; // Smooth cinematic pace (finishes in ~3.7s, door swings at ~2s)
       vaultOpenAction.play();
     }
 
-    // Camera rumble effect while the heavy gears rotate and locking bolts slide
+    // Procedural door swing fallback: directly rotates door hinge node (group1) to guarantee door physically swings open
+    const doorScene = vaultDoorMeshRef;
+    const group1Node = (doorScene && doorScene.getObjectByName) ? doorScene.getObjectByName('group1') : null;
     const startT = performance.now();
-    const rumbleDuration = 4000;
+    const swingAnim = (now) => {
+      const elapsed = (now - startT) / 1000;
+      if (elapsed >= 1.5 && elapsed <= 3.6) {
+        const p = (elapsed - 1.5) / 2.1;
+        const eased = 1 - Math.pow(1 - p, 2.5);
+        if (group1Node) {
+          group1Node.rotation.y = -1.48 * eased;
+        }
+      }
+      if (elapsed < 3.8) {
+        requestAnimationFrame(swingAnim);
+      } else if (group1Node) {
+        group1Node.rotation.y = -1.48;
+      }
+    };
+    requestAnimationFrame(swingAnim);
+
+    // Camera rumble effect while the heavy gears rotate and locking bolts slide
+    const rumbleDuration = 3500;
     const rumbleAnim = (now) => {
       const elapsed = now - startT;
       if (elapsed < rumbleDuration) {
@@ -9291,7 +9345,7 @@ function openVaultDoorAnimated() {
     };
     requestAnimationFrame(rumbleAnim);
 
-    // After ~3.5s (when locking bolts are retracted and door swings open):
+    // After ~2.4s (when locking bolts are retracted and door swings open):
     setTimeout(() => {
       // Remove collision wall so players can walk through seamlessly
       if (gateBlockerRef) {
@@ -9301,18 +9355,11 @@ function openVaultDoorAnimated() {
         gateBlockerRef = null;
       }
 
-      // Reveal the outdoor sunny forest and horizon sky beyond the portal
-      if (forestSceneInstance) {
-        forestSceneInstance.visible = true;
-        if (forestSceneInstance.userData.outdoorSun) forestSceneInstance.userData.outdoorSun.visible = true;
-        if (forestSceneInstance.userData.skyHemisphere) forestSceneInstance.userData.skyHemisphere.visible = true;
-      }
-
       window.vaultDoorOpen = true;
       triggerNotification("🚪 THE MASTER VAULT IS OPEN — STEP THROUGH TO ESCAPE!");
       updateGateHUD();
-    }, 3500);
-  }, 1200);
+    }, 2400);
+  }, 800);
 }
 
 function showExitGate() {
