@@ -845,8 +845,8 @@ export function loadGhostGLBAsset() {
 
   gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
     preloadedGhostModel = gltf.scene;
-    // Scale 1.15 (~2.3m tall) gives an imposing spectral presence while leaving ~0.75m clearance below the 3.5m ceiling
-    const ghostScale = 1.15;
+    // Scale 1.75 (~3.5m tall, 3.4m wingspan) gives a terrifying, menacing spectral presence filling the 6m corridor
+    const ghostScale = 1.75;
     preloadedGhostModel.scale.set(ghostScale, ghostScale, ghostScale);
 
     // Center the model's pivot point so it rotates in place instead of sweeping
@@ -3268,8 +3268,31 @@ function bfsPath(startCol, startRow, endCol, endRow, canPassDoors = false) {
   }
   const token = _bfsIterationToken;
 
+  let targetEndCol = safeEndCol;
+  let targetEndRow = safeEndRow;
+
+  // If destination cell is a solid wall or closed sliding door (e.g. human stepped into an indent/alcove),
+  // clamp target destination to the closest passable neighbor cell so pathfinding never fails or freezes!
+  if (mazeLayout[targetEndRow] && (mazeLayout[targetEndRow][targetEndCol] !== 0 && !(canPassDoors && mazeLayout[targetEndRow][targetEndCol] === 2))) {
+    const neighbors = [
+      [targetEndRow - 1, targetEndCol], [targetEndRow + 1, targetEndCol],
+      [targetEndRow, targetEndCol - 1], [targetEndRow, targetEndCol + 1],
+      [targetEndRow - 1, targetEndCol - 1], [targetEndRow - 1, targetEndCol + 1],
+      [targetEndRow + 1, targetEndCol - 1], [targetEndRow + 1, targetEndCol + 1]
+    ];
+    for (const [nr, nc] of neighbors) {
+      if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols) {
+        if (mazeLayout[nr] && (mazeLayout[nr][nc] === 0 || (canPassDoors && mazeLayout[nr][nc] === 2))) {
+          targetEndCol = nc;
+          targetEndRow = nr;
+          break;
+        }
+      }
+    }
+  }
+
   const startIdx = safeStartRow * totalCols + safeStartCol;
-  const endIdx = safeEndRow * totalCols + safeEndCol;
+  const endIdx = targetEndRow * totalCols + targetEndCol;
 
   let head = 0;
   let tail = 0;
@@ -15667,8 +15690,8 @@ function animate() {
           const tGrid = worldToGrid(targetPos.x, targetPos.z);
           const inSameCell = (gGrid.col === tGrid.col && gGrid.row === tGrid.row);
 
-          // Only move straight toward human target if in the same cell, direct Line of Sight, or within close melee proximity!
-          if (inSameCell || hasDirectLos || distToPlayer < 3.5) {
+          // Only move straight toward human target if in the same cell, direct Line of Sight, or within close indent/melee proximity!
+          if (inSameCell || hasDirectLos || distToPlayer < 5.5) {
             _scratchVec3_1.set(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
             ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
             resolveGhostCollision(ghost);
