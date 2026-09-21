@@ -2446,9 +2446,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   renderer.setPixelRatio(isLowEnd ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
   renderer.setSize(w, h);
   const savedShadowsSetting = localStorage.getItem('manifestation_shadows_enabled');
-  const enableDynamicShadows = savedShadowsSetting !== null ? (savedShadowsSetting === 'true') : !isMobileDevice;
+  // High-performance default: dynamic shadows are opt-in via Settings to maintain smooth 60 FPS
+  const enableDynamicShadows = (savedShadowsSetting === 'true');
   renderer.shadowMap.enabled = enableDynamicShadows;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.localClippingEnabled = true; // Enables GPU fragment clipping planes for doorway threshold
   container.appendChild(renderer.domElement);
 
@@ -3465,65 +3466,79 @@ function hasGridLineOfSight(x1, z1, x2, z2) {
 const _camForwardVec = new THREE.Vector3();
 const _toGhostVec = new THREE.Vector3();
 let _losCheckTimer = 0;
+let _fearCheckTimer = 0;
+let _lastAppliedFear = -1;
+let _cachedOverlayEl = null;
+let _cachedChromaticEl = null;
+let _cachedStaticEl = null;
 
 function updateGhostHorrorEffects(delta) {
-  const overlay = document.getElementById('ghost-proximity-overlay');
+  if (!_cachedOverlayEl) {
+    _cachedOverlayEl = document.getElementById('ghost-proximity-overlay');
+    _cachedChromaticEl = document.getElementById('ghost-proximity-chromatic');
+    _cachedStaticEl = document.getElementById('ghost-proximity-static');
+  }
+  const overlay = _cachedOverlayEl;
+  if (!overlay) return;
+
   if (myTeam !== 'Human' || !window.gameReady || isCaptured || window.isEscaping) {
-    if (overlay && overlay.style.display !== 'none') {
+    if (overlay.style.display !== 'none') {
       overlay.style.opacity = '0';
       overlay.style.display = 'none';
+      _lastAppliedFear = -1;
     }
     return;
   }
 
-  // 1. Collect all active ghosts in match (AI bots + player-controlled ghosts)
-  const activeGhosts = [];
-  if (typeof ghosts3D !== 'undefined' && Array.isArray(ghosts3D)) {
-    for (let i = 0; i < ghosts3D.length; i++) {
-      const g = ghosts3D[i];
-      if (g && g.position) activeGhosts.push(g);
-    }
-  }
-  if (typeof players3D !== 'undefined' && players3D) {
-    const ids = Object.keys(players3D);
-    for (let i = 0; i < ids.length; i++) {
-      const p = players3D[ids[i]];
-      if (p && p.userData && p.userData.type === 'Ghost' && p.position) {
-        activeGhosts.push(p);
+  // Throttle fear calculation & DOM updates to 10Hz (every 100ms) with zero per-frame GC allocations
+  _fearCheckTimer += delta;
+  if (_fearCheckTimer >= 0.1) {
+    _fearCheckTimer = 0;
+
+    let minGhostDist = Infinity;
+    let closestGhost = null;
+    const camPos = camera.position;
+
+    if (typeof ghosts3D !== 'undefined' && Array.isArray(ghosts3D)) {
+      for (let i = 0; i < ghosts3D.length; i++) {
+        const g = ghosts3D[i];
+        if (g && g.position) {
+          const d = camPos.distanceTo(g.position);
+          if (d < minGhostDist) {
+            minGhostDist = d;
+            closestGhost = g;
+          }
+        }
       }
     }
-  }
-
-  if (activeGhosts.length === 0) {
-    if (overlay && overlay.style.display !== 'none') {
-      overlay.style.opacity = '0';
-      overlay.style.display = 'none';
+    if (typeof players3D !== 'undefined' && players3D) {
+      for (const pId in players3D) {
+        const p = players3D[pId];
+        if (p && p.userData && p.userData.type === 'Ghost' && p.position) {
+          const d = camPos.distanceTo(p.position);
+          if (d < minGhostDist) {
+            minGhostDist = d;
+            closestGhost = p;
+          }
+        }
+      }
     }
-    return;
-  }
 
-  // 2. Proximity Chromatic Aberration & Vignette Distortion
-  let minGhostDist = Infinity;
-  const camPos = camera.position;
-  for (let i = 0; i < activeGhosts.length; i++) {
-    const d = camPos.distanceTo(activeGhosts[i].position);
-    if (d < minGhostDist) minGhostDist = d;
-  }
-
-  const chromatic = document.getElementById('ghost-proximity-chromatic');
-  const staticOverlay = document.getElementById('ghost-proximity-static');
-
-  if (minGhostDist < 14.0 && overlay) {
-    overlay.style.display = 'block';
-    // Fear factor: 0.0 at 14m to 1.0 at 2.5m
-    const fear = Math.max(0, Math.min(1.0, (14.0 - minGhostDist) / 11.5));
-    overlay.style.opacity = (fear * 0.95).toFixed(2);
-    if (chromatic) chromatic.style.opacity = (fear * 0.85).toFixed(2);
-    if (staticOverlay) staticOverlay.style.opacity = fear > 0.35 ? ((fear - 0.35) * 0.7).toFixed(2) : '0';
-  } else if (overlay && overlay.style.display !== 'none') {
-    overlay.style.opacity = '0';
-    if (minGhostDist >= 15.0) {
-      overlay.style.display = 'none';
+    if (minGhostDist < 14.0) {
+      if (overlay.style.display !== 'block') overlay.style.display = 'block';
+      const fear = Math.max(0, Math.min(1.0, (14.0 - minGhostDist) / 11.5));
+      if (Math.abs(fear - _lastAppliedFear) > 0.02) {
+        _lastAppliedFear = fear;
+        overlay.style.opacity = (fear * 0.95).toFixed(2);
+        if (_cachedChromaticEl) _cachedChromaticEl.style.opacity = (fear * 0.85).toFixed(2);
+        if (_cachedStaticEl) _cachedStaticEl.style.opacity = fear > 0.35 ? ((fear - 0.35) * 0.6).toFixed(2) : '0';
+      }
+    } else if (overlay.style.display !== 'none') {
+      overlay.style.opacity = '0';
+      _lastAppliedFear = 0;
+      if (minGhostDist >= 15.0) {
+        overlay.style.display = 'none';
+      }
     }
   }
 
@@ -3537,22 +3552,36 @@ function updateGhostHorrorEffects(delta) {
       _camForwardVec.y = 0;
       _camForwardVec.normalize();
 
-      for (let i = 0; i < activeGhosts.length; i++) {
-        const g = activeGhosts[i];
+      const camPos = camera.position;
+      const testSight = (g) => {
+        if (!g || !g.position) return false;
         const dist = camPos.distanceTo(g.position);
         if (dist >= 3.0 && dist <= 20.0) {
           _toGhostVec.subVectors(g.position, camPos);
           _toGhostVec.y = 0;
           _toGhostVec.normalize();
-
-          const dot = _camForwardVec.dot(_toGhostVec);
-          // Facing within ~50 degree field of view
-          if (dot > 0.65) {
+          if (_camForwardVec.dot(_toGhostVec) > 0.65) {
             if (hasGridLineOfSight(camPos.x, camPos.z, g.position.x, g.position.z)) {
               lastGhostSightStingerTime = now;
               playGhostSightStinger();
-              break;
+              return true;
             }
+          }
+        }
+        return false;
+      };
+
+      let played = false;
+      if (typeof ghosts3D !== 'undefined' && Array.isArray(ghosts3D)) {
+        for (let i = 0; i < ghosts3D.length; i++) {
+          if (testSight(ghosts3D[i])) { played = true; break; }
+        }
+      }
+      if (!played && typeof players3D !== 'undefined' && players3D) {
+        for (const pId in players3D) {
+          const p = players3D[pId];
+          if (p && p.userData && p.userData.type === 'Ghost') {
+            if (testSight(p)) break;
           }
         }
       }

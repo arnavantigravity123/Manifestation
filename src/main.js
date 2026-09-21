@@ -2033,7 +2033,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const shadowsToggle = document.getElementById('dynamic-shadows-toggle');
   const shadowsStatusTag = document.getElementById('shadows-status-tag');
   const savedShadows = localStorage.getItem('manifestation_shadows_enabled');
-  const defaultShadows = savedShadows !== null ? (savedShadows === 'true') : !isTouchCapable;
+  // High-performance default: false (opt-in via Settings toggle)
+  const defaultShadows = (savedShadows === 'true');
   if (shadowsToggle) {
     shadowsToggle.checked = defaultShadows;
     if (shadowsStatusTag) {
@@ -2063,9 +2064,7 @@ window.addEventListener('DOMContentLoaded', () => {
       vipGlowToggle.disabled = !active;
     }
     if (shadowsToggle) {
-      const isShadowOn = localStorage.getItem('manifestation_shadows_enabled') !== null 
-        ? (localStorage.getItem('manifestation_shadows_enabled') === 'true') 
-        : !isTouchCapable;
+      const isShadowOn = (localStorage.getItem('manifestation_shadows_enabled') === 'true');
       shadowsToggle.checked = isShadowOn;
       if (shadowsStatusTag) {
         shadowsStatusTag.textContent = isShadowOn ? "(Active)" : "(Disabled)";
