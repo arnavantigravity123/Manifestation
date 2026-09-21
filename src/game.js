@@ -873,10 +873,10 @@ export function loadGhostGLBAsset() {
         group.remove(spriteChild);
         
         // Wrap the centered model in an anchor group so the centering isn't lost during rotation
-        // anchorGroup rotates by Math.PI (180 degrees) around Y so the GLTF front (+Z) matches Three.js lookAt forward direction (-Z)!
+        // Model faces -Z naturally, matching Three.js lookAt forward direction (-Z)
         const clone = SkeletonUtils.clone(preloadedGhostModel);
         const anchorGroup = new THREE.Group();
-        anchorGroup.rotation.y = Math.PI;
+        anchorGroup.rotation.y = 0;
         anchorGroup.add(clone);
         
         group.add(anchorGroup);
@@ -12414,7 +12414,7 @@ function createGhostMeshGroup(skinId) {
   if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
-    anchorGroup.rotation.y = Math.PI; // Orient GLTF front (+Z) to match Three.js lookAt (-Z)
+    anchorGroup.rotation.y = 0; // Model faces -Z naturally, matching Three.js lookAt forward direction (-Z)
     anchorGroup.add(clone);
     group.add(anchorGroup);
   } else {
