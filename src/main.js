@@ -1572,6 +1572,7 @@ function startLocalSoloMatch(isTutorial = false) {
   const soloHumanClasses = ['Locksmith', 'Trapper', 'Scout', 'Medic', 'Flashlight Expert', 'Quartermaster'];
   const chosenSoloSetting = isTutorial ? 'Locksmith' : ((soloClassSelect && soloClassSelect.value) || localStorage.getItem('manifestation_solo_class') || 'Random');
   let chosenClass = chosenSoloSetting;
+  window.wasRandomClassChosen = (chosenSoloSetting === 'Random');
   if (!chosenClass || chosenClass === 'Random' || !soloHumanClasses.includes(chosenClass)) {
     chosenClass = soloHumanClasses[Math.floor(Math.random() * soloHumanClasses.length)];
   }

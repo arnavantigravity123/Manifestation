@@ -8552,14 +8552,28 @@ function awardMatchWinCredits() {
   let requiresAccount = false;
 
   if (alreadyCompleted) {
-    // Mode has already been beaten!
-    creditsAwarded = 0;
-    isOneTimeClaimed = true;
-    rewardTitle = '✅ LEVEL PREVIOUSLY COMPLETED';
-    rewardSub = `You have already claimed the first-time completion reward for ${modeTitle}! Each mode only grants credits once.`;
+    // Mode has already been beaten, but Random Wildcard Operative ALWAYS earns bonus coins on survival!
+    if (window.wasRandomClassChosen && hasAccount) {
+      creditsAwarded = 15;
+      let localCreds = parseInt(localStorage.getItem('manifestation_credits') || '0', 10);
+      localCreds += creditsAwarded;
+      localStorage.setItem('manifestation_credits', localCreds.toString());
+      if (profile) profile.credits = localCreds;
+      rewardTitle = '🎲 WILDCARD OPERATIVE BONUS!';
+      rewardSub = `Earned +15 Bonus Coins for surviving with a randomized wildcard loadout!`;
+    } else {
+      creditsAwarded = 0;
+      isOneTimeClaimed = true;
+      rewardTitle = '✅ LEVEL PREVIOUSLY COMPLETED';
+      rewardSub = `You have already claimed the first-time completion reward for ${modeTitle}! Each mode only grants credits once.`;
+    }
   } else {
     // Eligible for first-time clear reward!
     creditsAwarded = baseRewardCredits;
+    if (window.wasRandomClassChosen) {
+      const bonus = Math.max(10, Math.round(creditsAwarded * 0.25));
+      creditsAwarded += bonus;
+    }
 
     if (!hasAccount) {
       // User is a Guest without an account!
@@ -8963,6 +8977,28 @@ function collectClueLocal(digitIndex) {
       if (sVal) sVal.textContent = `${Math.floor(currentSanity)}%`;
       if (sBar) sBar.style.width = `${currentSanity}%`;
       triggerNotification(`📖 Clue #${digitIndex + 1} Decoded! (+15% Sanity — Cipher Clarity)`);
+    }
+
+    // Locksmith Class Buff: Master Cryptographer (+50% Cipher Decode Speed)
+    // Automatically decrypts an additional uncollected cipher digit!
+    if (myTeam === 'Human' && myClass === 'Locksmith') {
+      const remainingClues = codeClueNotes.filter(n => !n.collected && n.digitIndex !== digitIndex);
+      if (remainingClues.length > 0) {
+        const bonusClue = remainingClues[0];
+        bonusClue.collected = true;
+        const bonusDigit = (digits[bonusClue.digitIndex] !== undefined && digits[bonusClue.digitIndex] !== null) ? digits[bonusClue.digitIndex] : '?';
+        setTimeout(() => {
+          triggerNotification(`🔑 Locksmith Cipher Sense: Decoded bonus digit #${bonusClue.digitIndex + 1} [ ${bonusDigit} ]!`);
+          const cHUD = document.getElementById('hud-cipher-info');
+          if (cHUD && window.gameDifficulty !== 'impossible') {
+            const display = digits.map((d, idx) => {
+              const col = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
+              return col ? d : '_';
+            }).join(' ');
+            cHUD.textContent = `CODE: [ ${display} ]`;
+          }
+        }, 1200);
+      }
     }
   }
 
