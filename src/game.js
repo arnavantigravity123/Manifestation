@@ -1806,10 +1806,47 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     }
   }
 
+  const requestCanvasOrBodyPointerLock = () => {
+    if (isMobileDevice) return;
+    if (document.pointerLockElement) return;
+    const canvas = renderer && renderer.domElement;
+    const container = document.getElementById('canvas-container');
+    const target = canvas || container || document.body;
+    if (!target || !target.requestPointerLock) return;
+
+    try {
+      const p = target.requestPointerLock();
+      if (p && typeof p.then === 'function') {
+        p.then(() => {
+          window._pendingPointerRelock = false;
+        }).catch(err => {
+          console.warn('[POINTER] Initial lock request deferred/rejected, trying document.body fallback:', err);
+          window._pendingPointerRelock = true;
+          if (target !== document.body && document.body && document.body.requestPointerLock) {
+            try {
+              const p2 = document.body.requestPointerLock();
+              if (p2 && typeof p2.then === 'function') {
+                p2.then(() => {
+                  window._pendingPointerRelock = false;
+                }).catch(() => {});
+              }
+            } catch(_) {}
+          }
+        });
+      }
+    } catch(err) {
+      try {
+        if (target !== document.body && document.body && document.body.requestPointerLock) {
+          document.body.requestPointerLock();
+        }
+      } catch(_) {}
+    }
+  };
+
   const handleEnterGame = (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    if (performance.now() - pauseOpenedTime < 400) {
-      return; // Discard trailing touches / synthetic clicks from the tap that opened pause
+    if (isMobileDevice && (performance.now() - pauseOpenedTime < 350)) {
+      return; // Discard trailing touches / synthetic clicks from the tap that opened pause on mobile
     }
     resetPlayerMovementState();
     if (window.isSpectating) {
@@ -1821,8 +1858,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
         const mobileCtrl = document.getElementById('mobile-controls-container');
         if (mobileCtrl) mobileCtrl.style.display = 'flex';
       } else {
-        const lockTarget = (renderer && renderer.domElement) || container;
-        if (lockTarget && lockTarget.requestPointerLock) lockTarget.requestPointerLock();
+        requestCanvasOrBodyPointerLock();
       }
       return;
     }
@@ -1845,6 +1881,12 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     if (isMinimapExpanded) return;
     window.mobileGameActive = true;
     window.gameReady = true;
+
+    // Immediately trigger pointer lock during trusted user click gesture before DOM modification
+    if (!isMobileDevice) {
+      requestCanvasOrBodyPointerLock();
+    }
+
     ptrOverlay.style.display = 'none';
     if (roleSplash) {
       roleSplash.style.display = 'none';
@@ -1857,30 +1899,16 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     if (reticle) reticle.style.display = 'block';
 
     if (!isMobileDevice) {
-      if (document.activeElement && document.activeElement.blur) {
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
         document.activeElement.blur();
-      }
-      const lockTarget = (renderer && renderer.domElement) || container || document.body;
-      if (lockTarget && lockTarget.requestPointerLock) {
-        try {
-          const promise = lockTarget.requestPointerLock();
-          if (promise && promise.catch) {
-            promise.catch(err => {
-              console.warn('[POINTER] Pointer lock request deferred by browser:', err);
-              // Do NOT force pause overlay back on temporary browser Esc-cooldown
-            });
-          }
-        } catch(err) {
-          console.warn('[POINTER] Pointer lock exception:', err);
-        }
       }
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   };
+  window.handleEnterGame = handleEnterGame;
 
   ptrOverlay.addEventListener('click', (e) => {
     if (isMobileDevice) return; // On mobile devices, do not resume by clicking empty overlay background!
-    if (performance.now() - pauseOpenedTime < 400) return;
     if (e.target.closest('#pause-settings-btn') || e.target.closest('#pause-abort-btn') || e.target.closest('#pause-controls-btn') || e.target.closest('.glass-panel')) return;
     handleEnterGame(e);
   });
@@ -1890,11 +1918,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   const resumeBtn = document.getElementById('resume-click-target');
   if (resumeBtn) {
     resumeBtn.addEventListener('click', (e) => {
-      if (performance.now() - pauseOpenedTime < 400) return;
       handleEnterGame(e);
     });
     resumeBtn.addEventListener('touchend', (e) => {
-      if (performance.now() - pauseOpenedTime < 400) return;
+      if (isMobileDevice && performance.now() - pauseOpenedTime < 350) return;
       if (e.cancelable) e.preventDefault();
       handleEnterGame(e);
     }, { passive: false });
@@ -1902,11 +1929,10 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   const pauseResumeBtn = document.getElementById('pause-resume-btn');
   if (pauseResumeBtn) {
     pauseResumeBtn.addEventListener('click', (e) => {
-      if (performance.now() - pauseOpenedTime < 400) return;
       handleEnterGame(e);
     });
     pauseResumeBtn.addEventListener('touchend', (e) => {
-      if (performance.now() - pauseOpenedTime < 400) return;
+      if (isMobileDevice && performance.now() - pauseOpenedTime < 350) return;
       if (e.cancelable) e.preventDefault();
       handleEnterGame(e);
     }, { passive: false });
@@ -1944,13 +1970,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
       document.activeElement.blur();
     }
-    const lockTarget = (renderer && renderer.domElement) || container || document.body;
-    if (lockTarget && lockTarget.requestPointerLock) {
-      try {
-        const p = lockTarget.requestPointerLock();
-        if (p && p.catch) p.catch(() => {});
-      } catch(_) {}
-    }
+    requestCanvasOrBodyPointerLock();
   };
 
   // Global click & pointerdown to relock mouse anytime desktop player clicks during gameplay
@@ -1986,7 +2006,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     }
     if (document.pointerLockElement) {
       ptrOverlay.style.display = 'none';
+      window._pendingPointerRelock = false;
     } else {
+      pauseOpenedTime = performance.now();
       resetPlayerMovementState(true);
       // Don't show pause overlay if dying, captured, escaping, keypad modal, minimap, settings modal, or game-over is open
       const keypadEl = document.getElementById('keypad-modal-ui');
@@ -2039,6 +2061,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   document.addEventListener('pointerlockerror', () => {
     if (isMobileDevice) return;
+    window._pendingPointerRelock = true;
     console.warn('[POINTER] Pointer lock error/cooldown event fired — awaiting next player interaction');
   });
 
@@ -6478,6 +6501,20 @@ function setupControls() {
       }
     }
 
+    // Auto-relock mouse pointer if desktop player presses movement or action keys during active gameplay
+    if (!isMobileDevice && window.gameReady && !document.pointerLockElement && !isCaptured && !window.isEscaping) {
+      const ptrOverlay = document.getElementById('pointer-lock-overlay');
+      const isPaused = Boolean(ptrOverlay && ptrOverlay.style.display === 'flex');
+      if (!isPaused && !isMinimapExpanded && event.code !== 'Escape') {
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+          if (window.requestGamePointerLock) {
+            window.requestGamePointerLock();
+          }
+        }
+      }
+    }
+
     switch (event.code) {
       case 'ArrowUp':
       case 'KeyW':
@@ -6801,7 +6838,7 @@ function setupControls() {
     if (!document.pointerLockElement && window.gameReady && !isCaptured && window.requestGamePointerLock) {
       window.requestGamePointerLock();
     }
-    if ((!document.pointerLockElement && e.target.id !== 'canvas-container') || (isCaptured && !window.isSpectating)) return;
+    if (!document.pointerLockElement || (isCaptured && !window.isSpectating)) return;
     if (e.button === 0 && !window.isSpectating) { // Left click: use active inventory item
       useActiveItem();
     }
@@ -11761,6 +11798,12 @@ export function setupControlsGuideModal() {
     }
     modal.style.display = 'none';
     const ptrOverlay = document.getElementById('pointer-lock-overlay');
+    const isResumeBtn = e && e.target && (e.target.id === 'resume-from-controls-btn' || (e.target.closest && e.target.closest('#resume-from-controls-btn')));
+    if (isResumeBtn && window.handleEnterGame) {
+      if (ptrOverlay) ptrOverlay.style.display = 'none';
+      window.handleEnterGame(e);
+      return;
+    }
     const isPaused = ptrOverlay && ptrOverlay.style.display === 'flex';
     if (!isMobileDevice && window.gameReady && !isCaptured && !isPaused && window.requestGamePointerLock) {
       window.requestGamePointerLock();
