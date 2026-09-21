@@ -1014,6 +1014,11 @@ function addGLBModelToForest(forestContainer) {
     forestClone.position.set(-629.33, -930.10, -1718.69);
 
     forestClone.traverse(child => {
+      // Hide perimeter mountain hill meshes (Object_15 and Object_18) that protrude across doorway and block view
+      if (child.name === 'Object_15' || child.name === 'Object_18') {
+        child.visible = false;
+        return;
+      }
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
@@ -1203,6 +1208,40 @@ export function attachForestToVault() {
   });
   const motes = new THREE.Points(moteGeo, moteMat);
   forestContainer.add(motes);
+
+  // 3.5 Seamless Outdoor Natural Meadow & Flagstone Entrance Terrace
+  // Spans from the doorway threshold plate (Z = 0) out to the forest trail
+  // Completely eliminates any void or blue sky gaps under the player's feet!
+  const outdoorGroundGroup = new THREE.Group();
+  outdoorGroundGroup.name = 'forest_ground_terrace';
+
+  // Broad green meadow lawn (width 32m, length 28m)
+  const lawnGeo = new THREE.PlaneGeometry(32, 28);
+  const lawnMat = new THREE.MeshStandardMaterial({
+    color: 0x244f24, // Vibrant alpine grass
+    roughness: 0.92,
+    metalness: 0.04
+  });
+  const lawnMesh = new THREE.Mesh(lawnGeo, lawnMat);
+  lawnMesh.rotation.x = -Math.PI / 2;
+  lawnMesh.position.set(0, -0.015, -4.5);
+  lawnMesh.receiveShadow = true;
+  outdoorGroundGroup.add(lawnMesh);
+
+  // Weathered natural stone terrace walkway leading from doorway threshold to the trail
+  const stonePathGeo = new THREE.PlaneGeometry(4.4, 16);
+  const stonePathMat = new THREE.MeshStandardMaterial({
+    color: 0x484f56, // Natural mountain flagstone slate
+    roughness: 0.82,
+    metalness: 0.15
+  });
+  const stonePathMesh = new THREE.Mesh(stonePathGeo, stonePathMat);
+  stonePathMesh.rotation.x = -Math.PI / 2;
+  stonePathMesh.position.set(0, 0.005, 0.5);
+  stonePathMesh.receiveShadow = true;
+  outdoorGroundGroup.add(stonePathMesh);
+
+  forestContainer.add(outdoorGroundGroup);
 
   // 4. Attach the authentic 3D forest.glb model!
   if (preloadedForestModel) {
@@ -4469,6 +4508,8 @@ function spawnDungeonProps(layout, blockSize) {
     for (let r = 0; r < layout.length; r++) {
       for (let c = 0; c < layout[r].length; c++) {
         if (isPassable(r, c)) {
+          // Never generate dungeon runner rugs in the vault exterior cell behind the gate
+          if (r === window.vaultR && c === window.vaultC) continue;
           const northOpen = isPassable(r - 1, c);
           const southOpen = isPassable(r + 1, c);
           const westOpen  = isPassable(r, c - 1);
@@ -5384,7 +5425,9 @@ function generateMaze(keysCount = 8) {
         walls.push(wallMesh);
         slidingWallSegments.push(wallMesh);
       } else {
-        openCorridors.push({ x: xPos, z: zPos });
+        if (!(r === window.vaultR && c === window.vaultC)) {
+          openCorridors.push({ x: xPos, z: zPos });
+        }
       }
     }
   }
@@ -5565,11 +5608,12 @@ function generateMaze(keysCount = 8) {
   wallShape.holes.push(holePath);
 
   const faceplateGeo = new THREE.ExtrudeGeometry(wallShape, { 
+    curveSegments: 64,
     depth: 0.14, 
     bevelEnabled: true, 
     bevelThickness: 0.03, 
     bevelSize: 0.03, 
-    bevelSegments: 3 
+    bevelSegments: 4 
   });
   const faceplateMesh = new THREE.Mesh(faceplateGeo, faceplateMat);
   faceplateMesh.position.set(0, 0, 0.02);
@@ -9481,20 +9525,38 @@ function openVaultDoorAnimated() {
   });
   triggerNotification("⚡ VAULT POWER SURGE: ALL GHOSTS FROZEN DURING DOOR UNSEALING!");
 
-  // Keep the dungeon ceiling and floor strictly visible inside the labyrinth hallways!
-  // Clip them only at the vault doorway threshold (Z = 0) so the sky and forest are visible beyond the door
+  // Keep the dungeon ceiling, floor, walls, and rugs strictly inside the labyrinth hallways!
+  // Clip them at the vault doorway threshold (Z = 0) so the outdoor sky and forest are visible beyond the door
   if (vaultGroupRef) {
-    const localCeilPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.0);
-    const worldCeilPlane = localCeilPlane.clone().applyMatrix4(vaultGroupRef.matrixWorld);
+    vaultGroupRef.updateMatrixWorld(true);
+    const localGatePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.0);
+    const worldGatePlane = localGatePlane.clone().applyMatrix4(vaultGroupRef.matrixWorld);
     if (ceilingMesh && ceilingMesh.material) {
       ceilingMesh.visible = true;
-      ceilingMesh.material.clippingPlanes = [worldCeilPlane];
+      ceilingMesh.material.clippingPlanes = [worldGatePlane];
       ceilingMesh.material.needsUpdate = true;
     }
     if (floorMesh && floorMesh.material) {
       floorMesh.visible = true;
-      floorMesh.material.clippingPlanes = [worldCeilPlane];
+      floorMesh.material.clippingPlanes = [worldGatePlane];
       floorMesh.material.needsUpdate = true;
+    }
+    if (staticWallsMesh && staticWallsMesh.material) {
+      staticWallsMesh.material.clippingPlanes = [worldGatePlane];
+      staticWallsMesh.material.needsUpdate = true;
+    }
+    if (dungeonRugMat) {
+      dungeonRugMat.clippingPlanes = [worldGatePlane];
+      dungeonRugMat.needsUpdate = true;
+    }
+    const ariadne = scene.getObjectByName('ariadneThreadGroup');
+    if (ariadne) {
+      ariadne.traverse(c => {
+        if (c.material) {
+          c.material.clippingPlanes = [worldGatePlane];
+          c.material.needsUpdate = true;
+        }
+      });
     }
   }
 
@@ -11733,8 +11795,9 @@ function playEscapeCinematic(callback) {
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
   if (ptrOverlay) ptrOverlay.style.display = 'none';
 
-  // Ensure ceiling and floor clipping planes are active so hallway remains fully enclosed until player crosses threshold
+  // Ensure all dungeon geometry (ceiling, floor, static walls, rugs) is clipped at the gate threshold
   if (vaultGroupRef) {
+    vaultGroupRef.updateMatrixWorld(true);
     const localGatePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.0);
     const worldGatePlane = localGatePlane.clone().applyMatrix4(vaultGroupRef.matrixWorld);
     if (ceilingMesh && ceilingMesh.material) {
@@ -11746,6 +11809,23 @@ function playEscapeCinematic(callback) {
       floorMesh.visible = true;
       floorMesh.material.clippingPlanes = [worldGatePlane];
       floorMesh.material.needsUpdate = true;
+    }
+    if (staticWallsMesh && staticWallsMesh.material) {
+      staticWallsMesh.material.clippingPlanes = [worldGatePlane];
+      staticWallsMesh.material.needsUpdate = true;
+    }
+    if (dungeonRugMat) {
+      dungeonRugMat.clippingPlanes = [worldGatePlane];
+      dungeonRugMat.needsUpdate = true;
+    }
+    const ariadne = scene.getObjectByName('ariadneThreadGroup');
+    if (ariadne) {
+      ariadne.traverse(c => {
+        if (c.material) {
+          c.material.clippingPlanes = [worldGatePlane];
+          c.material.needsUpdate = true;
+        }
+      });
     }
   }
 
