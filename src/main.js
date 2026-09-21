@@ -173,6 +173,37 @@ const classesData = {
 };
 window.classesData = classesData;
 
+// Dynamic Class Intel Preview Metadata for Main Menu Dossier
+const classIntelMeta = {
+  Locksmith: { icon: "🔑", role: "Infiltration Specialist", desc: "Equipped with Thermal Camera to detect entities through walls and Breaker Remote to freeze entities and restore power grids." },
+  Trapper: { icon: "🪤", role: "Containment Defender", desc: "Deploys defensive salt barriers that slow pursuing entities by 80%, sprays navigational chalk markers, and uses adrenaline bursts." },
+  Scout: { icon: "🧭", role: "Recon & Navigation", desc: "Features a 50m long-range EMF radar to track spectral signatures, sanity pills to resist hallucinations, and sprint boosters." },
+  Medic: { icon: "🩺", role: "Field Surgeon", desc: "Starts with field trauma medkits to heal injured allies, sanity stabilizers, and defibrillators to revive downed teammates." },
+  "Flashlight Expert": { icon: "🔦", role: "High-Beam Illuminator", desc: "Carries 2x heavy battery packs for extended flashlight uptime, paired with passive wall-penetrating Thermal X-Ray vision." },
+  Quartermaster: { icon: "🎒", role: "Resource Specialist", desc: "Unlocks Deep Pockets (12 Inventory Slots) pre-stocked with medkits, sanity stabilizers, salt barriers, and battery cells." },
+  Random: { icon: "🎲", role: "Wildcard Operative", desc: "Deploys with an unpredictable loadout assigned by containment headquarters upon labyrinth breach." }
+};
+
+function updateClassIntelCard(className) {
+  const iconEl = document.getElementById('intel-class-icon');
+  const titleEl = document.getElementById('intel-class-title');
+  const roleEl = document.getElementById('intel-class-role');
+  const descEl = document.getElementById('intel-class-desc');
+  const meta = classIntelMeta[className] || classIntelMeta.Locksmith;
+
+  if (iconEl) iconEl.textContent = meta.icon;
+  if (titleEl) titleEl.textContent = className === 'Random' ? 'Random Class' : className;
+  if (roleEl) roleEl.textContent = meta.role;
+  if (descEl) descEl.textContent = meta.desc;
+}
+
+if (soloClassSelect) {
+  soloClassSelect.addEventListener('change', (e) => {
+    updateClassIntelCard(e.target.value);
+  });
+  updateClassIntelCard(soloClassSelect.value || 'Locksmith');
+}
+
 // Universal fast button listener: fires immediately on pointerdown / touch (0ms delay)
 function addFastButtonListener(btn, callback) {
   if (!btn) return;

@@ -106,15 +106,127 @@ body, html {
   max-width: 580px;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.2rem;
   animation: fadeIn 0.6s ease-out;
+  margin: auto;
 }
 
-@media (min-width: 1200px) {
-  #auth-view {
-    max-width: 640px;
-    padding: 3rem 2.5rem;
-  }
+.auth-panels-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  width: 100%;
+}
+
+.auth-panel-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.4);
+}
+
+.panel-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.panel-card-header h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.95rem;
+  color: #f1f5f9;
+  letter-spacing: 1.5px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.panel-tag {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.65rem;
+  color: #38bdf8;
+  letter-spacing: 1px;
+  font-weight: 700;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+/* Class Intel Preview Box */
+.class-intel-box {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px dashed rgba(56, 189, 248, 0.35);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  margin-top: 0.4rem;
+  transition: all 0.25s ease;
+}
+
+.class-intel-box .intel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+
+.class-intel-box h4 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.9rem;
+  color: #38bdf8;
+  margin: 0;
+  letter-spacing: 1px;
+}
+
+.class-intel-box #intel-class-role {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.class-intel-box p {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* Telemetry Lore Box */
+.telemetry-lore-box {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.75rem;
+}
+
+.telemetry-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.telemetry-label {
+  color: #64748b;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.telemetry-val {
+  color: #f1f5f9;
+  font-weight: 800;
+  letter-spacing: 1.2px;
 }
 
 .logo-container {
@@ -3187,6 +3299,39 @@ kbd {
    Guaranteed ZERO impact on mobile phones, tablets, or Capacitor apps!
    ========================================================================== */
 @media screen and (min-width: 1024px) and (pointer: fine) {
+  /* 0. Widescreen Tactical 3-Panel Main Menu Command Center */
+  body.is-pc:not(.is-mobile) #auth-view,
+  body:not(.is-mobile) #auth-view {
+    max-width: 1240px;
+    width: 92vw;
+    padding: 2.2rem 2.8rem;
+  }
+
+  body.is-pc:not(.is-mobile) .auth-panels-grid,
+  body:not(.is-mobile) .auth-panels-grid {
+    display: grid;
+    grid-template-columns: 330px 1fr 310px;
+    gap: 1.8rem;
+    align-items: stretch;
+    margin-top: 1rem;
+  }
+
+  body.is-pc:not(.is-mobile) .auth-panel-card,
+  body:not(.is-mobile) .auth-panel-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    box-sizing: border-box;
+  }
+
+  body.is-pc:not(.is-mobile) .auth-panel-center,
+  body:not(.is-mobile) .auth-panel-center {
+    background: rgba(15, 23, 42, 0.82);
+    border-color: rgba(56, 189, 248, 0.3);
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.7), inset 0 0 25px rgba(56, 189, 248, 0.08);
+  }
+
   body.is-pc:not(.is-mobile) .hud-top,
   body:not(.is-mobile) .hud-top {
     padding: 0.8rem 1.2rem;
