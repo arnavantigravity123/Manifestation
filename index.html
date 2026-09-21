@@ -20,161 +20,156 @@
     <div id="ui-overlay">
       
       <!-- 1. Authentication / Main Menu View -->
-      <div id="auth-view" class="glass-panel" style="position: relative;">
-        <button id="auth-settings-btn" class="settings-gear-btn" title="System Settings">⚙️</button>
+      <div id="auth-view" class="auth-view-wrapper">
         
-        <!-- Top Command Header -->
-        <div class="logo-container" style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
-          <img src="/assets/manifestation_logo.jpg" alt="Manifestation Logo" style="width: 88px; height: 88px; border-radius: 20px; box-shadow: 0 0 30px rgba(56, 189, 248, 0.45), 0 8px 16px rgba(0,0,0,0.8); border: 2px solid rgba(56, 189, 248, 0.5); object-fit: cover; margin-bottom: 2px;">
-          <h1>Manifestation</h1>
-          <p>Labyrinth Escape Protocol</p>
-        </div>
+        <!-- Left Wing: Operative Dossier & Class Perks (Desktop only) -->
+        <aside class="auth-desktop-wing auth-wing-left">
+          <div class="wing-inner-card">
+            <div class="wing-header">
+              <span class="wing-tag">OPERATIVE // SPEC</span>
+            </div>
+            <div class="wing-class-preview">
+              <div id="wing-class-icon" style="font-size: 2.8rem; text-shadow: 0 0 20px rgba(56, 189, 248, 0.6); margin: 0.3rem 0;">🔑</div>
+              <h3 id="wing-class-title" style="font-family: 'Orbitron', sans-serif; color: #38bdf8; margin: 0.2rem 0; font-size: 1.15rem; letter-spacing: 1.5px;">Locksmith</h3>
+              <span id="wing-class-role" style="font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">Infiltration Specialist</span>
+            </div>
+            <p id="wing-class-desc" style="font-size: 0.8rem; color: #cbd5e1; line-height: 1.5; margin: 0.8rem 0; background: rgba(0,0,0,0.35); padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+              Starts with Thermal Scanner to detect entities through walls and a Breaker Remote to restore power grids from a distance.
+            </p>
+            <div class="wing-perks-list">
+              <div class="wing-perk-row"><span>EMF RADAR</span><b style="color: #34d399;">PASSIVE</b></div>
+              <div class="wing-perk-row"><span>KEY AFFINITY</span><b style="color: #fde047;">TIER-3</b></div>
+              <div class="wing-perk-row"><span>CIPHER DECODE</span><b style="color: #38bdf8;">+50% SPEED</b></div>
+            </div>
+          </div>
+        </aside>
 
-        <!-- 3-Panel Responsive Command Grid -->
-        <div class="auth-panels-grid">
+        <!-- Center Main Menu Card (The Core Hub) -->
+        <div class="glass-panel auth-core-panel" style="position: relative;">
+          <button id="auth-settings-btn" class="settings-gear-btn" title="System Settings">⚙️</button>
           
-          <!-- LEFT WING: OPERATIVE DOSSIER & CLASS PERKS -->
-          <div class="auth-panel-card auth-panel-left">
-            <div class="panel-card-header">
-              <span class="panel-tag">SECTION // 01</span>
-              <h3>OPERATIVE DOSSIER</h3>
+          <div class="logo-container" style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+            <img src="/assets/manifestation_logo.jpg" alt="Manifestation Logo" style="width: 76px; height: 76px; border-radius: 18px; box-shadow: 0 0 25px rgba(56, 189, 248, 0.45), 0 6px 14px rgba(0,0,0,0.8); border: 2px solid rgba(56, 189, 248, 0.5); object-fit: cover; margin-bottom: 2px;">
+            <h1 style="font-size: 2.2rem; margin: 0; letter-spacing: 3px;">Manifestation</h1>
+            <p style="margin: 0; font-size: 0.85rem; color: #94a3b8; letter-spacing: 1px;">Labyrinth Escape Protocol</p>
+          </div>
+
+          <!-- Account Status Header -->
+          <div id="account-status-bar" class="account-bar" style="margin-top: 0.4rem;">
+            <div id="account-guest-view" class="account-info">
+              <span class="account-badge guest-badge">👤 GUEST</span>
+              <button id="open-auth-modal-btn" class="account-action-btn">🔑 LOGIN / REGISTER</button>
+            </div>
+            <div id="account-logged-view" class="account-info" style="display: none;">
+              <div class="account-user-details">
+                <span id="account-username-display" class="account-username" style="cursor: pointer;" title="Tap to change Call-Sign">Operative</span>
+                <button id="edit-callsign-btn" style="background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 0 4px; color: #38bdf8;" title="Change Call-Sign">✏️</button>
+                <span id="account-vip-badge" class="account-badge vip-badge" style="display: none;">👑 VIP</span>
+                <span id="account-credits-display" class="account-credits">💰 0</span>
+              </div>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <button id="account-logout-btn" class="account-logout-btn" title="Log Out">LOGOUT</button>
+                <button id="account-delete-btn" class="account-logout-btn" title="Permanently Delete Account" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5;">DELETE</button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-group" style="margin-top: 0.2rem;">
+            <label for="username-input">Operative Call-Sign <span id="callsign-hint" style="font-size: 0.72rem; color: #38bdf8; font-weight: normal; margin-left: 4px;">(Tap to edit)</span></label>
+            <input type="text" id="username-input" placeholder="e.g., Locksmith_01" value="" />
+          </div>
+
+          <!-- 2-Select Row for Difficulty & Class -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.2rem;">
+            <div class="form-group">
+              <label for="solo-difficulty-select" style="font-size: 0.76rem; color: #94a3b8; font-family: 'Orbitron', sans-serif;">Difficulty</label>
+              <select id="solo-difficulty-select" class="select-control" style="padding: 0.4rem; font-size: 0.82rem; width: 100%;">
+                <option value="easy">🟢 Easy</option>
+                <option value="medium" selected>🟡 Medium</option>
+                <option value="hard">🔴 Hard</option>
+                <option value="impossible">💀 Impossible</option>
+              </select>
             </div>
 
-            <!-- Account Status Header -->
-            <div id="account-status-bar" class="account-bar">
-              <div id="account-guest-view" class="account-info">
-                <span class="account-badge guest-badge">👤 GUEST</span>
-                <button id="open-auth-modal-btn" class="account-action-btn">🔑 LOGIN / REGISTER</button>
-              </div>
-              <div id="account-logged-view" class="account-info" style="display: none;">
-                <div class="account-user-details">
-                  <span id="account-username-display" class="account-username" style="cursor: pointer;" title="Tap to change Call-Sign">Operative</span>
-                  <button id="edit-callsign-btn" style="background: none; border: none; cursor: pointer; font-size: 0.85rem; padding: 0 4px; color: #38bdf8;" title="Change Call-Sign">✏️</button>
-                  <span id="account-vip-badge" class="account-badge vip-badge" style="display: none;">👑 VIP</span>
-                  <span id="account-credits-display" class="account-credits">💰 0</span>
-                </div>
-                <div style="display: flex; gap: 6px; align-items: center;">
-                  <button id="account-logout-btn" class="account-logout-btn" title="Log Out">LOGOUT</button>
-                  <button id="account-delete-btn" class="account-logout-btn" title="Permanently Delete Account" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5;">DELETE</button>
-                </div>
-              </div>
+            <div class="form-group">
+              <label for="solo-class-select" style="font-size: 0.76rem; color: #94a3b8; font-family: 'Orbitron', sans-serif;">Class</label>
+              <select id="solo-class-select" class="select-control" style="padding: 0.4rem; font-size: 0.82rem; width: 100%;">
+                <option value="Random">🎲 Random</option>
+                <option value="Locksmith">🔑 Locksmith</option>
+                <option value="Trapper">🪤 Trapper</option>
+                <option value="Scout">🧭 Scout</option>
+                <option value="Medic">🩺 Medic</option>
+                <option value="Flashlight Expert">🔦 Flashlight</option>
+                <option value="Quartermaster">🎒 Quartermaster</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 0.55rem; margin-top: 0.4rem;">
+            <button id="tutorial-btn" class="action-btn" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; box-shadow: 0 0 15px rgba(56, 189, 248, 0.35); padding: 0.65rem;">🎓 Training & Tutorial Protocol</button>
+            <button id="solo-btn" class="action-btn" style="background: linear-gradient(135deg, #4f46e5, #312e81); border: 1px solid #6366f1; padding: 0.65rem;">🚀 Deploy Solo Protocol</button>
+            
+            <div style="border-top: 1px dashed rgba(255,255,255,0.15); margin: 0.2rem 0;"></div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;">
+              <button id="join-public-btn" class="action-btn" style="padding: 0.6rem; font-size: 0.82rem;">🌐 Public Match</button>
+              <button id="create-public-btn" class="action-btn" style="background: linear-gradient(135deg, #059669, #064e3b); padding: 0.6rem; font-size: 0.82rem;">🛡️ Create Lobby</button>
             </div>
             
-            <div class="form-group" style="margin-top: 0.6rem;">
-              <label for="username-input">Operative Call-Sign <span id="callsign-hint" style="font-size: 0.72rem; color: #38bdf8; font-weight: normal; margin-left: 4px;">(Tap to edit)</span></label>
-              <input type="text" id="username-input" placeholder="e.g., Locksmith_01" value="" />
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.1rem;">
+              <button id="create-private-btn" class="action-btn" style="background: linear-gradient(135deg, #d97706, #78350f); font-size: 0.8rem; padding: 0.55rem 0.8rem; width: auto; white-space: nowrap;">🔒 Private</button>
+              <input type="text" id="private-room-input" placeholder="Room Code" style="flex-grow: 1; padding: 0.5rem; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; font-family: 'Orbitron', sans-serif; text-transform: uppercase; font-size: 0.82rem;" />
+              <button id="join-private-btn" class="action-btn" style="width: auto; padding: 0.55rem 1rem; font-size: 0.82rem;">Join</button>
             </div>
 
-            <div class="form-group" style="margin: 0.5rem 0 0.4rem 0;">
-              <label for="solo-class-select" style="font-size: 0.8rem; color: #94a3b8; font-family: 'Orbitron', sans-serif;">Specialization Class</label>
-              <select id="solo-class-select" class="select-control" style="padding: 0.4rem; font-size: 0.85rem; width: 100%;">
-                <option value="Random">🎲 Random Specialization</option>
-                <option value="Locksmith">🔑 Locksmith (Thermal X-Ray & Breaker Remote)</option>
-                <option value="Trapper">🪤 Trapper (Salt Barriers & Adrenaline)</option>
-                <option value="Scout">🧭 Scout (50m EMF Radar & Sanity Pills)</option>
-                <option value="Medic">🩺 Medic (Med Kits & Sanity Pills)</option>
-                <option value="Flashlight Expert">🔦 Flashlight Expert (2x Batteries & Thermal)</option>
-                <option value="Quartermaster">🎒 Quartermaster (12 Inventory Slots)</option>
-              </select>
-            </div>
-
-            <!-- Dynamic Class Intel Preview Card -->
-            <div id="class-intel-card" class="class-intel-box">
-              <div class="intel-header">
-                <span id="intel-class-icon" style="font-size: 1.4rem;">🔑</span>
-                <div>
-                  <h4 id="intel-class-title">Locksmith</h4>
-                  <span id="intel-class-role">Infiltration Specialist</span>
-                </div>
-              </div>
-              <p id="intel-class-desc">Starts with Thermal Scanner to detect entities through walls and a Breaker Remote to restore power grids from a distance.</p>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.8rem;">
-              <button id="vip-store-btn" class="action-btn" style="background: linear-gradient(135deg, #d4af37, #996515); border: 1px solid #fde047; font-weight: bold; text-shadow: 0 0 5px rgba(255,255,255,0.5); font-size: 0.85rem; padding: 0.6rem;">💎 UPGRADE TO VIP 💎</button>
-              <button id="open-skins-btn" class="action-btn" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: 1px solid #60a5fa; font-weight: bold; font-size: 0.85rem; padding: 0.6rem;">🛍️ OPERATIVE ARSENAL (SKINS)</button>
-            </div>
-          </div>
-
-          <!-- CENTER STAGE: DEPLOYMENT OPERATIONS -->
-          <div class="auth-panel-card auth-panel-center">
-            <div class="panel-card-header">
-              <span class="panel-tag">SECTION // 02</span>
-              <h3>DEPLOYMENT OPERATIONS</h3>
-            </div>
-
-            <div class="form-group" style="margin: 0.2rem 0 0.8rem 0;">
-              <label for="solo-difficulty-select" style="font-size: 0.8rem; color: #94a3b8; font-family: 'Orbitron', sans-serif;">Containment Difficulty</label>
-              <select id="solo-difficulty-select" class="select-control" style="padding: 0.5rem; font-size: 0.88rem; width: 100%;">
-                <option value="easy">🟢 Easy [Small Map | Formula: max(2, H × 1) | 2 Breakers]</option>
-                <option value="medium" selected>🟡 Medium [Standard Map | Formula: max(3, H × 2) | 3 Breakers]</option>
-                <option value="hard">🔴 Hard [Large Map | Formula: max(6, H × 3) | 4 Breakers]</option>
-                <option value="impossible">💀 Impossible [Colossal Map | Formula: max(8, H × 4) | 6 Breakers]</option>
-              </select>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-              <button id="tutorial-btn" class="action-btn" style="background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; box-shadow: 0 0 15px rgba(56, 189, 248, 0.35);">🎓 Training & Tutorial Protocol</button>
-              <button id="solo-btn" class="action-btn" style="background: linear-gradient(135deg, #4f46e5, #312e81); border: 1px solid #6366f1;">🚀 Deploy Solo Protocol</button>
-              
-              <div style="border-top: 1px dashed rgba(255,255,255,0.2); margin: 0.3rem 0;"></div>
-              
-              <button id="join-public-btn" class="action-btn" style="background: linear-gradient(135deg, #2563eb, #1e40af);">🌐 Join Public Match</button>
-              <button id="create-public-btn" class="action-btn" style="background: linear-gradient(135deg, #059669, #064e3b);">🛡️ Create Public Lobby</button>
-            </div>
-
-            <!-- Loading overlay for Solo mode -->
-            <div id="solo-loading-overlay" style="display: none; text-align: center; color: var(--primary-accent); margin-top: 1rem; font-family: 'Orbitron', sans-serif;">
-              INITIALIZING SOLO CONTAINMENT...
-            </div>
-          </div>
-
-          <!-- RIGHT WING: INFILTRATION CELLS & SYSTEM -->
-          <div class="auth-panel-card auth-panel-right">
-            <div class="panel-card-header">
-              <span class="panel-tag">SECTION // 03</span>
-              <h3>TACTICAL COMMS & CELLS</h3>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-              <button id="create-private-btn" class="action-btn" style="background: linear-gradient(135deg, #d97706, #78350f); font-size: 0.88rem;">🔒 Create Private Lobby</button>
-              
-              <div style="display: flex; gap: 0.5rem;">
-                <input type="text" id="private-room-input" placeholder="Room Code" style="flex-grow: 1; padding: 0.5rem; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; font-family: 'Orbitron', sans-serif; text-transform: uppercase; font-size: 0.85rem;" />
-                <button id="join-private-btn" class="action-btn" style="width: auto; padding: 0.5rem 1.1rem; font-size: 0.85rem;">Join</button>
-              </div>
-
-              <!-- Telemetry Lore Card -->
-              <div class="telemetry-lore-box">
-                <div class="telemetry-row">
-                  <span class="telemetry-label">SECTOR:</span>
-                  <span class="telemetry-val">LABYRINTH-9</span>
-                </div>
-                <div class="telemetry-row">
-                  <span class="telemetry-label">THREAT LEVEL:</span>
-                  <span class="telemetry-val" style="color: #ef4444;">ACTIVE PHANTOM</span>
-                </div>
-                <div class="telemetry-row">
-                  <span class="telemetry-label">ESCAPE STATUS:</span>
-                  <span class="telemetry-val" style="color: #10b981;">VAULT ARMED</span>
-                </div>
-              </div>
-
-              <button id="open-credits-btn" class="action-btn open-credits-trigger" style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.5); font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 0.82rem; padding: 0.55rem; color: #38bdf8; text-shadow: 0 0 8px rgba(56,189,248,0.4); margin-top: 0.4rem;">📜 CREDITS & 3D ASSETS</button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.1rem;">
+              <button id="vip-store-btn" class="action-btn" style="background: linear-gradient(135deg, #d4af37, #996515); border: 1px solid #fde047; font-weight: bold; font-size: 0.78rem; padding: 0.55rem;">💎 VIP PASS 💎</button>
+              <button id="open-skins-btn" class="action-btn" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: 1px solid #60a5fa; font-weight: bold; font-size: 0.78rem; padding: 0.55rem;">🛍️ SKINS ARSENAL</button>
             </div>
 
             <!-- Main Menu Legal & Controls Footer -->
-            <div style="margin-top: 1.2rem; font-size: 0.72rem; color: #64748b; display: flex; justify-content: center; gap: 0.6rem; flex-wrap: wrap;">
-              <a href="#" id="menu-open-controls-trigger" style="color: #34d399; text-decoration: underline; font-weight: bold;">🎮 Controls</a>
+            <div style="margin-top: 0.5rem; font-size: 0.72rem; color: #64748b; display: flex; justify-content: center; gap: 0.6rem; flex-wrap: wrap;">
+              <a href="#" id="menu-open-controls-trigger" style="color: #34d399; text-decoration: underline; font-weight: bold;">🎮 Controls Guide</a>
               <span>•</span>
               <a href="#" class="open-terms-trigger" style="color: #94a3b8; text-decoration: underline;">Terms</a>
               <span>•</span>
               <a href="#" class="open-privacy-trigger" style="color: #94a3b8; text-decoration: underline;">Privacy</a>
+              <span>•</span>
+              <a href="#" class="open-credits-trigger" style="color: #38bdf8; text-decoration: underline; font-weight: bold;">📜 Credits</a>
             </div>
           </div>
+          
+          <!-- Loading overlay for Solo mode -->
+          <div id="solo-loading-overlay" style="display: none; text-align: center; color: var(--primary-accent); margin-top: 0.8rem; font-family: 'Orbitron', sans-serif;">
+            INITIALIZING SOLO CONTAINMENT...
+          </div>
+        </div> <!-- End auth-core-panel -->
 
-        </div> <!-- End auth-panels-grid -->
-      </div>
+        <!-- Right Wing: Sector Telemetry & Surveillance Radar (Desktop only) -->
+        <aside class="auth-desktop-wing auth-wing-right">
+          <div class="wing-inner-card">
+            <div class="wing-header">
+              <span class="wing-tag" style="color: #f43f5e; border-color: rgba(244,63,94,0.3); background: rgba(244,63,94,0.1);">SURVEILLANCE // RADAR</span>
+            </div>
+            <div class="wing-radar-display">
+              <div class="radar-circle">
+                <div class="radar-sweep-line"></div>
+                <div class="radar-blip-dot"></div>
+                <div class="radar-center-cross"></div>
+              </div>
+            </div>
+            <div class="wing-telemetry-feed">
+              <div class="wing-telemetry-row"><span>SECTOR</span><b>LABYRINTH-9</b></div>
+              <div class="wing-telemetry-row"><span>THREAT</span><b style="color: #ef4444;">ACTIVE PHANTOM</b></div>
+              <div class="wing-telemetry-row"><span>VAULT STATUS</span><b style="color: #10b981;">ARMED & SEALED</b></div>
+            </div>
+            <div class="wing-intel-lore">
+              "Tactical Warning: Containment integrity failing. Restore primary breaker circuits to reveal cipher segments and initiate vault evacuation."
+            </div>
+          </div>
+        </aside>
+
+      </div> <!-- End auth-view -->
 
       <!-- Account Login & Registration Modal -->
       <div id="account-auth-modal" class="glass-panel auth-modal" style="display: none;">

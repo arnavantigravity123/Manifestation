@@ -185,10 +185,10 @@ const classIntelMeta = {
 };
 
 function updateClassIntelCard(className) {
-  const iconEl = document.getElementById('intel-class-icon');
-  const titleEl = document.getElementById('intel-class-title');
-  const roleEl = document.getElementById('intel-class-role');
-  const descEl = document.getElementById('intel-class-desc');
+  const iconEl = document.getElementById('wing-class-icon');
+  const titleEl = document.getElementById('wing-class-title');
+  const roleEl = document.getElementById('wing-class-role');
+  const descEl = document.getElementById('wing-class-desc');
   const meta = classIntelMeta[className] || classIntelMeta.Locksmith;
 
   if (iconEl) iconEl.textContent = meta.icon;

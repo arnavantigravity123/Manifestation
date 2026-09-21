@@ -102,131 +102,170 @@ body, html {
 
 /* Auth / Entry view styling */
 #auth-view {
-  width: 92%;
-  max-width: 580px;
   display: flex;
-  flex-direction: column;
-  gap: 1.2rem;
-  animation: fadeIn 0.6s ease-out;
-  margin: auto;
-}
-
-.auth-panels-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 1.2rem;
-  width: 100%;
-}
-
-.auth-panel-card {
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 1.2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.4);
-}
-
-.panel-card-header {
-  display: flex;
+  justify-content: center;
   align-items: center;
-  justify-content: space-between;
+  width: 100%;
+  animation: fadeIn 0.5s ease-out;
+  margin: auto;
+  box-sizing: border-box;
+}
+
+.auth-core-panel {
+  width: 92%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1.3rem 1.6rem;
+  border-radius: 12px;
+  margin: auto;
+  box-sizing: border-box;
+}
+
+.auth-desktop-wing {
+  display: none; /* strictly hidden on mobile and tablets */
+}
+
+/* Radar & Telemetry Styles for Desktop Wings */
+.wing-inner-card {
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 12px;
+  padding: 1.2rem;
+  box-shadow: 0 0 25px rgba(0, 0, 0, 0.8), inset 0 0 15px rgba(56, 189, 248, 0.05);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.wing-header {
+  display: flex;
+  justify-content: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding-bottom: 0.5rem;
-  margin-bottom: 0.4rem;
+  padding-bottom: 0.4rem;
 }
 
-.panel-card-header h3 {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.95rem;
-  color: #f1f5f9;
-  letter-spacing: 1.5px;
-  font-weight: 800;
-  margin: 0;
-}
-
-.panel-tag {
+.wing-tag {
   font-family: 'Orbitron', sans-serif;
   font-size: 0.65rem;
   color: #38bdf8;
-  letter-spacing: 1px;
-  font-weight: 700;
+  letter-spacing: 1.2px;
+  font-weight: 800;
   background: rgba(56, 189, 248, 0.12);
-  padding: 2px 6px;
+  padding: 3px 8px;
   border-radius: 4px;
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
-/* Class Intel Preview Box */
-.class-intel-box {
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px dashed rgba(56, 189, 248, 0.35);
-  border-radius: 8px;
-  padding: 0.75rem 0.9rem;
-  margin-top: 0.4rem;
-  transition: all 0.25s ease;
-}
-
-.class-intel-box .intel-header {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.4rem;
-}
-
-.class-intel-box h4 {
-  font-family: 'Orbitron', sans-serif;
-  font-size: 0.9rem;
-  color: #38bdf8;
-  margin: 0;
-  letter-spacing: 1px;
-}
-
-.class-intel-box #intel-class-role {
-  font-size: 0.72rem;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-}
-
-.class-intel-box p {
-  font-size: 0.78rem;
-  color: #cbd5e1;
-  line-height: 1.45;
-  margin: 0;
-}
-
-/* Telemetry Lore Box */
-.telemetry-lore-box {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 0.75rem 0.9rem;
+.wing-perks-list {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   font-family: 'Orbitron', sans-serif;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
+  margin-top: 0.2rem;
 }
 
-.telemetry-row {
+.wing-perk-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  padding: 0.3rem 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  border-left: 2px solid #38bdf8;
 }
 
-.telemetry-label {
-  color: #64748b;
-  font-weight: 700;
-  letter-spacing: 1px;
+.wing-radar-display {
+  display: flex;
+  justify-content: center;
+  margin: 0.4rem 0;
 }
 
-.telemetry-val {
-  color: #f1f5f9;
-  font-weight: 800;
-  letter-spacing: 1.2px;
+.radar-circle {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(56, 189, 248, 0.4);
+  position: relative;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.1) 0%, transparent 70%);
+  overflow: hidden;
+  box-shadow: inset 0 0 15px rgba(56, 189, 248, 0.15);
+}
+
+.radar-sweep-line {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 50px;
+  height: 50px;
+  transform-origin: top left;
+  background: linear-gradient(45deg, rgba(56, 189, 248, 0.6) 0%, transparent 60%);
+  animation: radarSweep 3s linear infinite;
+}
+
+.radar-blip-dot {
+  position: absolute;
+  top: 28px;
+  left: 32px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f43f5e;
+  box-shadow: 0 0 8px #f43f5e;
+  animation: blipPulse 1.5s ease-in-out infinite;
+}
+
+.radar-center-cross {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translate(-50%, -50%);
+  background: #38bdf8;
+  border-radius: 50%;
+}
+
+@keyframes radarSweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes blipPulse {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1.0; transform: scale(1.4); }
+}
+
+.wing-telemetry-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+}
+
+.wing-telemetry-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.3rem 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.wing-intel-lore {
+  font-size: 0.76rem;
+  color: #94a3b8;
+  line-height: 1.45;
+  font-style: italic;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.6rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .logo-container {
@@ -3299,37 +3338,36 @@ kbd {
    Guaranteed ZERO impact on mobile phones, tablets, or Capacitor apps!
    ========================================================================== */
 @media screen and (min-width: 1024px) and (pointer: fine) {
-  /* 0. Widescreen Tactical 3-Panel Main Menu Command Center */
+  /* 0. Widescreen Tactical Flanking Wings */
   body.is-pc:not(.is-mobile) #auth-view,
   body:not(.is-mobile) #auth-view {
-    max-width: 1240px;
-    width: 92vw;
-    padding: 2.2rem 2.8rem;
-  }
-
-  body.is-pc:not(.is-mobile) .auth-panels-grid,
-  body:not(.is-mobile) .auth-panels-grid {
-    display: grid;
-    grid-template-columns: 330px 1fr 310px;
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+    align-items: center !important;
     gap: 1.8rem;
-    align-items: stretch;
-    margin-top: 1rem;
+    max-width: 1140px;
+    width: 95vw;
+    margin: auto;
+    padding: 0;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
   }
 
-  body.is-pc:not(.is-mobile) .auth-panel-card,
-  body:not(.is-mobile) .auth-panel-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    height: 100%;
-    box-sizing: border-box;
+  body.is-pc:not(.is-mobile) .auth-core-panel,
+  body:not(.is-mobile) .auth-core-panel {
+    max-width: 470px;
+    width: 100%;
+    padding: 1.4rem 1.8rem;
+    box-shadow: 0 0 35px rgba(0, 0, 0, 0.9), 0 0 20px rgba(56, 189, 248, 0.15);
   }
 
-  body.is-pc:not(.is-mobile) .auth-panel-center,
-  body:not(.is-mobile) .auth-panel-center {
-    background: rgba(15, 23, 42, 0.82);
-    border-color: rgba(56, 189, 248, 0.3);
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.7), inset 0 0 25px rgba(56, 189, 248, 0.08);
+  body.is-pc:not(.is-mobile) .auth-desktop-wing,
+  body:not(.is-mobile) .auth-desktop-wing {
+    display: block !important;
+    width: 270px;
+    flex-shrink: 0;
   }
 
   body.is-pc:not(.is-mobile) .hud-top,
