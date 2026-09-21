@@ -264,12 +264,26 @@ function updateClassIntelCard(className) {
       <div class="wing-perk-row"><span>${p.label}</span><b style="color: ${p.color};">${p.val}</b></div>
     `).join('');
   }
+
+  // Two-way synchronization: ensure dropdown value always matches preview card
+  if (soloClassSelect && soloClassSelect.value !== className) {
+    soloClassSelect.value = className;
+  }
 }
 
 if (soloClassSelect) {
+  // Restore saved selection from localStorage immediately upfront
+  const savedSoloClass = localStorage.getItem('manifestation_solo_class');
+  if (savedSoloClass && (classIntelMeta[savedSoloClass] || savedSoloClass === 'Random')) {
+    soloClassSelect.value = savedSoloClass;
+  }
+
   soloClassSelect.addEventListener('change', (e) => {
+    localStorage.setItem('manifestation_solo_class', e.target.value);
     updateClassIntelCard(e.target.value);
   });
+
+  // Initialize preview card with the exact active selector value
   updateClassIntelCard(soloClassSelect.value || 'Locksmith');
 }
 
@@ -1435,6 +1449,7 @@ function initializeSocketConnection() {
       const chosenSoloSetting = isTutorialMode ? 'Locksmith' : ((soloClassSelect && soloClassSelect.value) || localStorage.getItem('manifestation_solo_class') || 'Random');
       
       let chosenClass = chosenSoloSetting;
+      window.wasRandomClassChosen = (chosenSoloSetting === 'Random');
       if (!chosenClass || chosenClass === 'Random' || !soloHumanClasses.includes(chosenClass)) {
         chosenClass = soloHumanClasses[Math.floor(Math.random() * soloHumanClasses.length)];
       }
@@ -1947,12 +1962,7 @@ if (typeof window.getMazeSizeForDifficulty === 'function') {
   window.mazeSizeGlobal = window.getMazeSizeForDifficulty(savedDifficulty);
 }
 
-const savedSoloClass = localStorage.getItem('manifestation_solo_class') || 'Random';
-if (soloClassSelect) soloClassSelect.value = savedSoloClass;
-
-soloClassSelect?.addEventListener('change', () => {
-  localStorage.setItem('manifestation_solo_class', soloClassSelect.value);
-});
+// Note: soloClassSelect restoration and change listener are initialized upfront with updateClassIntelCard()
 
 soloDifficultySelect?.addEventListener('change', () => {
   const diff = soloDifficultySelect.value;
