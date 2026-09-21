@@ -1069,8 +1069,12 @@ export function attachVaultDoorModel(vaultGroup) {
       child.castShadow = true;
       child.receiveShadow = true;
       if (child.material) {
-        child.material.roughness = Math.max(0.4, child.material.roughness || 0.5);
-        child.material.metalness = Math.max(0.6, child.material.metalness || 0.8);
+        // Tint down diffuse reflectance to dark reinforced industrial steel to prevent blinding white blowout
+        if (child.material.color) {
+          child.material.color.setHex(0x525c68);
+        }
+        child.material.roughness = 0.68; // Matte brushed steel scatter
+        child.material.metalness = 0.85; // Heavy authentic vault metal
       }
     }
   });
@@ -2519,7 +2523,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   if (myTeam === 'Human') {
     // Add player flashlight with cinematic focused beam
     const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
-    flashLight = new THREE.SpotLight(0xffffff, isDungeon ? 75 : 120, 52, Math.PI / 3.4, 0.45, 1.1);
+    flashLight = new THREE.SpotLight(0xffffff, isDungeon ? 32 : 55, 45, Math.PI / 3.4, 0.45, 1.2);
     flashLight.position.set(0, 0, 0);
     flashLight.castShadow = enableDynamicShadows;
     const shadowRes = isMobileDevice ? 512 : 1024;
@@ -5456,11 +5460,9 @@ function generateMaze(keysCount = 8) {
     const vaultTex = getLoadedTexture('/assets/vault_door.png', null, true);
     const doorFrontMat = new THREE.MeshStandardMaterial({
       map: vaultTex,
-      color: 0xffffff,
-      metalness: 0.75,
-      roughness: 0.65,
-      emissive: 0x021520,
-      emissiveIntensity: 0.05
+      color: 0x525c68,
+      metalness: 0.80,
+      roughness: 0.65
     });
     const doorBackMat = new THREE.MeshStandardMaterial({
       color: 0x181e26,
@@ -5498,7 +5500,7 @@ function generateMaze(keysCount = 8) {
   vaultGroup.add(exitSignMesh);
 
   // Soft atmospheric cyan extraction beacon casting gentle radiance onto the red runner carpet
-  const exitBeacon = new THREE.PointLight(0x06b6d4, 1.4, 10);
+  const exitBeacon = new THREE.PointLight(0x06b6d4, 0.7, 7.0);
   exitBeacon.position.set(0, 3.0, 0.7);
   vaultGroup.add(exitBeacon);
 
@@ -10320,7 +10322,7 @@ function processFlashlightBattery(delta) {
 
   const mult = getVisionMultiplier();
   const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
-  const baseIntensity = (isDungeon ? (inventory.includes('Battery Pack') ? 80 : 45) : (inventory.includes('Battery Pack') ? 200 : 80)) * mult;
+  const baseIntensity = (isDungeon ? (inventory.includes('Battery Pack') ? 42 : 28) : (inventory.includes('Battery Pack') ? 65 : 45)) * mult;
 
   // Drain if battery still has charge (tracked by battery level, not intensity,
   // so a flicker can't permanently kill the light)
