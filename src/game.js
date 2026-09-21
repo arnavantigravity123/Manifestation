@@ -3378,9 +3378,15 @@ function buildAriadneThread(fromPos = null) {
   const pX = (fromPos && typeof fromPos.x === 'number') ? fromPos.x : (camera ? camera.position.x : 0);
   const pZ = (fromPos && typeof fromPos.z === 'number') ? fromPos.z : (camera ? camera.position.z : 0);
 
-  // 3. Find vault end cell (strictly cellVal === 0)
+  // 3. Find vault end cell (strictly targeting the open corridor cell in front of the gate)
+  const edge = window.vaultEdge || 'N';
   let endCol = window.vaultC;
   let endRow = window.vaultR;
+  if (edge === 'N') endRow = 1;
+  else if (edge === 'S') endRow = Math.max(1, (mazeLayout ? mazeLayout.length : 13) - 2);
+  else if (edge === 'E') endCol = Math.max(1, (mazeLayout && mazeLayout[0] ? mazeLayout[0].length : 13) - 2);
+  else if (edge === 'W') endCol = 1;
+
   if (typeof endCol !== 'number' || typeof endRow !== 'number' || !mazeLayout[endRow] || mazeLayout[endRow][endCol] !== 0) {
     const targetGate = (typeof gateCoordinates !== 'undefined' && gateCoordinates) ? gateCoordinates : { x: 0, z: -35 };
     let bestDist = Infinity;
@@ -3429,15 +3435,14 @@ function buildAriadneThread(fromPos = null) {
     return;
   }
 
-  // Add the vault portal position as the terminal point (stopping cleanly before the threshold)
+  // Add the vault portal position as the terminal point (stopping cleanly before the threshold plate)
   if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
     let termX = gateCoordinates.x;
     let termZ = gateCoordinates.z;
-    const edge = window.vaultEdge || 'N';
-    if (edge === 'N') termZ += 0.8;
-    else if (edge === 'S') termZ -= 0.8;
-    else if (edge === 'E') termX -= 0.8;
-    else if (edge === 'W') termX += 0.8;
+    if (edge === 'N') termZ += 1.1;
+    else if (edge === 'S') termZ -= 1.1;
+    else if (edge === 'E') termX -= 1.1;
+    else if (edge === 'W') termX += 1.1;
     path.push({ x: termX, z: termZ });
   }
 
@@ -4245,10 +4250,10 @@ function spawnDungeonProps(layout, blockSize) {
     let rugX = gateCoordinates.x;
     let rugZ = gateCoordinates.z;
     let rugRot = 0;
-    if (edge === 'N') { rugZ += 2.8; rugRot = 0; }
-    else if (edge === 'S') { rugZ -= 2.8; rugRot = Math.PI; }
-    else if (edge === 'E') { rugX -= 2.8; rugRot = Math.PI / 2; }
-    else if (edge === 'W') { rugX += 2.8; rugRot = -Math.PI / 2; }
+    if (edge === 'N') { rugZ += 3.15; rugRot = 0; }
+    else if (edge === 'S') { rugZ -= 3.15; rugRot = Math.PI; }
+    else if (edge === 'E') { rugX -= 3.15; rugRot = Math.PI / 2; }
+    else if (edge === 'W') { rugX += 3.15; rugRot = -Math.PI / 2; }
     addRugTile(dungeonRugCrestGeo || dungeonRugGeo, rugX, rugZ, rugRot);
   }
 
@@ -5489,8 +5494,8 @@ function generateMaze(keysCount = 8) {
   rightBulkhead.receiveShadow = true;
   vaultGroup.add(rightBulkhead);
 
-  // Solid Top Transom Bulkhead: spans full 6.0m corridor width above the lintel (Y = 3.1 to 3.55) meeting the ceiling flush
-  const transomGeo = new THREE.BoxGeometry(6.1, 0.48, 0.42);
+  // Solid Top Transom Bulkhead: clean masonry span matching the lintel width
+  const transomGeo = new THREE.BoxGeometry(3.8, 0.48, 0.38);
   const transomBulkhead = new THREE.Mesh(transomGeo, bulkheadMat);
   transomBulkhead.position.set(0, 3.34, 0);
   transomBulkhead.castShadow = true;
@@ -5537,6 +5542,38 @@ function generateMaze(keysCount = 8) {
     bolt.position.set(bx, 3.25, 0.20);
     vaultGroup.add(bolt);
   });
+
+  // Authentic Gothic Steel Vault Faceplate (Spandrel Wall) sealing all 4 corners around the circular door
+  const faceplateMat = new THREE.MeshStandardMaterial({
+    color: 0x1f242c,
+    metalness: 0.85,
+    roughness: 0.4
+  });
+
+  const wallShape = new THREE.Shape();
+  wallShape.moveTo(-1.82, 0.05);
+  wallShape.lineTo(1.82, 0.05);
+  wallShape.lineTo(1.82, 3.1);
+  wallShape.lineTo(-1.82, 3.1);
+  wallShape.closePath();
+
+  // Circular aperture matching the circular door disc (radius 1.33m centered at Y = 1.55)
+  const holePath = new THREE.Path();
+  holePath.absarc(0, 1.55, 1.33, 0, Math.PI * 2, true);
+  wallShape.holes.push(holePath);
+
+  const faceplateGeo = new THREE.ExtrudeGeometry(wallShape, { 
+    depth: 0.14, 
+    bevelEnabled: true, 
+    bevelThickness: 0.03, 
+    bevelSize: 0.03, 
+    bevelSegments: 3 
+  });
+  const faceplateMesh = new THREE.Mesh(faceplateGeo, faceplateMat);
+  faceplateMesh.position.set(0, 0, 0.02);
+  faceplateMesh.castShadow = true;
+  faceplateMesh.receiveShadow = true;
+  vaultGroup.add(faceplateMesh);
 
   // 2. The Massive Reinforced 3D Vault Door (Animated GLB / Dynamic Mechanized Rig)
   if (preloadedVaultModel) {
@@ -5680,19 +5717,24 @@ function generateMaze(keysCount = 8) {
   gateKeypadWorldPos.y = 1.5;
 
   // 5. Extraction Portal Frame & Open Tunnel Wing Walls (Leading out into the 3D Forest)
-  const chamberWallMat = (isDungeon && typeof dungeonWallMat !== 'undefined' && dungeonWallMat) ? dungeonWallMat : frameMat;
+  // 5. Extraction Portal Frame & Open Tunnel Wing Walls (Leading out into the 3D Forest)
+  const tunnelMat = new THREE.MeshStandardMaterial({
+    color: 0x181e26,
+    metalness: 0.6,
+    roughness: 0.7
+  });
   const chamberSideGeo = new THREE.BoxGeometry(0.35, 3.6, 4.5);
-  const chamberLeftMesh = new THREE.Mesh(chamberSideGeo, chamberWallMat);
+  const chamberLeftMesh = new THREE.Mesh(chamberSideGeo, tunnelMat);
   chamberLeftMesh.position.set(-1.85, 1.8, -2.25);
   vaultGroup.add(chamberLeftMesh);
 
-  const chamberRightMesh = new THREE.Mesh(chamberSideGeo, chamberWallMat);
+  const chamberRightMesh = new THREE.Mesh(chamberSideGeo, tunnelMat);
   chamberRightMesh.position.set(1.85, 1.8, -2.25);
   vaultGroup.add(chamberRightMesh);
 
   // Stone tunnel ceiling slab connecting the vault frame to the forest threshold
   const chamberRoofGeo = new THREE.BoxGeometry(4.0, 0.35, 4.5);
-  const chamberRoofMesh = new THREE.Mesh(chamberRoofGeo, chamberWallMat);
+  const chamberRoofMesh = new THREE.Mesh(chamberRoofGeo, tunnelMat);
   chamberRoofMesh.position.set(0, 3.425, -2.25);
   vaultGroup.add(chamberRoofMesh);
 
