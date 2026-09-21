@@ -965,6 +965,34 @@ export function loadForestAsset() {
   });
 }
 
+export function updateForestClippingPlanes(container) {
+  if (!container || !vaultGroupRef) return;
+  try {
+    vaultGroupRef.updateMatrixWorld(true);
+
+    // World clipping plane at Z = -0.15m behind the doorway threshold pointing into the outdoor forest (-Z)
+    // Any fragment with local Z > -0.15m (such as mountains or terrain protruding into the dungeon hallway)
+    // will evaluate to negative in the clipping plane equation and get discarded by GPU hardware.
+    const localClipPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), -0.15);
+    const worldClipPlane = localClipPlane.clone().applyMatrix4(vaultGroupRef.matrixWorld);
+
+    container.traverse((child) => {
+      if (child.isMesh || child.isPoints) {
+        if (child.material) {
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          mats.forEach(m => {
+            m.clippingPlanes = [worldClipPlane];
+            m.clipShadows = true;
+            m.needsUpdate = true;
+          });
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('[FOREST] Clipping planes update warning:', err);
+  }
+}
+
 function addGLBModelToForest(forestContainer) {
   if (!preloadedForestModel || !forestContainer || forestContainer.userData.hasGlb) return;
   try {
@@ -1004,6 +1032,7 @@ function addGLBModelToForest(forestContainer) {
     forestCloneWrapper.add(forestClone);
     forestContainer.add(forestCloneWrapper);
     forestContainer.userData.hasGlb = true;
+    updateForestClippingPlanes(forestContainer);
     console.log('[FOREST] Authentic 3D Forest model (/assets/forest.glb) mounted to outdoor world successfully!');
   } catch (e) {
     console.warn('[FOREST] Error attaching GLB model to forest container:', e);
@@ -1177,6 +1206,7 @@ export function attachForestToVault() {
 
   vaultGroupRef.add(forestContainer);
   forestSceneInstance = forestContainer;
+  updateForestClippingPlanes(forestContainer);
 }
 
 // 3D Forest Environment Model is preloaded and augmented with procedural scenery
@@ -1820,6 +1850,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   loadLanternAsset();
   loadVaultDoorAsset();
   window.vaultDoorOpen = false;
+  window.isVaultOpeningCutscene = false;
   isVaultDoorOpeningOrOpen = false;
   exitGateShown = false;
   functionalKeysRevealed = [];
@@ -7244,7 +7275,7 @@ function setupControls() {
     if (ptrOverlay && ptrOverlay.style.display === 'flex') return;
     const keypadModalEl = document.getElementById('keypad-modal-ui');
     if (keypadModalEl && keypadModalEl.style.display !== 'none') return;
-    if (isMinimapExpanded) return;
+    if (isMinimapExpanded || window.isVaultOpeningCutscene) return;
 
     let mx = e.movementX;
     let my = e.movementY;
@@ -7320,7 +7351,7 @@ function setupControls() {
     }, { passive: false });
 
     document.addEventListener('touchmove', (e) => {
-      if (isCaptured || !window.gameReady) return;
+      if (isCaptured || !window.gameReady || window.isVaultOpeningCutscene) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (t.identifier === lookTouchId) {
@@ -8308,6 +8339,8 @@ function getBestInteractionTarget() {
           const breakersFixed = fixedBreakersCount >= totalBreakersRequired;
           if (!breakersFixed) {
             prompt = `MASTER GATE LOCKED: Need ${totalBreakersRequired} Breakers to Power Door (${fixedBreakersCount}/${totalBreakersRequired})`;
+          } else if (window.isVaultOpeningCutscene || !window.vaultDoorOpen) {
+            prompt = `⚡ UNLOCKING MECHANISM ENGAGED...`;
           } else {
             prompt = isMobileDevice ? "Tap to Escape Labyrinth!" : "Press <kbd>E</kbd> to Escape Labyrinth!";
           }
@@ -8396,6 +8429,10 @@ function getBestInteractionTarget() {
           if (insertedGateKeys.length >= 2) {
             if (!breakersFixed) {
               triggerNotification(`Master Gate needs power! Fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to open door`);
+              return;
+            }
+            if (window.isVaultOpeningCutscene || !window.vaultDoorOpen) {
+              triggerNotification(`⚡ Vault door is unsealing... Stand by!`);
               return;
             }
             triggerHumanEscape();
@@ -9292,10 +9329,19 @@ function deploySaltTrap() {
 // Keypad dialog helpers — queried lazily to avoid null refs at module load time
 let keypadUI, keypadScreen, keypadBtns, keypadClearBtn, keypadSubmitBtn, keypadCloseBtn;
 
-// Show the exit gate with authentic mechanical opening animation and 1.2s delay
+// Show the exit gate with authentic mechanical opening animation and cinematic POV lock
 function openVaultDoorAnimated() {
   if (isVaultDoorOpeningOrOpen) return;
   isVaultDoorOpeningOrOpen = true;
+
+  // 1. Freeze all ghosts immediately for the entire cutscene + safe buffer duration
+  window.ghostsFrozen = true;
+  ghostsFrozenRemaining = 6.5;
+  window.ghostsFrozenRemaining = 6.5;
+  ghosts3D.forEach(g => {
+    g.children.forEach(c => { if (c.isPointLight) c.intensity = 0; });
+  });
+  triggerNotification("⚡ VAULT POWER SURGE: ALL GHOSTS FROZEN DURING DOOR UNSEALING!");
 
   // Flash the keypad terminal status LED into unlocked green
   if (gateKeypadLed && gateKeypadLed.material) {
@@ -9326,20 +9372,10 @@ function openVaultDoorAnimated() {
   }
 
   playTutorialChime();
-  triggerNotification("🔓 MASTER VAULT ACCESS GRANTED — Unlocking mechanism engaged...");
 
-  // Reveal the outdoor sunny forest, daylight sky, and sunbeams IMMEDIATELY as mechanism unlocks!
-  if (scene) {
-    scene.background = new THREE.Color(0x6bb5ea); // Clear azure blue sky!
-    if (scene.fog) {
-      scene.fog.color.setHex(0x9fd2ee); // Soft aerial horizon mist
-      scene.fog.density = 0.005; // Expansive outdoor sightlines
-    }
-  }
-  if (ambientLight) {
-    ambientLight.intensity = Math.max(ambientLight.intensity, 1.8);
-  }
+  // 2. Reveal the outdoor sunny forest, strictly applying the GPU clipping plane so rocks NEVER clip into the hallway!
   if (forestSceneInstance) {
+    updateForestClippingPlanes(forestSceneInstance);
     forestSceneInstance.visible = true;
     if (forestSceneInstance.userData.outdoorSun) forestSceneInstance.userData.outdoorSun.visible = true;
     if (forestSceneInstance.userData.skyHemisphere) forestSceneInstance.userData.skyHemisphere.visible = true;
@@ -9356,16 +9392,88 @@ function openVaultDoorAnimated() {
     }
   }
 
-  // Mandatory 0.8s dramatic tension delay before gears rotate and heavy steel door swings open!
+  // 3. Cinematic POV lock: Lock player camera and controls into framed view of the vault unsealing
+  let isCameraLocked = false;
+  const distToVault = vaultGroupRef ? camera.position.distanceTo(vaultGroupRef.position) : 999;
+  if (distToVault <= 18.0) {
+    isCameraLocked = true;
+    window.isVaultOpeningCutscene = true;
+    window.vaultDoorOpen = false;
+
+    // Halt player movement physics immediately
+    velocity.set(0, 0, 0);
+    moveForward = false; moveBackward = false; moveLeft = false; moveRight = false;
+
+    // Show cutscene letterbox bars and banner
+    const cutOverlay = document.getElementById('vault-cutscene-overlay');
+    const lbTop = document.getElementById('vault-letterbox-top');
+    const lbBottom = document.getElementById('vault-letterbox-bottom');
+    const banner = document.getElementById('vault-cutscene-banner');
+    if (cutOverlay && lbTop && lbBottom) {
+      cutOverlay.style.display = 'block';
+      setTimeout(() => {
+        lbTop.style.top = '0';
+        lbBottom.style.bottom = '0';
+        if (banner) banner.style.opacity = '1';
+      }, 20);
+    }
+
+    // Smoothly glide camera into optimal framed shot facing the door
+    const startCamPos = camera.position.clone();
+    const startCamQuat = camera.quaternion.clone();
+
+    // Standing eye level at local (0.35, 1.65, 3.4) looking at door center (0, 1.65, 0)
+    const targetWorldPos = vaultGroupRef.localToWorld(new THREE.Vector3(0.35, 1.65, 3.4));
+    const targetWorldLookAt = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, 0));
+
+    const dummyCam = camera.clone();
+    dummyCam.position.copy(targetWorldPos);
+    dummyCam.lookAt(targetWorldLookAt);
+    const targetCamQuat = dummyCam.quaternion.clone();
+
+    const glideStart = performance.now();
+    const glideDuration = 800;
+
+    const camAnim = (now) => {
+      if (!window.isVaultOpeningCutscene) return;
+      const elapsed = now - glideStart;
+      if (elapsed < glideDuration) {
+        const p = elapsed / glideDuration;
+        const eased = 1 - Math.pow(1 - p, 3);
+        camera.position.lerpVectors(startCamPos, targetWorldPos, eased);
+        camera.quaternion.slerpQuaternions(startCamQuat, targetCamQuat, eased);
+        requestAnimationFrame(camAnim);
+      } else {
+        camera.position.copy(targetWorldPos);
+        camera.quaternion.copy(targetCamQuat);
+        requestAnimationFrame(camAnim);
+      }
+    };
+    requestAnimationFrame(camAnim);
+  }
+
+  // 4. Mandatory 0.8s dramatic tension delay before gears rotate and heavy steel door swings open!
   setTimeout(() => {
+    // Reveal azure sky and soft mist
+    if (scene) {
+      scene.background = new THREE.Color(0x6bb5ea);
+      if (scene.fog) {
+        scene.fog.color.setHex(0x9fd2ee);
+        scene.fog.density = 0.005;
+      }
+    }
+    if (ambientLight) {
+      ambientLight.intensity = Math.max(ambientLight.intensity, 1.8);
+    }
+
     // Play 3D model opening animation (Take 001: gear spin, bolt retract, door swing)
     if (vaultOpenAction) {
       vaultOpenAction.reset();
-      vaultOpenAction.timeScale = 3.2; // Smooth cinematic pace (finishes in ~3.7s, door swings at ~2s)
+      vaultOpenAction.timeScale = 3.2; // Smooth cinematic pace
       vaultOpenAction.play();
     }
 
-    // Procedural door swing fallback: directly rotates door hinge node (group1) to guarantee door physically swings open
+    // Procedural door swing fallback: directly rotates door hinge node (group1)
     const doorScene = vaultDoorMeshRef;
     const group1Node = (doorScene && doorScene.getObjectByName) ? doorScene.getObjectByName('group1') : null;
     const startT = performance.now();
@@ -9404,7 +9512,7 @@ function openVaultDoorAnimated() {
     };
     requestAnimationFrame(rumbleAnim);
 
-    // After ~2.4s (when locking bolts are retracted and door swings open):
+    // 5. At 3.8s: Door is completely open! Unlock player POV, remove blocker, and enable escape prompt!
     setTimeout(() => {
       // Remove collision wall so players can walk through seamlessly
       if (gateBlockerRef) {
@@ -9415,9 +9523,32 @@ function openVaultDoorAnimated() {
       }
 
       window.vaultDoorOpen = true;
-      triggerNotification("🚪 THE MASTER VAULT IS OPEN — STEP THROUGH TO ESCAPE!");
+
+      if (isCameraLocked) {
+        window.isVaultOpeningCutscene = false;
+
+        // Retract letterbox bars smoothly
+        const cutOverlay = document.getElementById('vault-cutscene-overlay');
+        const lbTop = document.getElementById('vault-letterbox-top');
+        const lbBottom = document.getElementById('vault-letterbox-bottom');
+        const banner = document.getElementById('vault-cutscene-banner');
+        if (lbTop && lbBottom) {
+          lbTop.style.top = '-14vh';
+          lbBottom.style.bottom = '-14vh';
+          if (banner) banner.style.opacity = '0';
+          setTimeout(() => {
+            if (cutOverlay) cutOverlay.style.display = 'none';
+          }, 600);
+        }
+
+        // Resync camera Euler angles from quaternion so mouse look resumes without hitching
+        camera.rotation.setFromQuaternion(camera.quaternion, 'YXZ');
+      }
+
+      playTutorialChime();
+      triggerNotification("🚪 THE MASTER VAULT IS OPEN — PRESS [E] OR STEP THROUGH TO ESCAPE!");
       updateGateHUD();
-    }, 2400);
+    }, 3800);
   }, 800);
 }
 
@@ -14268,8 +14399,8 @@ function animate() {
 
   // Active controls: on desktop, allow movement physics if pointer lock is active OR if interacting with minimap OR unpaused in-game
   const isActive = isMobileDevice 
-    ? (window.mobileGameActive && (!isCaptured || window.isSpectating)) 
-    : ((Boolean(document.pointerLockElement) || isMinimapOpen || (!isPauseMenuOpen && window.gameReady)) && (!isCaptured || window.isSpectating));
+    ? (window.mobileGameActive && (!isCaptured || window.isSpectating) && !window.isVaultOpeningCutscene) 
+    : ((Boolean(document.pointerLockElement) || isMinimapOpen || (!isPauseMenuOpen && window.gameReady)) && (!isCaptured || window.isSpectating) && !window.isVaultOpeningCutscene);
 
   // Auto-close keypad if player moves away from the terminal station (> 5.5m)
   if (isKeypadOpen) {
