@@ -1094,26 +1094,18 @@ export function attachVaultDoorModel(vaultGroup) {
   const doorScene = preloadedVaultModel.clone(true);
   doorScene.name = 'animated_vault_door_glb';
   doorScene.rotation.y = -Math.PI / 2;
-  const scale = 3.4;
+  const scale = 3.8;
   doorScene.scale.set(scale, scale, scale);
-  doorScene.position.set(0, 1.55, -1.4327);
+  // Centers Door2ay_lambert2_0 flush at Z = 0, Y = 0 on dungeon floor, X = 0 in corridor
+  doorScene.position.set(0.0027, 1.7114, -1.3033);
 
   doorScene.traverse(child => {
-    // Hide the low-poly placeholder wall collar from Sketchfab so the opening is completely unblocked
-    if (child.name && (child.name.toLowerCase().includes('door2ay') || child.name === 'Door2ay_lambert2_0')) {
-      child.visible = false;
-      return;
-    }
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
+      // Preserve authentic Sketchfab PBR textures (normal maps, diffuse maps, metallic-roughness maps)
       if (child.material) {
-        // Tint down diffuse reflectance to dark reinforced industrial steel to prevent blinding white blowout
-        if (child.material.color) {
-          child.material.color.setHex(0x525c68);
-        }
-        child.material.roughness = 0.68; // Matte brushed steel scatter
-        child.material.metalness = 0.85; // Heavy authentic vault metal
+        child.material.needsUpdate = true;
       }
     }
   });
@@ -5524,102 +5516,29 @@ function generateMaze(keysCount = 8) {
 
   const bulkheadMat = (isDungeon && typeof dungeonWallMat !== 'undefined' && dungeonWallMat) ? dungeonWallMat : frameMat;
 
-  // Solid Left Bulkhead Wall: completely seals space between left jamb (X = -1.94) and corridor wall (X = -3.0)
-  const sideBulkheadGeo = new THREE.BoxGeometry(1.2, 3.55, 0.42);
-  const leftBulkhead = new THREE.Mesh(sideBulkheadGeo, bulkheadMat);
-  leftBulkhead.position.set(-2.48, 1.775, 0);
+  // Solid Left Bulkhead Wall: completely seals space between left edge of vault frame (X = -1.713) and corridor wall (X = -3.0)
+  const leftBulkheadGeo = new THREE.BoxGeometry(1.30, 3.55, 0.80);
+  const leftBulkhead = new THREE.Mesh(leftBulkheadGeo, bulkheadMat);
+  leftBulkhead.position.set(-2.355, 1.775, 0);
   leftBulkhead.castShadow = true;
   leftBulkhead.receiveShadow = true;
   vaultGroup.add(leftBulkhead);
 
-  // Solid Right Bulkhead Wall: completely seals space between right jamb (X = +1.94) and corridor wall (X = +3.0)
-  const rightBulkhead = new THREE.Mesh(sideBulkheadGeo, bulkheadMat);
-  rightBulkhead.position.set(2.48, 1.775, 0);
+  // Solid Right Bulkhead Wall: completely seals space between right edge of vault frame (X = +1.713) and corridor wall (X = +3.0)
+  const rightBulkheadGeo = new THREE.BoxGeometry(1.30, 3.55, 0.80);
+  const rightBulkhead = new THREE.Mesh(rightBulkheadGeo, bulkheadMat);
+  rightBulkhead.position.set(2.355, 1.775, 0);
   rightBulkhead.castShadow = true;
   rightBulkhead.receiveShadow = true;
   vaultGroup.add(rightBulkhead);
 
-  // Solid Top Transom Bulkhead: clean masonry span matching the lintel width
-  const transomGeo = new THREE.BoxGeometry(3.8, 0.48, 0.38);
+  // Solid Top Transom Bulkhead: clean masonry span matching ceiling height above vault frame
+  const transomGeo = new THREE.BoxGeometry(3.45, 0.15, 0.80);
   const transomBulkhead = new THREE.Mesh(transomGeo, bulkheadMat);
-  transomBulkhead.position.set(0, 3.34, 0);
+  transomBulkhead.position.set(0, 3.485, 0);
   transomBulkhead.castShadow = true;
   transomBulkhead.receiveShadow = true;
   vaultGroup.add(transomBulkhead);
-
-  // Top header lintel beam spanning between flanking stone pillars
-  const lintelGeo = new THREE.BoxGeometry(3.8, 0.38, 0.38);
-  const lintelMesh = new THREE.Mesh(lintelGeo, frameMat);
-  lintelMesh.position.set(0, 3.25, 0);
-  lintelMesh.castShadow = true;
-  lintelMesh.receiveShadow = true;
-  vaultGroup.add(lintelMesh);
-
-  // Left jamb post
-  const leftJambGeo = new THREE.BoxGeometry(0.24, 3.1, 0.38);
-  const leftJambMesh = new THREE.Mesh(leftJambGeo, frameMat);
-  leftJambMesh.position.set(-1.82, 1.55, 0);
-  leftJambMesh.castShadow = true;
-  leftJambMesh.receiveShadow = true;
-  vaultGroup.add(leftJambMesh);
-
-  // Right jamb post
-  const rightJambGeo = new THREE.BoxGeometry(0.24, 3.1, 0.38);
-  const rightJambMesh = new THREE.Mesh(rightJambGeo, frameMat);
-  rightJambMesh.position.set(1.82, 1.55, 0);
-  rightJambMesh.castShadow = true;
-  rightJambMesh.receiveShadow = true;
-  vaultGroup.add(rightJambMesh);
-
-  // Floor threshold plate (raised heavy steel sill capping the carpet)
-  const threshGeo = new THREE.BoxGeometry(3.8, 0.10, 0.44);
-  const threshMesh = new THREE.Mesh(threshGeo, frameMat);
-  threshMesh.position.set(0, 0.05, 0);
-  threshMesh.receiveShadow = true;
-  vaultGroup.add(threshMesh);
-
-  // Decorative iron rivet studs along the lintel beam
-  const boltGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.03, 8);
-  const boltMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.9, roughness: 0.3 });
-  [-1.4, -0.85, -0.3, 0.3, 0.85, 1.4].forEach(bx => {
-    const bolt = new THREE.Mesh(boltGeo, boltMat);
-    bolt.rotation.x = Math.PI / 2;
-    bolt.position.set(bx, 3.25, 0.20);
-    vaultGroup.add(bolt);
-  });
-
-  // Authentic Gothic Steel Vault Faceplate (Spandrel Wall) sealing all 4 corners around the circular door
-  const faceplateMat = new THREE.MeshStandardMaterial({
-    color: 0x1f242c,
-    metalness: 0.85,
-    roughness: 0.4
-  });
-
-  const wallShape = new THREE.Shape();
-  wallShape.moveTo(-1.82, 0.05);
-  wallShape.lineTo(1.82, 0.05);
-  wallShape.lineTo(1.82, 3.1);
-  wallShape.lineTo(-1.82, 3.1);
-  wallShape.closePath();
-
-  // Circular aperture matching the circular door disc (radius 1.33m centered at Y = 1.55)
-  const holePath = new THREE.Path();
-  holePath.absarc(0, 1.55, 1.33, 0, Math.PI * 2, true);
-  wallShape.holes.push(holePath);
-
-  const faceplateGeo = new THREE.ExtrudeGeometry(wallShape, { 
-    curveSegments: 64,
-    depth: 0.14, 
-    bevelEnabled: true, 
-    bevelThickness: 0.03, 
-    bevelSize: 0.03, 
-    bevelSegments: 4 
-  });
-  const faceplateMesh = new THREE.Mesh(faceplateGeo, faceplateMat);
-  faceplateMesh.position.set(0, 0, 0.02);
-  faceplateMesh.castShadow = true;
-  faceplateMesh.receiveShadow = true;
-  vaultGroup.add(faceplateMesh);
 
   // 2. The Massive Reinforced 3D Vault Door (Animated GLB / Dynamic Mechanized Rig)
   if (preloadedVaultModel) {
@@ -5667,8 +5586,8 @@ function generateMaze(keysCount = 8) {
   }
 
   // 3. Subtle atmospheric extraction beacon casting gentle radiance onto the threshold
-  const exitBeacon = new THREE.PointLight(0x38bdf8, 0.45, 5.0);
-  exitBeacon.position.set(0, 3.1, 0.5);
+  const exitBeacon = new THREE.PointLight(0x38bdf8, 0.12, 4.0);
+  exitBeacon.position.set(0, 3.1, 0.8);
   vaultGroup.add(exitBeacon);
 
   // 4. 3D Keypad Terminal Station (Grounded Gothic Cast-Iron Pedestal + Heavy Wall Anchor)
@@ -9674,28 +9593,28 @@ function openVaultDoorAnimated() {
       vaultOpenAction.reset();
       vaultOpenAction.timeScale = 3.2; // Smooth cinematic pace
       vaultOpenAction.play();
-    }
-
-    // Procedural door swing fallback: directly rotates door hinge node (group1)
-    const doorScene = vaultDoorMeshRef;
-    const group1Node = (doorScene && doorScene.getObjectByName) ? doorScene.getObjectByName('group1') : null;
-    const startT = performance.now();
-    const swingAnim = (now) => {
-      const elapsed = (now - startT) / 1000;
-      if (elapsed >= 1.5 && elapsed <= 3.6) {
-        const p = (elapsed - 1.5) / 2.1;
-        const eased = 1 - Math.pow(1 - p, 2.5);
-        if (group1Node) {
-          group1Node.rotation.y = -1.48 * eased;
+    } else {
+      // Procedural door swing fallback: directly rotates door hinge node (group1)
+      const doorScene = vaultDoorMeshRef;
+      const group1Node = (doorScene && doorScene.getObjectByName) ? doorScene.getObjectByName('group1') : null;
+      const startT = performance.now();
+      const swingAnim = (now) => {
+        const elapsed = (now - startT) / 1000;
+        if (elapsed >= 1.5 && elapsed <= 3.6) {
+          const p = (elapsed - 1.5) / 2.1;
+          const eased = 1 - Math.pow(1 - p, 2.5);
+          if (group1Node) {
+            group1Node.rotation.y = -1.48 * eased;
+          }
         }
-      }
-      if (elapsed < 3.8) {
-        requestAnimationFrame(swingAnim);
-      } else if (group1Node) {
-        group1Node.rotation.y = -1.48;
-      }
-    };
-    requestAnimationFrame(swingAnim);
+        if (elapsed < 3.8) {
+          requestAnimationFrame(swingAnim);
+        } else if (group1Node) {
+          group1Node.rotation.y = -1.48;
+        }
+      };
+      requestAnimationFrame(swingAnim);
+    }
 
     // Camera rumble effect while the heavy gears rotate and locking bolts slide
     const rumbleDuration = 3500;

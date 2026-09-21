@@ -499,8 +499,16 @@ function updateAccountUI() {
     if (Array.isArray(currentUser.unlockedSkins)) {
       currentUser.unlockedSkins.forEach(sid => localStorage.setItem(`unlocked_${sid}`, 'true'));
     }
+    // Restore completed modes for this operative account
+    if (currentUser.completedModes && typeof currentUser.completedModes === 'object') {
+      Object.keys(currentUser.completedModes).forEach(m => {
+        if (currentUser.completedModes[m]) {
+          localStorage.setItem(`manifestation_mode_completed_${m}`, 'true');
+        }
+      });
+    }
     const localEquipped = localStorage.getItem('manifestation_equipped_skin');
-    if (localEquipped) {
+    if (localEquipped && (localStorage.getItem(`unlocked_${localEquipped}`) || localEquipped === 'skin_hazmat')) {
       currentUser.equippedSkin = localEquipped;
       localStorage.setItem('manifestation_user_profile', JSON.stringify(currentUser));
       if (socket && authToken) {
@@ -508,16 +516,29 @@ function updateAccountUI() {
       }
     } else if (currentUser.equippedSkin) {
       localStorage.setItem('manifestation_equipped_skin', currentUser.equippedSkin);
+    } else {
+      localStorage.setItem('manifestation_equipped_skin', 'skin_hazmat');
     }
     updateSkinButtons();
   } else {
+    playerCredits = 0;
+    if (accountCreditsDisplay) accountCreditsDisplay.textContent = `💰 0`;
+    if (playerCreditsDisplay) playerCreditsDisplay.textContent = '0';
+    localStorage.setItem('manifestation_credits', '0');
+
+    // Ensure guest does not have an unauthorized paid skin equipped
+    const currentEquipped = localStorage.getItem('manifestation_equipped_skin');
+    if (!currentEquipped || (!localStorage.getItem(`unlocked_${currentEquipped}`) && currentEquipped !== 'skin_hazmat')) {
+      localStorage.setItem('manifestation_equipped_skin', 'skin_hazmat');
+    }
+
     if (accountGuestView) accountGuestView.style.display = 'flex';
     if (accountLoggedView) accountLoggedView.style.display = 'none';
     if (usernameInput) {
       usernameInput.disabled = false;
       const saved = localStorage.getItem('manifestation_username');
-      if (document.activeElement !== usernameInput && saved) {
-        usernameInput.value = saved;
+      if (document.activeElement !== usernameInput) {
+        usernameInput.value = saved || "Operative";
       }
       usernameInput.title = "Guest Call-Sign";
     }
@@ -796,12 +817,30 @@ if (accountLogoutBtn) {
     }
     authToken = null;
     currentUser = null;
+
+    // Purge account credentials and VIP status
     localStorage.removeItem('manifestation_auth_token');
     localStorage.removeItem('manifestation_user_profile');
     localStorage.removeItem('manifestation_is_vip');
-    playerCredits = 0;
+    localStorage.removeItem('manifestation_username');
+    localStorage.removeItem('manifestation_credits');
     localStorage.setItem('manifestation_credits', '0');
+    playerCredits = 0;
+
+    // Purge all account-unlocked skins and level completion markers from localStorage
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('unlocked_') || key.startsWith('manifestation_mode_completed_') || key.startsWith('manifestation_reward_'))) {
+        localStorage.removeItem(key);
+      }
+    }
+
+    // Reset equipped skin to guest standard issue hazmat suit
+    localStorage.setItem('manifestation_equipped_skin', 'skin_hazmat');
+    localStorage.removeItem('manifestation_pending_level_reward');
+
     updateAccountUI();
+    updateSkinButtons();
     alert("Logged out. You are now playing as Guest.");
   });
 }
@@ -841,7 +880,17 @@ function handleAccountDeletion() {
       localStorage.removeItem('manifestation_credits');
       localStorage.removeItem('manifestation_username');
       playerCredits = 0;
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('unlocked_') || key.startsWith('manifestation_mode_completed_') || key.startsWith('manifestation_reward_'))) {
+          localStorage.removeItem(key);
+        }
+      }
+      localStorage.setItem('manifestation_equipped_skin', 'skin_hazmat');
+      localStorage.removeItem('manifestation_pending_level_reward');
+
       updateAccountUI();
+      updateSkinButtons();
       const settingsModal = document.getElementById('settings-modal');
       if (settingsModal) settingsModal.style.display = 'none';
       window.location.reload();
