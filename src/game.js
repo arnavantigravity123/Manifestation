@@ -3429,9 +3429,16 @@ function buildAriadneThread(fromPos = null) {
     return;
   }
 
-  // Add the vault portal position as the terminal point
+  // Add the vault portal position as the terminal point (stopping cleanly before the threshold)
   if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
-    path.push({ x: gateCoordinates.x, z: gateCoordinates.z });
+    let termX = gateCoordinates.x;
+    let termZ = gateCoordinates.z;
+    const edge = window.vaultEdge || 'N';
+    if (edge === 'N') termZ += 0.8;
+    else if (edge === 'S') termZ -= 0.8;
+    else if (edge === 'E') termX -= 0.8;
+    else if (edge === 'W') termX += 0.8;
+    path.push({ x: termX, z: termZ });
   }
 
   // 6. Build the 3D ribbon and waypoint orbs along the corridor segments
@@ -3470,21 +3477,25 @@ function buildAriadneThread(fromPos = null) {
     segMesh.position.set((p1.x + p2.x) / 2, 0.08, (p1.z + p2.z) / 2);
     threadGroup.add(segMesh);
 
-    // Glowing waypoint orb
-    const orb = new THREE.Mesh(orbGeo, orbMat);
-    orb.position.set(p1.x, 0.35, p1.z);
-    threadGroup.add(orb);
-    window.ariadneOrbs.push(orb);
+    // Glowing waypoint orb (skip the very last waypoint at the door so doorway stays clean)
+    if (i < path.length - 2) {
+      const orb = new THREE.Mesh(orbGeo, orbMat);
+      orb.position.set(p1.x, 0.35, p1.z);
+      threadGroup.add(orb);
+      window.ariadneOrbs.push(orb);
+    }
   }
 
   if (typeof gateCoordinates !== 'undefined' && gateCoordinates) {
-    // Final guide beacon hovering at the top arch of the vault door
-    const finalOrb = new THREE.Mesh(orbGeo, orbMat);
-    finalOrb.position.set(gateCoordinates.x, 3.2, gateCoordinates.z + 0.3);
-    threadGroup.add(finalOrb);
-
-    const gateLight = new THREE.PointLight(0x00ffff, 1.5, 8.0);
-    gateLight.position.set(gateCoordinates.x, 3.2, gateCoordinates.z + 0.5);
+    // Soft atmospheric extraction beacon light at the vault portal (no mid-air clipping sphere)
+    const gateLight = new THREE.PointLight(0x00ffff, 1.0, 6.0);
+    const edge = window.vaultEdge || 'N';
+    let lightX = gateCoordinates.x, lightZ = gateCoordinates.z;
+    if (edge === 'N') lightZ += 0.5;
+    else if (edge === 'S') lightZ -= 0.5;
+    else if (edge === 'E') lightX -= 0.5;
+    else if (edge === 'W') lightX += 0.5;
+    gateLight.position.set(lightX, 2.5, lightZ);
     threadGroup.add(gateLight);
   }
 
@@ -5454,12 +5465,37 @@ function generateMaze(keysCount = 8) {
   vaultObjects.push(vaultGroup);
   vaultGroupRef = vaultGroup;
 
-  // 1. Heavy Gothic Wrought Iron & Stone Architrave Frame
+  // 1. Heavy Gothic Wrought Iron & Stone Architrave Frame with Solid Bulkhead Masonry
   const frameMat = new THREE.MeshStandardMaterial({
     color: 0x242933,
     metalness: 0.35,
     roughness: 0.7
   });
+
+  const bulkheadMat = (isDungeon && typeof dungeonWallMat !== 'undefined' && dungeonWallMat) ? dungeonWallMat : frameMat;
+
+  // Solid Left Bulkhead Wall: completely seals space between left jamb (X = -1.94) and corridor wall (X = -3.0)
+  const sideBulkheadGeo = new THREE.BoxGeometry(1.2, 3.55, 0.42);
+  const leftBulkhead = new THREE.Mesh(sideBulkheadGeo, bulkheadMat);
+  leftBulkhead.position.set(-2.48, 1.775, 0);
+  leftBulkhead.castShadow = true;
+  leftBulkhead.receiveShadow = true;
+  vaultGroup.add(leftBulkhead);
+
+  // Solid Right Bulkhead Wall: completely seals space between right jamb (X = +1.94) and corridor wall (X = +3.0)
+  const rightBulkhead = new THREE.Mesh(sideBulkheadGeo, bulkheadMat);
+  rightBulkhead.position.set(2.48, 1.775, 0);
+  rightBulkhead.castShadow = true;
+  rightBulkhead.receiveShadow = true;
+  vaultGroup.add(rightBulkhead);
+
+  // Solid Top Transom Bulkhead: spans full 6.0m corridor width above the lintel (Y = 3.1 to 3.55) meeting the ceiling flush
+  const transomGeo = new THREE.BoxGeometry(6.1, 0.48, 0.42);
+  const transomBulkhead = new THREE.Mesh(transomGeo, bulkheadMat);
+  transomBulkhead.position.set(0, 3.34, 0);
+  transomBulkhead.castShadow = true;
+  transomBulkhead.receiveShadow = true;
+  vaultGroup.add(transomBulkhead);
 
   // Top header lintel beam spanning between flanking stone pillars
   const lintelGeo = new THREE.BoxGeometry(3.8, 0.38, 0.38);
@@ -5485,10 +5521,10 @@ function generateMaze(keysCount = 8) {
   rightJambMesh.receiveShadow = true;
   vaultGroup.add(rightJambMesh);
 
-  // Floor threshold plate
-  const threshGeo = new THREE.BoxGeometry(3.8, 0.05, 0.38);
+  // Floor threshold plate (raised heavy steel sill capping the carpet)
+  const threshGeo = new THREE.BoxGeometry(3.8, 0.10, 0.44);
   const threshMesh = new THREE.Mesh(threshGeo, frameMat);
-  threshMesh.position.set(0, 0.025, 0);
+  threshMesh.position.set(0, 0.05, 0);
   threshMesh.receiveShadow = true;
   vaultGroup.add(threshMesh);
 
@@ -5547,22 +5583,9 @@ function generateMaze(keysCount = 8) {
     gateMeshRef = gateMesh;
   }
 
-  // 3. Overhead Engraved Extraction Plaque (mounted cleanly on lintel beam below ceiling)
-  const exitSignGeo = new THREE.BoxGeometry(1.6, 0.22, 0.06);
-  const exitSignMat = new THREE.MeshStandardMaterial({
-    color: 0x091e2b,
-    emissive: 0x06b6d4,
-    emissiveIntensity: 0.65,
-    roughness: 0.3,
-    metalness: 0.8
-  });
-  const exitSignMesh = new THREE.Mesh(exitSignGeo, exitSignMat);
-  exitSignMesh.position.set(0, 3.25, 0.20);
-  vaultGroup.add(exitSignMesh);
-
-  // Soft atmospheric cyan extraction beacon casting gentle radiance onto the red runner carpet
-  const exitBeacon = new THREE.PointLight(0x06b6d4, 0.7, 7.0);
-  exitBeacon.position.set(0, 3.0, 0.7);
+  // 3. Subtle atmospheric extraction beacon casting gentle radiance onto the threshold
+  const exitBeacon = new THREE.PointLight(0x38bdf8, 0.45, 5.0);
+  exitBeacon.position.set(0, 3.1, 0.5);
   vaultGroup.add(exitBeacon);
 
   // 4. 3D Keypad Terminal Station (Grounded Gothic Cast-Iron Pedestal + Heavy Wall Anchor)
@@ -5658,14 +5681,20 @@ function generateMaze(keysCount = 8) {
 
   // 5. Extraction Portal Frame & Open Tunnel Wing Walls (Leading out into the 3D Forest)
   const chamberWallMat = (isDungeon && typeof dungeonWallMat !== 'undefined' && dungeonWallMat) ? dungeonWallMat : frameMat;
-  const chamberSideGeo = new THREE.BoxGeometry(0.35, 3.6, 3.2);
+  const chamberSideGeo = new THREE.BoxGeometry(0.35, 3.6, 4.5);
   const chamberLeftMesh = new THREE.Mesh(chamberSideGeo, chamberWallMat);
-  chamberLeftMesh.position.set(-2.2, 1.8, -1.6);
+  chamberLeftMesh.position.set(-1.85, 1.8, -2.25);
   vaultGroup.add(chamberLeftMesh);
 
   const chamberRightMesh = new THREE.Mesh(chamberSideGeo, chamberWallMat);
-  chamberRightMesh.position.set(2.2, 1.8, -1.6);
+  chamberRightMesh.position.set(1.85, 1.8, -2.25);
   vaultGroup.add(chamberRightMesh);
+
+  // Stone tunnel ceiling slab connecting the vault frame to the forest threshold
+  const chamberRoofGeo = new THREE.BoxGeometry(4.0, 0.35, 4.5);
+  const chamberRoofMesh = new THREE.Mesh(chamberRoofGeo, chamberWallMat);
+  chamberRoofMesh.position.set(0, 3.425, -2.25);
+  vaultGroup.add(chamberRoofMesh);
 
   // Attach 3D Forest Environment directly outside the vault portal
   attachForestToVault();
@@ -9395,9 +9424,18 @@ function openVaultDoorAnimated() {
   });
   triggerNotification("⚡ VAULT POWER SURGE: ALL GHOSTS FROZEN DURING DOOR UNSEALING!");
 
-  // Immediately hide the giant dungeon ceiling so it never casts a black rectangular shadow over the sky or forest!
+  // Keep the dungeon ceiling strictly visible inside the labyrinth hallways!
+  // Clip the ceiling only at the vault doorway threshold (Z = 0) so the sky is visible beyond the door
   if (ceilingMesh) {
-    ceilingMesh.visible = false;
+    ceilingMesh.visible = true;
+    if (vaultGroupRef) {
+      const localCeilPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.0);
+      const worldCeilPlane = localCeilPlane.clone().applyMatrix4(vaultGroupRef.matrixWorld);
+      if (ceilingMesh.material) {
+        ceilingMesh.material.clippingPlanes = [worldCeilPlane];
+        ceilingMesh.material.needsUpdate = true;
+      }
+    }
   }
 
   // Flash only the small keypad terminal status LED to indicate unlocked
