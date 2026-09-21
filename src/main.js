@@ -175,13 +175,76 @@ window.classesData = classesData;
 
 // Dynamic Class Intel Preview Metadata for Main Menu Dossier
 const classIntelMeta = {
-  Locksmith: { icon: "🔑", role: "Infiltration Specialist", desc: "Equipped with Thermal Camera to detect entities through walls and Breaker Remote to freeze entities and restore power grids." },
-  Trapper: { icon: "🪤", role: "Containment Defender", desc: "Deploys defensive salt barriers that slow pursuing entities by 80%, sprays navigational chalk markers, and uses adrenaline bursts." },
-  Scout: { icon: "🧭", role: "Recon & Navigation", desc: "Features a 50m long-range EMF radar to track spectral signatures, sanity pills to resist hallucinations, and sprint boosters." },
-  Medic: { icon: "🩺", role: "Field Surgeon", desc: "Starts with field trauma medkits to heal injured allies, sanity stabilizers, and defibrillators to revive downed teammates." },
-  "Flashlight Expert": { icon: "🔦", role: "High-Beam Illuminator", desc: "Carries 2x heavy battery packs for extended flashlight uptime, paired with passive wall-penetrating Thermal X-Ray vision." },
-  Quartermaster: { icon: "🎒", role: "Resource Specialist", desc: "Unlocks Deep Pockets (12 Inventory Slots) pre-stocked with medkits, sanity stabilizers, salt barriers, and battery cells." },
-  Random: { icon: "🎲", role: "Wildcard Operative", desc: "Deploys with an unpredictable loadout assigned by containment headquarters upon labyrinth breach." }
+  Locksmith: {
+    icon: "🔑",
+    role: "Infiltration Specialist",
+    desc: "Equipped with Thermal Camera to detect entities through walls and Breaker Remote to freeze entities and restore power grids.",
+    perks: [
+      { label: "THERMAL X-RAY", val: "PASSIVE SENSOR", color: "#34d399" },
+      { label: "BREAKER REMOTE", val: "FREEZE GHOSTS", color: "#38bdf8" },
+      { label: "CIPHER DECODE", val: "+50% SPEED", color: "#fde047" }
+    ]
+  },
+  Trapper: {
+    icon: "🪤",
+    role: "Containment Defender",
+    desc: "Deploys defensive salt barriers that slow pursuing entities by 80%, sprays navigational chalk markers, and uses adrenaline bursts.",
+    perks: [
+      { label: "SALT BARRIER", val: "-80% GHOST SPEED", color: "#f43f5e" },
+      { label: "CHALK SPRAY", val: "UV TRAIL MARKS", color: "#38bdf8" },
+      { label: "ADRENALINE", val: "10s SPRINT BURST", color: "#34d399" }
+    ]
+  },
+  Scout: {
+    icon: "🧭",
+    role: "Recon & Navigation",
+    desc: "Features a 50m long-range EMF radar to track spectral signatures, sanity pills to resist hallucinations, and sprint boosters.",
+    perks: [
+      { label: "EMF RADAR", val: "50m RANGE", color: "#34d399" },
+      { label: "SANITY PILLS", val: "+35% RESISTANCE", color: "#38bdf8" },
+      { label: "ADRENALINE", val: "10s SPRINT BURST", color: "#fde047" }
+    ]
+  },
+  Medic: {
+    icon: "🩺",
+    role: "Field Surgeon",
+    desc: "Starts with field trauma medkits to heal injured allies, sanity stabilizers, and defibrillators to revive downed teammates.",
+    perks: [
+      { label: "DEFIBRILLATOR", val: "INSTANT REVIVE", color: "#38bdf8" },
+      { label: "TRAUMA MEDKIT", val: "+50 HP HEAL", color: "#34d399" },
+      { label: "SANITY RECOVER", val: "CALM ALLIES", color: "#a78bfa" }
+    ]
+  },
+  "Flashlight Expert": {
+    icon: "🔦",
+    role: "High-Beam Illuminator",
+    desc: "Carries 2x heavy battery packs for extended flashlight uptime, paired with passive wall-penetrating Thermal X-Ray vision.",
+    perks: [
+      { label: "BATTERY CELLS", val: "2X CAPACITY", color: "#fde047" },
+      { label: "THERMAL SENSOR", val: "WALL-PIERCE", color: "#34d399" },
+      { label: "HIGH BEAMS", val: "+100% LUX", color: "#38bdf8" }
+    ]
+  },
+  Quartermaster: {
+    icon: "🎒",
+    role: "Resource Specialist",
+    desc: "Unlocks Deep Pockets (12 Inventory Slots) pre-stocked with medkits, sanity stabilizers, salt barriers, and battery cells.",
+    perks: [
+      { label: "DEEP POCKETS", val: "12 SLOTS", color: "#fde047" },
+      { label: "STOCKPILE", val: "FULL GEAR PACK", color: "#34d399" },
+      { label: "SALVAGE RATE", val: "+50% EXTRA YIELD", color: "#38bdf8" }
+    ]
+  },
+  Random: {
+    icon: "🎲",
+    role: "Wildcard Operative",
+    desc: "Deploys with an unpredictable loadout assigned by containment headquarters upon labyrinth breach.",
+    perks: [
+      { label: "ASSIGNMENT", val: "HQ WILDCARD", color: "#a78bfa" },
+      { label: "START GEAR", val: "RANDOM ROLL", color: "#38bdf8" },
+      { label: "MATCH REWARD", val: "+25% BONUS XP", color: "#34d399" }
+    ]
+  }
 };
 
 function updateClassIntelCard(className) {
@@ -189,12 +252,18 @@ function updateClassIntelCard(className) {
   const titleEl = document.getElementById('wing-class-title');
   const roleEl = document.getElementById('wing-class-role');
   const descEl = document.getElementById('wing-class-desc');
+  const perksEl = document.getElementById('wing-perks-list');
   const meta = classIntelMeta[className] || classIntelMeta.Locksmith;
 
   if (iconEl) iconEl.textContent = meta.icon;
   if (titleEl) titleEl.textContent = className === 'Random' ? 'Random Class' : className;
   if (roleEl) roleEl.textContent = meta.role;
   if (descEl) descEl.textContent = meta.desc;
+  if (perksEl && Array.isArray(meta.perks)) {
+    perksEl.innerHTML = meta.perks.map(p => `
+      <div class="wing-perk-row"><span>${p.label}</span><b style="color: ${p.color};">${p.val}</b></div>
+    `).join('');
+  }
 }
 
 if (soloClassSelect) {
