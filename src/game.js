@@ -2169,7 +2169,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   // Global helper to request pointer lock during active gameplay
   window.requestGamePointerLock = () => {
-    if (isMobileDevice || (!window.gameReady && !window.isSpectating) || window.isEscaping || (isCaptured && !window.isSpectating) || window.isCapturedAnimation) return;
+    if (isMobileDevice || (!window.gameReady && !window.isSpectating) || window.isEscaping || hasEscaped || window.isVaultOpeningCutscene || (isCaptured && !window.isSpectating) || window.isCapturedAnimation) return;
     if (document.pointerLockElement) return;
     if (ptrOverlay && ptrOverlay.style.display === 'flex') return;
     const settingsModal = document.getElementById('settings-modal');
@@ -7283,9 +7283,10 @@ function setupControls() {
     const isSettingsOpen = Boolean(settingsModal && settingsModal.style.display === 'flex');
     const keypadModalEl = document.getElementById('keypad-modal-ui');
     const isKeypadOpen = Boolean(keypadModalEl && keypadModalEl.style.display !== 'none');
+    const isCinematicActive = Boolean(window.isEscaping || hasEscaped || window.isVaultOpeningCutscene);
 
-    if (isPaused || isSettingsOpen || isKeypadOpen || e.target.closest('#pointer-lock-overlay') || e.target.closest('#settings-modal') || e.target.closest('.settings-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel')) {
-      return; // Never relock mouse, capture clicks, or use items while in pause menu, settings, or modals!
+    if (isPaused || isSettingsOpen || isKeypadOpen || isCinematicActive || e.target.closest('#pointer-lock-overlay') || e.target.closest('#settings-modal') || e.target.closest('.settings-modal') || e.target.closest('.keypad-modal') || e.target.closest('.glass-panel') || e.target.closest('#vault-cutscene-overlay') || e.target.closest('#escape-cinematic-overlay')) {
+      return; // Never relock mouse, capture clicks, or use items while in pause menu, settings, modals, cutscenes, or escape animation!
     }
 
     if (!document.pointerLockElement && window.gameReady && !isCaptured && window.requestGamePointerLock) {
@@ -7305,7 +7306,7 @@ function setupControls() {
     if (ptrOverlay && ptrOverlay.style.display === 'flex') return;
     const keypadModalEl = document.getElementById('keypad-modal-ui');
     if (keypadModalEl && keypadModalEl.style.display !== 'none') return;
-    if (isMinimapExpanded || window.isVaultOpeningCutscene) return;
+    if (isMinimapExpanded || window.isVaultOpeningCutscene || window.isEscaping || hasEscaped) return;
 
     let mx = e.movementX;
     let my = e.movementY;
@@ -7381,7 +7382,7 @@ function setupControls() {
     }, { passive: false });
 
     document.addEventListener('touchmove', (e) => {
-      if (isCaptured || !window.gameReady || window.isVaultOpeningCutscene) return;
+      if (isCaptured || !window.gameReady || window.isVaultOpeningCutscene || window.isEscaping || hasEscaped) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
         if (t.identifier === lookTouchId) {
@@ -9378,7 +9379,7 @@ function openVaultDoorAnimated() {
     ceilingMesh.visible = false;
   }
 
-  // Flash the keypad terminal status LED into unlocked green
+  // Flash only the small keypad terminal status LED to indicate unlocked
   if (gateKeypadLed && gateKeypadLed.material) {
     gateKeypadLed.material.color.setHex(0x10b981);
     if (gateKeypadLed.material.emissive) {
@@ -9387,14 +9388,9 @@ function openVaultDoorAnimated() {
     }
   }
 
-  // Illuminate extraction sign and architrave beacon
-  if (vaultGroupRef) {
-    vaultGroupRef.traverse(child => {
-      if (child.isPointLight && child !== gateKeypadLed) {
-        child.color.setHex(0x10b981);
-        child.intensity = 2.0;
-      }
-    });
+  // Ensure user pointer lock is released during unsealing so mouse does not fight cutscene
+  if (document.pointerLockElement) {
+    try { document.exitPointerLock(); } catch (_) {}
   }
 
   playTutorialChime();
@@ -11569,11 +11565,16 @@ let gateBlockerRef = null; // Will be set during maze building
 
 function playEscapeCinematic(callback) {
   window.isEscaping = true;
+  hasEscaped = true;
 
-  // Suppress pointer lock and pause overlay immediately
+  // Immediately disengage the user's mouse and exit pointer lock so cinematic plays completely hands-free
   if (document.pointerLockElement) {
-    document.exitPointerLock();
+    try {
+      document.exitPointerLock();
+    } catch (_) {}
   }
+  resetPlayerMovementState(true);
+
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
   if (ptrOverlay) ptrOverlay.style.display = 'none';
 
@@ -14425,8 +14426,8 @@ function animate() {
 
   // Active controls: on desktop, allow movement physics if pointer lock is active OR if interacting with minimap OR unpaused in-game
   const isActive = isMobileDevice 
-    ? (window.mobileGameActive && (!isCaptured || window.isSpectating) && !window.isVaultOpeningCutscene) 
-    : ((Boolean(document.pointerLockElement) || isMinimapOpen || (!isPauseMenuOpen && window.gameReady)) && (!isCaptured || window.isSpectating) && !window.isVaultOpeningCutscene);
+    ? (window.mobileGameActive && (!isCaptured || window.isSpectating) && !window.isVaultOpeningCutscene && !window.isEscaping && !hasEscaped) 
+    : ((Boolean(document.pointerLockElement) || isMinimapOpen || (!isPauseMenuOpen && window.gameReady)) && (!isCaptured || window.isSpectating) && !window.isVaultOpeningCutscene && !window.isEscaping && !hasEscaped);
 
   // Auto-close keypad if player moves away from the terminal station (> 5.5m)
   if (isKeypadOpen) {
