@@ -9424,17 +9424,20 @@ function openVaultDoorAnimated() {
   });
   triggerNotification("⚡ VAULT POWER SURGE: ALL GHOSTS FROZEN DURING DOOR UNSEALING!");
 
-  // Keep the dungeon ceiling strictly visible inside the labyrinth hallways!
-  // Clip the ceiling only at the vault doorway threshold (Z = 0) so the sky is visible beyond the door
-  if (ceilingMesh) {
-    ceilingMesh.visible = true;
-    if (vaultGroupRef) {
-      const localCeilPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.0);
-      const worldCeilPlane = localCeilPlane.clone().applyMatrix4(vaultGroupRef.matrixWorld);
-      if (ceilingMesh.material) {
-        ceilingMesh.material.clippingPlanes = [worldCeilPlane];
-        ceilingMesh.material.needsUpdate = true;
-      }
+  // Keep the dungeon ceiling and floor strictly visible inside the labyrinth hallways!
+  // Clip them only at the vault doorway threshold (Z = 0) so the sky and forest are visible beyond the door
+  if (vaultGroupRef) {
+    const localCeilPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.0);
+    const worldCeilPlane = localCeilPlane.clone().applyMatrix4(vaultGroupRef.matrixWorld);
+    if (ceilingMesh && ceilingMesh.material) {
+      ceilingMesh.visible = true;
+      ceilingMesh.material.clippingPlanes = [worldCeilPlane];
+      ceilingMesh.material.needsUpdate = true;
+    }
+    if (floorMesh && floorMesh.material) {
+      floorMesh.visible = true;
+      floorMesh.material.clippingPlanes = [worldCeilPlane];
+      floorMesh.material.needsUpdate = true;
     }
   }
 
@@ -11657,9 +11660,21 @@ function playEscapeCinematic(callback) {
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
   if (ptrOverlay) ptrOverlay.style.display = 'none';
 
-  // Hide the giant dungeon ceiling and floor so they do not clip the outdoor forest or block the sky
-  if (ceilingMesh) ceilingMesh.visible = false;
-  if (floorMesh) floorMesh.visible = false;
+  // Ensure ceiling and floor clipping planes are active so hallway remains fully enclosed until player crosses threshold
+  if (vaultGroupRef) {
+    const localGatePlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0.0);
+    const worldGatePlane = localGatePlane.clone().applyMatrix4(vaultGroupRef.matrixWorld);
+    if (ceilingMesh && ceilingMesh.material) {
+      ceilingMesh.visible = true;
+      ceilingMesh.material.clippingPlanes = [worldGatePlane];
+      ceilingMesh.material.needsUpdate = true;
+    }
+    if (floorMesh && floorMesh.material) {
+      floorMesh.visible = true;
+      floorMesh.material.clippingPlanes = [worldGatePlane];
+      floorMesh.material.needsUpdate = true;
+    }
+  }
 
   // Hide in-game HUD and center reticle during cinematic
   const hud = document.getElementById('hud-overlay');
