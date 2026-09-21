@@ -13711,7 +13711,8 @@ function drawMinimap() {
 function applyGhostDamageToHuman(ghostPos, delta) {
   if (window.isSpectating) return;
   const distToPlayer = Math.hypot(ghostPos.x - camera.position.x, ghostPos.z - camera.position.z);
-  if (distToPlayer < 1.5 && myTeam === 'Human' && !isPanicked) {
+  // Ghost reaches up to 2.8m (matches 3.2m tall, 3.0m wingspan GLB model)
+  if (distToPlayer < 2.8 && myTeam === 'Human' && !isPanicked) {
     if (window.isTutorialMatch) {
       if (currentHP > 50) {
         currentHP = Math.max(50, currentHP - delta * 15);
@@ -13722,7 +13723,9 @@ function applyGhostDamageToHuman(ghostPos, delta) {
       }
       return; // In training drill, ghost proximity demonstrates threat without capturing player
     }
-    currentHP = Math.max(0, currentHP - delta * 45);
+    // Proximity scaling: 100% damage inside 1.8m, scaling down to 40% at outer 2.8m periphery
+    const proximityMultiplier = Math.min(1.0, Math.max(0.4, (2.8 - distToPlayer) / 1.0));
+    currentHP = Math.max(0, currentHP - delta * 45 * proximityMultiplier);
     const hpVal = document.getElementById('hp-value');
     const hpBar = document.getElementById('hp-bar');
     if (hpVal) hpVal.textContent = `${Math.ceil(currentHP)} HP`;
@@ -14841,7 +14844,7 @@ function animate() {
       let closestHumanId = null;
       
       if (myTeam === 'Human' && !isPanicked && !isCaptured) {
-        const d = ghost.position.distanceTo(camera.position);
+        const d = Math.hypot(ghost.position.x - camera.position.x, ghost.position.z - camera.position.z);
         if (d < minDist) {
           minDist = d;
           _scratchNearestHuman.set(camera.position.x, ghost.position.y, camera.position.z);
@@ -14853,7 +14856,7 @@ function animate() {
         const p = players3D[pId];
         const isDead = Boolean((p && p.userData && p.userData.isCaptured) || (currentLobby && currentLobby.players && currentLobby.players[pId] && currentLobby.players[pId].isCaptured));
         if (p && p.userData && p.userData.type === 'Human' && !isDead && !p.userData.isPanicked) {
-          const d = ghost.position.distanceTo(p.position);
+          const d = Math.hypot(ghost.position.x - p.position.x, ghost.position.z - p.position.z);
           if (d < minDist) {
             minDist = d;
             _scratchNearestHuman.set(p.position.x, ghost.position.y, p.position.z);
@@ -15397,8 +15400,8 @@ function animate() {
           const tGrid = worldToGrid(targetPos.x, targetPos.z);
           const inSameCell = (gGrid.col === tGrid.col && gGrid.row === tGrid.row);
 
-          // Only move straight toward human target if in the same cell or has unblocked direct Line of Sight!
-          if (inSameCell || hasDirectLos) {
+          // Only move straight toward human target if in the same cell, direct Line of Sight, or within close melee proximity!
+          if (inSameCell || hasDirectLos || distToPlayer < 3.5) {
             _scratchVec3_1.set(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
             ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
             resolveGhostCollision(ghost);
