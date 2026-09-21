@@ -845,8 +845,9 @@ export function loadGhostGLBAsset() {
 
   gltfLoader.load('/assets/ghost_model.glb', (gltf) => {
     preloadedGhostModel = gltf.scene;
-    // Scale 1.6 provides a menacing, imposing presence (~3.2m tall) that fills the corridor while remaining comfortably within the 3.2m pillar clearance
-    preloadedGhostModel.scale.set(1.6, 1.6, 1.6);
+    // Scale 1.15 (~2.3m tall) gives an imposing spectral presence while leaving ~0.75m clearance below the 3.5m ceiling
+    const ghostScale = 1.15;
+    preloadedGhostModel.scale.set(ghostScale, ghostScale, ghostScale);
 
     // Center the model's pivot point so it rotates in place instead of sweeping
     const box = new THREE.Box3().setFromObject(preloadedGhostModel);
@@ -854,7 +855,7 @@ export function loadGhostGLBAsset() {
 
     preloadedGhostModel.position.x = -center.x;
     preloadedGhostModel.position.z = -center.z;
-    preloadedGhostModel.position.y = -box.min.y + 0.15; // Hover menacingly just above the red runner rug
+    preloadedGhostModel.position.y = -box.min.y + 0.10; // Ground base slightly above carpet
     
     preloadedGhostModel.traverse((child) => {
       if (child.isMesh) {
@@ -872,8 +873,10 @@ export function loadGhostGLBAsset() {
         group.remove(spriteChild);
         
         // Wrap the centered model in an anchor group so the centering isn't lost during rotation
+        // anchorGroup rotates by Math.PI (180 degrees) around Y so the GLTF front (+Z) matches Three.js lookAt forward direction (-Z)!
         const clone = SkeletonUtils.clone(preloadedGhostModel);
         const anchorGroup = new THREE.Group();
+        anchorGroup.rotation.y = Math.PI;
         anchorGroup.add(clone);
         
         group.add(anchorGroup);
@@ -12210,6 +12213,7 @@ function createGhostMeshGroup(skinId) {
   if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
+    anchorGroup.rotation.y = Math.PI; // Orient GLTF front (+Z) to match Three.js lookAt (-Z)
     anchorGroup.add(clone);
     group.add(anchorGroup);
   } else {
@@ -15711,8 +15715,8 @@ function animate() {
   // Bob AI ghosts + flickering visibility + fluid spectral levitation hover
   ghosts3D.forEach(g => {
     const acc = g.userData.bobAccumulator || 0;
-    // Multi-frequency harmonic eerie floating bobbing
-    const hoverY = 0.18 + Math.sin(time * 0.0022 + acc) * 0.16 + Math.sin(time * 0.0045 + acc * 1.5) * 0.04;
+    // Multi-frequency harmonic eerie floating bobbing (safe height clamped between 0.02m and 0.23m)
+    const hoverY = 0.12 + Math.sin(time * 0.0022 + acc) * 0.08 + Math.sin(time * 0.0045 + acc * 1.5) * 0.03;
     g.position.y = hoverY;
 
     // Subtle spectral roll and pitch float sway
@@ -15752,7 +15756,7 @@ function animate() {
     
     if (p.userData.type === 'Ghost') {
       const acc = p.userData.bobAccumulator || 0;
-      const hoverY = 0.18 + Math.sin(time * 0.0022 + acc) * 0.16 + Math.sin(time * 0.0045 + acc * 1.5) * 0.04;
+      const hoverY = 0.12 + Math.sin(time * 0.0022 + acc) * 0.08 + Math.sin(time * 0.0045 + acc * 1.5) * 0.03;
       p.position.y = hoverY;
       p.rotation.z = Math.sin(time * 0.0018 + acc) * 0.045;
       p.rotation.x = Math.cos(time * 0.0014 + acc) * 0.035;
