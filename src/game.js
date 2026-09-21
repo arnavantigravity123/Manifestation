@@ -2341,8 +2341,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   // Setup ThreeJS scene
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000); // Pure black to eliminate any gap visibility
-  scene.fog = new THREE.FogExp2(0x000000, 0.015);
+  scene.background = new THREE.Color(0x020408); // Deep atmospheric pitch tone
+  scene.fog = new THREE.FogExp2(0x020408, 0.032); // Oppressive claustrophobic depth falloff
 
   const w = container.clientWidth || window.innerWidth;
   const h = container.clientHeight || window.innerHeight;
@@ -2445,9 +2445,23 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   });
   renderer.setPixelRatio(isLowEnd ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
   renderer.setSize(w, h);
-  renderer.shadowMap.enabled = false; // Disable heavy multi-pass shadow map rendering for smooth 60-144 FPS
+  const savedShadowsSetting = localStorage.getItem('manifestation_shadows_enabled');
+  const enableDynamicShadows = savedShadowsSetting !== null ? (savedShadowsSetting === 'true') : !isMobileDevice;
+  renderer.shadowMap.enabled = enableDynamicShadows;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.localClippingEnabled = true; // Enables GPU fragment clipping planes for doorway threshold
   container.appendChild(renderer.domElement);
+
+  // Live dynamic shadow update hook for Settings toggle
+  window.updateDynamicShadows = (enabled) => {
+    if (renderer && renderer.shadowMap) {
+      renderer.shadowMap.enabled = enabled;
+      renderer.shadowMap.needsUpdate = true;
+    }
+    if (flashLight) {
+      flashLight.castShadow = enabled;
+    }
+  };
 
   // Live memory & GPU diagnostic utility
   window.getGameMemoryStats = () => {
@@ -2471,16 +2485,16 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   // Setup Audio Context for procedural EMF sound
   setupProceduralAudio();
 
-  // Lightings
-  ambientLight = new THREE.AmbientLight(0x445566, 2.0); // Balanced ambient for clear corridor visibility
+  // Lightings: balanced atmospheric ambient light (gives crisp shadows and pitch-black distant corridors)
+  ambientLight = new THREE.AmbientLight(0x28384a, 0.45);
   scene.add(ambientLight);
 
   if (myTeam === 'Human') {
-    // Add player flashlight
+    // Add player flashlight with cinematic focused beam
     const isDungeon = (localStorage.getItem('manifestation_maze_theme') || 'dungeon') === 'dungeon';
-    flashLight = new THREE.SpotLight(0xffffff, isDungeon ? 45 : 100, 50, Math.PI / 3, 0.4, 1.2);
+    flashLight = new THREE.SpotLight(0xffffff, isDungeon ? 75 : 120, 52, Math.PI / 3.4, 0.45, 1.1);
     flashLight.position.set(0, 0, 0);
-    flashLight.castShadow = false;
+    flashLight.castShadow = enableDynamicShadows;
     const shadowRes = isMobileDevice ? 512 : 1024;
     flashLight.shadow.mapSize.set(shadowRes, shadowRes);
     flashLight.shadow.bias = -0.0001;
@@ -3065,6 +3079,63 @@ function playEMFSound(frequency) {
   osc.stop(audioCtx.currentTime + 0.3);
 }
 
+// Horror stinger procedural audio synthesizer: Dissonant Diminished Fifth (Tritone) + Sub-Bass Thump
+let lastGhostSightStingerTime = 0;
+function playGhostSightStinger() {
+  if (!audioCtx) return;
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+
+  try {
+    const t = audioCtx.currentTime;
+    const osc1 = audioCtx.createOscillator();
+    const osc2 = audioCtx.createOscillator();
+    const subOsc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+
+    // Sawtooth oscillators with unsettling pitch droop
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(587.33, t); // D5
+    osc1.frequency.exponentialRampToValueAtTime(320.0, t + 1.2);
+
+    osc2.type = 'sawtooth';
+    osc2.frequency.setValueAtTime(830.61, t); // Ab5 (Tritone dissonance)
+    osc2.frequency.exponentialRampToValueAtTime(450.0, t + 1.2);
+
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(90.0, t); // Heavy chest thump
+    subOsc.frequency.exponentialRampToValueAtTime(32.0, t + 0.85);
+
+    // Resonant lowpass filter sweep
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(3600, t);
+    filter.frequency.exponentialRampToValueAtTime(500, t + 1.2);
+    filter.Q.setValueAtTime(4.5, t);
+
+    // Dynamic amplitude envelope
+    gainNode.gain.setValueAtTime(0.001, t);
+    gainNode.gain.linearRampToValueAtTime(0.85, t + 0.04);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, t + 1.35);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    subOsc.connect(filter);
+    filter.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    osc1.start(t);
+    osc2.start(t);
+    subOsc.start(t);
+    osc1.stop(t + 1.4);
+    osc2.stop(t + 1.4);
+    subOsc.stop(t + 1.4);
+  } catch (err) {
+    console.warn("Ghost sight stinger sound error:", err);
+  }
+}
+
 async function setupMicrophone() {
   if (myTeam !== 'Human') return;
   try {
@@ -3388,6 +3459,105 @@ function hasGridLineOfSight(x1, z1, x2, z2) {
     if (e2 < dx) { err += dx; currR += sz; }
   }
   return true;
+}
+
+// Pre-allocated vectors for ghost line-of-sight & horror effects (Zero-GC)
+const _camForwardVec = new THREE.Vector3();
+const _toGhostVec = new THREE.Vector3();
+let _losCheckTimer = 0;
+
+function updateGhostHorrorEffects(delta) {
+  const overlay = document.getElementById('ghost-proximity-overlay');
+  if (myTeam !== 'Human' || !window.gameReady || isCaptured || window.isEscaping) {
+    if (overlay && overlay.style.display !== 'none') {
+      overlay.style.opacity = '0';
+      overlay.style.display = 'none';
+    }
+    return;
+  }
+
+  // 1. Collect all active ghosts in match (AI bots + player-controlled ghosts)
+  const activeGhosts = [];
+  if (typeof ghosts3D !== 'undefined' && Array.isArray(ghosts3D)) {
+    for (let i = 0; i < ghosts3D.length; i++) {
+      const g = ghosts3D[i];
+      if (g && g.position) activeGhosts.push(g);
+    }
+  }
+  if (typeof players3D !== 'undefined' && players3D) {
+    const ids = Object.keys(players3D);
+    for (let i = 0; i < ids.length; i++) {
+      const p = players3D[ids[i]];
+      if (p && p.userData && p.userData.type === 'Ghost' && p.position) {
+        activeGhosts.push(p);
+      }
+    }
+  }
+
+  if (activeGhosts.length === 0) {
+    if (overlay && overlay.style.display !== 'none') {
+      overlay.style.opacity = '0';
+      overlay.style.display = 'none';
+    }
+    return;
+  }
+
+  // 2. Proximity Chromatic Aberration & Vignette Distortion
+  let minGhostDist = Infinity;
+  const camPos = camera.position;
+  for (let i = 0; i < activeGhosts.length; i++) {
+    const d = camPos.distanceTo(activeGhosts[i].position);
+    if (d < minGhostDist) minGhostDist = d;
+  }
+
+  const chromatic = document.getElementById('ghost-proximity-chromatic');
+  const staticOverlay = document.getElementById('ghost-proximity-static');
+
+  if (minGhostDist < 14.0 && overlay) {
+    overlay.style.display = 'block';
+    // Fear factor: 0.0 at 14m to 1.0 at 2.5m
+    const fear = Math.max(0, Math.min(1.0, (14.0 - minGhostDist) / 11.5));
+    overlay.style.opacity = (fear * 0.95).toFixed(2);
+    if (chromatic) chromatic.style.opacity = (fear * 0.85).toFixed(2);
+    if (staticOverlay) staticOverlay.style.opacity = fear > 0.35 ? ((fear - 0.35) * 0.7).toFixed(2) : '0';
+  } else if (overlay && overlay.style.display !== 'none') {
+    overlay.style.opacity = '0';
+    if (minGhostDist >= 15.0) {
+      overlay.style.display = 'none';
+    }
+  }
+
+  // 3. Line-of-Sight Horror Stinger Sound (Throttled to 5Hz, 20s cooldown)
+  _losCheckTimer += delta;
+  if (_losCheckTimer >= 0.2) {
+    _losCheckTimer = 0;
+    const now = performance.now();
+    if (now - lastGhostSightStingerTime > 20000) {
+      camera.getWorldDirection(_camForwardVec);
+      _camForwardVec.y = 0;
+      _camForwardVec.normalize();
+
+      for (let i = 0; i < activeGhosts.length; i++) {
+        const g = activeGhosts[i];
+        const dist = camPos.distanceTo(g.position);
+        if (dist >= 3.0 && dist <= 20.0) {
+          _toGhostVec.subVectors(g.position, camPos);
+          _toGhostVec.y = 0;
+          _toGhostVec.normalize();
+
+          const dot = _camForwardVec.dot(_toGhostVec);
+          // Facing within ~50 degree field of view
+          if (dot > 0.65) {
+            if (hasGridLineOfSight(camPos.x, camPos.z, g.position.x, g.position.z)) {
+              lastGhostSightStingerTime = now;
+              playGhostSightStinger();
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 let floorMesh = null;
@@ -15361,6 +15531,7 @@ function animate() {
     // Update Shadow Decoys (Feature 3) & Mirage Loot (Feature 2)
     if (typeof updateShadowDecoys === 'function') updateShadowDecoys(delta);
     if (typeof updateMirageLoot === 'function') updateMirageLoot(delta);
+    if (typeof updateGhostHorrorEffects === 'function') updateGhostHorrorEffects(delta);
 
     // Update on-screen interaction cues (throttled to 10Hz to eliminate raycast/dot-product CPU overhead)
     if (isActive) {
@@ -15404,10 +15575,16 @@ function animate() {
   }
 
   // --- Active bobbing and walk cycle limb animations ---
-  // Bob AI ghosts + flickering visibility
+  // Bob AI ghosts + flickering visibility + fluid spectral levitation hover
   ghosts3D.forEach(g => {
     const acc = g.userData.bobAccumulator || 0;
-    g.position.y = 0.1 + Math.sin(time * 0.0015 + acc) * 0.1;
+    // Multi-frequency harmonic eerie floating bobbing
+    const hoverY = 0.18 + Math.sin(time * 0.0022 + acc) * 0.16 + Math.sin(time * 0.0045 + acc * 1.5) * 0.04;
+    g.position.y = hoverY;
+
+    // Subtle spectral roll and pitch float sway
+    g.rotation.z = Math.sin(time * 0.0018 + acc) * 0.045;
+    g.rotation.x = Math.cos(time * 0.0014 + acc) * 0.035;
 
     // Flickering visibility — ghost pulses in and out
     const flickerPhase = Math.sin(time * 0.004 + acc) * 0.5 
@@ -15442,7 +15619,11 @@ function animate() {
     
     if (p.userData.type === 'Ghost') {
       const acc = p.userData.bobAccumulator || 0;
-      p.position.y = 0.1 + Math.sin(time * 0.0015 + acc) * 0.1;
+      const hoverY = 0.18 + Math.sin(time * 0.0022 + acc) * 0.16 + Math.sin(time * 0.0045 + acc * 1.5) * 0.04;
+      p.position.y = hoverY;
+      p.rotation.z = Math.sin(time * 0.0018 + acc) * 0.045;
+      p.rotation.x = Math.cos(time * 0.0014 + acc) * 0.035;
+
       const flickerPhase = Math.sin(time * 0.004 + acc) * 0.5 
                          + Math.sin(time * 0.011 + acc * 2) * 0.3;
       const glitchBurst = Math.random() < 0.003 ? 0.25 : 0;

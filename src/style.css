@@ -1232,29 +1232,41 @@ input[type="text"]:focus {
 
 .notification-box {
   position: fixed;
-  top: 52px;
+  top: auto;
+  bottom: 110px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(15, 23, 42, 0.94);
-  border: 1.5px solid rgba(56, 189, 248, 0.65);
-  padding: 0.5rem 1.4rem;
-  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1.5px solid rgba(56, 189, 248, 0.7);
+  padding: 0.55rem 1.6rem;
+  border-radius: 8px;
   color: #f1f5f9;
   font-family: 'Orbitron', sans-serif;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  font-size: 0.78rem;
+  letter-spacing: 1.2px;
+  font-size: 0.8rem;
   font-weight: 700;
   z-index: 10005;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.3), 0 4px 12px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.35), 0 6px 16px rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   pointer-events: none;
-  animation: slideDown 0.25s ease-out;
+  animation: toastSlideUp 0.25s ease-out;
   display: none;
-  max-width: 90vw;
+  max-width: 88vw;
   text-align: center;
   white-space: normal;
+}
+
+@keyframes toastSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
 }
 
 /* Dynamic crosshair */
@@ -1844,10 +1856,10 @@ body.is-mobile .sleek-hotbar-container.quartermaster-inventory .key-pocket-label
 
   .notification-box {
     top: auto;
-    bottom: 24px;
-    padding: 0.35rem 0.8rem;
-    font-size: 0.62rem;
-    max-width: 80vw;
+    bottom: 95px;
+    padding: 0.4rem 1.1rem;
+    font-size: 0.7rem;
+    max-width: 86vw;
     background: rgba(15, 23, 42, 0.96);
     border-color: rgba(56, 189, 248, 0.7);
     box-shadow: 0 0 14px rgba(0, 0, 0, 0.8);
@@ -3162,10 +3174,10 @@ kbd {
 
   .notification-box {
     top: auto;
-    bottom: 18px;
-    font-size: 0.6rem;
-    padding: 0.3rem 0.8rem;
-    max-width: 70vw;
+    bottom: 90px;
+    font-size: 0.66rem;
+    padding: 0.35rem 0.9rem;
+    max-width: 85vw;
   }
 }
 
@@ -3270,7 +3282,8 @@ kbd {
   /* 4. Notification / Announcement Toast */
   body.is-pc:not(.is-mobile) .notification-box,
   body:not(.is-mobile) .notification-box {
-    top: 68px;
+    top: auto;
+    bottom: 120px;
     font-size: 1.05rem;
     padding: 0.75rem 2.2rem;
     border-radius: 8px;
@@ -3474,5 +3487,59 @@ kbd {
   body:not(.is-mobile) .tutorial-badge {
     font-size: 0.85rem;
   }
+}
+
+/* ==========================================================================
+   GHOST PROXIMITY DISTORTION & CHROMATIC HORROR OVERLAY
+   ========================================================================== */
+#ghost-proximity-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9990;
+  opacity: 0;
+  display: none;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+#ghost-proximity-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 35%, rgba(60, 0, 90, 0.45) 75%, rgba(139, 0, 0, 0.8) 100%);
+  mix-blend-mode: multiply;
+  transition: opacity 0.25s ease;
+}
+
+#ghost-proximity-chromatic {
+  position: absolute;
+  inset: -8px;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(244, 63, 94, 0.35) 80%, rgba(56, 189, 248, 0.4) 100%);
+  mix-blend-mode: screen;
+  filter: blur(1.5px);
+  animation: chromaticPulse 1.2s ease-in-out infinite alternate;
+}
+
+#ghost-proximity-static {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  mix-blend-mode: overlay;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(255, 255, 255, 0.06) 3px, rgba(255, 255, 255, 0.06) 6px);
+  animation: staticJitter 0.08s steps(2) infinite;
+}
+
+@keyframes chromaticPulse {
+  0% { transform: scale(1.0) rotate(0deg); opacity: 0.4; }
+  50% { transform: scale(1.015) rotate(0.3deg); opacity: 0.85; }
+  100% { transform: scale(0.995) rotate(-0.3deg); opacity: 0.55; }
+}
+
+@keyframes staticJitter {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(2px); }
+  100% { transform: translateY(-2px); }
 }
 

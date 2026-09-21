@@ -1999,6 +1999,24 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const shadowsToggle = document.getElementById('dynamic-shadows-toggle');
+  const shadowsStatusTag = document.getElementById('shadows-status-tag');
+  const savedShadows = localStorage.getItem('manifestation_shadows_enabled');
+  const defaultShadows = savedShadows !== null ? (savedShadows === 'true') : !isTouchCapable;
+  if (shadowsToggle) {
+    shadowsToggle.checked = defaultShadows;
+    if (shadowsStatusTag) {
+      shadowsStatusTag.textContent = defaultShadows ? "(Active)" : "(Disabled)";
+    }
+    shadowsToggle.addEventListener('change', (e) => {
+      localStorage.setItem('manifestation_shadows_enabled', e.target.checked ? 'true' : 'false');
+      if (shadowsStatusTag) {
+        shadowsStatusTag.textContent = e.target.checked ? "(Active)" : "(Disabled)";
+      }
+      if (window.updateDynamicShadows) window.updateDynamicShadows(e.target.checked);
+    });
+  }
+
   const showSettings = (e) => {
     if (e) {
       if (e.preventDefault) e.preventDefault();
@@ -2012,6 +2030,15 @@ window.addEventListener('DOMContentLoaded', () => {
         vipGlowStatusTag.style.color = active ? "#fde047" : "#94a3b8";
       }
       vipGlowToggle.disabled = !active;
+    }
+    if (shadowsToggle) {
+      const isShadowOn = localStorage.getItem('manifestation_shadows_enabled') !== null 
+        ? (localStorage.getItem('manifestation_shadows_enabled') === 'true') 
+        : !isTouchCapable;
+      shadowsToggle.checked = isShadowOn;
+      if (shadowsStatusTag) {
+        shadowsStatusTag.textContent = isShadowOn ? "(Active)" : "(Disabled)";
+      }
     }
     const canvasContainer = document.getElementById('canvas-container');
     if (canvasContainer) canvasContainer.style.filter = 'none';
@@ -2035,6 +2062,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (themeSelect) {
       localStorage.setItem('manifestation_maze_theme', themeSelect.value);
+    }
+
+    if (shadowsToggle) {
+      localStorage.setItem('manifestation_shadows_enabled', shadowsToggle.checked ? 'true' : 'false');
+      if (window.updateDynamicShadows) window.updateDynamicShadows(shadowsToggle.checked);
     }
 
     if (vipGlowToggle) {
