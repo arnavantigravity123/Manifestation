@@ -8484,6 +8484,27 @@ function triggerHumanEscape() {
   hasEscaped = true;
   window.isEscaping = true;
 
+  // STOP ALL GHOSTS IMMEDIATELY: No matter what, freeze them dead in their tracks!
+  window.ghostsFrozen = true;
+  window.ghostsFrozenRemaining = 9999;
+  ghostsFrozenRemaining = 9999;
+
+  if (typeof ghosts3D !== 'undefined' && Array.isArray(ghosts3D)) {
+    ghosts3D.forEach(g => {
+      if (g.userData) {
+        g.userData.aiState = 'WANDER';
+        g.userData.targetGrid = null;
+        g.userData.path = null;
+        g.userData.pathTime = 0;
+        g.userData.chasedTargetId = null;
+        g.userData.lastKnownTargetPos = null;
+      }
+      g.children.forEach(c => {
+        if (c.isPointLight) c.intensity = 0;
+      });
+    });
+  }
+
   if (socketClient) {
     socketClient.emit('human_escaped', { id: socketClient.id });
   }
@@ -11567,6 +11588,26 @@ function playEscapeCinematic(callback) {
   window.isEscaping = true;
   hasEscaped = true;
 
+  // STOP ALL GHOSTS IMMEDIATELY: No matter what, freeze them dead in their tracks!
+  window.ghostsFrozen = true;
+  window.ghostsFrozenRemaining = 9999;
+  ghostsFrozenRemaining = 9999;
+  if (typeof ghosts3D !== 'undefined' && Array.isArray(ghosts3D)) {
+    ghosts3D.forEach(g => {
+      if (g.userData) {
+        g.userData.aiState = 'WANDER';
+        g.userData.targetGrid = null;
+        g.userData.path = null;
+        g.userData.pathTime = 0;
+        g.userData.chasedTargetId = null;
+        g.userData.lastKnownTargetPos = null;
+      }
+      g.children.forEach(c => {
+        if (c.isPointLight) c.intensity = 0;
+      });
+    });
+  }
+
   // Immediately disengage the user's mouse and exit pointer lock so cinematic plays completely hands-free
   if (document.pointerLockElement) {
     try {
@@ -14003,10 +14044,10 @@ function drawMinimap() {
 
 // Helper function to apply damage if human is near a ghost (hoisted to prevent per-frame closure GC churn)
 function applyGhostDamageToHuman(ghostPos, delta) {
-  if (window.isSpectating) return;
+  if (window.isSpectating || window.isEscaping || hasEscaped) return;
   const distToPlayer = Math.hypot(ghostPos.x - camera.position.x, ghostPos.z - camera.position.z);
   // Ghost reaches up to 2.8m (matches 3.2m tall, 3.0m wingspan GLB model)
-  if (distToPlayer < 2.8 && myTeam === 'Human' && !isPanicked) {
+  if (distToPlayer < 2.8 && myTeam === 'Human' && !isPanicked && !hasEscaped && !window.isEscaping) {
     if (window.isTutorialMatch) {
       if (currentHP > 50) {
         currentHP = Math.max(50, currentHP - delta * 15);
@@ -15097,8 +15138,8 @@ function animate() {
         }
       }
 
-      // Breaker Remote freezes all ghost movement
-      if (window.ghostsFrozen) return;
+      // Breaker Remote freezes all ghost movement; also stop ALL ghosts dead in their tracks when escaping/escaped!
+      if (window.ghostsFrozen || window.isEscaping || hasEscaped) return;
 
       // Anti-stuck watchdog: detects ghosts jammed in indents/corners for > 1.2s and ejects them to open corridors
       if (!ghost.userData.lastMoveCheckPos) {
@@ -15132,12 +15173,12 @@ function animate() {
       const prevGhostX = ghost.position.x;
       const prevGhostZ = ghost.position.z;
 
-      // Find nearest human
+      // Find nearest human (never target escaped or escaping players!)
       let nearestHumanPos = null;
       let minDist = Infinity;
       let closestHumanId = null;
       
-      if (myTeam === 'Human' && !isPanicked && !isCaptured) {
+      if (myTeam === 'Human' && !isPanicked && !isCaptured && !hasEscaped && !window.isEscaping) {
         const d = Math.hypot(ghost.position.x - camera.position.x, ghost.position.z - camera.position.z);
         if (d < minDist) {
           minDist = d;
@@ -15149,7 +15190,8 @@ function animate() {
       for (const pId in players3D) {
         const p = players3D[pId];
         const isDead = Boolean((p && p.userData && p.userData.isCaptured) || (currentLobby && currentLobby.players && currentLobby.players[pId] && currentLobby.players[pId].isCaptured));
-        if (p && p.userData && p.userData.type === 'Human' && !isDead && !p.userData.isPanicked) {
+        const hasPlayerEscaped = Boolean((p && p.userData && p.userData.hasEscaped) || (currentLobby && currentLobby.players && currentLobby.players[pId] && currentLobby.players[pId].hasEscaped));
+        if (p && p.userData && p.userData.type === 'Human' && !isDead && !p.userData.isPanicked && !hasPlayerEscaped) {
           const d = Math.hypot(ghost.position.x - p.position.x, ghost.position.z - p.position.z);
           if (d < minDist) {
             minDist = d;
