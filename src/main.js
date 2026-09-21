@@ -242,7 +242,7 @@ const classIntelMeta = {
     perks: [
       { label: "ASSIGNMENT", val: "HQ WILDCARD", color: "#a78bfa" },
       { label: "START GEAR", val: "RANDOM ROLL", color: "#38bdf8" },
-      { label: "MATCH REWARD", val: "+25% BONUS XP", color: "#34d399" }
+      { label: "MATCH REWARD", val: "+25% BONUS COINS", color: "#fde047" }
     ]
   }
 };
