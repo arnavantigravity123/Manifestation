@@ -112,19 +112,27 @@
             <div style="border-top: 1px dashed rgba(255,255,255,0.15); margin: 0.2rem 0;"></div>
             
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;">
-              <button id="join-public-btn" class="action-btn" style="padding: 0.6rem; font-size: 0.82rem;">🌐 Public Match</button>
-              <button id="create-public-btn" class="action-btn" style="background: linear-gradient(135deg, #059669, #064e3b); padding: 0.6rem; font-size: 0.82rem;">🛡️ Create Lobby</button>
+              <button id="join-public-btn" class="action-btn" style="padding: 0.65rem; font-size: 0.84rem; font-weight: 700;">🌐 Public Match</button>
+              <button id="create-public-btn" class="action-btn" style="background: linear-gradient(135deg, #059669, #064e3b); border: 1px solid #10b981; padding: 0.65rem; font-size: 0.84rem; font-weight: 700;">🛡️ Create Lobby</button>
             </div>
             
-            <div style="display: flex; gap: 0.5rem; margin-top: 0.1rem;">
-              <button id="create-private-btn" class="action-btn" style="background: linear-gradient(135deg, #d97706, #78350f); font-size: 0.8rem; padding: 0.55rem 0.8rem; width: auto; white-space: nowrap;">🔒 Private</button>
-              <input type="text" id="private-room-input" placeholder="Room Code" style="flex-grow: 1; padding: 0.5rem; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px; font-family: 'Orbitron', sans-serif; text-transform: uppercase; font-size: 0.82rem;" />
-              <button id="join-private-btn" class="action-btn" style="width: auto; padding: 0.55rem 1rem; font-size: 0.82rem;">Join</button>
+            <!-- Dedicated Private Infiltration Chamber (Spacious 2-Row Design) -->
+            <div class="private-room-container" style="background: rgba(15, 23, 42, 0.7); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 10px; padding: 0.65rem 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.2rem; box-shadow: inset 0 0 15px rgba(245, 158, 11, 0.08);">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.74rem; color: #f59e0b; font-family: 'Orbitron', sans-serif; font-weight: 700; letter-spacing: 1.2px; display: flex; align-items: center; gap: 6px;">
+                  🔒 PRIVATE INFILTRATION
+                </span>
+                <button id="create-private-btn" class="action-btn" style="width: auto; padding: 0.38rem 0.9rem; font-size: 0.76rem; background: linear-gradient(135deg, #d97706, #92400e); border: 1px solid #f59e0b; font-weight: 700; letter-spacing: 0.5px;">+ Create Room</button>
+              </div>
+              <div style="display: flex; gap: 0.5rem;">
+                <input type="text" id="private-room-input" placeholder="ENTER ROOM CODE..." style="flex: 1; padding: 0.48rem 0.8rem; background: rgba(0,0,0,0.6); border: 1px solid rgba(245, 158, 11, 0.35); color: #fde047; border-radius: 6px; font-family: 'Orbitron', sans-serif; text-transform: uppercase; font-size: 0.82rem; letter-spacing: 2px;" />
+                <button id="join-private-btn" class="action-btn" style="width: auto; padding: 0.48rem 1.2rem; font-size: 0.82rem; background: linear-gradient(135deg, #0284c7, #0369a1); border: 1px solid #38bdf8; font-weight: 700;">JOIN</button>
+              </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.1rem;">
-              <button id="vip-store-btn" class="action-btn" style="background: linear-gradient(135deg, #d4af37, #996515); border: 1px solid #fde047; font-weight: bold; font-size: 0.78rem; padding: 0.55rem;">💎 VIP PASS 💎</button>
-              <button id="open-skins-btn" class="action-btn" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: 1px solid #60a5fa; font-weight: bold; font-size: 0.78rem; padding: 0.55rem;">🛍️ SKINS ARSENAL</button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.2rem;">
+              <button id="vip-store-btn" class="action-btn" style="background: linear-gradient(135deg, #d4af37, #996515); border: 1px solid #fde047; font-weight: bold; font-size: 0.8rem; padding: 0.6rem;">💎 VIP PASS 💎</button>
+              <button id="open-skins-btn" class="action-btn" style="background: linear-gradient(135deg, #3b82f6, #1d4ed8); border: 1px solid #60a5fa; font-weight: bold; font-size: 0.8rem; padding: 0.6rem;">🛍️ SKINS ARSENAL</button>
             </div>
 
             <!-- Main Menu Legal & Controls Footer -->
