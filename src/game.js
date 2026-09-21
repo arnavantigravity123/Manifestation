@@ -1094,6 +1094,11 @@ export function attachVaultDoorModel(vaultGroup) {
   doorScene.position.set(0, 1.55, -1.4327);
 
   doorScene.traverse(child => {
+    // Hide the low-poly placeholder wall collar from Sketchfab so the opening is completely unblocked
+    if (child.name && (child.name.toLowerCase().includes('door2ay') || child.name === 'Door2ay_lambert2_0')) {
+      child.visible = false;
+      return;
+    }
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
@@ -1134,6 +1139,8 @@ export function attachForestToVault() {
 
   const forestContainer = new THREE.Group();
   forestContainer.name = 'forest_outdoor_world';
+  // Positioned safely outside the doorway threshold so no rocks, leaves, or bushes intrude into the dungeon hallway or carpet!
+  forestContainer.position.set(0, 0, -4.5);
   // Kept strictly 100% hidden during normal maze gameplay — only revealed when escaping through the vault!
   forestContainer.visible = false;
 
@@ -9366,6 +9373,11 @@ function openVaultDoorAnimated() {
   });
   triggerNotification("⚡ VAULT POWER SURGE: ALL GHOSTS FROZEN DURING DOOR UNSEALING!");
 
+  // Immediately hide the giant dungeon ceiling so it never casts a black rectangular shadow over the sky or forest!
+  if (ceilingMesh) {
+    ceilingMesh.visible = false;
+  }
+
   // Flash the keypad terminal status LED into unlocked green
   if (gateKeypadLed && gateKeypadLed.material) {
     gateKeypadLed.material.color.setHex(0x10b981);
@@ -9375,21 +9387,12 @@ function openVaultDoorAnimated() {
     }
   }
 
-  // Highlight gate mesh materials with green emissive glow
-  if (gateMeshRef) {
-    gateMeshRef.traverse(child => {
-      if (child.isMesh && child.material) {
-        if (Array.isArray(child.material)) {
-          child.material.forEach(m => {
-            if (m.emissive) {
-              m.emissive.setHex(0x10b981);
-              m.emissiveIntensity = 0.4;
-            }
-          });
-        } else if (child.material.emissive) {
-          child.material.emissive.setHex(0x10b981);
-          child.material.emissiveIntensity = 0.4;
-        }
+  // Illuminate extraction sign and architrave beacon
+  if (vaultGroupRef) {
+    vaultGroupRef.traverse(child => {
+      if (child.isPointLight && child !== gateKeypadLed) {
+        child.color.setHex(0x10b981);
+        child.intensity = 2.0;
       }
     });
   }
@@ -9441,13 +9444,13 @@ function openVaultDoorAnimated() {
       }, 20);
     }
 
-    // Smoothly glide camera into optimal framed shot facing the door
+    // Smoothly glide camera into optimal framed shot facing the door and open forest
     const startCamPos = camera.position.clone();
     const startCamQuat = camera.quaternion.clone();
 
-    // Standing eye level at local (0.35, 1.65, 3.4) looking at door center (0, 1.65, 0)
-    const targetWorldPos = vaultGroupRef.localToWorld(new THREE.Vector3(0.35, 1.65, 3.4));
-    const targetWorldLookAt = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, 0));
+    // Standing eye level at corridor center (0, 1.65, 3.6) looking through doorway towards the sunlit pine glade (0, 1.75, -12.0)
+    const targetWorldPos = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.65, 3.6));
+    const targetWorldLookAt = vaultGroupRef.localToWorld(new THREE.Vector3(0, 1.75, -12.0));
 
     const dummyCam = camera.clone();
     dummyCam.position.copy(targetWorldPos);
@@ -11697,12 +11700,12 @@ function playEscapeCinematic(callback) {
 
       if (vaultGroupRef) {
         // Walk from startLocalZ through doorway threshold out towards the sunlit white pavilion
-        const localZ = startLocalZ + (-6.5 - startLocalZ) * eased;
+        const localZ = startLocalZ + (-9.5 - startLocalZ) * eased;
         const localY = 1.65 + Math.sin(progress * Math.PI * 4.0) * 0.04; // Gentle natural footsteps
         const localCamPos = new THREE.Vector3(0, localY, localZ);
         
         // Look ahead and frame the majestic white marble sitting rotunda and pine trees
-        const lookZ = -18.0;
+        const lookZ = -22.5;
         const lookY = 1.95 + eased * 0.15;
         const localLookTarget = new THREE.Vector3(0, lookY, lookZ);
 
