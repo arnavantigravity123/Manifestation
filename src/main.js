@@ -1483,12 +1483,19 @@ function initializeSocketConnection() {
     logSystemMessage("Breach sequence authorized. Entering Labyrinth...");
     isSoloMode = false;
     isTutorialMode = false;
-    authView.style.display = 'none';
-    lobbyView.style.display = 'none';
+    if (authView) {
+      authView.style.setProperty('display', 'none', 'important');
+      authView.classList.add('hidden');
+    }
+    if (lobbyView) {
+      lobbyView.style.setProperty('display', 'none', 'important');
+      lobbyView.classList.add('hidden');
+    }
     const uiOverlay = document.getElementById('ui-overlay');
     if (uiOverlay) {
-      uiOverlay.style.display = 'none';
+      uiOverlay.style.setProperty('display', 'none', 'important');
       uiOverlay.style.pointerEvents = 'none';
+      uiOverlay.classList.add('hidden');
     }
 
     // Initialize match immediately with zero latency (0ms delay)
@@ -1539,8 +1546,20 @@ function startLocalSoloMatch(isTutorial = false) {
   isTutorialMode = isTutorial;
   
   if (soloLoadingOverlay) soloLoadingOverlay.style.display = 'none';
-  if (authView) authView.style.display = 'none';
-  if (lobbyView) lobbyView.style.display = 'none';
+  if (authView) {
+    authView.style.setProperty('display', 'none', 'important');
+    authView.classList.add('hidden');
+  }
+  if (lobbyView) {
+    lobbyView.style.setProperty('display', 'none', 'important');
+    lobbyView.classList.add('hidden');
+  }
+  const uiOverlay = document.getElementById('ui-overlay');
+  if (uiOverlay) {
+    uiOverlay.style.setProperty('display', 'none', 'important');
+    uiOverlay.style.pointerEvents = 'none';
+    uiOverlay.classList.add('hidden');
+  }
   const guideModal = document.getElementById('controls-guide-modal');
   if (guideModal) guideModal.style.display = 'none';
   const startScreen = document.getElementById('start-screen');

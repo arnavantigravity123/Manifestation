@@ -1683,6 +1683,24 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   const objBar = document.querySelector('.compact-objective-bar');
   if (objBar) objBar.style.display = 'flex';
 
+  // Forcefully dismiss all main menu, auth, and lobby panels upon match initialization
+  const authViewEl = document.getElementById('auth-view');
+  if (authViewEl) {
+    authViewEl.style.setProperty('display', 'none', 'important');
+    authViewEl.classList.add('hidden');
+  }
+  const lobbyViewEl = document.getElementById('lobby-view');
+  if (lobbyViewEl) {
+    lobbyViewEl.style.setProperty('display', 'none', 'important');
+    lobbyViewEl.classList.add('hidden');
+  }
+  const uiOverlayEl = document.getElementById('ui-overlay');
+  if (uiOverlayEl) {
+    uiOverlayEl.style.setProperty('display', 'none', 'important');
+    uiOverlayEl.style.pointerEvents = 'none';
+    uiOverlayEl.classList.add('hidden');
+  }
+
   if (window.isTutorialMatch) {
     totalBreakersRequired = 1;
   } else {

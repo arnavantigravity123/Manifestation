@@ -3341,10 +3341,10 @@ kbd {
   /* 0. Widescreen Tactical Flanking Wings */
   body.is-pc:not(.is-mobile) #auth-view,
   body:not(.is-mobile) #auth-view {
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: center !important;
-    align-items: stretch !important;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: stretch;
     gap: 1.8rem;
     max-width: 1220px;
     width: 95vw;
@@ -3353,6 +3353,17 @@ kbd {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
+  }
+
+  /* Strict hide enforcement when game is active */
+  #auth-view.hidden,
+  #auth-view[style*="display: none"],
+  #auth-view[style*="display:none"],
+  #ui-overlay.hidden,
+  #ui-overlay[style*="display: none"],
+  #ui-overlay[style*="display:none"] {
+    display: none !important;
+    pointer-events: none !important;
   }
 
   body.is-pc:not(.is-mobile) .auth-core-panel,
