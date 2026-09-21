@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import { initGame, setMobileMode, detectMobileDevice, setupControlsGuideModal } from './game.js';
+import { initGame, setMobileMode, detectMobileDevice, setupControlsGuideModal, getPlayerColor } from './game.js';
 import { Purchases } from '@revenuecat/purchases-capacitor';
 import { Capacitor } from '@capacitor/core';
 
@@ -1401,6 +1401,10 @@ function initializeSocketConnection() {
     const nameSpan = document.createElement('span');
     nameSpan.className = team === 'Ghost' ? 'chat-username ghost-user' : 'chat-username';
     nameSpan.textContent = `${username}: `;
+    if (window.playerColors && window.playerColors[username]) {
+      nameSpan.style.color = window.playerColors[username].hex;
+      nameSpan.style.textShadow = `0 0 8px ${window.playerColors[username].glow}`;
+    }
     msgEl.appendChild(nameSpan);
     msgEl.appendChild(document.createTextNode(msg));
     
@@ -1728,16 +1732,31 @@ function renderLobby() {
   }
 
   playersList.innerHTML = '';
-  players.forEach(p => {
+  window.playerColors = window.playerColors || {};
+  players.forEach((p, idx) => {
+    const pColor = getPlayerColor(p, idx);
+    window.playerColors[p.id] = pColor;
+    if (p.username) window.playerColors[p.username] = pColor;
+
     const row = document.createElement('div');
     row.className = p.id === myId ? 'player-row is-me' : 'player-row';
+    row.style.borderLeft = `4px solid ${pColor.hex}`;
+    row.style.boxShadow = `inset 4px 0 14px ${pColor.glow}`;
 
     const nameWrap = document.createElement('div');
     nameWrap.className = 'player-name-wrapper';
+
+    // Distinct glowing player color dot beacon
+    const colorBadge = document.createElement('span');
+    colorBadge.className = 'player-color-dot';
+    colorBadge.style.cssText = `display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: ${pColor.hex}; box-shadow: 0 0 10px ${pColor.hex}; border: 1.5px solid #ffffff; flex-shrink: 0;`;
+    nameWrap.appendChild(colorBadge);
     
     const nameSpan = document.createElement('span');
     nameSpan.textContent = p.username;
     nameSpan.style.fontWeight = 'bold';
+    nameSpan.style.color = pColor.hex;
+    nameSpan.style.textShadow = `0 0 10px ${pColor.glow}`;
     nameWrap.appendChild(nameSpan);
 
     if (p.isHost) {

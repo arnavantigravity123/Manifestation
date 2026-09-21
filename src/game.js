@@ -86,6 +86,63 @@ export function addFastTapListener(el, callback) {
   });
 }
 
+// Vibrant, high-contrast, visually distinct player colors for Lobbies & Tactical Map
+export const LOBBY_PLAYER_COLORS = [
+  { name: 'Neon Cyan',       hex: '#38bdf8', glow: 'rgba(56, 189, 248, 0.45)', border: '#0284c7' },
+  { name: 'Acid Lime',       hex: '#4ade80', glow: 'rgba(74, 222, 128, 0.45)', border: '#16a34a' },
+  { name: 'Amber Blaze',     hex: '#fbbf24', glow: 'rgba(251, 191, 36, 0.45)', border: '#d97706' },
+  { name: 'Rose Red',        hex: '#fb7185', glow: 'rgba(251, 113, 133, 0.45)', border: '#e11d48' },
+  { name: 'Electric Purple', hex: '#c084fc', glow: 'rgba(192, 132, 252, 0.45)', border: '#9333ea' },
+  { name: 'Emerald Gem',     hex: '#34d399', glow: 'rgba(52, 211, 153, 0.45)', border: '#059669' },
+  { name: 'Solar Orange',    hex: '#fb923c', glow: 'rgba(251, 146, 60, 0.45)', border: '#ea580c' },
+  { name: 'Hot Magenta',     hex: '#f472b6', glow: 'rgba(244, 114, 182, 0.45)', border: '#db2777' },
+  { name: 'Bright Azure',    hex: '#60a5fa', glow: 'rgba(96, 165, 250, 0.45)', border: '#2563eb' },
+  { name: 'Canary Gold',     hex: '#facc15', glow: 'rgba(250, 204, 21, 0.45)', border: '#ca8a04' },
+  { name: 'Cyber Teal',      hex: '#2dd4bf', glow: 'rgba(45, 212, 191, 0.45)', border: '#0d9488' },
+  { name: 'Plasma Violet',   hex: '#a855f7', glow: 'rgba(168, 85, 247, 0.45)', border: '#7e22ce' },
+];
+
+export function getPlayerColor(p, index = 0) {
+  if (!p) return LOBBY_PLAYER_COLORS[0];
+  if (typeof index === 'number' && index >= 0) {
+    return LOBBY_PLAYER_COLORS[index % LOBBY_PLAYER_COLORS.length];
+  }
+  const key = String(p.id || p.username || 'player');
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  return LOBBY_PLAYER_COLORS[hash % LOBBY_PLAYER_COLORS.length];
+}
+if (typeof window !== 'undefined') {
+  window.getPlayerColor = getPlayerColor;
+  window.LOBBY_PLAYER_COLORS = LOBBY_PLAYER_COLORS;
+}
+
+export function resolvePlayerColor(pId, username, fallbackIdx = 0) {
+  if (typeof window !== 'undefined' && window.playerColors) {
+    if (pId && window.playerColors[pId]) return window.playerColors[pId];
+    if (username && window.playerColors[username]) return window.playerColors[username];
+  }
+  if (typeof currentLobby !== 'undefined' && currentLobby && currentLobby.players) {
+    const pKeys = Object.keys(currentLobby.players);
+    const idx = pKeys.indexOf(pId);
+    if (idx !== -1) {
+      const color = getPlayerColor(currentLobby.players[pId], idx);
+      if (typeof window !== 'undefined') {
+        window.playerColors = window.playerColors || {};
+        window.playerColors[pId] = color;
+        if (username) window.playerColors[username] = color;
+      }
+      return color;
+    }
+  }
+  return getPlayerColor({ id: pId, username }, fallbackIdx);
+}
+if (typeof window !== 'undefined') {
+  window.resolvePlayerColor = resolvePlayerColor;
+}
+
 export function getHazmatMaterials() {
   if (!hazmatAlbedoTexture) {
     hazmatAlbedoTexture = textureLoader.load('/assets/hazmat/Hazmat_albedo.jpeg?' + HAZMAT_TEX_VER, (tex) => {
@@ -2535,6 +2592,11 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       }
 
       const pMesh = isGhost ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername, isVipPlayer);
+      pMesh.userData.id = pId;
+      pMesh.userData.username = pUsername;
+      pMesh.userData.type = pTeam;
+      pMesh.userData.team = pTeam;
+      pMesh.userData.characterClass = pData.characterClass || (isGhost ? 'Ghost' : 'Operative');
       pMesh.userData.isVip = isVipPlayer;
       const glowPref = window.isVipGlowEnabled ? window.isVipGlowEnabled() : true;
       if (isVipPlayer && glowPref) {
@@ -12472,6 +12534,7 @@ function advanceTutorialStage(nextStage, successMsg) {
 // ==========================================
 // MINIMAP LOGIC
 // ==========================================
+let activeMinimapEntities = [];
 let minimapSetupDone = false;
 function setupMinimap() {
   if (minimapSetupDone) return;
@@ -12486,11 +12549,19 @@ function setupMinimap() {
   if (!wrapper || !canvas) return;
   minimapSetupDone = true;
 
+  let tooltip = document.getElementById('minimap-tooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.id = 'minimap-tooltip';
+    wrapper.appendChild(tooltip);
+  }
+
   const closeMinimap = (e) => {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
+    if (tooltip) tooltip.style.display = 'none';
     isMinimapExpanded = false;
     wrapper.classList.remove('expanded');
     controls.style.display = 'none';
@@ -12517,6 +12588,62 @@ function setupMinimap() {
     if (document.pointerLockElement) document.exitPointerLock();
     drawMinimap();
   };
+
+  const handleMapHover = (clientX, clientY) => {
+    if (!tooltip) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const px = (clientX - rect.left) * scaleX;
+    const py = (clientY - rect.top) * scaleY;
+
+    let closest = null;
+    let minDist = Infinity;
+    const hitRadius = Math.max(18, (canvas.width / (mazeSizeGlobal || 21)) * 1.5);
+
+    for (const ent of activeMinimapEntities) {
+      const d = Math.hypot(px - ent.x, py - ent.y);
+      if (d < hitRadius && d < minDist) {
+        minDist = d;
+        closest = ent;
+      }
+    }
+
+    if (closest) {
+      const vipBadge = closest.isVip ? `<span style="color:#fde047;font-weight:900;margin-left:3px;">👑 VIP</span>` : '';
+      const typeBadge = closest.type ? `<span style="font-size:0.64rem; color:#cbd5e1; background:rgba(255,255,255,0.12); padding:1px 6px; border-radius:4px; font-weight:600; margin-left:4px;">${closest.type}</span>` : '';
+      
+      tooltip.innerHTML = `
+        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${closest.color}; box-shadow:0 0 10px ${closest.color}; border:1.5px solid #ffffff; flex-shrink:0;"></span>
+        <span style="color:${closest.color}; font-weight:900; letter-spacing:0.5px;">${closest.name}</span>
+        ${vipBadge}
+        ${typeBadge}
+      `;
+      tooltip.style.border = `1.5px solid ${closest.color}`;
+      tooltip.style.boxShadow = `0 0 20px rgba(0,0,0,0.95), 0 0 12px ${closest.color}88`;
+
+      const wrapRect = wrapper.getBoundingClientRect();
+      const posX = clientX - wrapRect.left;
+      const posY = clientY - wrapRect.top - 14;
+      tooltip.style.left = `${posX}px`;
+      tooltip.style.top = `${posY}px`;
+      tooltip.style.display = 'flex';
+    } else {
+      tooltip.style.display = 'none';
+    }
+  };
+
+  canvas.addEventListener('mousemove', (e) => {
+    handleMapHover(e.clientX, e.clientY);
+  });
+  canvas.addEventListener('mouseleave', () => {
+    if (tooltip) tooltip.style.display = 'none';
+  });
+  canvas.addEventListener('touchmove', (e) => {
+    if (e.touches && e.touches[0]) {
+      handleMapHover(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, { passive: true });
 
   const handleMapMark = (clientX, clientY) => {
     const rect = canvas.getBoundingClientRect();
@@ -12817,6 +12944,8 @@ function drawMinimap() {
   if (!canvas || !mazeLayout || mazeLayout.length === 0) return;
   const ctx = canvas.getContext('2d');
   
+  activeMinimapEntities = [];
+
   const totalRows = mazeLayout.length;
   const totalCols = (mazeLayout[0] && mazeLayout[0].length) ? mazeLayout[0].length : totalRows;
   const blockSize = mazeBlockSize || 6.0;
@@ -12873,8 +13002,6 @@ function drawMinimap() {
     ctx.fill();
   }
 
-
-
   // Draw Light Sanctuaries (Feature 4: Warm Gold Lantern markers)
   if (typeof sanctuaryZones !== 'undefined') {
     sanctuaryZones.forEach(s => {
@@ -12905,6 +13032,14 @@ function drawMinimap() {
       ctx.arc(0, 0, cellSize * 0.4, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+
+      activeMinimapEntities.push({
+        x: gc * cellSize,
+        y: gr * cellSize,
+        name: 'Spectral Entity (AI)',
+        color: '#c084fc',
+        type: 'Ghost AI'
+      });
     });
   }
 
@@ -12934,28 +13069,49 @@ function drawMinimap() {
         ctx.lineWidth = 1.2;
         ctx.stroke();
         ctx.restore();
+
+        activeMinimapEntities.push({
+          x: gc * cellSize,
+          y: gr * cellSize,
+          name: 'Training Dummy Ghost',
+          color: '#e879f9',
+          type: 'Target'
+        });
       }
     });
   }
 
   // Draw Teammates
-  Object.values(players3D).forEach(p => {
-    if (p.userData && p.userData.type === myTeam) {
+  Object.values(players3D).forEach((p, idx) => {
+    if (p.userData && (p.userData.type === myTeam || myTeam === 'Ghost')) {
       const tc = (p.position.x / blockSize) + (totalCols / 2);
       const tr = (p.position.z / blockSize) + (totalRows / 2);
       
+      const pColorObj = resolvePlayerColor(p.userData.id, p.userData.username, idx + 1);
+      const dotColor = pColorObj ? pColorObj.hex : (myTeam === 'Ghost' ? '#a855f7' : '#3b82f6');
+
       ctx.save();
       ctx.translate(tc * cellSize, tr * cellSize);
-      ctx.fillStyle = myTeam === 'Ghost' ? '#a855f7' : '#3b82f6'; // Ghost purple / Human blue
+      ctx.fillStyle = dotColor;
       ctx.beginPath();
       ctx.arc(0, 0, cellSize * 0.45, 0, Math.PI * 2);
       ctx.fill();
       
       // Outline
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.2;
       ctx.stroke();
       ctx.restore();
+
+      const pName = p.userData.username || 'Operative';
+      activeMinimapEntities.push({
+        x: tc * cellSize,
+        y: tr * cellSize,
+        name: pName,
+        color: dotColor,
+        type: p.userData.characterClass || p.userData.type || 'Operative',
+        isVip: Boolean(p.userData.isVip)
+      });
     }
   });
 
@@ -12977,6 +13133,15 @@ function drawMinimap() {
         ctx.lineTo(-half, half);
         ctx.stroke();
         ctx.restore();
+
+        const cName = c.username || 'Fallen Teammate';
+        activeMinimapEntities.push({
+          x: cc * cellSize,
+          y: cr * cellSize,
+          name: cName,
+          color: '#ef4444',
+          type: '☠️ Fallen Teammate'
+        });
       }
     });
   }
@@ -12992,16 +13157,31 @@ function drawMinimap() {
   // Canvas rotate() is clockwise. So we use negative to match.
   ctx.rotate(-camera.rotation.y); 
   
-  ctx.fillStyle = myTeam === 'Ghost' ? '#ec4899' : '#10b981'; // Pink/Magenta for Ghost, Green for Human
+  const myColorObj = resolvePlayerColor(myId, localStorage.getItem('manifestation_username') || 'You', 0);
+  const myDotColor = myColorObj ? myColorObj.hex : (myTeam === 'Ghost' ? '#ec4899' : '#10b981');
+  ctx.fillStyle = myDotColor;
   ctx.beginPath();
   // Draw an arrow pointing UP (-Z is Up on minimap)
-  ctx.moveTo(0, -cellSize * 0.8);
-  ctx.lineTo(cellSize * 0.6, cellSize * 0.6);
-  ctx.lineTo(-cellSize * 0.6, cellSize * 0.6);
+  ctx.moveTo(0, -cellSize * 0.85);
+  ctx.lineTo(cellSize * 0.65, cellSize * 0.65);
+  ctx.lineTo(-cellSize * 0.65, cellSize * 0.65);
   ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.4;
+  ctx.stroke();
   
   ctx.restore();
+
+  const myUsername = localStorage.getItem('manifestation_username') || 'You';
+  activeMinimapEntities.push({
+    x: pc * cellSize,
+    y: pr * cellSize,
+    name: `${myUsername} (You)`,
+    color: myDotColor,
+    type: myClass || myTeam || 'Operative',
+    isVip: Boolean(window.isVipActive && window.isVipActive())
+  });
 }
 
 // Helper function to apply damage if human is near a ghost (hoisted to prevent per-frame closure GC churn)
