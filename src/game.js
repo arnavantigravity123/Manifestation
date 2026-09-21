@@ -2406,12 +2406,26 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
         window._securityLockoutTimer = null;
       }
 
-      // Auto-complete objectives for testing
+      // Auto-complete objectives for testing: resolve the REAL functional keys
+      const rawKey1 = (functionalKeysRevealed && functionalKeysRevealed[0]) 
+        || (matchConfig && matchConfig.puzzleState && matchConfig.puzzleState.realKeySymbols && matchConfig.puzzleState.realKeySymbols[0])
+        || (currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.realKeySymbols && currentLobby.puzzleState.realKeySymbols[0])
+        || 'Amber Key';
+      const rawKey2 = (functionalKeysRevealed && functionalKeysRevealed[1])
+        || (matchConfig && matchConfig.puzzleState && matchConfig.puzzleState.realKeySymbols && matchConfig.puzzleState.realKeySymbols[1])
+        || (currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.realKeySymbols && currentLobby.puzzleState.realKeySymbols[1])
+        || 'Sapphire Key';
+
+      const keyName1 = getCanonicalGemstone(rawKey1);
+      const keyName2 = getCanonicalGemstone(rawKey2);
+
+      functionalKeysRevealed = [keyName1, keyName2];
+
       carriedKeys = [
-        { symbol: functionalKeysRevealed[0], typeName: 'Amber Key', mesh: null },
-        { symbol: functionalKeysRevealed[1], typeName: 'Sapphire Key', mesh: null }
+        { id: 'ariadne_key_0', symbol: keyName1, typeName: keyName1, mesh: null },
+        { id: 'ariadne_key_1', symbol: keyName2, typeName: keyName2, mesh: null }
       ];
-      foundKeysList = [...functionalKeysRevealed];
+      foundKeysList = [keyName1, keyName2];
       setTimeout(() => renderCarriedKeysHUD(), 100);
       
       fixedBreakersCount = totalBreakersRequired;
@@ -2440,13 +2454,13 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
       const codeStr = (window.cipherCodeDigits || []).join('');
       setTimeout(() => {
-        triggerNotification(`ARIADNE PROTOCOL ACTIVE: Labyrinth thread revealed. Vault Code: ${codeStr}`);
+        triggerNotification(`ARIADNE PROTOCOL ACTIVE: Labyrinth thread revealed. Vault Code: ${codeStr} | Keys: [${formatFunctionalKeyName(keyName1)} & ${formatFunctionalKeyName(keyName2)}]`);
         
         const cipherHUD = document.getElementById('hud-cipher-info');
         if (cipherHUD) {
-          cipherHUD.textContent = `CODE: ${codeStr}`;
+          cipherHUD.textContent = `CODE: ${codeStr} | KEYS: ${formatFunctionalKeyName(keyName1)} & ${formatFunctionalKeyName(keyName2)}`;
           cipherHUD.style.color = '#3b82f6';
-          cipherHUD.style.letterSpacing = '0.3em';
+          cipherHUD.style.letterSpacing = '0.2em';
         }
 
         checkWinCondition(); // Will update gate lights
@@ -6684,23 +6698,32 @@ function setupControls() {
         }
       }
       
-      if (cheatBuffer.includes('testwin')) {
+      if (cheatBuffer.includes('testwin') || cheatBuffer.includes('ariadne') || cheatBuffer.includes('aridane')) {
+        const isAriadneCheat = cheatBuffer.includes('ariadne') || cheatBuffer.includes('aridane');
         cheatBuffer = '';
         try {
-          // 1. Give the player the 2 REAL functional keys using the CORRECT symbols from the server
+          // 1. Give the player the 2 REAL functional keys using the CORRECT symbols
+          const rawKey1 = (functionalKeysRevealed && functionalKeysRevealed[0]) 
+            || (currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.realKeySymbols && currentLobby.puzzleState.realKeySymbols[0])
+            || 'Amber Key';
+          const rawKey2 = (functionalKeysRevealed && functionalKeysRevealed[1])
+            || (currentLobby && currentLobby.puzzleState && currentLobby.puzzleState.realKeySymbols && currentLobby.puzzleState.realKeySymbols[1])
+            || 'Sapphire Key';
+
+          const keyName1 = getCanonicalGemstone(rawKey1);
+          const keyName2 = getCanonicalGemstone(rawKey2);
+
+          functionalKeysRevealed = [keyName1, keyName2];
+
           carriedKeys = [
-            { symbol: functionalKeysRevealed[0], typeName: 'Amber Key', mesh: null },
-            { symbol: functionalKeysRevealed[1], typeName: 'Sapphire Key', mesh: null }
+            { id: 'testwin_key_0', symbol: keyName1, typeName: keyName1, mesh: null },
+            { id: 'testwin_key_1', symbol: keyName2, typeName: keyName2, mesh: null }
           ];
-          foundKeysList = [...functionalKeysRevealed];
+          foundKeysList = [keyName1, keyName2];
           renderCarriedKeysHUD();
           
-          // 2. Do not mark cipher as solved, so player still has to type it
-          // gateSolved = true;
-          
-          // 3. Fix all breakers
+          // 2. Fix all breakers
           fixedBreakersCount = totalBreakersRequired;
-          // Also visually mark all breakers as fixed
           circuitBreakers.forEach(b => {
             b.isFixed = true;
             if (b.mesh) {
@@ -6724,18 +6747,32 @@ function setupControls() {
           });
           updateEnvironmentLighting();
 
-          // 4. Teleport right in front of the vault (close enough to trigger win on interaction)
-          let telX = gateCoordinates.x;
-          let telZ = gateCoordinates.z;
-          if (window.vaultEdge === 'N') telZ += 4;
-          if (window.vaultEdge === 'S') telZ -= 4;
-          if (window.vaultEdge === 'E') telX -= 4;
-          if (window.vaultEdge === 'W') telX += 4;
-          camera.position.set(telX, 1.6, telZ);
+          window.isAriadneDev = true;
+          if (typeof buildAriadneThread === 'function') {
+            buildAriadneThread({ x: camera.position.x, z: camera.position.z });
+          }
+
+          if (!isAriadneCheat) {
+            // Teleport right in front of the vault for testwin
+            let telX = gateCoordinates.x;
+            let telZ = gateCoordinates.z;
+            if (window.vaultEdge === 'N') telZ += 4;
+            if (window.vaultEdge === 'S') telZ -= 4;
+            if (window.vaultEdge === 'E') telX -= 4;
+            if (window.vaultEdge === 'W') telX += 4;
+            camera.position.set(telX, 1.6, telZ);
+          }
           
           const codeStr = (window.cipherCodeDigits || []).join('');
-          triggerNotification(`WIN STATE READY! Walk to gate & press E. Code: ${codeStr}`);
-          console.log('testwin cheat executed. Keys:', functionalKeysRevealed, 'Code:', codeStr);
+          triggerNotification(`ARIADNE PROTOCOL ACTIVE! Keys: [${formatFunctionalKeyName(keyName1)} & ${formatFunctionalKeyName(keyName2)}] | Vault Code: ${codeStr}`);
+          
+          const cipherHUD = document.getElementById('hud-cipher-info');
+          if (cipherHUD) {
+            cipherHUD.textContent = `CODE: ${codeStr} | KEYS: ${formatFunctionalKeyName(keyName1)} & ${formatFunctionalKeyName(keyName2)}`;
+            cipherHUD.style.color = '#3b82f6';
+            cipherHUD.style.letterSpacing = '0.2em';
+          }
+          console.log('Ariadne/testwin cheat executed. Keys:', functionalKeysRevealed, 'Code:', codeStr);
           
           checkWinCondition();
         } catch(err) {
