@@ -1006,9 +1006,82 @@ function addGLBModelToForest(forestContainer) {
   }
 }
 
-// Preload forest.glb and latern.glb immediately so they are ready
+// Preload forest.glb, latern.glb, and vault_door.glb immediately so they are ready
 loadForestAsset();
 loadLanternAsset();
+
+let preloadedVaultModel = null;
+let preloadedVaultAnimClip = null;
+let isVaultLoading = false;
+let vaultMixer = null;
+let vaultOpenAction = null;
+let vaultDoorMeshRef = null;
+let isVaultDoorOpeningOrOpen = false;
+
+export function loadVaultDoorAsset() {
+  if (preloadedVaultModel || isVaultLoading) return;
+  isVaultLoading = true;
+
+  gltfLoader.load('/assets/vault_door.glb', (gltf) => {
+    preloadedVaultModel = gltf.scene;
+    if (gltf.animations && gltf.animations.length > 0) {
+      preloadedVaultAnimClip = gltf.animations[0];
+    }
+    isVaultLoading = false;
+    console.log('✅ [VAULT DOOR] Authentic animated 3D Vault Door (/assets/vault_door.glb) loaded!');
+
+    if (vaultGroupRef && !vaultDoorMeshRef) {
+      attachVaultDoorModel(vaultGroupRef);
+    }
+  }, undefined, (err) => {
+    isVaultLoading = false;
+    console.warn('⚠️ [VAULT DOOR] Error loading /assets/vault_door.glb:', err);
+  });
+}
+
+export function attachVaultDoorModel(vaultGroup) {
+  if (!preloadedVaultModel || !vaultGroup) return;
+
+  // Remove existing vault door instance if any
+  if (vaultDoorMeshRef && vaultDoorMeshRef.parent) {
+    vaultDoorMeshRef.parent.remove(vaultDoorMeshRef);
+    disposeHierarchy(vaultDoorMeshRef);
+    vaultDoorMeshRef = null;
+  }
+
+  const doorScene = preloadedVaultModel.clone(true);
+  doorScene.name = 'animated_vault_door_glb';
+  doorScene.rotation.y = -Math.PI / 2;
+  const scale = 3.4;
+  doorScene.scale.set(scale, scale, scale);
+  doorScene.position.set(0, 1.53, -1.43);
+
+  doorScene.traverse(child => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      if (child.material) {
+        child.material.roughness = Math.max(0.4, child.material.roughness || 0.5);
+        child.material.metalness = Math.max(0.6, child.material.metalness || 0.8);
+      }
+    }
+  });
+
+  vaultGroup.add(doorScene);
+  vaultDoorMeshRef = doorScene;
+  gateMeshRef = doorScene;
+
+  // Create dedicated animation mixer for this vault door
+  if (preloadedVaultAnimClip) {
+    vaultMixer = new THREE.AnimationMixer(doorScene);
+    vaultOpenAction = vaultMixer.clipAction(preloadedVaultAnimClip);
+    vaultOpenAction.setLoop(THREE.LoopOnce);
+    vaultOpenAction.clampWhenFinished = true;
+    console.log('🎬 [VAULT DOOR] Animation mixer initialized for Vault Door!');
+  }
+}
+
+loadVaultDoorAsset();
 
 export function attachForestToVault() {
   if (!vaultGroupRef) return;
@@ -1712,9 +1785,13 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   window.siphonDurationTimer = 0;
   window.scrambleDurationTimer = 0;
   matchCreditsAwardedThisSession = false;
-  // Preload forest model and 3D lantern model in background during gameplay
+  // Preload forest model, 3D lantern model, and animated vault door model in background during gameplay
   loadForestAsset();
   loadLanternAsset();
+  loadVaultDoorAsset();
+  window.vaultDoorOpen = false;
+  isVaultDoorOpeningOrOpen = false;
+  exitGateShown = false;
   functionalKeysRevealed = [];
   foundKeysList = [];
   carriedKeys = [];
@@ -5069,6 +5146,13 @@ function generateMaze(keysCount = 8) {
     gateBlockerRef = null;
   }
   gateMeshRef = null;
+  vaultDoorMeshRef = null;
+  if (vaultMixer) {
+    vaultMixer.stopAllAction();
+    vaultMixer = null;
+  }
+  vaultOpenAction = null;
+  isVaultDoorOpeningOrOpen = false;
   padMeshRef = null;
   gateKeypadLed = null;
 
@@ -5128,47 +5212,51 @@ function generateMaze(keysCount = 8) {
     vaultGroup.add(bolt);
   });
 
-  // 2. The Massive Reinforced 3D Vault Door (gateMeshRef)
-  // Cropped strictly to the heavy iron circular lock & reinforced hinges (omits 2D room floor/ceiling)
-  const doorGeo = new THREE.BoxGeometry(3.4, 3.06, 0.18);
-  const uvAttr = doorGeo.attributes.uv;
-  // BoxGeometry face 4 (+Z front face): crop to inner steel door mechanism [u: 0.12..0.88, v: 0.10..0.88]
-  const uMin = 0.12, uMax = 0.88;
-  const vMin = 0.10, vMax = 0.88;
-  uvAttr.setXY(16, uMin, vMax);
-  uvAttr.setXY(17, uMax, vMax);
-  uvAttr.setXY(18, uMin, vMin);
-  uvAttr.setXY(19, uMax, vMin);
-  uvAttr.needsUpdate = true;
+  // 2. The Massive Reinforced 3D Vault Door (Animated GLB / Dynamic Mechanized Rig)
+  if (preloadedVaultModel) {
+    attachVaultDoorModel(vaultGroup);
+  } else {
+    loadVaultDoorAsset();
+    // Temporary fallback box while GLB completes initial binary parsing:
+    const doorGeo = new THREE.BoxGeometry(3.4, 3.06, 0.18);
+    const uvAttr = doorGeo.attributes.uv;
+    const uMin = 0.12, uMax = 0.88;
+    const vMin = 0.10, vMax = 0.88;
+    uvAttr.setXY(16, uMin, vMax);
+    uvAttr.setXY(17, uMax, vMax);
+    uvAttr.setXY(18, uMin, vMin);
+    uvAttr.setXY(19, uMax, vMin);
+    uvAttr.needsUpdate = true;
 
-  const vaultTex = getLoadedTexture('/assets/vault_door.png', null, true);
-  const doorFrontMat = new THREE.MeshStandardMaterial({
-    map: vaultTex,
-    color: 0xffffff,
-    metalness: 0.75,
-    roughness: 0.65, // Diffused realistic cast iron sheen, zero blown-out glare
-    emissive: 0x021520,
-    emissiveIntensity: 0.05
-  });
-  const doorBackMat = new THREE.MeshStandardMaterial({
-    color: 0x181e26,
-    metalness: 0.8,
-    roughness: 0.4
-  });
-  const doorMaterials = [
-    doorBackMat,
-    doorBackMat,
-    doorBackMat,
-    doorBackMat,
-    doorFrontMat,
-    doorBackMat
-  ];
-  const gateMesh = new THREE.Mesh(doorGeo, doorMaterials);
-  gateMesh.position.set(0, 1.55, 0);
-  gateMesh.castShadow = true;
-  gateMesh.receiveShadow = true;
-  vaultGroup.add(gateMesh);
-  gateMeshRef = gateMesh;
+    const vaultTex = getLoadedTexture('/assets/vault_door.png', null, true);
+    const doorFrontMat = new THREE.MeshStandardMaterial({
+      map: vaultTex,
+      color: 0xffffff,
+      metalness: 0.75,
+      roughness: 0.65,
+      emissive: 0x021520,
+      emissiveIntensity: 0.05
+    });
+    const doorBackMat = new THREE.MeshStandardMaterial({
+      color: 0x181e26,
+      metalness: 0.8,
+      roughness: 0.4
+    });
+    const doorMaterials = [
+      doorBackMat,
+      doorBackMat,
+      doorBackMat,
+      doorBackMat,
+      doorFrontMat,
+      doorBackMat
+    ];
+    const gateMesh = new THREE.Mesh(doorGeo, doorMaterials);
+    gateMesh.position.set(0, 1.55, 0);
+    gateMesh.castShadow = true;
+    gateMesh.receiveShadow = true;
+    vaultGroup.add(gateMesh);
+    gateMeshRef = gateMesh;
+  }
 
   // 3. Overhead Engraved Extraction Plaque (mounted cleanly on lintel beam below ceiling)
   const exitSignGeo = new THREE.BoxGeometry(1.6, 0.22, 0.06);
@@ -8082,11 +8170,112 @@ function getBestInteractionTarget() {
               triggerNotification(`Master Gate needs power! Fix circuit breakers (${fixedBreakersCount}/${totalBreakersRequired}) to open door`);
               return;
             }
-            if (socketClient) {
-              socketClient.emit('human_escaped', { id: socketClient.id });
+            triggerHumanEscape();
+            return;
+          } else {
+            triggerNotification(`Master Gate requires remaining twin key! (${insertedGateKeys.length}/2 installed: [${insertedGateKeys.join(', ') || 'None'}])`);
+          }
+        }
+      };
+    }
+  }
+
+  return bestCandidate;
+}
+
+function triggerHumanEscape() {
+  if (hasEscaped || window.isEscaping) return;
+  hasEscaped = true;
+  window.isEscaping = true;
+
+  if (socketClient) {
+    socketClient.emit('human_escaped', { id: socketClient.id });
+  }
+
+  const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-') && !window.isTutorialMatch);
+
+  playEscapeCinematic(() => {
+    document.getElementById('hud-overlay').style.display = 'none';
+    if (document.pointerLockElement) document.exitPointerLock();
+    window.mobileGameActive = false;
+
+    const endOverlay = document.getElementById('end-game-overlay');
+    if (endOverlay && endOverlay.style.display !== 'flex') {
+      const title = document.getElementById('end-game-title');
+      const details = document.getElementById('end-game-details');
+      if (title && details) {
+        endOverlay.style.display = 'flex';
+        const rewardInfo = awardMatchWinCredits();
+        const rewardHTML = formatRewardCardHTML(rewardInfo);
+
+        if (window.isTutorialMatch) {
+          title.textContent = "🎓 CERTIFIED!";
+          title.style.color = "#38bdf8";
+          title.style.textShadow = "0 0 25px rgba(56, 189, 248, 0.8)";
+          details.innerHTML = `
+            <div style="font-weight:bold; color: #38bdf8; margin-bottom: 0.8rem; font-size: 1.3rem;">TRAINING PROTOCOL CERTIFIED</div>
+            <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You successfully mastered movement, sprint boosters, flashlight operation, supply salvage, circuit breaker power restoration, and master vault keypad extraction!</p>
+            ${rewardHTML}
+          `;
+        } else if (isMultiplayer) {
+          const remainingHumans = Object.values((currentLobby && currentLobby.players) || {}).filter(p => p.team === 'Human' && !p.isCaptured && !p.hasEscaped && p.id !== myId);
+          title.textContent = "ESCAPED!";
+          title.style.color = "#10b981";
+          title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
+          details.innerHTML = `
+            <div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">YOU EXTRACTED SAFELY!</div>
+            <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You escaped through the Master Vault into the pine forest! ${remainingHumans.length > 0 ? `${remainingHumans.length} teammate(s) still navigating to the Vault.` : 'All surviving operatives extracted!'}</p>
+            ${rewardHTML}
+          `;
+        } else {
+          title.textContent = "ESCAPED!";
+          title.style.color = "#10b981";
+          title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
+          details.innerHTML = `
+            <div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div>
+            <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>
+            ${rewardHTML}
+          `;
+        }
+
+        bindClaimAccountButton(rewardInfo);
+
+        const lobbyBtn = document.getElementById('end-game-lobby-btn');
+        if (lobbyBtn) {
+          lobbyBtn.textContent = 'Return to Lobby';
+          addFastTapListener(lobbyBtn, () => {
+            if (window.leaveGameWithAd) {
+              window.leaveGameWithAd(() => window.location.reload());
+            } else {
+              window.location.reload();
             }
-            isCaptured = true;
-            window.isEscaping = true;
+          });
+        }
+        const retryBtn = document.getElementById('end-game-retry-btn');
+        if (retryBtn) {
+          if (isMultiplayer) {
+            retryBtn.style.display = 'inline-block';
+            retryBtn.textContent = 'SPECTATE SQUAD';
+            addFastTapListener(retryBtn, () => {
+              endOverlay.style.display = 'none';
+              window.isSpectating = true;
+              updateEnvironmentLighting();
+              const specHud = document.getElementById('spectator-hud');
+              if (specHud) specHud.style.display = 'flex';
+            });
+          } else {
+            retryBtn.style.display = window.isTutorialMatch ? 'inline-block' : 'none';
+            retryBtn.textContent = 'REPLAY TUTORIAL';
+            addFastTapListener(retryBtn, () => {
+              window.location.reload();
+            });
+          }
+        }
+      }
+    }
+  });
+}
+
 function awardMatchWinCredits() {
   if (matchCreditsAwardedThisSession) {
     return { creditsAwarded: 0, rewardTitle: '', rewardSub: '', isOneTimeClaimed: false, requiresAccount: false };
@@ -8251,74 +8440,6 @@ function bindClaimAccountButton(rewardInfo) {
   }
 }
 
-            playEscapeCinematic(() => {
-              document.getElementById('hud-overlay').style.display = 'none';
-              if (document.pointerLockElement) document.exitPointerLock();
-              window.mobileGameActive = false;
-              const endOverlay = document.getElementById('end-game-overlay');
-              if (endOverlay && endOverlay.style.display !== 'flex') {
-                const title = document.getElementById('end-game-title');
-                const details = document.getElementById('end-game-details');
-                if (title && details) {
-                  endOverlay.style.display = 'flex';
-                  const rewardInfo = awardMatchWinCredits();
-                  const rewardHTML = formatRewardCardHTML(rewardInfo);
-
-                  if (window.isTutorialMatch) {
-                    title.textContent = "🎓 CERTIFIED!";
-                    title.style.color = "#38bdf8";
-                    title.style.textShadow = "0 0 25px rgba(56, 189, 248, 0.8)";
-                    details.innerHTML = `
-                      <div style="font-weight:bold; color: #38bdf8; margin-bottom: 0.8rem; font-size: 1.3rem;">TRAINING PROTOCOL CERTIFIED</div>
-                      <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You successfully mastered movement, sprint boosters, flashlight operation, supply salvage, circuit breaker power restoration, and master vault keypad extraction!</p>
-                      ${rewardHTML}
-                    `;
-                  } else {
-                    title.textContent = "ESCAPED!";
-                    title.style.color = "#10b981";
-                    title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
-                    details.innerHTML = `
-                      <div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div>
-                      <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate into the open pine forest!</p>
-                      ${rewardHTML}
-                    `;
-                  }
-
-                  bindClaimAccountButton(rewardInfo);
-
-                  const lobbyBtn = document.getElementById('end-game-lobby-btn');
-                  if (lobbyBtn) {
-                    lobbyBtn.textContent = 'Return to Lobby';
-                    addFastTapListener(lobbyBtn, () => {
-                      if (window.leaveGameWithAd) {
-                        window.leaveGameWithAd(() => window.location.reload());
-                      } else {
-                        window.location.reload();
-                      }
-                    });
-                  }
-                  const retryBtn = document.getElementById('end-game-retry-btn');
-                  if (retryBtn) {
-                    retryBtn.style.display = window.isTutorialMatch ? 'inline-block' : 'none';
-                    retryBtn.textContent = 'REPLAY TUTORIAL';
-                    addFastTapListener(retryBtn, () => {
-                      window.location.reload();
-                    });
-                  }
-                }
-              }
-            });
-            return;
-          } else {
-            triggerNotification(`Master Gate requires remaining twin key! (${insertedGateKeys.length}/2 installed: [${insertedGateKeys.join(', ') || 'None'}])`);
-          }
-        }
-      };
-    }
-  }
-
-  return bestCandidate;
-}
 
 // Dynamically render on-screen keys/breaker/item interaction prompts in HUD
 function updateInteractionPrompt() {
@@ -8907,39 +9028,96 @@ function deploySaltTrap() {
 // Keypad dialog helpers — queried lazily to avoid null refs at module load time
 let keypadUI, keypadScreen, keypadBtns, keypadClearBtn, keypadSubmitBtn, keypadCloseBtn;
 
-// Show the exit gate with an animation effect (now unlocks the already visible door)
-function showExitGate() {
-  if (!gateMeshRef) return;
-  // Flash the gate into unlocked state with a green emissive glow
-  if (Array.isArray(gateMeshRef.material)) {
-    gateMeshRef.material.forEach(m => {
-      if (m.color) m.color.setHex(0x10b981);
-      if (m.emissive) {
-        m.emissive.setHex(0x10b981);
-        m.emissiveIntensity = 1.0;
-      }
-    });
-  } else if (gateMeshRef.material) {
-    if (gateMeshRef.material.color) gateMeshRef.material.color.setHex(0x10b981);
-    if (gateMeshRef.material.emissive) {
-      gateMeshRef.material.emissive.setHex(0x10b981);
-      gateMeshRef.material.emissiveIntensity = 1.0;
-    }
-  }
+// Show the exit gate with authentic mechanical opening animation and 1.2s delay
+function openVaultDoorAnimated() {
+  if (isVaultDoorOpeningOrOpen) return;
+  isVaultDoorOpeningOrOpen = true;
+
+  // Flash the keypad terminal status LED into unlocked green
   if (gateKeypadLed && gateKeypadLed.material) {
     gateKeypadLed.material.color.setHex(0x10b981);
-    if (gateKeypadLed.material.emissive) gateKeypadLed.material.emissive.setHex(0x10b981);
-  }
-  setTimeout(() => {
-    if (gateMeshRef) {
-      if (Array.isArray(gateMeshRef.material)) {
-        gateMeshRef.material.forEach(m => { if (m.emissive) m.emissiveIntensity = 0.3; });
-      } else if (gateMeshRef.material && gateMeshRef.material.emissive) {
-        gateMeshRef.material.emissiveIntensity = 0.3;
-      }
+    if (gateKeypadLed.material.emissive) {
+      gateKeypadLed.material.emissive.setHex(0x10b981);
+      gateKeypadLed.material.emissiveIntensity = 1.0;
     }
-  }, 1500);
-  triggerNotification("⚠️ EXIT GATE UNLOCKED — Race to the Gate!");
+  }
+
+  // Highlight gate mesh materials with green emissive glow
+  if (gateMeshRef) {
+    gateMeshRef.traverse(child => {
+      if (child.isMesh && child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => {
+            if (m.emissive) {
+              m.emissive.setHex(0x10b981);
+              m.emissiveIntensity = 0.4;
+            }
+          });
+        } else if (child.material.emissive) {
+          child.material.emissive.setHex(0x10b981);
+          child.material.emissiveIntensity = 0.4;
+        }
+      }
+    });
+  }
+
+  playTutorialChime();
+  triggerNotification("🔓 MASTER VAULT ACCESS GRANTED — Unlocking mechanism engaged...");
+
+  // Mandatory 1.2s dramatic tension delay before gears rotate and heavy steel door swings open!
+  setTimeout(() => {
+    // Play 3D model opening animation (Take 001: gear spin, bolt retract, door swing)
+    if (vaultOpenAction) {
+      vaultOpenAction.reset();
+      vaultOpenAction.timeScale = 1.5; // Smooth cinematic pace (~8s total sequence)
+      vaultOpenAction.play();
+    }
+
+    // Camera rumble effect while the heavy gears rotate and locking bolts slide
+    const startT = performance.now();
+    const rumbleDuration = 4000;
+    const rumbleAnim = (now) => {
+      const elapsed = now - startT;
+      if (elapsed < rumbleDuration) {
+        const p = 1 - (elapsed / rumbleDuration);
+        const rX = (Math.random() - 0.5) * p * 1.4;
+        const rY = (Math.random() - 0.5) * p * 1.4;
+        const container = document.getElementById('canvas-container');
+        if (container) container.style.transform = `translate(${rX}px, ${rY}px)`;
+        requestAnimationFrame(rumbleAnim);
+      } else {
+        const container = document.getElementById('canvas-container');
+        if (container) container.style.transform = '';
+      }
+    };
+    requestAnimationFrame(rumbleAnim);
+
+    // After ~3.5s (when locking bolts are retracted and door swings open):
+    setTimeout(() => {
+      // Remove collision wall so players can walk through seamlessly
+      if (gateBlockerRef) {
+        const idx = walls.indexOf(gateBlockerRef);
+        if (idx !== -1) walls.splice(idx, 1);
+        scene.remove(gateBlockerRef);
+        gateBlockerRef = null;
+      }
+
+      // Reveal the outdoor sunny forest and horizon sky beyond the portal
+      if (forestSceneInstance) {
+        forestSceneInstance.visible = true;
+        if (forestSceneInstance.userData.outdoorSun) forestSceneInstance.userData.outdoorSun.visible = true;
+        if (forestSceneInstance.userData.skyHemisphere) forestSceneInstance.userData.skyHemisphere.visible = true;
+      }
+
+      window.vaultDoorOpen = true;
+      triggerNotification("🚪 THE MASTER VAULT IS OPEN — STEP THROUGH TO ESCAPE!");
+      updateGateHUD();
+    }, 3500);
+  }, 1200);
+}
+
+function showExitGate() {
+  openVaultDoorAnimated();
 }
 
 // Keypad display — always show exactly what the player has typed, no auto-fill
@@ -10155,9 +10333,32 @@ function setupSocketListeners() {
     insertedGateKeys = insertedKeys;
     triggerNotification(`🔑 [${installerName}] installed [${symbol}] into Master Gate! (${insertedGateKeys.length}/2 installed)`);
     updateGateHUD();
-    if (insertedGateKeys.length >= 2) {
-      showExitGate();
+    checkWinCondition();
+  });
+
+  socketClient.on('player_escaped_sync', ({ id, username, remainingCount, totalHumans, escapedCount }) => {
+    triggerNotification(`🏃 [${username}] escaped through the Master Gate! (${remainingCount} survivor${remainingCount > 1 ? 's' : ''} remaining)`);
+
+    if (currentLobby && currentLobby.players && currentLobby.players[id]) {
+      currentLobby.players[id].hasEscaped = true;
     }
+
+    if (players3D[id]) {
+      scene.remove(players3D[id]);
+      players3D[id].traverse(child => {
+        if (child.isMesh) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      });
+      delete players3D[id];
+    }
+
+    updateGateHUD();
+    drawMinimap();
   });
 
   socketClient.on('player_revived_sync', ({ targetId, medicName, revivedName, position }) => {
@@ -10528,14 +10729,25 @@ function setupSocketListeners() {
               ${formatRewardCardHTML(rewardInfo)}
             `;
           } else {
-            title.textContent = "ESCAPED!";
-            title.style.color = "#10b981";
-            title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
-            details.innerHTML = `
-              <div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div>
-              <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate!</p>
-              ${formatRewardCardHTML(rewardInfo)}
-            `;
+            if (hasEscaped) {
+              title.textContent = "ESCAPED!";
+              title.style.color = "#10b981";
+              title.style.textShadow = "0 0 25px rgba(16, 185, 129, 0.8)";
+              details.innerHTML = `
+                <div style="font-weight:bold; color: #10b981; margin-bottom: 0.8rem; font-size: 1.3rem;">EXTRACTION SUCCESSFUL</div>
+                <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You cracked the master vault cipher, outsmarted the entities, and extracted through the Master Gate!</p>
+                ${formatRewardCardHTML(rewardInfo)}
+              `;
+            } else {
+              title.textContent = "SQUAD VICTORY";
+              title.style.color = "#38bdf8";
+              title.style.textShadow = "0 0 25px rgba(56, 189, 248, 0.8)";
+              details.innerHTML = `
+                <div style="font-weight:bold; color: #38bdf8; margin-bottom: 0.8rem; font-size: 1.3rem;">SURVIVORS EXTRACTED</div>
+                <p style="color: #cbd5e1; font-size: 0.95rem; line-height: 1.5;">You fell in the labyrinth, but surviving operatives completed the extraction sequence through the Master Gate!</p>
+                ${formatRewardCardHTML(rewardInfo)}
+              `;
+            }
           }
           bindClaimAccountButton(rewardInfo);
         } else {
@@ -10563,8 +10775,8 @@ function setupSocketListeners() {
           let summaryHTML = `<div style="margin-top: 1rem; text-align: left; font-size: 0.9rem; line-height: 1.6; max-height: 160px; overflow-y: auto; padding: 0.5rem 0.8rem; background: rgba(0,0,0,0.35); border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">`;
           summary.forEach(p => {
             const teamColor = p.team === 'Ghost' ? '#a855f7' : '#3b82f6';
-            const statusText = p.team === 'Ghost' ? 'Spectral Threat' : (p.isCaptured ? 'Captured' : 'Escaped');
-            const statusColor = p.team === 'Ghost' ? '#a855f7' : (p.isCaptured ? '#ef4444' : '#10b981');
+            const statusText = p.team === 'Ghost' ? 'Spectral Threat' : (p.hasEscaped ? 'Escaped' : (p.isCaptured ? 'Captured' : 'Escaped'));
+            const statusColor = p.team === 'Ghost' ? '#a855f7' : (p.hasEscaped ? '#10b981' : (p.isCaptured ? '#ef4444' : '#10b981'));
             summaryHTML += `<div style="display:flex; justify-content:space-between; margin-bottom:0.3rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom:0.2rem;">
               <span style="font-weight: bold; color: ${teamColor};">${p.username}</span> 
               <span style="font-weight: bold; color: ${statusColor};">${statusText.toUpperCase()}</span>
@@ -10997,39 +11209,20 @@ function playEscapeCinematic(callback) {
     ambientLight.intensity = Math.max(ambientLight.intensity, 2.2);
   }
 
-  // Gate opens — slide the heavy door mesh up dynamically over 1100ms
-  if (gateMeshRef) {
-    const startY = gateMeshRef.position.y;
-    const targetY = startY + 5.2;
-    const startTime = performance.now();
-    const duration = 1100;
-    
-    const animateGate = (now) => {
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      // Ease out cubic
-      const eased = 1 - Math.pow(1 - progress, 3);
-      gateMeshRef.position.y = startY + (targetY - startY) * eased;
-
-      // Rumble effect during opening
-      if (progress < 1) {
-        const rumble = (1 - progress) * 2.0;
-        const rX = (Math.random() - 0.5) * rumble;
-        const rY = (Math.random() - 0.5) * rumble;
-        document.getElementById('canvas-container').style.transform = `translate(${rX}px, ${rY}px)`;
-        requestAnimationFrame(animateGate);
-      } else {
-        document.getElementById('canvas-container').style.transform = '';
-      }
-    };
-    requestAnimationFrame(animateGate);
-
-    // Remove the collision blocker immediately so the camera glides through seamlessly
-    if (gateBlockerRef) {
-      const idx = walls.indexOf(gateBlockerRef);
-      if (idx !== -1) walls.splice(idx, 1);
-      scene.remove(gateBlockerRef);
+  // Gate opens — ensure 3D animated vault door action plays and collision barrier is removed
+  if (vaultOpenAction) {
+    if (!vaultOpenAction.isRunning()) {
+      vaultOpenAction.timeScale = 2.5;
+      vaultOpenAction.play();
     }
+  }
+
+  // Remove the collision blocker immediately so the camera glides through seamlessly
+  if (gateBlockerRef) {
+    const idx = walls.indexOf(gateBlockerRef);
+    if (idx !== -1) walls.splice(idx, 1);
+    scene.remove(gateBlockerRef);
+    gateBlockerRef = null;
   }
 
   // Phase 3: Immediate forward momentum — camera steps forward under the rising gate directly into the 3D Forest!
@@ -13704,6 +13897,11 @@ function animate() {
     }
   }
 
+  // Update authentic 3D animated Vault Door mixer
+  if (vaultMixer) {
+    vaultMixer.update(delta);
+  }
+
   // Floating bob animation for Ariadne's thread orbs (O(1) cached list, zero scene traversal)
   const ariadneOrbs = window.ariadneOrbs;
   if (ariadneOrbs && ariadneOrbs.length > 0) {
@@ -14092,6 +14290,14 @@ function animate() {
           const baseFootY = myTeam === 'Ghost' ? 0.35 : 0;
           localPlayerVisual.position.y = baseFootY + Math.sin(time * 0.003) * 0.015;
           localPlayerVisual.rotation.set(0, camera.rotation.y, 0, 'YXZ');
+        }
+      }
+
+      // Check if human player physically walks through the opened Master Vault threshold into the pine forest
+      if (window.vaultDoorOpen && vaultGroupRef && myTeam === 'Human' && !hasEscaped && !isCaptured && !window.isEscaping) {
+        const localCam = vaultGroupRef.worldToLocal(camera.position.clone());
+        if (Math.abs(localCam.x) <= 1.7 && localCam.z <= 0.4 && localCam.z >= -4.0 && localCam.y >= 0 && localCam.y <= 3.5) {
+          triggerHumanEscape();
         }
       }
     }

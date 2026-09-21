@@ -420,13 +420,18 @@ function checkMatchEndCondition(roomId) {
   const humans = playersList.filter(p => p.team === 'Human');
   const humanCount = humans.length;
 
-  // Only trigger ghost win if there were real humans AND all of them are captured.
-  // Prevents a false defeat when the lobby has 0 human players (e.g. solo ghost test).
+  // Check victory / end conditions based on active, escaped, and captured humans
   if (humanCount > 0) {
-    const activeHumans = humans.filter(p => !p.isCaptured);
+    const activeHumans = humans.filter(p => !p.isCaptured && !p.hasEscaped);
+    const escapedHumans = humans.filter(p => p.hasEscaped);
     if (activeHumans.length === 0) {
-      // All humans captured! Ghosts win!
-      endMatch(roomId, 'Ghost');
+      if (escapedHumans.length > 0) {
+        // At least one human escaped before all remaining were captured
+        endMatch(roomId, 'Human');
+      } else {
+        // All humans were captured! Ghosts win!
+        endMatch(roomId, 'Ghost');
+      }
     }
   }
 }
@@ -440,12 +445,14 @@ function endMatch(roomId, winner) {
   const summary = Object.values(lobby.players).map(p => ({
     username: p.username,
     team: p.team,
-    isCaptured: !!p.isCaptured
+    isCaptured: !!p.isCaptured,
+    hasEscaped: !!p.hasEscaped
   }));
 
-  // Reset captured state on players
+  // Reset captured & escaped state on players
   Object.values(lobby.players).forEach(p => {
     p.isCaptured = false;
+    p.hasEscaped = false;
   });
 
   io.to(roomId).emit('match_ended', { winner, summary });
@@ -843,6 +850,7 @@ io.on('connection', (socket) => {
     const playersList = Object.values(lobby.players);
     playersList.forEach(p => {
       p.isCaptured = false;
+      p.hasEscaped = false;
     });
 
     const mode = lobby.settings.roleSelectionMode;
@@ -1124,7 +1132,37 @@ io.on('connection', (socket) => {
 
   socket.on('human_escaped', () => {
     const { roomId } = socket;
-    if (roomId && lobbies[roomId]) {
+    const lobby = lobbies[roomId];
+    if (!lobby || !lobby.gameStarted) return;
+
+    const player = lobby.players[socket.id];
+    if (!player || player.team !== 'Human' || player.hasEscaped) return;
+
+    player.hasEscaped = true;
+    const username = player.username || 'Operative';
+
+    const humans = Object.values(lobby.players).filter(p => p.team === 'Human');
+    const activeRemaining = humans.filter(p => !p.isCaptured && !p.hasEscaped);
+    const escapedHumans = humans.filter(p => p.hasEscaped);
+
+    console.log(`[Lobby ${roomId}] Operative ${username} escaped through the Vault! (${escapedHumans.length}/${humans.length} escaped, ${activeRemaining.length} remaining in maze)`);
+
+    if (activeRemaining.length > 0) {
+      io.to(roomId).emit('player_escaped_sync', {
+        id: socket.id,
+        username,
+        remainingCount: activeRemaining.length,
+        totalHumans: humans.length,
+        escapedCount: escapedHumans.length
+      });
+      io.to(roomId).emit('chat_message', {
+        msg: `[SYSTEM]: Operative ${username} escaped through the Vault! ${activeRemaining.length} survivor(s) remaining!`
+      });
+    } else {
+      // All remaining humans have now escaped! Full victory!
+      io.to(roomId).emit('chat_message', {
+        msg: `[SYSTEM]: All surviving operatives have escaped through the Master Gate!`
+      });
       endMatch(roomId, 'Human');
     }
   });
