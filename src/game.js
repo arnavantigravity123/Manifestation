@@ -3123,6 +3123,7 @@ function setupProceduralAudio() {
 }
 
 function playEMFSound(frequency) {
+  if (window.isEscaping || hasEscaped || isCaptured || window.isVaultOpeningCutscene || window.isSpectating) return;
   if (!audioCtx) return;
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
@@ -3151,6 +3152,7 @@ function playEMFSound(frequency) {
 // Horror stinger procedural audio synthesizer: Dissonant Diminished Fifth (Tritone) + Sub-Bass Thump
 let lastGhostSightStingerTime = 0;
 function playGhostSightStinger() {
+  if (window.isEscaping || hasEscaped || isCaptured || window.isVaultOpeningCutscene || window.isSpectating) return;
   if (!audioCtx) return;
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
@@ -8555,6 +8557,12 @@ function triggerHumanEscape() {
   hasEscaped = true;
   window.isEscaping = true;
 
+  // Immediately silence EMF and hide radar indicators
+  const blip = document.getElementById('radar-blip-element');
+  if (blip) blip.style.opacity = '0';
+  const radarPanel = document.getElementById('radar-panel');
+  if (radarPanel) radarPanel.style.display = 'none';
+
   // STOP ALL GHOSTS IMMEDIATELY: No matter what, freeze them dead in their tracks!
   window.ghostsFrozen = true;
   window.ghostsFrozenRemaining = 9999;
@@ -9456,6 +9464,13 @@ let keypadUI, keypadScreen, keypadBtns, keypadClearBtn, keypadSubmitBtn, keypadC
 function openVaultDoorAnimated() {
   if (isVaultDoorOpeningOrOpen) return;
   isVaultDoorOpeningOrOpen = true;
+  window.isVaultOpeningCutscene = true;
+
+  // Immediately hide radar blip and panel during door unsealing cutscene
+  const blip = document.getElementById('radar-blip-element');
+  if (blip) blip.style.opacity = '0';
+  const radarPanel = document.getElementById('radar-panel');
+  if (radarPanel) radarPanel.style.display = 'none';
 
   // 1. Freeze all ghosts immediately for the entire cutscene + safe buffer duration
   window.ghostsFrozen = true;
@@ -9648,10 +9663,13 @@ function openVaultDoorAnimated() {
         gateBlockerRef = null;
       }
 
-      window.vaultDoorOpen = true;
+      window.isVaultOpeningCutscene = false;
+      const restoredRadar = document.getElementById('radar-panel');
+      if (restoredRadar && inventory[activeSlot] === 'EMF Radar' && !hasEscaped && !window.isEscaping) {
+        restoredRadar.style.display = 'block';
+      }
 
       if (isCameraLocked) {
-        window.isVaultOpeningCutscene = false;
 
         // Retract letterbox bars smoothly
         const cutOverlay = document.getElementById('vault-cutscene-overlay');
@@ -10071,7 +10089,11 @@ function triggerPanicHide() {
 // Procedural EMF Loop pings
 let emfPingTimer = 0;
 function processEMFSensors(delta) {
-  if (myTeam !== 'Human' || window.isSpectating || inventory[activeSlot] !== 'EMF Radar') return;
+  if (myTeam !== 'Human' || window.isSpectating || inventory[activeSlot] !== 'EMF Radar' || window.isEscaping || hasEscaped || isCaptured || window.isVaultOpeningCutscene) {
+    const blip = document.getElementById('radar-blip-element');
+    if (blip) blip.style.opacity = '0';
+    return;
+  }
 
   // Track closest ghost
   let closestDist = 9999;
@@ -10104,6 +10126,9 @@ function processEMFSensors(delta) {
       blip.style.left = `calc(50% + ${Math.cos(angle) * offset}px)`;
       blip.style.top = `calc(50% + ${Math.sin(angle) * offset}px)`;
     }
+  } else {
+    const blip = document.getElementById('radar-blip-element');
+    if (blip) blip.style.opacity = '0';
   }
 }
 
@@ -10383,7 +10408,7 @@ function dissolveMirageItem(mirage) {
 
 let lastHeartbeatAudioTime = 0;
 function processGhostProximityAudio(distToGhost) {
-  if (distToGhost > 14.0 || window.isSpectating || isCaptured) return;
+  if (distToGhost > 14.0 || window.isSpectating || isCaptured || window.isEscaping || hasEscaped || window.isVaultOpeningCutscene) return;
   const now = performance.now();
   // Dynamic heartbeat interval: 450ms when close, 1200ms at 14m perimeter
   const interval = 450 + (distToGhost / 14.0) * 750;
@@ -10445,7 +10470,7 @@ function updateGhostProximityVignette(distToGhost, inSanctuary) {
     document.body.appendChild(vig);
   }
 
-  if (window.isSpectating || isCaptured || distToGhost > 14.0) {
+  if (window.isSpectating || isCaptured || distToGhost > 14.0 || window.isEscaping || hasEscaped || window.isVaultOpeningCutscene) {
     vig.style.opacity = '0';
     return;
   }
@@ -10469,8 +10494,8 @@ function processSanity(delta) {
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
   const isPauseActive = Boolean(ptrOverlay && ptrOverlay.style.display === 'flex');
 
-  // Immediately clear any visual filters if paused, spectating, or dead/captured
-  if (myTeam !== 'Human' || window.isSpectating || isPauseActive || isCaptured) {
+  // Immediately clear any visual filters if paused, spectating, escaping, in cutscene, or dead/captured
+  if (myTeam !== 'Human' || window.isSpectating || isPauseActive || isCaptured || window.isEscaping || hasEscaped || window.isVaultOpeningCutscene) {
     if (canvasContainer) canvasContainer.style.filter = 'none';
     document.body.style.filter = 'none';
     updateGhostProximityVignette(999, false);
@@ -11670,6 +11695,12 @@ let gateBlockerRef = null; // Will be set during maze building
 function playEscapeCinematic(callback) {
   window.isEscaping = true;
   hasEscaped = true;
+
+  // Immediately silence EMF and hide radar indicators
+  const blip = document.getElementById('radar-blip-element');
+  if (blip) blip.style.opacity = '0';
+  const radarPanel = document.getElementById('radar-panel');
+  if (radarPanel) radarPanel.style.display = 'none';
 
   // STOP ALL GHOSTS IMMEDIATELY: No matter what, freeze them dead in their tracks!
   window.ghostsFrozen = true;
@@ -14919,10 +14950,12 @@ function animate() {
   }
 
   if (window.gameReady) {
-    // 2. Active sensors & sanity ticks (runs continuously even when minimap is open)
-    processEMFSensors(delta);
-    processSanity(delta);
-    processFlashlightBattery(delta);
+    // 2. Active sensors & sanity ticks (only active during live maze gameplay, silenced when unsealing or escaping)
+    if (!hasEscaped && !window.isEscaping && !window.isVaultOpeningCutscene) {
+      processEMFSensors(delta);
+      processSanity(delta);
+      processFlashlightBattery(delta);
+    }
 
     // 3. Process panic timer cooldown & Thermal Camera overrides
     if (isPanicked) {
