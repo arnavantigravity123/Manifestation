@@ -1507,6 +1507,20 @@ let audioDataArray = null;
 // Minimap variables
 let visitedCells = new Set();
 let mapMarks = [];
+const TACTICAL_MARKER_STYLES = [
+  { label: 'A', name: 'Alpha',    color: '#38bdf8', shape: 'diamond' },     // Neon Sky Blue
+  { label: 'B', name: 'Bravo',    color: '#f43f5e', shape: 'triangle' },    // Neon Crimson
+  { label: 'C', name: 'Charlie',  color: '#22c55e', shape: 'circle' },      // Neon Emerald
+  { label: 'D', name: 'Delta',    color: '#eab308', shape: 'hexagon' },     // Neon Amber/Gold
+  { label: 'E', name: 'Echo',     color: '#a855f7', shape: 'square' },      // Neon Purple
+  { label: 'F', name: 'Foxtrot',  color: '#ec4899', shape: 'star' },        // Neon Pink
+  { label: 'G', name: 'Golf',     color: '#14b8a6', shape: 'cross' },       // Neon Teal
+  { label: 'H', name: 'Hotel',    color: '#f97316', shape: 'pentagon' },    // Neon Orange
+  { label: 'I', name: 'India',    color: '#06b6d4', shape: 'inv-triangle'}, // Neon Aqua
+  { label: 'J', name: 'Juliet',   color: '#84cc16', shape: 'octagon' },     // Neon Lime
+  { label: 'K', name: 'Kilo',     color: '#6366f1', shape: 'diamond' },     // Neon Indigo
+  { label: 'L', name: 'Lima',     color: '#fb7185', shape: 'circle' }       // Neon Coral
+];
 let isMinimapExpanded = false;
 let lastMinimapX = -9999, lastMinimapZ = -9999, lastMinimapRot = -9999, lastMinimapTime = 0;
 let lastLightCullTime = 0;
@@ -9030,7 +9044,13 @@ function submitKeypadCode(code) {
             const c = Math.floor((k.mesh.position.x / mazeBlockSize) + (mazeSizeGlobal / 2));
             const r = Math.floor((k.mesh.position.z / mazeBlockSize) + (mazeSizeGlobal / 2));
             if (!mapMarks.some(m => m.r === r && m.c === c)) {
-              mapMarks.push({ r, c });
+              const usedStyles = new Set(mapMarks.map(m => m.styleIdx).filter(s => s !== undefined));
+              let nextStyleIdx = 0;
+              while (usedStyles.has(nextStyleIdx) && nextStyleIdx < TACTICAL_MARKER_STYLES.length) {
+                nextStyleIdx++;
+              }
+              if (nextStyleIdx >= TACTICAL_MARKER_STYLES.length) nextStyleIdx = mapMarks.length % TACTICAL_MARKER_STYLES.length;
+              mapMarks.push({ r, c, styleIdx: nextStyleIdx });
             }
           }
         });
@@ -12536,6 +12556,125 @@ function advanceTutorialStage(nextStage, successMsg) {
 // ==========================================
 let activeMinimapEntities = [];
 let minimapSetupDone = false;
+
+function drawTacticalMarker(ctx, cx, cy, radius, style) {
+  ctx.save();
+  ctx.fillStyle = style.color;
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.6;
+  ctx.shadowColor = style.color;
+  ctx.shadowBlur = 6;
+
+  ctx.beginPath();
+  switch (style.shape) {
+    case 'diamond':
+      ctx.moveTo(cx, cy - radius);
+      ctx.lineTo(cx + radius, cy);
+      ctx.lineTo(cx, cy + radius);
+      ctx.lineTo(cx - radius, cy);
+      ctx.closePath();
+      break;
+    case 'triangle':
+      ctx.moveTo(cx, cy - radius * 1.05);
+      ctx.lineTo(cx + radius * 0.95, cy + radius * 0.75);
+      ctx.lineTo(cx - radius * 0.95, cy + radius * 0.75);
+      ctx.closePath();
+      break;
+    case 'circle':
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      break;
+    case 'hexagon':
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i - Math.PI / 2;
+        const x = cx + radius * Math.cos(a);
+        const y = cy + radius * Math.sin(a);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      break;
+    case 'square': {
+      const half = radius * 0.8;
+      ctx.rect(cx - half, cy - half, half * 2, half * 2);
+      break;
+    }
+    case 'star':
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 === 0 ? radius : radius * 0.48;
+        const a = (Math.PI / 5) * i - Math.PI / 2;
+        const x = cx + r * Math.cos(a);
+        const y = cy + r * Math.sin(a);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      break;
+    case 'cross': {
+      const w = radius * 0.35;
+      const l = radius;
+      ctx.moveTo(cx - w, cy - l);
+      ctx.lineTo(cx + w, cy - l);
+      ctx.lineTo(cx + w, cy - w);
+      ctx.lineTo(cx + l, cy - w);
+      ctx.lineTo(cx + l, cy + w);
+      ctx.lineTo(cx + w, cy + w);
+      ctx.lineTo(cx + w, cy + l);
+      ctx.lineTo(cx - w, cy + l);
+      ctx.lineTo(cx - w, cy + w);
+      ctx.lineTo(cx - l, cy + w);
+      ctx.lineTo(cx - l, cy - w);
+      ctx.lineTo(cx - w, cy - w);
+      ctx.closePath();
+      break;
+    }
+    case 'pentagon':
+      for (let i = 0; i < 5; i++) {
+        const a = (Math.PI * 2 / 5) * i - Math.PI / 2;
+        const x = cx + radius * Math.cos(a);
+        const y = cy + radius * Math.sin(a);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      break;
+    case 'inv-triangle':
+      ctx.moveTo(cx, cy + radius * 1.05);
+      ctx.lineTo(cx + radius * 0.95, cy - radius * 0.75);
+      ctx.lineTo(cx - radius * 0.95, cy - radius * 0.75);
+      ctx.closePath();
+      break;
+    case 'octagon':
+      for (let i = 0; i < 8; i++) {
+        const a = (Math.PI / 4) * i - Math.PI / 8;
+        const x = cx + radius * Math.cos(a);
+        const y = cy + radius * Math.sin(a);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      break;
+    default:
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      break;
+  }
+  ctx.fill();
+  ctx.stroke();
+
+  // Reset shadow blur before drawing crisp tactical letter label
+  ctx.shadowBlur = 0;
+  if (radius >= 5 && style.label) {
+    const fontSize = Math.max(7, Math.min(13, Math.round(radius * 1.05)));
+    ctx.font = `900 ${fontSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#050811';
+    const yOff = style.shape === 'triangle' ? radius * 0.18 : (style.shape === 'inv-triangle' ? -radius * 0.18 : 0.5);
+    ctx.fillText(style.label, cx, cy + yOff);
+  }
+
+  ctx.restore();
+}
+
 function setupMinimap() {
   if (minimapSetupDone) return;
   const wrapper = document.getElementById('minimap-wrapper');
@@ -12614,7 +12753,7 @@ function setupMinimap() {
       const typeBadge = closest.type ? `<span style="font-size:0.64rem; color:#cbd5e1; background:rgba(255,255,255,0.12); padding:1px 6px; border-radius:4px; font-weight:600; margin-left:4px;">${closest.type}</span>` : '';
       
       tooltip.innerHTML = `
-        <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:${closest.color}; box-shadow:0 0 10px ${closest.color}; border:1.5px solid #ffffff; flex-shrink:0;"></span>
+        <span style="display:inline-block; width:10px; height:10px; border-radius:${closest.borderRadius || '50%'}; background:${closest.color}; box-shadow:0 0 10px ${closest.color}; border:1.5px solid #ffffff; flex-shrink:0;"></span>
         <span style="color:${closest.color}; font-weight:900; letter-spacing:0.5px;">${closest.name}</span>
         ${vipBadge}
         ${typeBadge}
@@ -12665,7 +12804,15 @@ function setupMinimap() {
       if (existingIdx !== -1) {
         mapMarks.splice(existingIdx, 1);
       } else {
-        mapMarks.push({r, c});
+        const usedStyles = new Set(mapMarks.map(m => m.styleIdx).filter(s => s !== undefined));
+        let nextStyleIdx = 0;
+        while (usedStyles.has(nextStyleIdx) && nextStyleIdx < TACTICAL_MARKER_STYLES.length) {
+          nextStyleIdx++;
+        }
+        if (nextStyleIdx >= TACTICAL_MARKER_STYLES.length) {
+          nextStyleIdx = mapMarks.length % TACTICAL_MARKER_STYLES.length;
+        }
+        mapMarks.push({ r, c, styleIdx: nextStyleIdx });
       }
       drawMinimap();
 
@@ -12994,12 +13141,25 @@ function drawMinimap() {
     }
   }
 
-  // Draw Marks
-  ctx.fillStyle = '#0ea5e9'; // bright blue
-  for (const mark of mapMarks) {
-    ctx.beginPath();
-    ctx.arc((mark.c + 0.5) * cellSize, (mark.r + 0.5) * cellSize, cellSize * 0.4, 0, Math.PI * 2);
-    ctx.fill();
+  // Draw Marks (Unique tactical colors, shapes, and NATO callout labels)
+  for (let idx = 0; idx < mapMarks.length; idx++) {
+    const mark = mapMarks[idx];
+    const styleIdx = (mark.styleIdx !== undefined) ? mark.styleIdx : (idx % TACTICAL_MARKER_STYLES.length);
+    const style = TACTICAL_MARKER_STYLES[styleIdx % TACTICAL_MARKER_STYLES.length];
+    const mx = (mark.c + 0.5) * cellSize;
+    const my = (mark.r + 0.5) * cellSize;
+    const markRadius = cellSize * 0.46;
+
+    drawTacticalMarker(ctx, mx, my, markRadius, style);
+
+    activeMinimapEntities.push({
+      x: mx,
+      y: my,
+      name: `Marker ${style.label} (${style.name})`,
+      color: style.color,
+      type: '📍 Tactical Beacon',
+      borderRadius: (style.shape === 'square' || style.shape === 'cross') ? '2px' : '50%'
+    });
   }
 
   // Draw Light Sanctuaries (Feature 4: Warm Gold Lantern markers)
