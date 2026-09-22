@@ -142,9 +142,16 @@ namespace Manifestation.Maze
                         continue;
                     }
 
-                    if (cellType == 1 && wallPrefab != null)
+                    if (cellType == 1)
                     {
-                        Instantiate(wallPrefab, cellPos, Quaternion.identity, mazeContainer);
+                        if (wallPrefab != null)
+                        {
+                            Instantiate(wallPrefab, cellPos, Quaternion.identity, mazeContainer);
+                        }
+                        else
+                        {
+                            CreateProceduralDungeonWall(cellPos);
+                        }
                     }
                     else if (cellType == 2 && slidingDoorPrefab != null)
                     {
@@ -152,14 +159,67 @@ namespace Manifestation.Maze
                     }
                     else if (cellType == 0)
                     {
-                        // Spawn velvet carpet runner
                         if (rugStraightPrefab != null)
                         {
                             Instantiate(rugStraightPrefab, cellPos, Quaternion.identity, mazeContainer);
                         }
+                        else
+                        {
+                            CreateProceduralDungeonFloor(cellPos);
+                        }
                     }
                 }
             }
+        }
+
+        private void CreateProceduralDungeonWall(Vector3 cellPos)
+        {
+            GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wall.name = "DungeonWall";
+            wall.transform.SetParent(mazeContainer);
+            // 6.0m block size, 3.8m tall (matching Three.js dungeon walls)
+            wall.transform.position = new Vector3(cellPos.x, 1.9f, cellPos.z);
+            wall.transform.localScale = new Vector3(blockSize, 3.8f, blockSize);
+
+            // Give it a dark stone grey color
+            var renderer = wall.GetComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = GetOrCreateWallMaterial();
+            }
+        }
+
+        private void CreateProceduralDungeonFloor(Vector3 cellPos)
+        {
+            GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            floor.name = "DungeonFloor";
+            floor.transform.SetParent(mazeContainer);
+            floor.transform.position = new Vector3(cellPos.x, -0.1f, cellPos.z);
+            floor.transform.localScale = new Vector3(blockSize, 0.2f, blockSize);
+
+            var renderer = floor.GetComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = GetOrCreateFloorMaterial();
+            }
+        }
+
+        private static Material _cachedWallMat;
+        private static Material GetOrCreateWallMaterial()
+        {
+            if (_cachedWallMat != null) return _cachedWallMat;
+            _cachedWallMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            _cachedWallMat.color = new Color(0.18f, 0.19f, 0.22f); // heavy dark industrial slate grey
+            return _cachedWallMat;
+        }
+
+        private static Material _cachedFloorMat;
+        private static Material GetOrCreateFloorMaterial()
+        {
+            if (_cachedFloorMat != null) return _cachedFloorMat;
+            _cachedFloorMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            _cachedFloorMat.color = new Color(0.11f, 0.11f, 0.13f); // deep dungeon stone
+            return _cachedFloorMat;
         }
 
         public float BlockSize => blockSize;

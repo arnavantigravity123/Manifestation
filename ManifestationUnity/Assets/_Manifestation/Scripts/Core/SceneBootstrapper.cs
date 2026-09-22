@@ -38,11 +38,20 @@ namespace Manifestation.Core
 
         private void Start()
         {
-            // Generate the maze first (NavMesh bake happens inside)
-            if (mazeGenerator != null)
-                mazeGenerator.GenerateNewMaze(GameState.DungeonSeed);
+            if (mazeGenerator == null)
+            {
+                mazeGenerator = FindObjectOfType<Maze.LabyrinthGenerator>();
+                if (mazeGenerator == null)
+                {
+                    var mazeGO = new GameObject("ProceduralLabyrinth");
+                    mazeGenerator = mazeGO.AddComponent<Maze.LabyrinthGenerator>();
+                }
+            }
 
-            // Spawn local player after maze is built
+            // Generate the maze
+            mazeGenerator.GenerateNewMaze(GameState.DungeonSeed);
+
+            // Spawn or place local player
             SpawnPlayer();
         }
 
