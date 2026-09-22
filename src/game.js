@@ -9646,6 +9646,7 @@ function openVaultDoorAnimated() {
       }
 
       window.isVaultOpeningCutscene = false;
+      window.vaultDoorOpen = true;
       const restoredRadar = document.getElementById('radar-panel');
       if (restoredRadar && inventory[activeSlot] === 'EMF Radar' && !hasEscaped && !window.isEscaping) {
         restoredRadar.style.display = 'block';
@@ -14929,8 +14930,9 @@ function animate() {
 
       // Check if human player physically walks through the opened Master Vault threshold into the pine forest
       if (window.vaultDoorOpen && vaultGroupRef && myTeam === 'Human' && !hasEscaped && !isCaptured && !window.isEscaping) {
-        const localCam = vaultGroupRef.worldToLocal(camera.position.clone());
-        if (Math.abs(localCam.x) <= 1.7 && localCam.z <= 0.4 && localCam.z >= -4.0 && localCam.y >= 0 && localCam.y <= 3.5) {
+        const checkPos = (localPlayerVisual && currentViewIndex > 0) ? localPlayerVisual.position : camera.position;
+        const localPos = vaultGroupRef.worldToLocal(checkPos.clone());
+        if (Math.abs(localPos.x) <= 1.8 && localPos.z <= 0.8 && localPos.z >= -4.5 && localPos.y >= -0.2 && localPos.y <= 3.8) {
           triggerHumanEscape();
         }
       }
