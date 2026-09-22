@@ -34,6 +34,18 @@ namespace Manifestation.Maze
             if (customSeed != -1) seed = customSeed;
             Random.InitState(seed);
 
+            // Auto-load authentic prefabs if unassigned
+            #if UNITY_EDITOR
+            if (wallPrefab == null)
+            {
+                wallPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Prefabs/DungeonWall.prefab");
+            }
+            if (rugStraightPrefab == null)
+            {
+                rugStraightPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Prefabs/DungeonFloor.prefab");
+            }
+            #endif
+
             ClearExistingMaze();
             BuildMazeData();
             InstantiateGeometry();
