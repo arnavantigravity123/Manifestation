@@ -1103,8 +1103,20 @@ export function attachVaultDoorModel(vaultGroup) {
     if (child.isMesh) {
       child.castShadow = true;
       child.receiveShadow = true;
-      // Preserve authentic Sketchfab PBR textures (normal maps, diffuse maps, metallic-roughness maps)
       if (child.material) {
+        child.material = child.material.clone();
+        // Give the entire vault a cohesive, imposing dark grey finish while preserving PBR texture maps
+        if (child.name && (child.name.toLowerCase().includes('door2ay') || child.name === 'Door2ay_lambert2_0')) {
+          // Dark grey chiseled stone wall face
+          child.material.color.setHex(0x363b42);
+          child.material.roughness = 0.85;
+          child.material.metalness = 0.15;
+        } else {
+          // Dark grey reinforced industrial steel vault door disc, spokes, and locking clamps
+          child.material.color.setHex(0x282c34);
+          child.material.roughness = 0.58;
+          child.material.metalness = 0.82;
+        }
         child.material.needsUpdate = true;
       }
     }
@@ -5509,12 +5521,16 @@ function generateMaze(keysCount = 8) {
 
   // 1. Heavy Gothic Wrought Iron & Stone Architrave Frame with Solid Bulkhead Masonry
   const frameMat = new THREE.MeshStandardMaterial({
-    color: 0x242933,
-    metalness: 0.35,
+    color: 0x22262d,
+    metalness: 0.5,
     roughness: 0.7
   });
 
-  const bulkheadMat = (isDungeon && typeof dungeonWallMat !== 'undefined' && dungeonWallMat) ? dungeonWallMat : frameMat;
+  const bulkheadMat = new THREE.MeshStandardMaterial({
+    color: 0x2c3038, // Matching heavy dark grey stone
+    roughness: 0.82,
+    metalness: 0.18
+  });
 
   // Solid Left Bulkhead Wall: completely seals space between left edge of vault frame (X = -1.713) and corridor wall (X = -3.0)
   const leftBulkheadGeo = new THREE.BoxGeometry(1.30, 3.55, 0.80);
@@ -5559,7 +5575,7 @@ function generateMaze(keysCount = 8) {
     const vaultTex = getLoadedTexture('/assets/vault_door.png', null, true);
     const doorFrontMat = new THREE.MeshStandardMaterial({
       map: vaultTex,
-      color: 0x525c68,
+      color: 0x2e333a,
       metalness: 0.80,
       roughness: 0.65
     });
