@@ -48,6 +48,10 @@ namespace Manifestation.Player
         {
             if (characterController == null)
                 characterController = GetComponent<CharacterController>();
+
+            // Ensure fast, authentic labyrinth speed
+            if (walkSpeed < 6.0f) walkSpeed = 6.2f;
+            if (sprintSpeed < 10.0f) sprintSpeed = 10.8f;
         }
 
         private void Update()

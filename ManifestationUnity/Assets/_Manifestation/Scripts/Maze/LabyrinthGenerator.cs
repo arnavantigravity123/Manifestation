@@ -159,12 +159,12 @@ namespace Manifestation.Maze
                     else if (cellType == 2 && slidingDoorPrefab != null)
                     {
                         Instantiate(slidingDoorPrefab, cellPos, Quaternion.identity, mazeContainer);
-                        CreateVelvetCarpet(cellPos);
+                        CreateVelvetCarpet(cellPos, r, c);
                     }
                     else if (cellType == 0)
                     {
                         // Walkable corridor: spawn velvet red carpet runner!
-                        CreateVelvetCarpet(cellPos);
+                        CreateVelvetCarpet(cellPos, r, c);
                     }
                 }
             }
@@ -200,33 +200,68 @@ namespace Manifestation.Maze
             }
         }
 
-        private void CreateVelvetCarpet(Vector3 cellPos)
+        private void CreateVelvetCarpet(Vector3 cellPos, int r, int c)
         {
-            // Center velvet red runner (2.0m wide matching Three.js specification)
+            // Check connectivity to adjacent cells
+            bool hasNorth = r > 0 && layout[r - 1, c] != 1;
+            bool hasSouth = r < gridHeight - 1 && layout[r + 1, c] != 1;
+            bool hasWest  = c > 0 && layout[r, c - 1] != 1;
+            bool hasEast  = c < gridWidth - 1 && layout[r, c + 1] != 1;
+
+            bool isPureHorizontal = (hasWest || hasEast) && !hasNorth && !hasSouth;
+            bool isPureVertical   = (hasNorth || hasSouth) && !hasWest && !hasEast;
+
+            if (isPureHorizontal)
+            {
+                // East-West corridor: carpet spans along X (width=blockSize, depth=2.0m)
+                SpawnCarpetQuad(cellPos, new Vector3(blockSize, 0.01f, 2.0f));
+                // Gold borders on North & South edges
+                CreateCarpetBorder(new Vector3(cellPos.x, 0.007f, cellPos.z + 1.04f), new Vector3(blockSize, 0.012f, 0.08f));
+                CreateCarpetBorder(new Vector3(cellPos.x, 0.007f, cellPos.z - 1.04f), new Vector3(blockSize, 0.012f, 0.08f));
+            }
+            else if (isPureVertical)
+            {
+                // North-South corridor: carpet spans along Z (width=2.0m, depth=blockSize)
+                SpawnCarpetQuad(cellPos, new Vector3(2.0f, 0.01f, blockSize));
+                // Gold borders on West & East edges
+                CreateCarpetBorder(new Vector3(cellPos.x - 1.04f, 0.007f, cellPos.z), new Vector3(0.08f, 0.012f, blockSize));
+                CreateCarpetBorder(new Vector3(cellPos.x + 1.04f, 0.007f, cellPos.z), new Vector3(0.08f, 0.012f, blockSize));
+            }
+            else
+            {
+                // Corner, T-Junction or 4-way Crossroads: Modular 2m x 2m Center Hub Tile
+                SpawnCarpetQuad(cellPos, new Vector3(2.0f, 0.01f, 2.0f));
+
+                // Extension arms into each open passage (2m long)
+                if (hasNorth) SpawnCarpetQuad(new Vector3(cellPos.x, 0.005f, cellPos.z + 2.0f), new Vector3(2.0f, 0.01f, 2.0f));
+                if (hasSouth) SpawnCarpetQuad(new Vector3(cellPos.x, 0.005f, cellPos.z - 2.0f), new Vector3(2.0f, 0.01f, 2.0f));
+                if (hasEast)  SpawnCarpetQuad(new Vector3(cellPos.x + 2.0f, 0.005f, cellPos.z), new Vector3(2.0f, 0.01f, 2.0f));
+                if (hasWest)  SpawnCarpetQuad(new Vector3(cellPos.x - 2.0f, 0.005f, cellPos.z), new Vector3(2.0f, 0.01f, 2.0f));
+            }
+        }
+
+        private void SpawnCarpetQuad(Vector3 pos, Vector3 scale)
+        {
             GameObject carpet = GameObject.CreatePrimitive(PrimitiveType.Cube);
             carpet.name = "VelvetRedRunner";
             carpet.transform.SetParent(mazeContainer);
-            carpet.transform.position = new Vector3(cellPos.x, 0.005f, cellPos.z);
-            carpet.transform.localScale = new Vector3(2.0f, 0.01f, blockSize);
+            carpet.transform.position = new Vector3(pos.x, 0.005f, pos.z);
+            carpet.transform.localScale = scale;
 
             var renderer = carpet.GetComponent<MeshRenderer>();
             if (renderer != null)
             {
                 renderer.sharedMaterial = GetOrCreateVelvetMaterial();
             }
-
-            // Gold border trims on left & right (+2mm elevation to prevent Z-fighting)
-            CreateCarpetBorder(cellPos, -1.05f);
-            CreateCarpetBorder(cellPos,  1.05f);
         }
 
-        private void CreateCarpetBorder(Vector3 cellPos, float offsetX)
+        private void CreateCarpetBorder(Vector3 worldPos, Vector3 scale)
         {
             GameObject border = GameObject.CreatePrimitive(PrimitiveType.Cube);
             border.name = "GoldCarpetBorder";
             border.transform.SetParent(mazeContainer);
-            border.transform.position = new Vector3(cellPos.x + offsetX, 0.007f, cellPos.z);
-            border.transform.localScale = new Vector3(0.08f, 0.012f, blockSize);
+            border.transform.position = worldPos;
+            border.transform.localScale = scale;
 
             var renderer = border.GetComponent<MeshRenderer>();
             if (renderer != null)
@@ -240,7 +275,9 @@ namespace Manifestation.Maze
         {
             if (_cachedWallMat != null) return _cachedWallMat;
             _cachedWallMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            _cachedWallMat.color = new Color(0.28f, 0.28f, 0.30f); // authentic stone brick grey
+            _cachedWallMat.color = new Color(0.38f, 0.38f, 0.40f);
+            Texture2D tex = Resources.Load<Texture2D>("WallColor");
+            if (tex != null) _cachedWallMat.mainTexture = tex;
             return _cachedWallMat;
         }
 
@@ -249,7 +286,9 @@ namespace Manifestation.Maze
         {
             if (_cachedFloorMat != null) return _cachedFloorMat;
             _cachedFloorMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            _cachedFloorMat.color = new Color(0.14f, 0.14f, 0.16f); // dark cobblestone
+            _cachedFloorMat.color = new Color(0.18f, 0.18f, 0.20f);
+            Texture2D tex = Resources.Load<Texture2D>("GroundColor");
+            if (tex != null) _cachedFloorMat.mainTexture = tex;
             return _cachedFloorMat;
         }
 
@@ -258,9 +297,8 @@ namespace Manifestation.Maze
         {
             if (_cachedVelvetMat != null) return _cachedVelvetMat;
             _cachedVelvetMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            // Vibrant crimson red velvet matching Three.js rug color (#9e1b24)
-            _cachedVelvetMat.color = new Color(0.62f, 0.11f, 0.14f);
-            _cachedVelvetMat.SetFloat("_Smoothness", 0.15f);
+            _cachedVelvetMat.color = new Color(0.66f, 0.12f, 0.15f); // authentic crimson velvet red
+            _cachedVelvetMat.SetFloat("_Smoothness", 0.2f);
             return _cachedVelvetMat;
         }
 
@@ -269,10 +307,9 @@ namespace Manifestation.Maze
         {
             if (_cachedGoldMat != null) return _cachedGoldMat;
             _cachedGoldMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            // Metallic gold border trim matching Three.js (#d4af37)
-            _cachedGoldMat.color = new Color(0.83f, 0.68f, 0.21f);
-            _cachedGoldMat.SetFloat("_Metallic", 0.7f);
-            _cachedGoldMat.SetFloat("_Smoothness", 0.6f);
+            _cachedGoldMat.color = new Color(0.88f, 0.72f, 0.24f); // metallic gold
+            _cachedGoldMat.SetFloat("_Metallic", 0.75f);
+            _cachedGoldMat.SetFloat("_Smoothness", 0.65f);
             return _cachedGoldMat;
         }
 
