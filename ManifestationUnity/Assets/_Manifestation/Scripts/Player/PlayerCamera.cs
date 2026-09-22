@@ -33,14 +33,15 @@ namespace Manifestation.Player
 
         private void Start()
         {
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
+            LockCursor();
             yaw = playerBody != null ? playerBody.eulerAngles.y : transform.eulerAngles.y;
             UpdateModelVisibility();
         }
 
         private void LateUpdate()
         {
+            HandleCursorLockToggle();
+
             if (Input.GetKeyDown(toggleModeKey))
             {
                 currentMode = (currentMode == CameraMode.FirstPerson) ? CameraMode.ThirdPerson : CameraMode.FirstPerson;
@@ -51,8 +52,35 @@ namespace Manifestation.Player
             HandlePositioning();
         }
 
+        private void HandleCursorLockToggle()
+        {
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                UnlockCursor();
+            }
+            else if (Input.GetMouseButtonDown(0) && Cursor.lockState != CursorLockMode.Locked)
+            {
+                LockCursor();
+            }
+        }
+
+        private void LockCursor()
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+
+        private void UnlockCursor()
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+
         private void HandleRotation()
         {
+            // Do NOT rotate if cursor is unlocked (player is clicking UI or outside game window)
+            if (Cursor.lockState != CursorLockMode.Locked) return;
+
             float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
             float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
 

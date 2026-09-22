@@ -49,9 +49,17 @@ namespace Manifestation.Core
         // ── Helpers ────────────────────────────────────────────────────────
         private void SpawnPlayer()
         {
+            // If a player is already placed in the scene manually, use it!
+            var existingPlayer = GameObject.FindGameObjectWithTag("Player");
+            if (existingPlayer != null)
+            {
+                Debug.Log($"[Bootstrapper] Using existing player in scene at {existingPlayer.transform.position}.");
+                return;
+            }
+
             if (playerPrefab == null)
             {
-                Debug.LogError("[Bootstrapper] No player prefab assigned!");
+                Debug.LogWarning("[Bootstrapper] No player prefab assigned and no Player found in scene.");
                 return;
             }
 
