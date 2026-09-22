@@ -17,10 +17,10 @@ namespace Manifestation.Player
     public class PlayerController : MonoBehaviour
     {
         [Header("Locomotion Speeds")]
-        [SerializeField] private float walkSpeed   = 3.6f;
-        [SerializeField] private float sprintSpeed = 6.2f;
-        [SerializeField] private float gravity     = -18.0f;
-        [SerializeField] private float jumpHeight  = 1.1f;
+        [SerializeField] private float walkSpeed   = 5.4f;
+        [SerializeField] private float sprintSpeed = 9.0f;
+        [SerializeField] private float gravity     = -22.0f;
+        [SerializeField] private float jumpHeight  = 1.2f;
 
         [Header("Component References")]
         [SerializeField] private CharacterController characterController;

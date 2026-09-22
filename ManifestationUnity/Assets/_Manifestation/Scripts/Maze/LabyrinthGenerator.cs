@@ -133,6 +133,9 @@ namespace Manifestation.Maze
 
                     int cellType = layout[r, c];
 
+                    // 1. ALWAYS lay base cobblestone floor for EVERY cell so there are ZERO holes!
+                    CreateProceduralDungeonFloor(cellPos);
+
                     if (r == vaultCoord.y && c == vaultCoord.x)
                     {
                         if (vaultPortalPrefab != null)
@@ -156,17 +159,12 @@ namespace Manifestation.Maze
                     else if (cellType == 2 && slidingDoorPrefab != null)
                     {
                         Instantiate(slidingDoorPrefab, cellPos, Quaternion.identity, mazeContainer);
+                        CreateVelvetCarpet(cellPos);
                     }
                     else if (cellType == 0)
                     {
-                        if (rugStraightPrefab != null)
-                        {
-                            Instantiate(rugStraightPrefab, cellPos, Quaternion.identity, mazeContainer);
-                        }
-                        else
-                        {
-                            CreateProceduralDungeonFloor(cellPos);
-                        }
+                        // Walkable corridor: spawn velvet red carpet runner!
+                        CreateVelvetCarpet(cellPos);
                     }
                 }
             }
@@ -177,11 +175,9 @@ namespace Manifestation.Maze
             GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
             wall.name = "DungeonWall";
             wall.transform.SetParent(mazeContainer);
-            // 6.0m block size, 3.8m tall (matching Three.js dungeon walls)
             wall.transform.position = new Vector3(cellPos.x, 1.9f, cellPos.z);
             wall.transform.localScale = new Vector3(blockSize, 3.8f, blockSize);
 
-            // Give it a dark stone grey color
             var renderer = wall.GetComponent<MeshRenderer>();
             if (renderer != null)
             {
@@ -194,8 +190,8 @@ namespace Manifestation.Maze
             GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
             floor.name = "DungeonFloor";
             floor.transform.SetParent(mazeContainer);
-            floor.transform.position = new Vector3(cellPos.x, -0.1f, cellPos.z);
-            floor.transform.localScale = new Vector3(blockSize, 0.2f, blockSize);
+            floor.transform.position = new Vector3(cellPos.x, -0.05f, cellPos.z);
+            floor.transform.localScale = new Vector3(blockSize, 0.1f, blockSize);
 
             var renderer = floor.GetComponent<MeshRenderer>();
             if (renderer != null)
@@ -204,12 +200,47 @@ namespace Manifestation.Maze
             }
         }
 
+        private void CreateVelvetCarpet(Vector3 cellPos)
+        {
+            // Center velvet red runner (2.0m wide matching Three.js specification)
+            GameObject carpet = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            carpet.name = "VelvetRedRunner";
+            carpet.transform.SetParent(mazeContainer);
+            carpet.transform.position = new Vector3(cellPos.x, 0.005f, cellPos.z);
+            carpet.transform.localScale = new Vector3(2.0f, 0.01f, blockSize);
+
+            var renderer = carpet.GetComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = GetOrCreateVelvetMaterial();
+            }
+
+            // Gold border trims on left & right (+2mm elevation to prevent Z-fighting)
+            CreateCarpetBorder(cellPos, -1.05f);
+            CreateCarpetBorder(cellPos,  1.05f);
+        }
+
+        private void CreateCarpetBorder(Vector3 cellPos, float offsetX)
+        {
+            GameObject border = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            border.name = "GoldCarpetBorder";
+            border.transform.SetParent(mazeContainer);
+            border.transform.position = new Vector3(cellPos.x + offsetX, 0.007f, cellPos.z);
+            border.transform.localScale = new Vector3(0.08f, 0.012f, blockSize);
+
+            var renderer = border.GetComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = GetOrCreateGoldBorderMaterial();
+            }
+        }
+
         private static Material _cachedWallMat;
         private static Material GetOrCreateWallMaterial()
         {
             if (_cachedWallMat != null) return _cachedWallMat;
             _cachedWallMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            _cachedWallMat.color = new Color(0.18f, 0.19f, 0.22f); // heavy dark industrial slate grey
+            _cachedWallMat.color = new Color(0.28f, 0.28f, 0.30f); // authentic stone brick grey
             return _cachedWallMat;
         }
 
@@ -218,8 +249,31 @@ namespace Manifestation.Maze
         {
             if (_cachedFloorMat != null) return _cachedFloorMat;
             _cachedFloorMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            _cachedFloorMat.color = new Color(0.11f, 0.11f, 0.13f); // deep dungeon stone
+            _cachedFloorMat.color = new Color(0.14f, 0.14f, 0.16f); // dark cobblestone
             return _cachedFloorMat;
+        }
+
+        private static Material _cachedVelvetMat;
+        private static Material GetOrCreateVelvetMaterial()
+        {
+            if (_cachedVelvetMat != null) return _cachedVelvetMat;
+            _cachedVelvetMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            // Vibrant crimson red velvet matching Three.js rug color (#9e1b24)
+            _cachedVelvetMat.color = new Color(0.62f, 0.11f, 0.14f);
+            _cachedVelvetMat.SetFloat("_Smoothness", 0.15f);
+            return _cachedVelvetMat;
+        }
+
+        private static Material _cachedGoldMat;
+        private static Material GetOrCreateGoldBorderMaterial()
+        {
+            if (_cachedGoldMat != null) return _cachedGoldMat;
+            _cachedGoldMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            // Metallic gold border trim matching Three.js (#d4af37)
+            _cachedGoldMat.color = new Color(0.83f, 0.68f, 0.21f);
+            _cachedGoldMat.SetFloat("_Metallic", 0.7f);
+            _cachedGoldMat.SetFloat("_Smoothness", 0.6f);
+            return _cachedGoldMat;
         }
 
         public float BlockSize => blockSize;
