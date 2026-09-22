@@ -1,16 +1,21 @@
 # Manifestation — Unity URP Project Setup Guide
+## 🎯 Target: Unity 6.6 (6000.6.2f1) + URP
 
 ## Prerequisites
 Before opening in Unity, install these packages (Window → Package Manager):
 
 | Package | Version | How |
 |---|---|---|
-| Universal Render Pipeline (URP) | 14.x | Unity Registry |
+| Universal Render Pipeline (URP) | 17.x | Unity Registry (included in 3D URP template) |
 | TextMeshPro | 3.x | Unity Registry |
-| AI Navigation | 1.x | Unity Registry |
+| AI Navigation | 2.x | Unity Registry |
 | Input System | 1.x | Unity Registry |
 | NativeWebSocket | latest | Add from Git URL: `https://github.com/endel/NativeWebSocket.git#upm` |
-| RevenueCat Purchases Unity SDK | 5.x | Add from Git URL: `https://github.com/RevenueCat/purchases-unity.git` |
+| RevenueCat Purchases Unity SDK | 5.2+ | Add from Git URL: `https://github.com/RevenueCat/purchases-unity.git` |
+
+> ⚠️ **Unity 6 Input Setting**: After installing Input System, go to  
+> `Edit → Project Settings → Player → Active Input Handling → Both`  
+> This lets our scripts use the familiar `Input.GetKey()` style without rewriting everything.
 
 ---
 

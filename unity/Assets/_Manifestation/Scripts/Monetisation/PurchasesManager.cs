@@ -1,8 +1,9 @@
 using System;
-using System.Collections;
 using UnityEngine;
-// RevenueCat Unity SDK namespace — install via Package Manager
-// https://github.com/RevenueCat/purchases-unity
+// RevenueCat Unity SDK — Unity 6 compatible (v5.x+)
+// Install: Window → Package Manager → Add from Git URL:
+// https://github.com/RevenueCat/purchases-unity.git
+// Make sure to use SDK version 5.2.0 or higher for Unity 6 support.
 using Purchases;
 
 namespace Manifestation.Monetisation
@@ -16,9 +17,8 @@ namespace Manifestation.Monetisation
     ///   • Coin bundle purchases (100, 500, 1000 coins)
     ///   • Restore purchases
     ///
-    /// Think of RevenueCat like a shop clerk that talks to the App Store/
-    /// Google Play for you — you just say "buy this" and it handles all the
-    /// receipt verification and currency conversion behind the scenes.
+    /// Unity 6 note: RevenueCat SDK 5.x is fully compatible with Unity 6.
+    /// Make sure to install the SDK via Package Manager (not Asset Store).
     ///
     /// IMPORTANT: Replace the API key placeholders before releasing!
     /// </summary>
@@ -33,18 +33,18 @@ namespace Manifestation.Monetisation
         [SerializeField] private string googleApiKey = "goog_YOUR_KEY_HERE";
 
         [Header("Product IDs")]
-        [SerializeField] private string vipPassId          = "manifestation_vip_pass";
-        [SerializeField] private string coins100Id         = "coins_100";
-        [SerializeField] private string coins500Id         = "coins_500";
-        [SerializeField] private string coins1000Id        = "coins_1000";
+        [SerializeField] private string vipPassId   = "manifestation_vip_pass";
+        [SerializeField] private string coins100Id  = "coins_100";
+        [SerializeField] private string coins500Id  = "coins_500";
+        [SerializeField] private string coins1000Id = "coins_1000";
 
         [Header("Entitlement")]
-        [SerializeField] private string vipEntitlementId  = "vip";
+        [SerializeField] private string vipEntitlementId = "vip";
 
         // ── Events ────────────────────────────────────────────────────────
-        public static event Action<bool>   OnVIPStatusChanged;   // true = VIP active
-        public static event Action<int>    OnCoinsGranted;        // amount granted
-        public static event Action<string> OnPurchaseError;       // human-readable message
+        public static event Action<bool>   OnVIPStatusChanged;
+        public static event Action<int>    OnCoinsGranted;
+        public static event Action<string> OnPurchaseError;
 
         // ── Unity ─────────────────────────────────────────────────────────
         private void Awake()
@@ -67,117 +67,88 @@ namespace Manifestation.Monetisation
 #elif UNITY_IOS
             string apiKey = appleApiKey;
 #else
-            // Editor / PC: use Google key for testing
-            string apiKey = googleApiKey;
+            string apiKey = googleApiKey; // Editor fallback
 #endif
-            Purchases.PurchasesConfiguration.Builder builder =
-                Purchases.PurchasesConfiguration.Builder.Init(apiKey);
+            // Unity 6 compatible initialisation (RevenueCat SDK 5.x)
+            var builder = PurchasesConfiguration.Builder.Init(apiKey);
+            Purchases.Purchases.Configure(builder.Build());
 
-            Purchases.PurchasesConfiguration config = builder.Build();
-            Purchases.Purchases.Configure(config);
-
-            Debug.Log("[RevenueCat] SDK initialised.");
-
-            // Immediately check existing entitlements
+            Debug.Log("[RevenueCat] SDK initialised (Unity 6 mode).");
             RefreshCustomerInfo();
         }
 
         // ── Public API ────────────────────────────────────────────────────
-        /// <summary>Refresh customer info and update VIP flag.</summary>
         public void RefreshCustomerInfo()
         {
             Purchases.Purchases.SharedPurchases.GetCustomerInfo((info, error) =>
             {
-                if (error != null)
-                {
-                    Debug.LogWarning($"[RevenueCat] CustomerInfo error: {error.Message}");
-                    return;
-                }
+                if (error != null) { Debug.LogWarning($"[RevenueCat] {error.Message}"); return; }
                 ProcessCustomerInfo(info);
             });
         }
 
-        /// <summary>Purchase the VIP pass subscription/one-time product.</summary>
         public void PurchaseVIPPass()
         {
             FetchOfferings(offerings =>
             {
                 var pkg = FindPackage(offerings, vipPassId);
-                if (pkg == null) { OnPurchaseError?.Invoke("VIP Pass not found in offerings."); return; }
-
-                Purchases.Purchases.SharedPurchases.PurchasePackage(pkg, (productIdentifier, info, userCancelled, error) =>
-                {
-                    if (userCancelled) return;
-                    if (error != null) { OnPurchaseError?.Invoke(error.Message); return; }
-                    ProcessCustomerInfo(info);
-                });
+                if (pkg == null) { OnPurchaseError?.Invoke("VIP Pass not found."); return; }
+                Purchases.Purchases.SharedPurchases.PurchasePackage(pkg,
+                    (id, info, cancelled, error) =>
+                    {
+                        if (cancelled) return;
+                        if (error != null) { OnPurchaseError?.Invoke(error.Message); return; }
+                        ProcessCustomerInfo(info);
+                    });
             });
         }
 
-        /// <summary>Purchase a coin bundle by product ID.</summary>
         public void PurchaseCoins(int amount)
         {
-            string productId = amount switch
-            {
-                100  => coins100Id,
-                500  => coins500Id,
-                1000 => coins1000Id,
-                _    => null
-            };
-
-            if (productId == null) { Debug.LogError("[RevenueCat] Unknown coin bundle: " + amount); return; }
+            string productId = amount switch { 100 => coins100Id, 500 => coins500Id, 1000 => coins1000Id, _ => null };
+            if (productId == null) return;
 
             FetchOfferings(offerings =>
             {
                 var pkg = FindPackage(offerings, productId);
-                if (pkg == null) { OnPurchaseError?.Invoke($"Coin bundle {amount} not found."); return; }
-
-                Purchases.Purchases.SharedPurchases.PurchasePackage(pkg, (productIdentifier, info, userCancelled, error) =>
-                {
-                    if (userCancelled) return;
-                    if (error != null) { OnPurchaseError?.Invoke(error.Message); return; }
-                    // Non-consumable coins: grant locally, backend should validate receipt
-                    Core.GameState.CoinBalance += amount;
-                    OnCoinsGranted?.Invoke(amount);
-                    Debug.Log($"[RevenueCat] Granted {amount} coins. Total: {Core.GameState.CoinBalance}");
-                });
+                if (pkg == null) { OnPurchaseError?.Invoke($"Bundle {amount} not found."); return; }
+                Purchases.Purchases.SharedPurchases.PurchasePackage(pkg,
+                    (id, info, cancelled, error) =>
+                    {
+                        if (cancelled || error != null) return;
+                        Core.GameState.CoinBalance += amount;
+                        OnCoinsGranted?.Invoke(amount);
+                    });
             });
         }
 
-        /// <summary>Restore previous purchases (required for iOS App Store approval).</summary>
         public void RestorePurchases()
         {
             Purchases.Purchases.SharedPurchases.RestorePurchases((info, error) =>
             {
                 if (error != null) { OnPurchaseError?.Invoke(error.Message); return; }
                 ProcessCustomerInfo(info);
-                Debug.Log("[RevenueCat] Purchases restored.");
             });
         }
 
-        // ── Private helpers ────────────────────────────────────────────────
-        private void ProcessCustomerInfo(Purchases.CustomerInfo info)
+        // ── Helpers ───────────────────────────────────────────────────────
+        private void ProcessCustomerInfo(CustomerInfo info)
         {
             bool isVIP = info.Entitlements.Active.ContainsKey(vipEntitlementId);
             Core.GameState.IsVIP = isVIP;
             OnVIPStatusChanged?.Invoke(isVIP);
-            Debug.Log($"[RevenueCat] VIP status: {isVIP}");
         }
 
-        private void FetchOfferings(Action<Purchases.Offerings> callback)
+        private void FetchOfferings(Action<Offerings> callback)
         {
             Purchases.Purchases.SharedPurchases.GetOfferings((offerings, error) =>
             {
-                if (error != null || offerings == null)
-                {
-                    OnPurchaseError?.Invoke(error?.Message ?? "No offerings available.");
-                    return;
-                }
+                if (error != null || offerings == null) { OnPurchaseError?.Invoke(error?.Message ?? "No offerings"); return; }
                 callback(offerings);
             });
         }
 
-        private static Purchases.Package FindPackage(Purchases.Offerings offerings, string productId)
+        private static Package FindPackage(Offerings offerings, string productId)
         {
             if (offerings.Current == null) return null;
             foreach (var pkg in offerings.Current.AvailablePackages)
