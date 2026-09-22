@@ -5606,6 +5606,7 @@ function generateMaze(keysCount = 8) {
   padGroup.add(baseFlangeMesh);
 
   // Four corner mounting flange bolts
+  const boltMat = new THREE.MeshStandardMaterial({ color: 0x111827, metalness: 0.9, roughness: 0.3 });
   const flangeBoltGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.025, 8);
   [[-0.16, -0.16], [-0.16, 0.16], [0.16, -0.16], [0.16, 0.16]].forEach(([bx, bz]) => {
     const bMesh = new THREE.Mesh(flangeBoltGeo, boltMat);
