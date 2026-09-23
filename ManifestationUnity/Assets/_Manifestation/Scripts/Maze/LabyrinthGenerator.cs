@@ -19,6 +19,8 @@ namespace Manifestation.Maze
         [SerializeField] private GameObject rugStraightPrefab;
         [SerializeField] private GameObject rugHubPrefab;
         [SerializeField] private GameObject lightSanctuaryPrefab;
+        [SerializeField] private GameObject pillarPrefab;
+        [SerializeField] private GameObject statuePrefab;
 
         [Header("NavMesh AI Surface")]
         [SerializeField] private NavMeshSurface navMeshSurface;
