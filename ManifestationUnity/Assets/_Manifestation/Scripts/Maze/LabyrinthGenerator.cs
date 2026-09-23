@@ -187,11 +187,24 @@ namespace Manifestation.Maze
 
         private void CreateProceduralDungeonWall(Vector3 cellPos)
         {
-            GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            GameObject wall = null;
+            if (wallPrefab != null)
+            {
+#if UNITY_EDITOR
+                wall = UnityEditor.PrefabUtility.InstantiatePrefab(wallPrefab) as GameObject;
+#else
+                wall = Instantiate(wallPrefab);
+#endif
+            }
+            else
+            {
+                wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            }
+            
             wall.name = "DungeonWall";
             wall.transform.SetParent(mazeContainer);
-            wall.transform.position = new Vector3(cellPos.x, 1.9f, cellPos.z);
-            wall.transform.localScale = new Vector3(blockSize, 3.8f, blockSize);
+            wall.transform.position = new Vector3(cellPos.x, 1.75f, cellPos.z);
+            wall.transform.localScale = new Vector3(blockSize, 3.5f, blockSize);
 
             var renderer = wall.GetComponent<MeshRenderer>();
             if (renderer != null)
@@ -202,7 +215,16 @@ namespace Manifestation.Maze
 
         private void CreateProceduralDungeonFloor(Vector3 cellPos)
         {
-            GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            GameObject floor = null;
+            if (rugStraightPrefab != null) {
+#if UNITY_EDITOR
+                floor = UnityEditor.PrefabUtility.InstantiatePrefab(rugStraightPrefab) as GameObject;
+#else
+                floor = Instantiate(rugStraightPrefab);
+#endif
+            } else {
+                floor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            }
             floor.name = "DungeonFloor";
             floor.transform.SetParent(mazeContainer);
             floor.transform.position = new Vector3(cellPos.x, -0.05f, cellPos.z);
@@ -217,7 +239,7 @@ namespace Manifestation.Maze
 
         private void CreateDungeonCeiling(Vector3 cellPos)
         {
-            GameObject ceiling = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            GameObject ceiling = wallPrefab != null ? Instantiate(wallPrefab) : GameObject.CreatePrimitive(PrimitiveType.Cube);
             ceiling.name = "DungeonCeiling";
             ceiling.transform.SetParent(mazeContainer);
             // 3.8m above floor, blocks all skybox sunlight completely
@@ -248,7 +270,16 @@ namespace Manifestation.Maze
 
         private void SpawnPillar(Vector3 pos)
         {
-            GameObject pillar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            GameObject pillar = null;
+            if (pillarPrefab != null) {
+#if UNITY_EDITOR
+                pillar = UnityEditor.PrefabUtility.InstantiatePrefab(pillarPrefab) as GameObject;
+#else
+                pillar = Instantiate(pillarPrefab);
+#endif
+            } else {
+                pillar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            }
             pillar.name = "DungeonPillar";
             pillar.transform.SetParent(mazeContainer);
             pillar.transform.position = new Vector3(pos.x, 1.9f, pos.z);
@@ -321,7 +352,7 @@ namespace Manifestation.Maze
 
         private void SpawnCarpetQuad(Vector3 pos, Vector3 scale)
         {
-            GameObject carpet = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            GameObject carpet = rugStraightPrefab != null ? Instantiate(rugStraightPrefab) : GameObject.CreatePrimitive(PrimitiveType.Cube);
             carpet.name = "VelvetRedRunner";
             carpet.transform.SetParent(mazeContainer);
             carpet.transform.position = new Vector3(pos.x, 0.005f, pos.z);
@@ -336,7 +367,7 @@ namespace Manifestation.Maze
 
         private void CreateCarpetBorder(Vector3 worldPos, Vector3 scale)
         {
-            GameObject border = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            GameObject border = rugStraightPrefab != null ? Instantiate(rugStraightPrefab) : GameObject.CreatePrimitive(PrimitiveType.Cube);
             border.name = "GoldCarpetBorder";
             border.transform.SetParent(mazeContainer);
             border.transform.position = worldPos;
@@ -397,3 +428,5 @@ namespace Manifestation.Maze
         public Vector2Int VaultCoordinates => vaultCoord;
     }
 }
+
+
