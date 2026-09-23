@@ -38,15 +38,25 @@ namespace Manifestation.Maze
 
             // Auto-load authentic prefabs if unassigned
             #if UNITY_EDITOR
-            if (wallPrefab == null)
-            {
-                wallPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Prefabs/DungeonWall.prefab");
-            }
-            if (rugStraightPrefab == null)
-            {
-                rugStraightPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Prefabs/DungeonFloor.prefab");
-            }
+            if (wallPrefab == null) wallPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Prefabs/DungeonWall.prefab");
+            if (rugStraightPrefab == null) rugStraightPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Prefabs/DungeonFloor.prefab");
+            if (pillarPrefab == null) pillarPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Prefabs/DungeonPillar.prefab");
+            if (statuePrefab == null) statuePrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Prefabs/DungeonStatue.prefab");
             #endif
+
+            // Enforce True Horror Environment instantly at runtime
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
+            RenderSettings.ambientLight = new Color(0.015f, 0.018f, 0.025f);
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.ExponentialSquared;
+            RenderSettings.fogDensity = 0.055f;
+            RenderSettings.fogColor = new Color(0.01f, 0.01f, 0.015f);
+
+            GameObject dirLight = GameObject.Find("Directional Light");
+            if (dirLight != null) {
+                var l = dirLight.GetComponent<Light>();
+                if (l != null) { l.intensity = 0.02f; l.color = new Color(0.2f, 0.3f, 0.5f); }
+            }
 
             ClearExistingMaze();
             BuildMazeData();

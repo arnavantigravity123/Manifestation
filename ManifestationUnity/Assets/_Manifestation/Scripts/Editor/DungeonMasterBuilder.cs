@@ -33,21 +33,21 @@ namespace Manifestation.EditorTools
             string prefabDir = "Assets/_Manifestation/Prefabs";
             if (!AssetDatabase.IsValidFolder(prefabDir)) AssetDatabase.CreateFolder("Assets/_Manifestation", "Prefabs");
 
-            Object[] fbxAssets = AssetDatabase.LoadAllAssetsAtPath("Assets/_Manifestation/Dungeon/models/DungedonAssets.fbx");
-            var meshes = fbxAssets.OfType<Mesh>().ToList();
+            GameObject fbxRoot = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Dungeon/models/DungedonAssets.fbx");
+            Transform[] allTransforms = fbxRoot != null ? fbxRoot.GetComponentsInChildren<Transform>(true) : new Transform[0];
 
-            Mesh pillarMesh = meshes.FirstOrDefault(m => m.name.ToLower().Contains("pillar"));
-            Mesh wallMesh = meshes.FirstOrDefault(m => m.name.ToLower().Contains("wall"));
-            Mesh floorMesh = meshes.FirstOrDefault(m => m.name.ToLower().Contains("floor"));
-            Mesh statueMesh = meshes.FirstOrDefault(m => m.name.ToLower().Contains("statue"));
-            Mesh rugMesh = meshes.FirstOrDefault(m => m.name.ToLower().Contains("rug"));
+            GameObject pillarGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("pillar"))?.gameObject;
+            GameObject wallGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("wall"))?.gameObject;
+            GameObject floorGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("floor"))?.gameObject;
+            GameObject statueGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("statue"))?.gameObject;
+            GameObject rugGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("rug"))?.gameObject;
 
-            CreatePrefab("DungeonPillar", pillarMesh, pillarMat, prefabDir, 0.463f, PrimitiveType.Cylinder);
-            CreatePrefab("DungeonWall", wallMesh, wallMat, prefabDir, 1.0f, PrimitiveType.Cube);
-            CreatePrefab("DungeonFloor", floorMesh, floorMat, prefabDir, 1.0f, PrimitiveType.Cube);
-            CreatePrefab("DungeonStatue", statueMesh, statueMat, prefabDir, 0.8095f, PrimitiveType.Capsule);
-            CreatePrefab("DungeonRug", rugMesh, rugMat, prefabDir, 1.0f, PrimitiveType.Cube);
-            CreatePrefab("DungeonCeiling", floorMesh, ceilingMat, prefabDir, 1.0f, PrimitiveType.Cube); // fallback to floor mesh for ceiling
+            CreatePrefab("DungeonPillar", pillarGO, pillarMat, prefabDir, 0.463f, PrimitiveType.Cylinder);
+            CreatePrefab("DungeonWall", wallGO, wallMat, prefabDir, 1.0f, PrimitiveType.Cube);
+            CreatePrefab("DungeonFloor", floorGO, floorMat, prefabDir, 1.0f, PrimitiveType.Cube);
+            CreatePrefab("DungeonStatue", statueGO, statueMat, prefabDir, 0.8095f, PrimitiveType.Capsule);
+            CreatePrefab("DungeonRug", rugGO, rugMat, prefabDir, 1.0f, PrimitiveType.Cube);
+            CreatePrefab("DungeonCeiling", floorGO, ceilingMat, prefabDir, 1.0f, PrimitiveType.Cube);
 
             SetupTrueHorrorEnvironment();
             BuildInGameHUD();
@@ -57,19 +57,21 @@ namespace Manifestation.EditorTools
             Debug.Log("<color=green>[MasterBuilder] COMPLETE PLAY STORE READY DUNGEON BUILT!</color>");
         }
 
-        private static void CreatePrefab(string name, Mesh mesh, Material mat, string prefabDir, float scale, PrimitiveType fallback)
+        private static void CreatePrefab(string name, GameObject sourceGO, Material mat, string prefabDir, float scale, PrimitiveType fallback)
         {
-            GameObject go;
-            if (mesh != null)
+            GameObject go = new GameObject(name);
+            MeshFilter sourceMf = sourceGO != null ? sourceGO.GetComponent<MeshFilter>() : null;
+            if (sourceMf == null && sourceGO != null) sourceMf = sourceGO.GetComponentInChildren<MeshFilter>();
+
+            if (sourceMf != null && sourceMf.sharedMesh != null)
             {
-                go = new GameObject(name);
-                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                go.AddComponent<MeshFilter>().sharedMesh = sourceMf.sharedMesh;
                 go.AddComponent<MeshRenderer>().sharedMaterial = mat;
-                // Add collision
                 go.AddComponent<BoxCollider>();
             }
             else
             {
+                DestroyImmediate(go);
                 go = GameObject.CreatePrimitive(fallback);
                 go.name = name;
                 go.GetComponent<MeshRenderer>().sharedMaterial = mat;
