@@ -7,18 +7,8 @@ using System.Linq;
 
 namespace Manifestation.EditorTools
 {
-    [InitializeOnLoad]
     public class DungeonMasterBuilder : MonoBehaviour
     {
-        static DungeonMasterBuilder()
-        {
-            EditorApplication.playModeStateChanged += (PlayModeStateChange state) => {
-                if (state == PlayModeStateChange.ExitingEditMode) {
-                    BuildCompleteDungeon();
-                }
-            };
-        }
-
         [MenuItem("Manifestation/1. BUILD COMPLETE PLAY STORE READY DUNGEON")]
         public static void BuildCompleteDungeon()
         {
