@@ -51,10 +51,39 @@ namespace Manifestation.EditorTools
 
             SetupTrueHorrorEnvironment();
             BuildInGameHUD();
+            UpgradePlayerVisuals();
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Debug.Log("<color=green>[MasterBuilder] COMPLETE PLAY STORE READY DUNGEON BUILT!</color>");
+        }
+
+        private static void UpgradePlayerVisuals()
+        {
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player != null)
+            {
+                var mr = player.GetComponent<MeshRenderer>();
+                if (mr != null) mr.enabled = false;
+
+                Transform existingVis = player.transform.Find("PlayerVisuals");
+                if (existingVis == null)
+                {
+                    GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Animations/human_idle.fbx");
+                    if (model == null) model = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Animations/Breathing Idle.fbx");
+                    
+                    if (model != null)
+                    {
+                        GameObject vis = Instantiate(model, player.transform);
+                        vis.name = "PlayerVisuals";
+                        vis.transform.localPosition = new Vector3(0, -1.0f, 0);
+                        vis.transform.localRotation = Quaternion.identity;
+                        if (vis.GetComponent<Animator>() == null) vis.AddComponent<Animator>();
+                        
+                        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene());
+                    }
+                }
+            }
         }
 
         private static void CreatePrefab(string name, GameObject sourceGO, Material mat, string prefabDir, float scale, PrimitiveType fallback)
