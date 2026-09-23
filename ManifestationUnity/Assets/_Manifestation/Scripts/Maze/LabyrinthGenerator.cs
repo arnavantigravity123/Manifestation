@@ -172,11 +172,14 @@ namespace Manifestation.Maze
                     {
                         Instantiate(slidingDoorPrefab, cellPos, Quaternion.identity, mazeContainer);
                         CreateVelvetCarpet(cellPos, r, c);
+                        CreateDungeonCeiling(cellPos);
                     }
                     else if (cellType == 0)
                     {
-                        // Walkable corridor: spawn velvet red carpet runner!
+                        // Walkable corridor: spawn velvet red carpet runner + pitch-black ceiling!
                         CreateVelvetCarpet(cellPos, r, c);
+                        CreateDungeonCeiling(cellPos);
+                        SpawnCorridorDecorations(cellPos, r, c);
                     }
                 }
             }
@@ -210,6 +213,70 @@ namespace Manifestation.Maze
             {
                 renderer.sharedMaterial = GetOrCreateFloorMaterial();
             }
+        }
+
+        private void CreateDungeonCeiling(Vector3 cellPos)
+        {
+            GameObject ceiling = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            ceiling.name = "DungeonCeiling";
+            ceiling.transform.SetParent(mazeContainer);
+            // 3.8m above floor, blocks all skybox sunlight completely
+            ceiling.transform.position = new Vector3(cellPos.x, 3.85f, cellPos.z);
+            ceiling.transform.localScale = new Vector3(blockSize, 0.15f, blockSize);
+
+            var renderer = ceiling.GetComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = GetOrCreateCeilingMaterial();
+            }
+        }
+
+        private void SpawnCorridorDecorations(Vector3 cellPos, int r, int c)
+        {
+            // Check adjacent walls
+            bool hasNorthWall = r > 0 && layout[r - 1, c] == 1;
+            bool hasSouthWall = r < gridHeight - 1 && layout[r + 1, c] == 1;
+            bool hasWestWall  = c > 0 && layout[r, c - 1] == 1;
+            bool hasEastWall  = c < gridWidth - 1 && layout[r, c + 1] == 1;
+
+            // Spawn Corner Columns at wall vertices
+            if (hasNorthWall && hasWestWall) SpawnPillar(new Vector3(cellPos.x - 2.5f, 0f, cellPos.z + 2.5f));
+            if (hasNorthWall && hasEastWall) SpawnPillar(new Vector3(cellPos.x + 2.5f, 0f, cellPos.z + 2.5f));
+            if (hasSouthWall && hasWestWall) SpawnPillar(new Vector3(cellPos.x - 2.5f, 0f, cellPos.z - 2.5f));
+            if (hasSouthWall && hasEastWall) SpawnPillar(new Vector3(cellPos.x + 2.5f, 0f, cellPos.z - 2.5f));
+        }
+
+        private void SpawnPillar(Vector3 pos)
+        {
+            GameObject pillar = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            pillar.name = "DungeonPillar";
+            pillar.transform.SetParent(mazeContainer);
+            pillar.transform.position = new Vector3(pos.x, 1.9f, pos.z);
+            pillar.transform.localScale = new Vector3(0.8f, 1.9f, 0.8f);
+
+            var renderer = pillar.GetComponent<MeshRenderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = GetOrCreatePillarMaterial();
+            }
+        }
+
+        private static Material _cachedCeilingMat;
+        private static Material GetOrCreateCeilingMaterial()
+        {
+            if (_cachedCeilingMat != null) return _cachedCeilingMat;
+            _cachedCeilingMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            _cachedCeilingMat.color = new Color(0.12f, 0.12f, 0.14f); // pitch black stone
+            return _cachedCeilingMat;
+        }
+
+        private static Material _cachedPillarMat;
+        private static Material GetOrCreatePillarMaterial()
+        {
+            if (_cachedPillarMat != null) return _cachedPillarMat;
+            _cachedPillarMat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            _cachedPillarMat.color = new Color(0.42f, 0.42f, 0.45f); // ornate stone
+            return _cachedPillarMat;
         }
 
         private void CreateVelvetCarpet(Vector3 cellPos, int r, int c)
