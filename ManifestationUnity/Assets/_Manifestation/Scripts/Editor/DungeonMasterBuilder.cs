@@ -7,8 +7,18 @@ using System.Linq;
 
 namespace Manifestation.EditorTools
 {
+    [InitializeOnLoad]
     public class DungeonMasterBuilder : MonoBehaviour
     {
+        static DungeonMasterBuilder()
+        {
+            EditorApplication.playModeStateChanged += (PlayModeStateChange state) => {
+                if (state == PlayModeStateChange.ExitingEditMode) {
+                    BuildCompleteDungeon();
+                }
+            };
+        }
+
         [MenuItem("Manifestation/1. BUILD COMPLETE PLAY STORE READY DUNGEON")]
         public static void BuildCompleteDungeon()
         {
@@ -36,11 +46,11 @@ namespace Manifestation.EditorTools
             GameObject fbxRoot = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/_Manifestation/Dungeon/models/DungedonAssets.fbx");
             Transform[] allTransforms = fbxRoot != null ? fbxRoot.GetComponentsInChildren<Transform>(true) : new Transform[0];
 
-            GameObject pillarGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("pillar"))?.gameObject;
+            GameObject pillarGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("column") || t.name.ToLower().Contains("pillar"))?.gameObject;
             GameObject wallGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("wall"))?.gameObject;
-            GameObject floorGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("floor"))?.gameObject;
-            GameObject statueGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("statue"))?.gameObject;
-            GameObject rugGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("rug"))?.gameObject;
+            GameObject floorGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("ground") || t.name.ToLower().Contains("floor"))?.gameObject;
+            GameObject statueGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("statue") || t.name.ToLower().Contains("monk"))?.gameObject;
+            GameObject rugGO = allTransforms.FirstOrDefault(t => t.name.ToLower().Contains("rug") || t.name.ToLower().Contains("carpet"))?.gameObject;
 
             CreatePrefab("DungeonPillar", pillarGO, pillarMat, prefabDir, 0.463f, PrimitiveType.Cylinder);
             CreatePrefab("DungeonWall", wallGO, wallMat, prefabDir, 1.0f, PrimitiveType.Cube);
