@@ -182,7 +182,7 @@ const classIntelMeta = {
     perks: [
       { label: "THERMAL X-RAY", val: "PASSIVE SENSOR", color: "#34d399" },
       { label: "BREAKER REMOTE", val: "FREEZE GHOSTS", color: "#38bdf8" },
-      { label: "CIPHER SENSE", val: "AUTO-BONUS DIGIT", color: "#fde047" }
+      { label: "CIPHER SENSE", val: "1 STARTING DIGIT", color: "#fde047" }
     ]
   },
   Trapper: {

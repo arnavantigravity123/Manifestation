@@ -2650,6 +2650,11 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   generateMaze(matchConfig.puzzleState.keysCount);
   updateGateHUD();
 
+  // Locksmith Class Perk: Starts with exactly 1 bonus cipher digit revealed at the very start (no more than that)
+  if (myTeam === 'Human' && myClass === 'Locksmith' && !window.isAriadneDev) {
+    applyLocksmithStartingBonus();
+  }
+
   // Set spawn positions (All Humans spawn together at center (0, 1.6, 0))
   const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
   const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
@@ -9098,6 +9103,63 @@ function checkInteractions() {
   triggerNotification("Nothing nearby to interact with.");
 }
 
+function applyLocksmithStartingBonus() {
+  if (myTeam !== 'Human' || myClass !== 'Locksmith') return;
+  if (!codeClueNotes || codeClueNotes.length === 0) return;
+  const digits = window.cipherCodeDigits || [null, null, null, null];
+
+  // Locksmith starts with exactly 1 bonus cipher digit at match start (no more than that)
+  const bonusNote = codeClueNotes.find(n => n.digitIndex === 0) || codeClueNotes[0];
+  if (!bonusNote || bonusNote.collected) return;
+
+  bonusNote.collected = true;
+  const bonusDigit = (digits[bonusNote.digitIndex] !== undefined && digits[bonusNote.digitIndex] !== null) 
+    ? digits[bonusNote.digitIndex] 
+    : '?';
+
+  if (bonusNote.mesh) {
+    if (bonusNote.mesh.userData && bonusNote.mesh.userData.noteMesh) {
+      applyClueNoteMaterials(bonusNote.mesh.userData.noteMesh, bonusNote.digitIndex, bonusDigit, true);
+    }
+    if (bonusNote.mesh.userData && bonusNote.mesh.userData.ring && bonusNote.mesh.userData.ring.material) {
+      bonusNote.mesh.userData.ring.material.color.setHex(0x10b981);
+      bonusNote.mesh.userData.ring.material.opacity = 0.55;
+    }
+    bonusNote.mesh.traverse(c => {
+      if (c.isPointLight) {
+        c.color.setHex(0x6ee7b7);
+        c.intensity = 1.0;
+      }
+    });
+  }
+
+  // Update Cipher HUD at match start with the 1 starting bonus digit
+  const cipherHUD = document.getElementById('hud-cipher-info');
+  if (cipherHUD) {
+    if (window.gameDifficulty === 'impossible') {
+      cipherHUD.textContent = `UNORDERED DIGITS: [ ${bonusDigit} ] (1/4 found)`;
+      cipherHUD.style.color = '#f59e0b';
+    } else {
+      const display = digits.map((d, idx) => {
+        const col = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
+        return col ? d : '_';
+      }).join(' ');
+      cipherHUD.textContent = `CODE: [ ${display} ]`;
+      cipherHUD.style.color = '#10b981';
+      cipherHUD.style.letterSpacing = '0.25em';
+    }
+  }
+
+  setTimeout(() => {
+    triggerNotification(`🔑 Locksmith Intel: Decoded starting bonus digit #${bonusNote.digitIndex + 1} [ ${bonusDigit} ]!`);
+  }, 1200);
+
+  // Sync initial decoded clue to multiplayer peers if connected
+  if (typeof socketClient !== 'undefined' && socketClient && socketClient.connected) {
+    socketClient.emit('clue_collected', { digitIndex: bonusNote.digitIndex });
+  }
+}
+
 function collectClueLocal(digitIndex) {
   const digitNames = ['1ST', '2ND', '3RD', '4TH'];
   const digits = window.cipherCodeDigits || [null, null, null, null];
@@ -9132,27 +9194,7 @@ function collectClueLocal(digitIndex) {
       triggerNotification(`📖 Clue #${digitIndex + 1} Decoded! (+15% Sanity — Cipher Clarity)`);
     }
 
-    // Locksmith Class Buff: Master Cryptographer (+50% Cipher Decode Speed)
-    // Automatically decrypts an additional uncollected cipher digit!
-    if (myTeam === 'Human' && myClass === 'Locksmith') {
-      const remainingClues = codeClueNotes.filter(n => !n.collected && n.digitIndex !== digitIndex);
-      if (remainingClues.length > 0) {
-        const bonusClue = remainingClues[0];
-        bonusClue.collected = true;
-        const bonusDigit = (digits[bonusClue.digitIndex] !== undefined && digits[bonusClue.digitIndex] !== null) ? digits[bonusClue.digitIndex] : '?';
-        setTimeout(() => {
-          triggerNotification(`🔑 Locksmith Cipher Sense: Decoded bonus digit #${bonusClue.digitIndex + 1} [ ${bonusDigit} ]!`);
-          const cHUD = document.getElementById('hud-cipher-info');
-          if (cHUD && window.gameDifficulty !== 'impossible') {
-            const display = digits.map((d, idx) => {
-              const col = codeClueNotes.find(n => n.digitIndex === idx && n.collected);
-              return col ? d : '_';
-            }).join(' ');
-            cHUD.textContent = `CODE: [ ${display} ]`;
-          }
-        }, 1200);
-      }
-    }
+    // Locksmith starting bonus was already granted at match start; no additional bonus clues on pickup
   }
 
   const cipherHUD = document.getElementById('hud-cipher-info');
