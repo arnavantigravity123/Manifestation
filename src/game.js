@@ -9,6 +9,8 @@ let preloadedGhostModel = null;
 let preloadedHumanModel = null;
 let preloadedHumanFBX = null;
 let hazmatSuitTexture = null;
+let globalAudioListener = null;
+let vaultDoorAudio = null;
 const activeAnimationMixers = [];
 
 const gltfLoader = new GLTFLoader();
@@ -1064,6 +1066,16 @@ export function loadVaultDoorAsset() {
     preloadedVaultModel = gltf.scene;
     if (gltf.animations && gltf.animations.length > 0) {
       preloadedVaultAnimClip = gltf.animations[0];
+    }
+    if (globalAudioListener) {
+      vaultDoorAudio = new THREE.PositionalAudio(globalAudioListener);
+      const audioLoader = new THREE.AudioLoader();
+      audioLoader.load('/assets/vault_door.m4a', (buffer) => {
+        vaultDoorAudio.setBuffer(buffer);
+        vaultDoorAudio.setRefDistance(10);
+        vaultDoorAudio.setVolume(2.0); // Heavy metal door creak
+        preloadedVaultModel.add(vaultDoorAudio);
+      });
     }
     isVaultLoading = false;
     console.log('✅ [VAULT DOOR] Authentic animated 3D Vault Door (/assets/vault_door.glb) loaded!');
@@ -2459,6 +2471,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   const h = container.clientHeight || window.innerHeight;
   
   camera = new THREE.PerspectiveCamera(75, w / h, 0.25, 200);
+  globalAudioListener = new THREE.AudioListener();
+  camera.add(globalAudioListener);
   camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
   camera.position.set(0, 1.6, 0); // Eye level
 
@@ -5510,6 +5524,9 @@ function generateMaze(keysCount = 8) {
   if (vaultMixer) {
     vaultMixer.stopAllAction();
     vaultMixer = null;
+  }
+  if (vaultDoorAudio && vaultDoorAudio.isPlaying) {
+    vaultDoorAudio.stop();
   }
   vaultOpenAction = null;
   isVaultDoorOpeningOrOpen = false;
@@ -9488,6 +9505,10 @@ function openVaultDoorAnimated() {
   isVaultDoorOpeningOrOpen = true;
   window.isVaultOpeningCutscene = true;
 
+  if (vaultDoorAudio && !vaultDoorAudio.isPlaying) {
+    vaultDoorAudio.play();
+  }
+
   // Immediately hide radar blip and panel during door unsealing cutscene
   const blip = document.getElementById('radar-blip-element');
   if (blip) blip.style.opacity = '0';
@@ -11904,6 +11925,10 @@ function playEscapeCinematic(callback) {
       vaultOpenAction.timeScale = 2.5;
       vaultOpenAction.play();
     }
+  }
+
+  if (vaultDoorAudio && !vaultDoorAudio.isPlaying) {
+    vaultDoorAudio.play();
   }
 
   // Remove the collision blocker immediately so the camera glides through seamlessly
