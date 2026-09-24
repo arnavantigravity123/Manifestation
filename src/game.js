@@ -1068,16 +1068,6 @@ export function loadVaultDoorAsset() {
     if (gltf.animations && gltf.animations.length > 0) {
       preloadedVaultAnimClip = gltf.animations[0];
     }
-    if (globalAudioListener) {
-      vaultDoorAudio = new THREE.PositionalAudio(globalAudioListener);
-      const audioLoader = new THREE.AudioLoader();
-      audioLoader.load('/assets/vault_door.m4a', (buffer) => {
-        vaultDoorAudio.setBuffer(buffer);
-        vaultDoorAudio.setRefDistance(10);
-        vaultDoorAudio.setVolume(2.0); // Heavy metal door creak
-        preloadedVaultModel.add(vaultDoorAudio);
-      });
-    }
     isVaultLoading = false;
     console.log('✅ [VAULT DOOR] Authentic animated 3D Vault Door (/assets/vault_door.glb) loaded!');
 
@@ -5536,9 +5526,7 @@ function generateMaze(keysCount = 8) {
     vaultMixer.stopAllAction();
     vaultMixer = null;
   }
-  if (vaultDoorAudio && vaultDoorAudio.isPlaying) {
-    vaultDoorAudio.stop();
-  }
+  // vaultDoorAudio is a cached AudioBuffer — fire-and-forget, no stop needed
   vaultOpenAction = null;
   isVaultDoorOpeningOrOpen = false;
   padMeshRef = null;
@@ -9516,8 +9504,30 @@ function openVaultDoorAnimated() {
   isVaultDoorOpeningOrOpen = true;
   window.isVaultOpeningCutscene = true;
 
-  if (vaultDoorAudio && !vaultDoorAudio.isPlaying) {
-    vaultDoorAudio.play();
+  // Play vault door sound using the existing Web Audio API context (same as EMF beeps - always works)
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) audioCtx = new AudioContextClass();
+  }
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    if (!vaultDoorAudio) {
+      // Load and cache the vault door audio buffer on first trigger
+      const audioLoader = new THREE.AudioLoader();
+      audioLoader.load('/assets/vault_door.m4a', (buffer) => {
+        vaultDoorAudio = buffer;
+        const src = audioCtx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(audioCtx.destination);
+        src.start(0);
+      });
+    } else {
+      // Buffer already cached - play immediately
+      const src = audioCtx.createBufferSource();
+      src.buffer = vaultDoorAudio;
+      src.connect(audioCtx.destination);
+      src.start(0);
+    }
   }
 
   // Immediately hide radar blip and panel during door unsealing cutscene
@@ -11939,8 +11949,12 @@ function playEscapeCinematic(callback) {
     }
   }
 
-  if (vaultDoorAudio && !vaultDoorAudio.isPlaying) {
-    vaultDoorAudio.play();
+  if (vaultDoorAudio && audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    const src = audioCtx.createBufferSource();
+    src.buffer = vaultDoorAudio;
+    src.connect(audioCtx.destination);
+    src.start(0);
   }
 
   // Remove the collision blocker immediately so the camera glides through seamlessly
