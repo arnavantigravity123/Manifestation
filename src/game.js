@@ -14991,7 +14991,8 @@ function animate() {
 
       // Play local footstep audio, dynamically matching speed to walking vs sprinting
       if (typeof footstepAudio !== 'undefined' && footstepAudio && footstepAudio.buffer) {
-        if (isEffectivelyMoving && myTeam === 'Human') {
+        const cutsceneActive = window.isVaultOpeningCutscene || window.isEscaping || hasEscaped || isCaptured;
+        if (isEffectivelyMoving && myTeam === 'Human' && !cutsceneActive) {
           if (!footstepAudio.isPlaying) footstepAudio.play();
           footstepAudio.setVolume(isSprinting ? 0.8 : 0.4);
           const rate = THREE.MathUtils.clamp(localPlayerGroundSpeed / 7.0, 0.5, 1.55);
