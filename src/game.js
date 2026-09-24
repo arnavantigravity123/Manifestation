@@ -9679,6 +9679,8 @@ function openVaultDoorAnimated() {
       ambientLight.intensity = Math.max(ambientLight.intensity, 1.8);
     }
 
+    const startT = performance.now();
+
     // Play 3D model opening animation (Take 001: gear spin, bolt retract, door swing)
     if (vaultOpenAction) {
       vaultOpenAction.reset();
@@ -9688,7 +9690,6 @@ function openVaultDoorAnimated() {
       // Procedural door swing fallback: directly rotates door hinge node (group1)
       const doorScene = vaultDoorMeshRef;
       const group1Node = (doorScene && doorScene.getObjectByName) ? doorScene.getObjectByName('group1') : null;
-      const startT = performance.now();
       const swingAnim = (now) => {
         const elapsed = (now - startT) / 1000;
         if (elapsed >= 1.5 && elapsed <= 3.6) {
