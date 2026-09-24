@@ -1350,6 +1350,38 @@ export function detectMobileDevice() {
 export let isMobileDevice = detectMobileDevice();
 window.isMobileDevice = isMobileDevice;
 
+export function requestAppFullscreen() {
+  if (typeof window !== 'undefined' && window.__manifestationRequestFullscreen) {
+    window.__manifestationRequestFullscreen();
+    return;
+  }
+  const doc = document;
+  const docEl = doc.documentElement;
+  const requestFS = docEl.requestFullscreen ||
+                    docEl.webkitRequestFullscreen ||
+                    docEl.mozRequestFullScreen ||
+                    docEl.msRequestFullscreen;
+
+  if (requestFS && !doc.fullscreenElement && !doc.webkitFullscreenElement) {
+    try {
+      const res = requestFS.call(docEl, { navigationUI: 'hide' });
+      if (res && typeof res.catch === 'function') {
+        res.catch(() => {});
+      }
+    } catch (e) {}
+  }
+
+  if (screen.orientation && typeof screen.orientation.lock === 'function') {
+    screen.orientation.lock('landscape').catch(() => {});
+  }
+
+  try {
+    window.scrollTo(0, 1);
+    setTimeout(() => { window.scrollTo(0, 0); }, 60);
+  } catch (e) {}
+}
+window.requestAppFullscreen = requestAppFullscreen;
+
 export function detectLowEndOrIntegratedGPU() {
   try {
     const canvas = document.createElement('canvas');
@@ -2147,6 +2179,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     // Immediately trigger pointer lock during trusted user click gesture before DOM modification
     if (!isMobileDevice) {
       requestCanvasOrBodyPointerLock();
+    } else {
+      requestAppFullscreen();
     }
 
     ptrOverlay.style.display = 'none';

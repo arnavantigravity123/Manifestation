@@ -3,7 +3,7 @@
   "short_name": "Manifestation",
   "description": "3D multiplayer survival horror labyrinth game",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#020408",
   "theme_color": "#020408",

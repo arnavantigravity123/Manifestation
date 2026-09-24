@@ -15,6 +15,43 @@
     <link rel="icon" type="image/jpeg" href="/assets/manifestation_logo.jpg" />
     <link rel="apple-touch-icon" href="/assets/manifestation_logo.jpg" />
     <link rel="stylesheet" href="/src/style.css" />
+    <!-- Auto-Fullscreen & Address Bar Hider for Mobile Web (Triggers automatically on first tap with zero human setup) -->
+    <script>
+      (function() {
+        var isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                       (('ontouchstart' in window) && navigator.maxTouchPoints > 1);
+        if (!isMobile) return;
+
+        window.__manifestationRequestFullscreen = function() {
+          var doc = document;
+          var el = doc.documentElement;
+          var rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+          if (rfs && !doc.fullscreenElement && !doc.webkitFullscreenElement) {
+            try {
+              var p = rfs.call(el, { navigationUI: 'hide' });
+              if (p && p.catch) p.catch(function(){});
+            } catch(e) {}
+          }
+          if (screen.orientation && screen.orientation.lock) {
+            try { screen.orientation.lock('landscape').catch(function(){}); } catch(e) {}
+          }
+          try {
+            window.scrollTo(0, 1);
+            setTimeout(function() { window.scrollTo(0, 0); }, 60);
+          } catch(e) {}
+        };
+
+        try { window.__manifestationRequestFullscreen(); } catch(e) {}
+
+        var events = ['touchstart', 'pointerdown', 'touchend', 'click'];
+        function onTouch() {
+          window.__manifestationRequestFullscreen();
+        }
+        events.forEach(function(evt) {
+          window.addEventListener(evt, onTouch, { passive: true });
+        });
+      })();
+    </script>
   </head>
   <body class="is-pc">
     <!-- 3D Render Area -->

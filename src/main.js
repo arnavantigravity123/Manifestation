@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import { initGame, setMobileMode, detectMobileDevice, setupControlsGuideModal, getPlayerColor } from './game.js';
+import { initGame, setMobileMode, detectMobileDevice, setupControlsGuideModal, getPlayerColor, requestAppFullscreen } from './game.js';
 import { Purchases } from '@revenuecat/purchases-capacitor';
 import { Capacitor } from '@capacitor/core';
 
@@ -296,6 +296,7 @@ function addFastButtonListener(btn, callback) {
     const now = performance.now();
     if (now - lastTrigger < 120) return;
     lastTrigger = now;
+    requestAppFullscreen();
     try {
       callback(e);
     } catch (err) {
@@ -306,6 +307,27 @@ function addFastButtonListener(btn, callback) {
   btn.addEventListener('click', fire);
 }
 window.addFastButtonListener = addFastButtonListener;
+
+// Auto-fullscreen manager for mobile web (removes browser URL bar on first tap with zero human input)
+if (isTouchCapable || detectMobileDevice()) {
+  const autoFS = () => {
+    requestAppFullscreen();
+  };
+  ['touchstart', 'pointerdown', 'touchend', 'click'].forEach(evt => {
+    window.addEventListener(evt, () => {
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        autoFS();
+      }
+    }, { passive: true });
+  });
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') autoFS();
+  });
+  window.addEventListener('orientationchange', () => {
+    setTimeout(autoFS, 200);
+  });
+  autoFS();
+}
 
 // Pre-fill username from localStorage or random fallback
 const savedUsername = localStorage.getItem('manifestation_username');
