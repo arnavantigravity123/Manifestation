@@ -11,6 +11,7 @@ let preloadedHumanFBX = null;
 let hazmatSuitTexture = null;
 let globalAudioListener = null;
 let vaultDoorAudio = null;
+let footstepAudio = null;
 const activeAnimationMixers = [];
 
 const gltfLoader = new GLTFLoader();
@@ -2473,6 +2474,16 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   camera = new THREE.PerspectiveCamera(75, w / h, 0.25, 200);
   globalAudioListener = new THREE.AudioListener();
   camera.add(globalAudioListener);
+  
+  // Load looping footstep audio
+  footstepAudio = new THREE.Audio(globalAudioListener);
+  const audioLoader = new THREE.AudioLoader();
+  audioLoader.load('/assets/footsteps.wav', (buffer) => {
+    footstepAudio.setBuffer(buffer);
+    footstepAudio.setLoop(true);
+    footstepAudio.setVolume(0.5);
+  });
+
   camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
   camera.position.set(0, 1.6, 0); // Eye level
 
@@ -14962,6 +14973,18 @@ function animate() {
       }
 
       const isEffectivelyMoving = hasMoveInput && !isBlockedByWall && (localPlayerGroundSpeed >= 0.35);
+
+      // Play local footstep audio, dynamically matching speed to walking vs sprinting
+      if (typeof footstepAudio !== 'undefined' && footstepAudio && footstepAudio.buffer) {
+        if (isEffectivelyMoving && myTeam === 'Human') {
+          if (!footstepAudio.isPlaying) footstepAudio.play();
+          footstepAudio.setVolume(isSprinting ? 0.8 : 0.4);
+          const rate = THREE.MathUtils.clamp(localPlayerGroundSpeed / 7.0, 0.5, 1.55);
+          footstepAudio.setPlaybackRate(rate);
+        } else {
+          if (footstepAudio.isPlaying) footstepAudio.pause();
+        }
+      }
 
       // Update local player 3D locomotion animation state
       if (localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.animMixer) {
