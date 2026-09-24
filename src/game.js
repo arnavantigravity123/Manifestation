@@ -9677,6 +9677,7 @@ function openVaultDoorAnimated() {
         const fireSound = (buffer) => {
           const src = audioCtx.createBufferSource();
           src.buffer = buffer;
+          src.playbackRate.value = 1.8; // Speed up to match the fast door swing animation
           // Small gain node so we can set volume
           const gain = audioCtx.createGain();
           gain.gain.value = 1.8;
