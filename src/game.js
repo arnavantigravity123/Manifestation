@@ -5527,6 +5527,7 @@ function generateMaze(keysCount = 8) {
     vaultMixer = null;
   }
   // vaultDoorAudio is a cached AudioBuffer — fire-and-forget, no stop needed
+  window._vaultAudioPlayed = false; // Reset so vault creak plays again next round
   vaultOpenAction = null;
   isVaultDoorOpeningOrOpen = false;
   padMeshRef = null;
@@ -9504,32 +9505,6 @@ function openVaultDoorAnimated() {
   isVaultDoorOpeningOrOpen = true;
   window.isVaultOpeningCutscene = true;
 
-  // Play vault door sound using the existing Web Audio API context (same as EMF beeps - always works)
-  if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (AudioContextClass) audioCtx = new AudioContextClass();
-  }
-  if (audioCtx) {
-    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-    if (!vaultDoorAudio) {
-      // Load and cache the vault door audio buffer on first trigger
-      const audioLoader = new THREE.AudioLoader();
-      audioLoader.load('/assets/vault_door.m4a', (buffer) => {
-        vaultDoorAudio = buffer;
-        const src = audioCtx.createBufferSource();
-        src.buffer = buffer;
-        src.connect(audioCtx.destination);
-        src.start(0);
-      });
-    } else {
-      // Buffer already cached - play immediately
-      const src = audioCtx.createBufferSource();
-      src.buffer = vaultDoorAudio;
-      src.connect(audioCtx.destination);
-      src.start(0);
-    }
-  }
-
   // Immediately hide radar blip and panel during door unsealing cutscene
   const blip = document.getElementById('radar-blip-element');
   if (blip) blip.style.opacity = '0';
@@ -9690,6 +9665,37 @@ function openVaultDoorAnimated() {
     }
 
     const startT = performance.now();
+
+    // Play vault door creak at the EXACT moment the door physically begins to move
+    const playVaultCreak = () => {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) audioCtx = new AudioContextClass();
+      }
+      if (audioCtx) {
+        if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+        const fireSound = (buffer) => {
+          const src = audioCtx.createBufferSource();
+          src.buffer = buffer;
+          // Small gain node so we can set volume
+          const gain = audioCtx.createGain();
+          gain.gain.value = 1.8;
+          src.connect(gain);
+          gain.connect(audioCtx.destination);
+          src.start(0);
+        };
+        if (!vaultDoorAudio) {
+          const audioLoader = new THREE.AudioLoader();
+          audioLoader.load('/assets/vault_door.m4a', (buffer) => {
+            vaultDoorAudio = buffer;
+            fireSound(buffer);
+          });
+        } else {
+          fireSound(vaultDoorAudio);
+        }
+      }
+    };
+    playVaultCreak();
 
     // Play 3D model opening animation (Take 001: gear spin, bolt retract, door swing)
     if (vaultOpenAction) {
@@ -11949,11 +11955,15 @@ function playEscapeCinematic(callback) {
     }
   }
 
-  if (vaultDoorAudio && audioCtx) {
+  if (vaultDoorAudio && audioCtx && !window._vaultAudioPlayed) {
+    window._vaultAudioPlayed = true;
     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    const gain = audioCtx.createGain();
+    gain.gain.value = 1.8;
     const src = audioCtx.createBufferSource();
     src.buffer = vaultDoorAudio;
-    src.connect(audioCtx.destination);
+    src.connect(gain);
+    gain.connect(audioCtx.destination);
     src.start(0);
   }
 
