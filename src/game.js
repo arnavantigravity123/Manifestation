@@ -1017,11 +1017,6 @@ function addGLBModelToForest(forestContainer) {
     forestClone.position.set(-629.33, -930.10, -1718.69);
 
     forestClone.traverse(child => {
-      // Hide perimeter mountain hill meshes (Object_15 and Object_18) that protrude across doorway and block view
-      if (child.name === 'Object_15' || child.name === 'Object_18') {
-        child.visible = false;
-        return;
-      }
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
@@ -1172,12 +1167,12 @@ export function attachForestToVault() {
   forestContainer.userData.outdoorSun = outdoorSun;
   forestContainer.userData.skyHemisphere = skyHemisphere;
 
-  // 2. Atmospheric Volumetric God Rays streaming down into the forest
-  const rayGeo = new THREE.CylinderGeometry(0.5, 3.2, 28, 8, 1, true);
+  // 2. Atmospheric Volumetric God Rays streaming down into the forest (32 radial segments for smooth round beams)
+  const rayGeo = new THREE.CylinderGeometry(0.5, 3.8, 30, 32, 1, true);
   const rayMat = new THREE.MeshBasicMaterial({
     color: 0xfffae0,
     transparent: true,
-    opacity: 0.035,
+    opacity: 0.018,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -1216,39 +1211,20 @@ export function attachForestToVault() {
   const motes = new THREE.Points(moteGeo, moteMat);
   forestContainer.add(motes);
 
-  // 3.5 Seamless Outdoor Natural Meadow & Flagstone Entrance Terrace
-  // Spans from the doorway threshold plate (Z = 0) out to the forest trail
-  // Completely eliminates any void or blue sky gaps under the player's feet!
-  const outdoorGroundGroup = new THREE.Group();
-  outdoorGroundGroup.name = 'forest_ground_terrace';
-
-  // Broad green meadow lawn (width 32m, length 28m)
-  const lawnGeo = new THREE.PlaneGeometry(32, 28);
-  const lawnMat = new THREE.MeshStandardMaterial({
-    color: 0x244f24, // Vibrant alpine grass
-    roughness: 0.92,
-    metalness: 0.04
+  // 3.5 Seamless Natural Distant Horizon Skirt
+  // Positioned far beneath the authentic terrain bounds (Y = -3.4m) so distant mountain silhouettes
+  // blend softly into the outdoor aerial perspective fog without any harsh rectangular cutoffs or gaps
+  const horizonGeo = new THREE.CircleGeometry(160, 48);
+  const horizonMat = new THREE.MeshStandardMaterial({
+    color: 0x1f3822, // Deep alpine moss green matching distant terrain base
+    roughness: 0.95,
+    metalness: 0.02
   });
-  const lawnMesh = new THREE.Mesh(lawnGeo, lawnMat);
-  lawnMesh.rotation.x = -Math.PI / 2;
-  lawnMesh.position.set(0, -0.015, -4.5);
-  lawnMesh.receiveShadow = true;
-  outdoorGroundGroup.add(lawnMesh);
-
-  // Weathered natural stone terrace walkway leading from doorway threshold to the trail
-  const stonePathGeo = new THREE.PlaneGeometry(4.4, 16);
-  const stonePathMat = new THREE.MeshStandardMaterial({
-    color: 0x484f56, // Natural mountain flagstone slate
-    roughness: 0.82,
-    metalness: 0.15
-  });
-  const stonePathMesh = new THREE.Mesh(stonePathGeo, stonePathMat);
-  stonePathMesh.rotation.x = -Math.PI / 2;
-  stonePathMesh.position.set(0, 0.005, 0.5);
-  stonePathMesh.receiveShadow = true;
-  outdoorGroundGroup.add(stonePathMesh);
-
-  forestContainer.add(outdoorGroundGroup);
+  const horizonMesh = new THREE.Mesh(horizonGeo, horizonMat);
+  horizonMesh.rotation.x = -Math.PI / 2;
+  horizonMesh.position.set(0, -3.4, -25);
+  horizonMesh.receiveShadow = true;
+  forestContainer.add(horizonMesh);
 
   // 4. Attach the authentic 3D forest.glb model!
   if (preloadedForestModel) {
@@ -5978,6 +5954,13 @@ function generateMaze(keysCount = 8) {
   const chamberRoofMesh = new THREE.Mesh(chamberRoofGeo, tunnelMat);
   chamberRoofMesh.position.set(0, 3.425, -2.25);
   vaultGroup.add(chamberRoofMesh);
+
+  // Stone tunnel floor slab connecting the vault frame to the forest threshold
+  const chamberFloorGeo = new THREE.BoxGeometry(4.0, 0.35, 4.5);
+  const chamberFloorMesh = new THREE.Mesh(chamberFloorGeo, tunnelMat);
+  chamberFloorMesh.position.set(0, -0.175, -2.25);
+  chamberFloorMesh.receiveShadow = true;
+  vaultGroup.add(chamberFloorMesh);
 
   // Attach 3D Forest Environment directly outside the vault portal
   attachForestToVault();
