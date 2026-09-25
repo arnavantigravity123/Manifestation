@@ -1233,26 +1233,42 @@ io.on('connection', (socket) => {
 
       // Drop player's items and keys if game is active
       if (lobby.gameStarted && leftPlayer && leftPlayer.lastPosition && leftPlayer.team === 'Human') {
+        const dropList = [];
         if (leftPlayer.inventory) {
           leftPlayer.inventory.forEach(itemName => {
-            if (itemName && itemName !== '') {
-              io.to(roomId).emit('item_dropped_sync', {
-                id: 'item_' + Math.random().toString(36).substr(2, 9),
-                name: itemName,
-                position: leftPlayer.lastPosition
-              });
-            }
+            if (itemName && itemName !== '') dropList.push({ type: 'item', name: itemName });
           });
         }
         if (leftPlayer.carriedKeys) {
           leftPlayer.carriedKeys.forEach(key => {
-            io.to(roomId).emit('key_dropped_sync', {
-              typeName: key.typeName,
-              symbol: key.symbol,
-              position: leftPlayer.lastPosition
-            });
+            dropList.push({ type: 'key', key: key });
           });
         }
+
+        const totalD = dropList.length;
+        dropList.forEach((drop, idx) => {
+          const angle = totalD > 1 ? (idx / totalD) * Math.PI * 2 : 0;
+          const radius = totalD > 1 ? 0.9 : 0;
+          const pos = {
+            x: (leftPlayer.lastPosition.x || 0) + Math.cos(angle) * radius,
+            y: 0.35,
+            z: (leftPlayer.lastPosition.z || 0) + Math.sin(angle) * radius
+          };
+
+          if (drop.type === 'item') {
+            io.to(roomId).emit('item_dropped_sync', {
+              id: 'item_' + Math.random().toString(36).substr(2, 9),
+              name: drop.name,
+              position: pos
+            });
+          } else {
+            io.to(roomId).emit('key_dropped_sync', {
+              typeName: drop.key.typeName,
+              symbol: drop.key.symbol,
+              position: pos
+            });
+          }
+        });
       }
 
       const remainingPlayers = Object.keys(lobby.players);

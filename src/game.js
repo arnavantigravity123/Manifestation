@@ -10219,8 +10219,45 @@ function dropActiveItem() {
   }
 }
 
+// Ensure dropped items and keys never stack directly on top of each other
+function findNonOverlappingDropPosition(pos) {
+  if (!pos) return new THREE.Vector3(0, 0.45, 0);
+  let targetX = pos.x;
+  let targetZ = pos.z;
+  const targetY = 0.45;
+
+  let overlapCount = 0;
+  if (typeof itemsInMaze !== 'undefined' && itemsInMaze.length > 0) {
+    for (let i = 0; i < itemsInMaze.length; i++) {
+      const itm = itemsInMaze[i];
+      if (itm && itm.mesh && Math.hypot(itm.mesh.position.x - targetX, itm.mesh.position.z - targetZ) < 0.55) {
+        overlapCount++;
+      }
+    }
+  }
+  if (typeof keysInMaze !== 'undefined' && keysInMaze.length > 0) {
+    for (let i = 0; i < keysInMaze.length; i++) {
+      const k = keysInMaze[i];
+      if (k && k.mesh && Math.hypot(k.mesh.position.x - targetX, k.mesh.position.z - targetZ) < 0.55) {
+        overlapCount++;
+      }
+    }
+  }
+
+  if (overlapCount > 0) {
+    // Disperse radially in a clean golden-angle petal pattern (~ 2.3999 rad)
+    const angle = overlapCount * 2.3999;
+    const radius = 0.85 + Math.floor(overlapCount / 5) * 0.45;
+    targetX += Math.cos(angle) * radius;
+    targetZ += Math.sin(angle) * radius;
+  }
+
+  return new THREE.Vector3(targetX, targetY, targetZ);
+}
+
 function spawnDroppedItemLocal(id, name, pos) {
-  const mesh = createItemPickupMesh(id, name, pos);
+  const validPos = findNonOverlappingDropPosition(pos);
+  const mesh = createItemPickupMesh(id, name, validPos);
 
   itemsInMaze.push({
     id: id,
@@ -11716,9 +11753,11 @@ function setupSocketListeners() {
   });
 
   socketClient.on('key_dropped_sync', (data) => {
+    const rawPos = new THREE.Vector3(data.position.x, data.position.y || 0.45, data.position.z);
+    const validPos = findNonOverlappingDropPosition(rawPos);
     const kt = KEY_TYPES.find(k => k.label === data.typeName) || KEY_TYPES[0];
     const mesh = createKeyMeshGroup(kt.color, kt.emissive);
-    mesh.position.set(data.position.x, data.position.y, data.position.z);
+    mesh.position.copy(validPos);
     scene.add(mesh);
 
     const preservedId = data.id || ('key_' + data.symbol);
@@ -14572,24 +14611,61 @@ function triggerLocalPlayerCapture() {
       skinId: mySkin
     });
 
-    // Drop all items and keys
+    // Drop all items and keys in a clean radial circle around the death location
+    const dropsToScatter = [];
     inventory.forEach(itemName => {
       if (itemName && itemName !== '') {
-        socketClient.emit('item_dropped', {
-          id: 'item_' + seededRandom().toString(36).substr(2, 9),
-          name: itemName,
-          position: { x: camera.position.x, y: 1.6, z: camera.position.z }
-        });
+        dropsToScatter.push({ type: 'item', name: itemName });
       }
     });
     carriedKeys.forEach(key => {
-      const preservedId = key.id || ('key_' + key.symbol);
-      socketClient.emit('key_dropped', {
-        id: preservedId,
-        typeName: key.typeName,
-        symbol: key.symbol,
-        position: { x: camera.position.x, y: 1.6, z: camera.position.z }
-      });
+      dropsToScatter.push({ type: 'key', key: key });
+    });
+
+    const totalDrops = dropsToScatter.length;
+    dropsToScatter.forEach((drop, idx) => {
+      const angle = totalDrops > 1 ? (idx / totalDrops) * Math.PI * 2 : 0;
+      const radius = totalDrops > 1 ? 0.9 : 0;
+      const dropPos = new THREE.Vector3(
+        camera.position.x + Math.cos(angle) * radius,
+        0.45,
+        camera.position.z + Math.sin(angle) * radius
+      );
+
+      if (drop.type === 'item') {
+        const itemId = 'item_' + seededRandom().toString(36).substr(2, 9);
+        if (socketClient) {
+          socketClient.emit('item_dropped', {
+            id: itemId,
+            name: drop.name,
+            position: { x: dropPos.x, y: dropPos.y, z: dropPos.z }
+          });
+        }
+        spawnDroppedItemLocal(itemId, drop.name, dropPos);
+      } else {
+        const key = drop.key;
+        const preservedId = key.id || ('key_' + key.symbol);
+        if (socketClient) {
+          socketClient.emit('key_dropped', {
+            id: preservedId,
+            typeName: key.typeName,
+            symbol: key.symbol,
+            position: { x: dropPos.x, y: dropPos.y, z: dropPos.z }
+          });
+        }
+        const validPos = findNonOverlappingDropPosition(dropPos);
+        const kt = KEY_TYPES.find(k => k.label === key.typeName) || KEY_TYPES[0];
+        const mesh = createKeyMeshGroup(kt.color, kt.emissive);
+        mesh.position.copy(validPos);
+        scene.add(mesh);
+        keysInMaze.push({
+          id: preservedId,
+          mesh: mesh,
+          symbol: key.symbol,
+          typeName: key.typeName,
+          isDropped: true
+        });
+      }
     });
     inventory = [];
     carriedKeys = [];
