@@ -800,12 +800,27 @@ io.on('connection', (socket) => {
     socket.emit('joined_room_success', { roomId, isPublic: lobby.isPublic });
   }
 
+  socket.on('request_lobby_sync', () => {
+    const { roomId } = socket;
+    if (roomId && lobbies[roomId]) {
+      socket.emit('lobby_update', lobbies[roomId]);
+    }
+  });
+
   socket.on('update_player', (updates) => {
     const { roomId } = socket;
     if (!roomId || !lobbies[roomId]) return;
 
     const lobby = lobbies[roomId];
-    const player = lobby.players[socket.id];
+    let player = lobby.players[socket.id];
+    if (!player && updates.username) {
+      player = Object.values(lobby.players).find(p => p.username === updates.username);
+      if (player) {
+        delete lobby.players[player.id];
+        player.id = socket.id;
+        lobby.players[socket.id] = player;
+      }
+    }
     if (!player) return;
 
     if (lobby.settings.roleSelectionMode === 'manual') {

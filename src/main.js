@@ -1516,6 +1516,17 @@ function initializeSocketConnection() {
       });
     }
     updateAccountUI();
+
+    // Auto-rejoin lobby room if reconnected while in lobby view
+    if (currentLobby && currentLobby.id && !currentLobby.gameStarted && !isSoloMode) {
+      socket.emit('join_room', {
+        roomId: currentLobby.id,
+        username: getUsername(),
+        skinId: getSkinId(),
+        isPublic: currentLobby.isPublic,
+        isVip: isVipActive()
+      });
+    }
   });
 
   socket.on('joined_room_success', ({ roomId, isPublic }) => {
@@ -1559,11 +1570,13 @@ function initializeSocketConnection() {
     lobbyView.style.display = 'grid';
     roomDisplay.textContent = roomId.toUpperCase();
     lobbyTypeLabel.textContent = isPublic ? "Public Matchmaking Lobby" : "Private Lobby";
+    ensureLobbySyncLoop();
   });
 
   socket.on('lobby_update', (lobby) => {
     currentLobby = lobby;
     renderLobby();
+    ensureLobbySyncLoop();
   });
 
   socket.on('host_changed', ({ hostId }) => {
@@ -1571,6 +1584,10 @@ function initializeSocketConnection() {
   });
 
   socket.on('match_started', (matchConfig) => {
+    if (lobbySyncTimer) {
+      clearInterval(lobbySyncTimer);
+      lobbySyncTimer = null;
+    }
     logSystemMessage("Breach sequence authorized. Entering Labyrinth...");
     isSoloMode = false;
     isTutorialMode = false;
@@ -1831,8 +1848,28 @@ addFastButtonListener(joinPrivateBtn, () => {
   s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive(), difficulty: preferredDiff });
 });
 
+let lobbySyncTimer = null;
+function ensureLobbySyncLoop() {
+  if (lobbySyncTimer) return;
+  lobbySyncTimer = setInterval(() => {
+    const lView = document.getElementById('lobby-view');
+    if (lView && lView.style.display !== 'none' && !lView.classList.contains('hidden') && currentLobby && !currentLobby.gameStarted) {
+      if (socket && socket.connected) {
+        socket.emit('request_lobby_sync');
+      }
+    } else {
+      clearInterval(lobbySyncTimer);
+      lobbySyncTimer = null;
+    }
+  }, 1000);
+}
+
 // ====== Quit Handlers ======
 function quitToMenu() {
+  if (lobbySyncTimer) {
+    clearInterval(lobbySyncTimer);
+    lobbySyncTimer = null;
+  }
   isSoloMode = false;
   isTutorialMode = false;
   resetLobbyRoleToHumanLocksmith();
@@ -1856,7 +1893,17 @@ function updatePlayerSettings() {
   if (!socket || !currentLobby) return;
   const roleMode = currentLobby.settings?.roleSelectionMode;
   if (roleMode === 'random' || roleMode === 'hidden') return;
+
+  // Optimistic local UI update: 0ms lag!
+  let myPlayer = currentLobby.players && (currentLobby.players[myId] || Object.values(currentLobby.players).find(p => p.username === getUsername()));
+  if (myPlayer) {
+    myPlayer.team = currentSelectedTeam;
+    myPlayer.characterClass = subclassSelect.value;
+    renderLobby();
+  }
+
   socket.emit('update_player', {
+    username: myPlayer ? myPlayer.username : getUsername(),
     team: currentSelectedTeam,
     characterClass: subclassSelect.value
   });
@@ -2129,14 +2176,22 @@ if (readyStartBtn) {
     if (!myPlayer) return;
 
     if (myPlayer.isHost) {
+      if (!currentLobby.canStart) return;
+      readyStartBtn.disabled = true;
+      readyStartBtn.textContent = "Authorizing Breach...";
       const activeDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
       if (currentLobby.settings?.difficulty !== activeDiff) {
         socket.emit('update_settings', { difficulty: activeDiff });
       }
       socket.emit('start_match');
     } else {
+      // Optimistic instant toggle: 0ms lag!
+      myPlayer.isReady = !myPlayer.isReady;
+      readyStartBtn.textContent = myPlayer.isReady ? "Ready (Waiting)" : "Ready Up";
+      renderLobby();
       socket.emit('update_player', {
-        isReady: !myPlayer.isReady
+        username: myPlayer.username,
+        isReady: myPlayer.isReady
       });
     }
   });
