@@ -1497,6 +1497,7 @@ input[type="text"]:focus {
 
 .unified-pause-btn,
 .unified-cam-btn,
+.unified-mute-btn,
 .unified-controls-btn {
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -1523,6 +1524,18 @@ input[type="text"]:focus {
   color: #38bdf8;
 }
 
+.unified-mute-btn {
+  border-color: rgba(234, 179, 8, 0.5);
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.15), rgba(15, 23, 42, 0.9));
+  color: #fde047;
+}
+
+.unified-mute-btn.is-muted {
+  border-color: #ef4444 !important;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.35), rgba(15, 23, 42, 0.9)) !important;
+  color: #fca5a5 !important;
+}
+
 .unified-controls-btn {
   border-color: rgba(16, 185, 129, 0.6);
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(15, 23, 42, 0.9));
@@ -1531,6 +1544,7 @@ input[type="text"]:focus {
 
 .unified-pause-btn:active,
 .unified-cam-btn:active,
+.unified-mute-btn:active,
 .unified-controls-btn:active {
   transform: scale(0.93);
   filter: brightness(1.3);
@@ -1838,6 +1852,7 @@ body.is-mobile .sleek-hotbar-container.quartermaster-inventory .key-pocket-label
 
   .unified-pause-btn,
   .unified-cam-btn,
+  .unified-mute-btn,
   .unified-controls-btn {
     min-height: 38px;
     min-width: 68px;
@@ -3463,9 +3478,11 @@ kbd {
 
   body.is-pc:not(.is-mobile) .unified-pause-btn,
   body.is-pc:not(.is-mobile) .unified-cam-btn,
+  body.is-pc:not(.is-mobile) .unified-mute-btn,
   body.is-pc:not(.is-mobile) .unified-controls-btn,
   body:not(.is-mobile) .unified-pause-btn,
   body:not(.is-mobile) .unified-cam-btn,
+  body:not(.is-mobile) .unified-mute-btn,
   body:not(.is-mobile) .unified-controls-btn {
     font-size: 0.88rem;
     padding: 0.5rem 1.15rem;

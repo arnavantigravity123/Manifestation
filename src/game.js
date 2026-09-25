@@ -1704,6 +1704,117 @@ let micStream = null;
 let audioAnalyser = null;
 let audioDataArray = null;
 
+// Master & Footstep Audio Controls (Persistent via localStorage)
+export let isMasterMuted = (localStorage.getItem('manifestation_audio_muted') === 'true');
+export let isFootstepsMuted = (localStorage.getItem('manifestation_footsteps_muted') === 'true');
+export let masterAudioVolume = parseFloat(localStorage.getItem('manifestation_audio_volume') || '1.0');
+if (isNaN(masterAudioVolume)) masterAudioVolume = 1.0;
+
+window.isMasterMuted = isMasterMuted;
+window.isFootstepsMuted = isFootstepsMuted;
+window.masterAudioVolume = masterAudioVolume;
+
+export function updateAudioControlsUI() {
+  const hudMuteBtn = document.getElementById('btn-audio-mute');
+  if (hudMuteBtn) {
+    if (isMasterMuted) {
+      hudMuteBtn.innerHTML = '🔇 MUTED';
+      hudMuteBtn.classList.add('is-muted');
+      hudMuteBtn.style.background = 'rgba(239, 68, 68, 0.35)';
+      hudMuteBtn.style.borderColor = '#ef4444';
+      hudMuteBtn.style.color = '#fca5a5';
+    } else {
+      hudMuteBtn.innerHTML = '🔊 SOUND';
+      hudMuteBtn.classList.remove('is-muted');
+      hudMuteBtn.style.background = 'rgba(15, 23, 42, 0.9)';
+      hudMuteBtn.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+      hudMuteBtn.style.color = '#e2e8f0';
+    }
+  }
+
+  const pauseMuteBtn = document.getElementById('pause-mute-btn');
+  if (pauseMuteBtn) {
+    if (isMasterMuted) {
+      pauseMuteBtn.innerHTML = '🔇 SOUND: MUTED';
+      pauseMuteBtn.style.background = 'rgba(239, 68, 68, 0.4)';
+      pauseMuteBtn.style.borderColor = '#ef4444';
+      pauseMuteBtn.style.color = '#fecaca';
+    } else {
+      pauseMuteBtn.innerHTML = '🔊 SOUND: ON';
+      pauseMuteBtn.style.background = 'rgba(30, 41, 59, 0.85)';
+      pauseMuteBtn.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+      pauseMuteBtn.style.color = '#ffffff';
+    }
+  }
+
+  const muteAllToggle = document.getElementById('mute-all-toggle');
+  const muteAllStatus = document.getElementById('mute-all-status');
+  if (muteAllToggle) muteAllToggle.checked = isMasterMuted;
+  if (muteAllStatus) {
+    muteAllStatus.textContent = isMasterMuted ? '(Muted)' : '(Unmuted)';
+    muteAllStatus.style.color = isMasterMuted ? '#ef4444' : '#94a3b8';
+  }
+
+  const muteFootstepsToggle = document.getElementById('mute-footsteps-toggle');
+  const muteFootstepsStatus = document.getElementById('mute-footsteps-status');
+  if (muteFootstepsToggle) muteFootstepsToggle.checked = !isFootstepsMuted;
+  if (muteFootstepsStatus) {
+    muteFootstepsStatus.textContent = isFootstepsMuted ? '(Muted)' : '(Enabled)';
+    muteFootstepsStatus.style.color = isFootstepsMuted ? '#ef4444' : '#34d399';
+  }
+
+  const volumeSlider = document.getElementById('master-volume-slider');
+  const volumeValue = document.getElementById('master-volume-value');
+  const pct = Math.round(masterAudioVolume * 100);
+  if (volumeSlider && parseInt(volumeSlider.value) !== pct) volumeSlider.value = pct;
+  if (volumeValue) volumeValue.textContent = `${pct}%`;
+}
+window.updateAudioControlsUI = updateAudioControlsUI;
+
+export function setMasterAudioMute(muted) {
+  isMasterMuted = Boolean(muted);
+  window.isMasterMuted = isMasterMuted;
+  localStorage.setItem('manifestation_audio_muted', isMasterMuted ? 'true' : 'false');
+  if (globalAudioListener) {
+    globalAudioListener.setMasterVolume(isMasterMuted ? 0 : masterAudioVolume);
+  }
+  if (isMasterMuted && footstepAudio && footstepAudio.isPlaying) {
+    footstepAudio.pause();
+  }
+  updateAudioControlsUI();
+}
+window.setMasterAudioMute = setMasterAudioMute;
+
+export function setFootstepsAudioMute(muted) {
+  isFootstepsMuted = Boolean(muted);
+  window.isFootstepsMuted = isFootstepsMuted;
+  localStorage.setItem('manifestation_footsteps_muted', isFootstepsMuted ? 'true' : 'false');
+  if (isFootstepsMuted && footstepAudio && footstepAudio.isPlaying) {
+    footstepAudio.pause();
+  }
+  updateAudioControlsUI();
+}
+window.setFootstepsAudioMute = setFootstepsAudioMute;
+
+export function setMasterAudioVolume(vol) {
+  masterAudioVolume = THREE.MathUtils.clamp(vol, 0, 1);
+  window.masterAudioVolume = masterAudioVolume;
+  localStorage.setItem('manifestation_audio_volume', masterAudioVolume.toString());
+  if (globalAudioListener) {
+    globalAudioListener.setMasterVolume(isMasterMuted ? 0 : masterAudioVolume);
+  }
+  if (masterAudioVolume <= 0 && footstepAudio && footstepAudio.isPlaying) {
+    footstepAudio.pause();
+  }
+  updateAudioControlsUI();
+}
+window.setMasterAudioVolume = setMasterAudioVolume;
+
+export function toggleMasterAudioMute() {
+  setMasterAudioMute(!isMasterMuted);
+}
+window.toggleMasterAudioMute = toggleMasterAudioMute;
+
 // Minimap variables
 let visitedCells = new Set();
 let mapMarks = [];
@@ -2497,6 +2608,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   
   camera = new THREE.PerspectiveCamera(75, w / h, 0.25, 200);
   globalAudioListener = new THREE.AudioListener();
+  globalAudioListener.setMasterVolume(isMasterMuted ? 0 : masterAudioVolume);
   camera.add(globalAudioListener);
   
   // Load looping footstep audio
@@ -2505,8 +2617,9 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   audioLoader.load('/assets/footsteps.wav', (buffer) => {
     footstepAudio.setBuffer(buffer);
     footstepAudio.setLoop(true);
-    footstepAudio.setVolume(0.5);
+    footstepAudio.setVolume((isFootstepsMuted || isMasterMuted) ? 0 : (0.5 * masterAudioVolume));
   });
+  updateAudioControlsUI();
 
   camera.rotation.order = 'YXZ'; // Fixes the weird rolling/tilted camera issues!
   camera.position.set(0, 1.6, 0); // Eye level
@@ -3231,7 +3344,7 @@ function setupProceduralAudio() {
 
 function playEMFSound(frequency) {
   if (window.isEscaping || hasEscaped || isCaptured || window.isVaultOpeningCutscene || window.isSpectating) return;
-  if (!audioCtx) return;
+  if (!audioCtx || isMasterMuted || masterAudioVolume <= 0.001) return;
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
@@ -3245,8 +3358,8 @@ function playEMFSound(frequency) {
   osc.type = 'sine';
   osc.frequency.setValueAtTime(800 + frequency * 400, audioCtx.currentTime); // Pitch gets higher as they get closer
   
-  // Crank the volume all the way up so it's clearly audible
-  gainNode.gain.setValueAtTime(1.0, audioCtx.currentTime);
+  // Volume scaled by master audio volume
+  gainNode.gain.setValueAtTime(1.0 * masterAudioVolume, audioCtx.currentTime);
   gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
   
   osc.connect(gainNode);
@@ -3260,7 +3373,7 @@ function playEMFSound(frequency) {
 let lastGhostSightStingerTime = 0;
 function playGhostSightStinger() {
   if (window.isEscaping || hasEscaped || isCaptured || window.isVaultOpeningCutscene || window.isSpectating) return;
-  if (!audioCtx) return;
+  if (!audioCtx || isMasterMuted || masterAudioVolume <= 0.001) return;
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
@@ -3292,9 +3405,9 @@ function playGhostSightStinger() {
     filter.frequency.exponentialRampToValueAtTime(500, t + 1.2);
     filter.Q.setValueAtTime(4.5, t);
 
-    // Dynamic amplitude envelope
+    // Dynamic amplitude envelope scaled by master audio volume
     gainNode.gain.setValueAtTime(0.001, t);
-    gainNode.gain.linearRampToValueAtTime(0.85, t + 0.04);
+    gainNode.gain.linearRampToValueAtTime(0.85 * masterAudioVolume, t + 0.04);
     gainNode.gain.exponentialRampToValueAtTime(0.001, t + 1.35);
 
     osc1.connect(filter);
@@ -9712,6 +9825,7 @@ function openVaultDoorAnimated() {
 
     // Play vault door creak at the EXACT moment the door physically begins to move
     const playVaultCreak = () => {
+      if (isMasterMuted || masterAudioVolume <= 0.001) return;
       if (!audioCtx) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (AudioContextClass) audioCtx = new AudioContextClass();
@@ -9724,7 +9838,7 @@ function openVaultDoorAnimated() {
           src.playbackRate.value = 1.8; // Speed up to match the fast door swing animation
           // Small gain node so we can set volume
           const gain = audioCtx.createGain();
-          gain.gain.value = 1.8;
+          gain.gain.value = 1.8 * masterAudioVolume;
           src.connect(gain);
           gain.connect(audioCtx.destination);
           src.start(0);
@@ -10524,14 +10638,14 @@ function dissolveMirageItem(mirage) {
 
   triggerNotification("🌫️ Mirage crumbled into ash! It was a hallucination.");
 
-  if (audioCtx) {
+  if (audioCtx && !isMasterMuted && masterAudioVolume > 0.001) {
     try {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(140, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(30, audioCtx.currentTime + 0.4);
-      gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.18 * masterAudioVolume, audioCtx.currentTime);
       gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
       osc.connect(gain);
       gain.connect(audioCtx.destination);
@@ -10543,6 +10657,7 @@ function dissolveMirageItem(mirage) {
 
 let lastHeartbeatAudioTime = 0;
 function processGhostProximityAudio(distToGhost) {
+  if (isMasterMuted || masterAudioVolume <= 0.001) return;
   if (distToGhost > 14.0 || window.isSpectating || isCaptured || window.isEscaping || hasEscaped || window.isVaultOpeningCutscene) return;
   const now = performance.now();
   // Dynamic heartbeat interval: 450ms when close, 1200ms at 14m perimeter
@@ -10559,7 +10674,7 @@ function processGhostProximityAudio(distToGhost) {
     if (!audioCtx) return;
 
     const t = audioCtx.currentTime;
-    const vol = Math.max(0.04, Math.min(0.24, (1.0 - distToGhost / 14.0) * 0.24));
+    const vol = Math.max(0.04, Math.min(0.24, (1.0 - distToGhost / 14.0) * 0.24)) * masterAudioVolume;
 
     // Beat 1 (lub): 60Hz -> 35Hz
     const osc1 = audioCtx.createOscillator();
@@ -15047,9 +15162,11 @@ function animate() {
       // Play local footstep audio, dynamically matching speed to walking vs sprinting
       if (typeof footstepAudio !== 'undefined' && footstepAudio && footstepAudio.buffer) {
         const cutsceneActive = window.isVaultOpeningCutscene || window.isEscaping || hasEscaped || isCaptured;
-        if (isEffectivelyMoving && myTeam === 'Human' && !cutsceneActive) {
+        const footstepDisabled = isFootstepsMuted || isMasterMuted || (masterAudioVolume <= 0.001);
+        if (isEffectivelyMoving && myTeam === 'Human' && !cutsceneActive && !footstepDisabled) {
           if (!footstepAudio.isPlaying) footstepAudio.play();
-          footstepAudio.setVolume(isSprinting ? 0.8 : 0.4);
+          const baseVol = isSprinting ? 0.8 : 0.4;
+          footstepAudio.setVolume(baseVol * masterAudioVolume);
           const rate = THREE.MathUtils.clamp(localPlayerGroundSpeed / 7.0, 0.5, 1.55);
           footstepAudio.setPlaybackRate(rate);
         } else {

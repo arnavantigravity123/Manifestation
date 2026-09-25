@@ -1,5 +1,20 @@
 import { io } from 'socket.io-client';
-import { initGame, setMobileMode, detectMobileDevice, setupControlsGuideModal, getPlayerColor, requestAppFullscreen } from './game.js';
+import {
+  initGame,
+  setMobileMode,
+  detectMobileDevice,
+  setupControlsGuideModal,
+  getPlayerColor,
+  requestAppFullscreen,
+  setMasterAudioMute,
+  setFootstepsAudioMute,
+  setMasterAudioVolume,
+  toggleMasterAudioMute,
+  updateAudioControlsUI,
+  isMasterMuted,
+  isFootstepsMuted,
+  masterAudioVolume
+} from './game.js';
 import { Purchases } from '@revenuecat/purchases-capacitor';
 import { Capacitor } from '@capacitor/core';
 
@@ -2234,6 +2249,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (canvasContainer) canvasContainer.style.filter = 'none';
     document.body.style.filter = 'none';
     if (settingsModal) settingsModal.style.display = 'flex';
+    updateAudioControlsUI();
   };
   window.showSettings = showSettings;
 
@@ -2263,8 +2279,64 @@ window.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem('manifestation_vip_glow_enabled', vipGlowToggle.checked ? 'true' : 'false');
       if (window.updateAllVipGlows) window.updateAllVipGlows(vipGlowToggle.checked);
     }
+    updateAudioControlsUI();
   };
   window.hideSettings = hideSettings;
+
+  // 3. Audio & Sound Effects UI Wiring
+  const masterVolSlider = document.getElementById('master-volume-slider');
+  const masterVolValue = document.getElementById('master-volume-value');
+  const muteFootstepsToggle = document.getElementById('mute-footsteps-toggle');
+  const muteAllToggle = document.getElementById('mute-all-toggle');
+  const hudMuteBtn = document.getElementById('btn-audio-mute');
+  const pauseMuteBtn = document.getElementById('pause-mute-btn');
+
+  if (masterVolSlider) {
+    masterVolSlider.value = Math.round(masterAudioVolume * 100);
+    masterVolSlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value) / 100.0;
+      setMasterAudioVolume(val);
+      if (masterVolValue) masterVolValue.textContent = `${e.target.value}%`;
+    });
+  }
+
+  if (muteFootstepsToggle) {
+    muteFootstepsToggle.checked = !isFootstepsMuted;
+    muteFootstepsToggle.addEventListener('change', (e) => {
+      setFootstepsAudioMute(!e.target.checked);
+    });
+  }
+
+  if (muteAllToggle) {
+    muteAllToggle.checked = isMasterMuted;
+    muteAllToggle.addEventListener('change', (e) => {
+      setMasterAudioMute(e.target.checked);
+    });
+  }
+
+  if (hudMuteBtn) {
+    addFastButtonListener(hudMuteBtn, (e) => {
+      if (e && e.stopPropagation) e.stopPropagation();
+      toggleMasterAudioMute();
+    });
+  }
+
+  if (pauseMuteBtn) {
+    addFastButtonListener(pauseMuteBtn, (e) => {
+      if (e && e.stopPropagation) e.stopPropagation();
+      toggleMasterAudioMute();
+    });
+  }
+
+  // Keyboard shortcut: Press U to toggle master audio mute
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyU') {
+      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
+      toggleMasterAudioMute();
+    }
+  });
+
+  updateAudioControlsUI();
 
   const authSetBtn = document.getElementById('auth-settings-btn');
   const lobbySetBtn = document.getElementById('lobby-settings-btn');

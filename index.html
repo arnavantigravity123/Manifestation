@@ -609,6 +609,7 @@
              <div class="top-controls-group">
                 <button id="btn-mobile-pause" class="unified-pause-btn">⏸️ PAUSE</button>
                 <button id="btn-camera-toggle" class="unified-cam-btn" title="Toggle Camera View (V)">🎥 CAM</button>
+                <button id="btn-audio-mute" class="unified-mute-btn" title="Mute/Unmute Audio (M)">🔊 SOUND</button>
                 <button id="btn-controls-guide" class="unified-controls-btn" title="Controls / Buttons Guide (H / C)">🎮 GUIDE</button>
              </div>
              <!-- Sleek Horizontal Master Gate Objective Ribbon -->
@@ -759,6 +760,7 @@
 
         <div style="display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap; justify-content: center;">
           <button id="pause-resume-btn" class="action-btn" style="width: auto; background: var(--primary-gradient); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; font-weight: 800;">▶ RESUME</button>
+          <button id="pause-mute-btn" class="action-btn" style="width: auto; background: rgba(30, 41, 59, 0.85); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; border: 1px solid rgba(255,255,255,0.25); font-weight: 800;">🔊 SOUND: ON</button>
           <button id="pause-controls-btn" class="action-btn" style="width: auto; background: rgba(16, 185, 129, 0.6); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; border: 1px solid #10b981; font-weight: 800;">🎮 CONTROLS</button>
           <button id="pause-settings-btn" class="action-btn" style="width: auto; background: rgba(59, 130, 246, 0.6); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; border: 1px solid var(--human-accent); font-weight: 800;">⚙️ SETTINGS</button>
           <button id="pause-abort-btn" class="action-btn" style="width: auto; background: rgba(139,0,0,0.85); padding: 0.85rem 1.8rem; font-size: 1.1rem; cursor: pointer; pointer-events: auto; border: 1px solid #ef4444; font-weight: 800;">🚨 ABORT MATCH</button>
@@ -1103,6 +1105,40 @@
             <span id="shadows-status-tag" style="font-size: 0.72rem; color: #38bdf8; font-weight: normal;">(High Quality)</span>
           </label>
           <input type="checkbox" id="dynamic-shadows-toggle" style="width: 1.2rem; height: 1.2rem; accent-color: #38bdf8; cursor: pointer;">
+        </div>
+
+        <!-- Audio & Sound Effects Configuration -->
+        <div style="margin-top: 1.2rem; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 0.9rem;">
+          <div style="font-family: 'Orbitron', sans-serif; font-size: 0.82rem; color: #38bdf8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.7rem; display: flex; align-items: center; gap: 0.4rem;">
+            <span>🔊 AUDIO & SOUND EFFECTS</span>
+          </div>
+
+          <!-- Master Volume Slider -->
+          <div class="settings-option">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label for="master-volume-slider" style="margin-bottom: 0; font-size: 0.85rem;">Master Volume</label>
+              <span id="master-volume-value" style="font-size: 0.85rem; color: #38bdf8; font-weight: bold;">100%</span>
+            </div>
+            <input type="range" id="master-volume-slider" min="0" max="100" step="5" value="100" style="width: 100%; margin-top: 0.4rem; accent-color: #38bdf8;">
+          </div>
+
+          <!-- Mute Footstep Audio Specifically -->
+          <div class="settings-option" style="margin-top: 0.8rem; display: flex; align-items: center; justify-content: space-between; background: rgba(52, 211, 153, 0.08); border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 6px; padding: 0.6rem 0.8rem;">
+            <label for="mute-footsteps-toggle" style="margin-bottom: 0; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem;">
+              <span>👣 Footstep Audio</span>
+              <span id="mute-footsteps-status" style="font-size: 0.72rem; color: #34d399;">(Enabled)</span>
+            </label>
+            <input type="checkbox" id="mute-footsteps-toggle" checked style="width: 1.2rem; height: 1.2rem; accent-color: #34d399; cursor: pointer;">
+          </div>
+
+          <!-- Master Audio Mute Toggle -->
+          <div class="settings-option" style="margin-top: 0.6rem; display: flex; align-items: center; justify-content: space-between; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 6px; padding: 0.6rem 0.8rem;">
+            <label for="mute-all-toggle" style="margin-bottom: 0; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem;">
+              <span>🔇 Mute All Audio</span>
+              <span id="mute-all-status" style="font-size: 0.72rem; color: #94a3b8;">(Unmuted)</span>
+            </label>
+            <input type="checkbox" id="mute-all-toggle" style="width: 1.2rem; height: 1.2rem; accent-color: #ef4444; cursor: pointer;">
+          </div>
         </div>
         
         <div style="margin-top: 1.2rem; border-top: 1px dashed rgba(255,255,255,0.15); padding-top: 0.8rem; display: flex; justify-content: center; gap: 0.8rem; font-size: 0.8rem;">
