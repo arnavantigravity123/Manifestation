@@ -2462,4 +2462,18 @@ window.addEventListener('DOMContentLoaded', () => {
     // Connect to server on startup to verify authentication token / load account state
     initializeSocketConnection();
   }
+
+  // Force Landscape Button listener for mobile orientation lock
+  const forceLandscapeBtn = document.getElementById('force-landscape-btn');
+  if (forceLandscapeBtn) {
+    forceLandscapeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (window.__manifestationRequestFullscreen) {
+        window.__manifestationRequestFullscreen();
+      }
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+    });
+  }
 });

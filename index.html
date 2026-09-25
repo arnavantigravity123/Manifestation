@@ -51,6 +51,23 @@
     </script>
   </head>
   <body class="is-pc">
+    <!-- Mobile Landscape Orientation Enforcer Overlay -->
+    <div id="rotate-device-overlay" class="rotate-device-overlay">
+      <div class="rotate-phone-anim">
+        <div class="phone-frame">
+          <div class="phone-speaker"></div>
+          <div class="phone-screen-display">
+            <span class="phone-screen-symbol">⚠️</span>
+          </div>
+        </div>
+        <div class="rotate-arrow-badge">↻</div>
+      </div>
+      <div class="rotate-title">ORIENTATION LOCKED</div>
+      <div class="rotate-tag">TACTICAL ESCAPE PROTOCOL</div>
+      <div class="rotate-desc">Please rotate your device to <strong>Landscape (Horizontal)</strong> for containment deployment.</div>
+      <button id="force-landscape-btn" class="rotate-action-btn">ENTER LANDSCAPE</button>
+    </div>
+
     <!-- 3D Render Area -->
     <div id="canvas-container"></div>
     

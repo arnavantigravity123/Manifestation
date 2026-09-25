@@ -3485,6 +3485,406 @@ kbd {
 }
 
 /* ==========================================================================
+   MOBILE LANDSCAPE ORIENTATION ENFORCER OVERLAY
+   Forces the user into horizontal/landscape mode for tactical gameplay
+   ========================================================================== */
+.rotate-device-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999999;
+  background: radial-gradient(circle at center, rgba(15, 23, 42, 0.98) 0%, rgba(2, 6, 23, 0.99) 100%);
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 1.5rem;
+  box-sizing: border-box;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+@media screen and (orientation: portrait) and (max-width: 1024px) {
+  .rotate-device-overlay {
+    display: flex !important;
+  }
+}
+
+@media screen and (orientation: landscape) {
+  .rotate-device-overlay {
+    display: none !important;
+  }
+}
+
+.rotate-phone-anim {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1.2rem;
+}
+
+.phone-frame {
+  width: 44px;
+  height: 74px;
+  border: 2.5px solid #38bdf8;
+  border-radius: 10px;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.4), inset 0 0 10px rgba(56, 189, 248, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px;
+  box-sizing: border-box;
+  animation: phoneRotateAnim 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.phone-speaker {
+  width: 14px;
+  height: 3px;
+  background: #38bdf8;
+  border-radius: 2px;
+  margin-bottom: 4px;
+}
+
+.phone-screen-display {
+  flex: 1;
+  width: 100%;
+  background: rgba(56, 189, 248, 0.08);
+  border-radius: 4px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.2rem;
+}
+
+.rotate-arrow-badge {
+  position: absolute;
+  bottom: 0px;
+  right: 6px;
+  width: 30px;
+  height: 30px;
+  background: #0284c7;
+  border: 2px solid #38bdf8;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 1.2rem;
+  color: #fff;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.7);
+  animation: spinSlow 3s linear infinite;
+}
+
+@keyframes phoneRotateAnim {
+  0%, 15% { transform: rotate(0deg); }
+  45%, 75% { transform: rotate(-90deg); }
+  95%, 100% { transform: rotate(0deg); }
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.rotate-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #ef4444;
+  letter-spacing: 2px;
+  text-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+  margin-bottom: 0.35rem;
+}
+
+.rotate-tag {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #38bdf8;
+  letter-spacing: 1.5px;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 0.25rem 0.8rem;
+  border-radius: 4px;
+  margin-bottom: 0.8rem;
+}
+
+.rotate-desc {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  max-width: 300px;
+  line-height: 1.5;
+  margin-bottom: 1.2rem;
+}
+
+.rotate-action-btn {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 1px;
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  border: 1.5px solid #38bdf8;
+  border-radius: 8px;
+  padding: 0.65rem 1.6rem;
+  cursor: pointer;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rotate-action-btn:active {
+  transform: scale(0.96);
+}
+
+/* ==========================================================================
+   MOBILE LANDSCAPE 3-PANEL TACTICAL VIEWPORT TUNING
+   Flanks the center core panel with Operative Spec and Surveillance Radar,
+   fluidly scaled and density-tuned so everything fits cleanly on mobile screens!
+   ========================================================================== */
+@media screen and (orientation: landscape) and (max-height: 560px) {
+  #ui-overlay:not(.hidden) {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 3px 5px !important;
+    box-sizing: border-box !important;
+  }
+
+  #auth-view {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: center !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    max-width: 960px !important;
+    height: auto !important;
+    max-height: 98vh !important;
+    gap: clamp(4px, 1vw, 10px) !important;
+    margin: auto !important;
+    padding: 2px !important;
+    box-sizing: border-box !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Left and Right Wings visible and compact on mobile landscape */
+  .auth-desktop-wing {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 0 1 clamp(150px, 22vw, 210px) !important;
+    min-width: 135px !important;
+    max-width: 220px !important;
+    box-sizing: border-box !important;
+    height: auto !important;
+  }
+
+  .wing-inner-card {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    padding: 0.35rem 0.5rem !important;
+    gap: 0.2rem !important;
+    border-radius: 8px !important;
+    background: rgba(15, 23, 42, 0.88) !important;
+    border: 1px solid rgba(56, 189, 248, 0.3) !important;
+  }
+
+  .wing-header {
+    padding-bottom: 0.2rem !important;
+  }
+
+  .wing-tag {
+    font-size: 0.52rem !important;
+    padding: 1.5px 5px !important;
+    letter-spacing: 0.8px !important;
+  }
+
+  /* Left Wing Compact Specs */
+  #wing-class-icon {
+    font-size: 1.5rem !important;
+    margin: 0.1rem 0 !important;
+  }
+
+  #wing-class-title {
+    font-size: 0.78rem !important;
+    margin: 0 !important;
+    letter-spacing: 0.8px !important;
+  }
+
+  #wing-class-role {
+    font-size: 0.55rem !important;
+    letter-spacing: 0.5px !important;
+  }
+
+  #wing-class-desc {
+    font-size: 0.58rem !important;
+    line-height: 1.25 !important;
+    margin: 0.2rem 0 !important;
+    padding: 0.25rem 0.35rem !important;
+    border-radius: 5px !important;
+  }
+
+  .wing-perks-list {
+    gap: 0.2rem !important;
+    font-size: 0.58rem !important;
+    margin-top: 0.1rem !important;
+  }
+
+  .wing-perk-row {
+    padding: 0.15rem 0.35rem !important;
+    font-size: 0.55rem !important;
+  }
+
+  /* Right Wing Compact Radar */
+  .wing-radar-display {
+    margin: 0.15rem 0 !important;
+  }
+
+  .radar-circle {
+    width: 60px !important;
+    height: 60px !important;
+  }
+
+  .radar-sweep-line {
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .radar-blip-dot {
+    top: 16px !important;
+    left: 20px !important;
+    width: 4px !important;
+    height: 4px !important;
+  }
+
+  .wing-telemetry-feed {
+    gap: 0.2rem !important;
+    font-size: 0.56rem !important;
+  }
+
+  .wing-telemetry-row {
+    padding: 0.15rem 0.35rem !important;
+  }
+
+  .wing-intel-lore {
+    font-size: 0.55rem !important;
+    line-height: 1.25 !important;
+    padding: 0.25rem 0.35rem !important;
+  }
+
+  /* Center Core Panel Compact Layout */
+  .auth-core-panel {
+    flex: 1 1 clamp(270px, 48vw, 420px) !important;
+    min-width: 250px !important;
+    max-width: 440px !important;
+    padding: 0.35rem 0.65rem !important;
+    gap: 0.2rem !important;
+    border-radius: 10px !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .logo-container img {
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 9px !important;
+    margin-bottom: 0px !important;
+  }
+
+  .logo-container h1 {
+    font-size: 1.05rem !important;
+    letter-spacing: 1.5px !important;
+  }
+
+  .logo-container p {
+    font-size: 0.58rem !important;
+    letter-spacing: 0.5px !important;
+  }
+
+  .account-bar {
+    margin-top: 0.1rem !important;
+    padding: 0.2rem 0.4rem !important;
+    font-size: 0.65rem !important;
+  }
+
+  .account-action-btn, .account-logout-btn {
+    font-size: 0.58rem !important;
+    padding: 0.2rem 0.45rem !important;
+  }
+
+  .form-group label {
+    font-size: 0.62rem !important;
+    margin-bottom: 1px !important;
+  }
+
+  .form-group input, .form-group select, .select-control {
+    padding: 0.25rem 0.45rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  .auth-core-panel .action-btn {
+    padding: 0.32rem 0.45rem !important;
+    font-size: 0.68rem !important;
+    letter-spacing: 0.4px !important;
+  }
+
+  .private-room-container {
+    padding: 0.28rem 0.55rem !important;
+    gap: 0.25rem !important;
+    margin-top: 0.1rem !important;
+  }
+
+  .private-room-container span {
+    font-size: 0.62rem !important;
+  }
+
+  #private-room-input {
+    padding: 0.22rem 0.45rem !important;
+    font-size: 0.68rem !important;
+  }
+
+  #join-private-btn, #create-private-btn {
+    padding: 0.22rem 0.6rem !important;
+    font-size: 0.65rem !important;
+  }
+
+  .settings-gear-btn {
+    top: 6px !important;
+    right: 6px !important;
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 0.85rem !important;
+  }
+
+  /* Main Menu Footer Links */
+  .auth-core-panel > div:last-of-type,
+  .auth-core-panel div[style*="margin-top: 0.5rem"] {
+    margin-top: 0.15rem !important;
+    font-size: 0.58rem !important;
+    gap: 0.4rem !important;
+  }
+}
+
+/* Ultra-compact landscape scaling for heights <= 380px */
+@media screen and (orientation: landscape) and (max-height: 380px) {
+  #auth-view {
+    zoom: 0.92;
+  }
+}
+
+@media screen and (orientation: landscape) and (max-height: 330px) {
+  #auth-view {
+    zoom: 0.82;
+  }
+}
+
+/* ==========================================================================
    DESKTOP PC ONLY - PROPORTIONATE HIGH-VISIBILITY HUD SCALING
    Applied exclusively to desktop/PC monitors (>= 1024px, pointer: fine).
    Guaranteed ZERO impact on mobile phones, tablets, or Capacitor apps!
