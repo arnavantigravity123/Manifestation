@@ -2227,10 +2227,22 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   const requestCanvasOrBodyPointerLock = () => {
     if (isMobileDevice) return;
     if (document.pointerLockElement) return;
-    const canvas = renderer && renderer.domElement;
+
+    // Defocus any active buttons/inputs so hiding the overlay doesn't cancel pointer lock
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      try { document.activeElement.blur(); } catch (_) {}
+    }
+
+    const canvas = (renderer && renderer.domElement) || document.querySelector('#canvas-container canvas');
     const container = document.getElementById('canvas-container');
     const target = canvas || container || document.body;
     if (!target || !target.requestPointerLock) return;
+
+    // Ensure target is focusable and focused so Chromium grants pointer lock without focus loss rejection
+    if (target.tabIndex === undefined || target.tabIndex < 0) {
+      target.tabIndex = 1;
+    }
+    try { target.focus(); } catch (_) {}
 
     try {
       const p = target.requestPointerLock();
@@ -2238,26 +2250,13 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
         p.then(() => {
           window._pendingPointerRelock = false;
         }).catch(err => {
-          console.warn('[POINTER] Initial lock request deferred/rejected, trying document.body fallback:', err);
+          console.warn('[POINTER] Initial lock request deferred/rejected:', err);
           window._pendingPointerRelock = true;
-          if (target !== document.body && document.body && document.body.requestPointerLock) {
-            try {
-              const p2 = document.body.requestPointerLock();
-              if (p2 && typeof p2.then === 'function') {
-                p2.then(() => {
-                  window._pendingPointerRelock = false;
-                }).catch(() => {});
-              }
-            } catch(_) {}
-          }
         });
       }
     } catch(err) {
-      try {
-        if (target !== document.body && document.body && document.body.requestPointerLock) {
-          document.body.requestPointerLock();
-        }
-      } catch(_) {}
+      console.warn('[POINTER] Direct requestPointerLock exception:', err);
+      window._pendingPointerRelock = true;
     }
   };
 
@@ -2267,12 +2266,14 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       return; // Discard trailing touches / synthetic clicks from the tap that opened pause on mobile
     }
     resetPlayerMovementState();
+    window.gameReady = true;
+    window.mobileGameActive = true;
+
     if (window.isSpectating) {
       if (ptrOverlay) ptrOverlay.style.display = 'none';
       const specHud = document.getElementById('spectator-hud');
       if (specHud) specHud.style.display = 'flex';
       if (isMobileDevice) {
-        window.mobileGameActive = true;
         const mobileCtrl = document.getElementById('mobile-controls-container');
         if (mobileCtrl) mobileCtrl.style.display = 'flex';
       } else {
@@ -2280,10 +2281,12 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       }
       return;
     }
-    if (window.isEscaping || isCaptured || window.isCapturedAnimation || !window.gameReady) {
+
+    if (window.isEscaping || (isCaptured && !window.isSpectating) || window.isCapturedAnimation) {
       if (ptrOverlay) ptrOverlay.style.display = 'none';
       return;
     }
+
     const endOverlay = document.getElementById('end-game-overlay');
     if (endOverlay && endOverlay.style.display === 'flex') {
       if (ptrOverlay) ptrOverlay.style.display = 'none';
@@ -2297,8 +2300,6 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     const keypadEl = document.getElementById('keypad-modal-ui');
     if (keypadEl && keypadEl.style.display !== 'none') return;
     if (isMinimapExpanded) return;
-    window.mobileGameActive = true;
-    window.gameReady = true;
 
     // Immediately trigger pointer lock during trusted user click gesture before DOM modification
     if (!isMobileDevice) {
@@ -2318,11 +2319,6 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     const reticle = document.getElementById('crosshair') || document.getElementById('reticle');
     if (reticle) reticle.style.display = 'block';
 
-    if (!isMobileDevice) {
-      if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
-        document.activeElement.blur();
-      }
-    }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   };
   window.handleEnterGame = handleEnterGame;
@@ -7414,6 +7410,12 @@ function setupControls() {
             (renderer && renderer.domElement || document.getElementById('canvas-container')).requestPointerLock();
           }
           drawMinimap();
+          return;
+        }
+        const pauseOverlay = document.getElementById('pointer-lock-overlay');
+        if (pauseOverlay && pauseOverlay.style.display === 'flex') {
+          if (window.handleEnterGame) window.handleEnterGame();
+          return;
         }
         break;
       case 'Digit1': if (inventory.length > 0) { activeSlot = 0; renderHUDInventory(); } break;
@@ -7617,7 +7619,9 @@ function setupControls() {
   // Mouse camera rotation controller with seamless relock & drag fallback
   document.addEventListener('mousemove', (e) => {
     const hasLock = Boolean(document.pointerLockElement);
-    if ((!hasLock && e.buttons !== 1 && !window.gameReady) || (isCaptured && !window.isSpectating)) return;
+    if (!hasLock && e.buttons !== 1) return;
+    if (!window.gameReady && !window.isSpectating) return;
+    if (isCaptured && !window.isSpectating) return;
     const ptrOverlay = document.getElementById('pointer-lock-overlay');
     if (ptrOverlay && ptrOverlay.style.display === 'flex') return;
     const keypadModalEl = document.getElementById('keypad-modal-ui');
