@@ -1350,7 +1350,12 @@ export function detectMobileDevice() {
 export let isMobileDevice = detectMobileDevice();
 window.isMobileDevice = isMobileDevice;
 
+let lastFullscreenCall = 0;
 export function requestAppFullscreen() {
+  const now = performance.now();
+  if (now - lastFullscreenCall < 2000) return;
+  lastFullscreenCall = now;
+
   if (typeof window !== 'undefined' && window.__manifestationRequestFullscreen) {
     window.__manifestationRequestFullscreen();
     return;
@@ -1374,11 +1379,6 @@ export function requestAppFullscreen() {
   if (screen.orientation && typeof screen.orientation.lock === 'function') {
     screen.orientation.lock('landscape').catch(() => {});
   }
-
-  try {
-    window.scrollTo(0, 1);
-    setTimeout(() => { window.scrollTo(0, 0); }, 60);
-  } catch (e) {}
 }
 window.requestAppFullscreen = requestAppFullscreen;
 
@@ -2915,19 +2915,29 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     });
   }
 
-  // Window Resize
+  // Window Resize (Debounced and guarded against micro-jitter & buffer thrashing)
+  let lastResizeW = 0;
+  let lastResizeH = 0;
+  let resizeRaf = null;
+
   window.addEventListener('resize', () => {
-    const container = document.getElementById('canvas-container');
-    const w = container.clientWidth || window.innerWidth;
-    const h = container.clientHeight || window.innerHeight;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    if (activeViewCamera) {
-      activeViewCamera.aspect = w / h;
-      activeViewCamera.updateProjectionMatrix();
-    }
-    renderer.setPixelRatio((isMobileDevice || isLowEndHardware) ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
-    renderer.setSize(w, h);
+    if (resizeRaf) cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => {
+      const container = document.getElementById('canvas-container');
+      const w = container ? (container.clientWidth || window.innerWidth) : window.innerWidth;
+      const h = container ? (container.clientHeight || window.innerHeight) : window.innerHeight;
+      if (Math.abs(w - lastResizeW) < 4 && Math.abs(h - lastResizeH) < 4) return;
+      lastResizeW = w;
+      lastResizeH = h;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      if (activeViewCamera) {
+        activeViewCamera.aspect = w / h;
+        activeViewCamera.updateProjectionMatrix();
+      }
+      renderer.setPixelRatio((isMobileDevice || isLowEndHardware) ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
+      renderer.setSize(w, h, false);
+    });
   });
 
   // Start loop

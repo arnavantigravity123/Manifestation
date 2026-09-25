@@ -308,25 +308,14 @@ function addFastButtonListener(btn, callback) {
 }
 window.addFastButtonListener = addFastButtonListener;
 
-// Auto-fullscreen manager for mobile web (removes browser URL bar on first tap with zero human input)
+// Auto-fullscreen manager for mobile web: trigger cleanly on menu interactions without touch loop spam
 if (isTouchCapable || detectMobileDevice()) {
-  const autoFS = () => {
-    requestAppFullscreen();
-  };
-  ['touchstart', 'pointerdown', 'touchend', 'click'].forEach(evt => {
-    window.addEventListener(evt, () => {
-      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-        autoFS();
-      }
-    }, { passive: true });
-  });
   window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') autoFS();
+    if (document.visibilityState === 'visible') requestAppFullscreen();
   });
   window.addEventListener('orientationchange', () => {
-    setTimeout(autoFS, 200);
+    setTimeout(() => requestAppFullscreen(), 300);
   });
-  autoFS();
 }
 
 // Pre-fill username from localStorage or random fallback

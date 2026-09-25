@@ -15,41 +15,38 @@
     <link rel="icon" type="image/jpeg" href="/assets/manifestation_logo.jpg" />
     <link rel="apple-touch-icon" href="/assets/manifestation_logo.jpg" />
     <link rel="stylesheet" href="/src/style.css" />
-    <!-- Auto-Fullscreen & Address Bar Hider for Mobile Web (Triggers automatically on first tap with zero human setup) -->
+    <!-- Auto-Fullscreen & Address Bar Hider for Mobile Web (Triggers cleanly on first touch with zero jitter) -->
     <script>
       (function() {
         var isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
                        (('ontouchstart' in window) && navigator.maxTouchPoints > 1);
         if (!isMobile) return;
 
+        var hasRequested = false;
         window.__manifestationRequestFullscreen = function() {
+          if (hasRequested) return;
           var doc = document;
           var el = doc.documentElement;
           var rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
           if (rfs && !doc.fullscreenElement && !doc.webkitFullscreenElement) {
+            hasRequested = true;
             try {
               var p = rfs.call(el, { navigationUI: 'hide' });
-              if (p && p.catch) p.catch(function(){});
-            } catch(e) {}
+              if (p && p.catch) p.catch(function(){ hasRequested = false; });
+            } catch(e) { hasRequested = false; }
           }
           if (screen.orientation && screen.orientation.lock) {
             try { screen.orientation.lock('landscape').catch(function(){}); } catch(e) {}
           }
-          try {
-            window.scrollTo(0, 1);
-            setTimeout(function() { window.scrollTo(0, 0); }, 60);
-          } catch(e) {}
         };
 
-        try { window.__manifestationRequestFullscreen(); } catch(e) {}
-
-        var events = ['touchstart', 'pointerdown', 'touchend', 'click'];
-        function onTouch() {
+        var onFirstTouch = function() {
           window.__manifestationRequestFullscreen();
-        }
-        events.forEach(function(evt) {
-          window.addEventListener(evt, onTouch, { passive: true });
-        });
+          window.removeEventListener('touchstart', onFirstTouch);
+          window.removeEventListener('click', onFirstTouch);
+        };
+        window.addEventListener('touchstart', onFirstTouch, { passive: true, once: true });
+        window.addEventListener('click', onFirstTouch, { passive: true, once: true });
       })();
     </script>
   </head>
