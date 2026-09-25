@@ -1016,6 +1016,114 @@ input[type="text"]:focus {
   color: #38bdf8;
 }
 
+/* Match Role & Difficulty Level Badges */
+.match-meta-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  margin-bottom: 6px;
+  background: rgba(10, 15, 30, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 6px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.8px;
+  font-weight: 700;
+  box-shadow: 0 0 14px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.match-meta-pill .role-text {
+  color: #38bdf8;
+  font-weight: 800;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+
+.match-meta-pill .role-text.ghost-role,
+.hud-meta-ribbon .ribbon-role.ghost-role {
+  color: #c084fc !important;
+  text-shadow: 0 0 8px rgba(192, 132, 252, 0.5) !important;
+}
+
+.match-meta-pill .meta-separator {
+  opacity: 0.35;
+  color: #ffffff;
+}
+
+.hud-meta-ribbon {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.8px;
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  width: 100%;
+  pointer-events: none;
+}
+
+.hud-meta-ribbon .ribbon-role {
+  font-weight: 800;
+  color: #38bdf8;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+
+.hud-meta-ribbon .meta-divider {
+  opacity: 0.35;
+  color: #ffffff;
+}
+
+.diff-easy {
+  color: #10b981 !important;
+  text-shadow: 0 0 8px rgba(16, 185, 129, 0.5) !important;
+}
+
+.diff-medium {
+  color: #38bdf8 !important;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.5) !important;
+}
+
+.diff-hard {
+  color: #f59e0b !important;
+  text-shadow: 0 0 8px rgba(245, 158, 11, 0.5) !important;
+}
+
+.diff-impossible {
+  color: #ef4444 !important;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.6) !important;
+}
+
+.diff-tutorial {
+  color: #a855f7 !important;
+  text-shadow: 0 0 8px rgba(168, 85, 247, 0.5) !important;
+}
+
+@media (max-width: 768px) {
+  .match-meta-pill {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 3px 6px;
+    font-size: 0.48rem;
+    max-width: 120px;
+    white-space: normal;
+  }
+  .match-meta-pill .meta-separator {
+    display: none;
+  }
+  .hud-meta-ribbon {
+    font-size: 0.55rem;
+    gap: 6px;
+    margin-top: 2px;
+    padding-top: 2px;
+  }
+}
+
 /* Top Right Header HUD: Radar & Minimap */
 .top-right-hud {
   display: flex;

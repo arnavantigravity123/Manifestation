@@ -562,8 +562,15 @@
         <!-- Top row: Vitals, Pause/Cam, and Map -->
         <!-- Top row: Vitals (Left), Objectives & Controls (Center), Minimap & Radar (Right) -->
         <div class="hud-top">
-          <!-- Top Left: Compact Vitals Gauge -->
+          <!-- Top Left: Compact Vitals Gauge & Tactical Role/Level Badge -->
           <div class="hud-left-column">
+            <!-- Tactical Role & Difficulty Level Pill -->
+            <div id="hud-match-role-badge" class="hud-panel match-meta-pill">
+              <span id="hud-role-indicator" class="role-text">👤 SURVIVOR (LOCKSMITH)</span>
+              <span class="meta-separator">•</span>
+              <span id="hud-level-indicator" class="level-text diff-easy">LEVEL: EASY</span>
+            </div>
+
             <div class="vitals-box hud-panel">
               <div class="gauge-row">
                 <div class="gauge-label">
@@ -619,6 +626,11 @@
                   <span id="hud-breakers-info">⚡ 0/3 BREAKERS</span>
                   <span id="keys-hud-info">🔑 0/2 KEYS</span>
                   <span id="hud-cipher-info">📝 4-DIGIT CODE</span>
+                </div>
+                <div class="hud-meta-ribbon">
+                  <span id="hud-ribbon-role" class="ribbon-role">👤 SURVIVOR (LOCKSMITH)</span>
+                  <span class="meta-divider">|</span>
+                  <span id="hud-ribbon-level" class="ribbon-level diff-easy">LEVEL: EASY</span>
                 </div>
                 <button id="quit-game-btn" style="pointer-events: auto; padding: 0.2rem 0.6rem; background: rgba(239, 68, 68, 0.2); border: 1px solid red; color: white; cursor: pointer; border-radius: 4px; font-family: inherit; font-size: 0.7rem; display: none;">ABORT</button>
              </div>
@@ -745,6 +757,13 @@
         <h2 id="resume-click-target" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: var(--primary-accent); text-shadow: 0 0 12px var(--primary-accent); cursor: pointer; padding: 10px 24px; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; background: rgba(239, 68, 68, 0.1); transition: all 0.2s ease;">
           ▶ CLICK TO RESUME LABYRINTH
         </h2>
+
+        <!-- Match Role & Difficulty Level in Pause Menu -->
+        <div id="pause-telemetry-tag" style="margin-top: 10px; font-family: 'Orbitron', sans-serif; font-size: 0.95rem; font-weight: 700; display: flex; gap: 12px; align-items: center; justify-content: center; background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(56, 189, 248, 0.35); padding: 6px 18px; border-radius: 8px;">
+          <span id="pause-role-text" style="color: #38bdf8;">👤 SURVIVOR (LOCKSMITH)</span>
+          <span style="opacity: 0.35;">|</span>
+          <span id="pause-level-text" style="color: #10b981;">LEVEL: EASY</span>
+        </div>
 
         <!-- Multiplayer Live Game Warning Note -->
         <div id="multiplayer-pause-warning" style="display: none; margin: 16px 0; padding: 14px 22px; background: rgba(239, 68, 68, 0.25); border: 2px solid #ef4444; border-radius: 10px; max-width: 560px; text-align: center; box-shadow: 0 0 25px rgba(239, 68, 68, 0.6); animation: livePulseGlow 2s infinite ease-in-out;">

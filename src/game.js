@@ -3113,6 +3113,77 @@ function setupInventory() {
     clsBadge.textContent = `CLASS: ${myClass.toUpperCase()} (${myTeam.toUpperCase()})`;
     clsBadge.style.color = myTeam === 'Ghost' ? 'var(--ghost-accent)' : 'var(--human-accent)';
   }
+  updateMatchRoleAndLevelHUD();
+}
+
+export function updateMatchRoleAndLevelHUD() {
+  const isGhost = (myTeam === 'Ghost');
+  const teamName = isGhost ? 'GHOST' : 'SURVIVOR';
+  const rawClass = myClass || (isGhost ? 'Stalker' : 'Locksmith');
+  const className = rawClass.toUpperCase();
+  const icon = isGhost ? '👻' : '👤';
+  const roleDisplay = `${icon} ${teamName} (${className})`;
+
+  let diffText = 'EASY';
+  let diffClass = 'diff-easy';
+
+  if (window.isTutorialMatch) {
+    diffText = 'TUTORIAL';
+    diffClass = 'diff-tutorial';
+  } else {
+    const rawDiff = ((currentLobby && currentLobby.settings && currentLobby.settings.difficulty) || window.gameDifficulty || localStorage.getItem('manifestation_difficulty') || 'easy').toLowerCase();
+    if (rawDiff === 'hard') {
+      diffText = 'HARD';
+      diffClass = 'diff-hard';
+    } else if (rawDiff === 'impossible') {
+      diffText = 'IMPOSSIBLE';
+      diffClass = 'diff-impossible';
+    } else if (rawDiff === 'medium') {
+      diffText = 'NORMAL';
+      diffClass = 'diff-medium';
+    } else {
+      diffText = 'EASY';
+      diffClass = 'diff-easy';
+    }
+  }
+
+  const levelDisplay = `LEVEL: ${diffText}`;
+
+  // 1. Top-Left Pill Badge
+  const roleInd = document.getElementById('hud-role-indicator');
+  const levelInd = document.getElementById('hud-level-indicator');
+  if (roleInd) {
+    roleInd.textContent = roleDisplay;
+    roleInd.className = `role-text ${isGhost ? 'ghost-role' : ''}`;
+  }
+  if (levelInd) {
+    levelInd.textContent = levelDisplay;
+    levelInd.className = `level-text ${diffClass}`;
+  }
+
+  // 2. Top-Center Ribbon Badge
+  const ribbonRole = document.getElementById('hud-ribbon-role');
+  const ribbonLevel = document.getElementById('hud-ribbon-level');
+  if (ribbonRole) {
+    ribbonRole.textContent = roleDisplay;
+    ribbonRole.className = `ribbon-role ${isGhost ? 'ghost-role' : ''}`;
+  }
+  if (ribbonLevel) {
+    ribbonLevel.textContent = levelDisplay;
+    ribbonLevel.className = `ribbon-level ${diffClass}`;
+  }
+
+  // 3. Pause Menu Telemetry
+  const pauseRole = document.getElementById('pause-role-text');
+  const pauseLevel = document.getElementById('pause-level-text');
+  if (pauseRole) {
+    pauseRole.textContent = roleDisplay;
+    pauseRole.style.color = isGhost ? '#c084fc' : '#38bdf8';
+  }
+  if (pauseLevel) {
+    pauseLevel.textContent = levelDisplay;
+    pauseLevel.className = diffClass;
+  }
 }
 
 function renderHUDInventory() {
@@ -10995,6 +11066,7 @@ function updateGateHUD() {
       }
     }
   }
+  updateMatchRoleAndLevelHUD();
 }
 
 function checkWinCondition() {
