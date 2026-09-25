@@ -741,18 +741,18 @@
       </div>
 
       <!-- 5. Pointer Lock & Pause / In-Game Menu Overlay -->
-      <div id="pointer-lock-overlay" style="display: none; position: fixed; inset: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 20000; flex-direction: column; justify-content: center; align-items: center; color: white; padding: 20px; box-sizing: border-box; backdrop-filter: blur(8px);">
+      <div id="pointer-lock-overlay" style="display: none; position: fixed; inset: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.68); z-index: 20000; flex-direction: column; justify-content: center; align-items: center; color: white; padding: 20px; box-sizing: border-box; backdrop-filter: blur(4px);">
         <h2 id="resume-click-target" style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; color: var(--primary-accent); text-shadow: 0 0 12px var(--primary-accent); cursor: pointer; padding: 10px 24px; border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 8px; background: rgba(239, 68, 68, 0.1); transition: all 0.2s ease;">
           ▶ CLICK TO RESUME LABYRINTH
         </h2>
 
         <!-- Multiplayer Live Game Warning Note -->
-        <div id="multiplayer-pause-warning" style="display: none; margin: 16px 0; padding: 12px 20px; background: rgba(239, 68, 68, 0.18); border: 1.5px solid #ef4444; border-radius: 8px; max-width: 540px; text-align: center; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);">
-          <div style="font-family: 'Orbitron', sans-serif; font-size: 0.92rem; font-weight: 900; color: #ef4444; letter-spacing: 1px; margin-bottom: 4px;">
-            ⚠️ LIVE MULTIPLAYER MATCH IN PROGRESS
+        <div id="multiplayer-pause-warning" style="display: none; margin: 16px 0; padding: 14px 22px; background: rgba(239, 68, 68, 0.25); border: 2px solid #ef4444; border-radius: 10px; max-width: 560px; text-align: center; box-shadow: 0 0 25px rgba(239, 68, 68, 0.6); animation: livePulseGlow 2s infinite ease-in-out;">
+          <div style="font-family: 'Orbitron', sans-serif; font-size: 1.05rem; font-weight: 900; color: #ff4d4d; letter-spacing: 1.2px; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <span>⚠️</span> LIVE MULTIPLAYER MATCH IN PROGRESS <span>⚠️</span>
           </div>
-          <div style="font-size: 0.85rem; color: #fecaca; line-height: 1.35;">
-            The game world does <strong>NOT</strong> freeze. Everything is still moving in real-time, and ghosts & other players <strong>can still attack you</strong> while this menu is open!
+          <div style="font-size: 0.92rem; color: #fee2e2; line-height: 1.4; font-weight: 500;">
+            The game world does <strong>NOT</strong> pause! Other players and ghosts are still moving in real time, and you <strong>can still take damage or be captured</strong> while this menu is open.
           </div>
         </div>
 

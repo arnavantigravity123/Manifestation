@@ -942,6 +942,8 @@ io.on('connection', (socket) => {
     };
 
     io.to(roomId).emit('match_started', {
+      id: roomId,
+      isMultiplayer: true,
       players: lobby.players,
       settings: lobby.settings,
       puzzleState: {

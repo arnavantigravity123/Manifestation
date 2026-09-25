@@ -1589,6 +1589,15 @@ function initializeSocketConnection() {
       uiOverlay.classList.add('hidden');
     }
 
+    // Ensure matchConfig preserves lobby id and explicit multiplayer flag
+    if (matchConfig) {
+      if (!matchConfig.id && currentLobby && currentLobby.id) {
+        matchConfig.id = currentLobby.id;
+      }
+      matchConfig.id = matchConfig.id || 'multiplayer-match';
+      matchConfig.isMultiplayer = true;
+    }
+
     // Initialize match immediately with zero latency (0ms delay)
     initGame(socket, myId, matchConfig, false, false);
   });

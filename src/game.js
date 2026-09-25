@@ -1895,6 +1895,18 @@ export function getFarGhostSpawnPool(minDistOverride) {
   return far;
 }
 
+export function isMatchMultiplayer() {
+  if (window.isTutorialMatch) return false;
+  if (window.isSoloMatch) return false;
+  if (currentLobby && currentLobby.isMultiplayer === true) return true;
+  if (currentLobby && currentLobby.id) {
+    if (currentLobby.id.startsWith('solo-') || currentLobby.id.startsWith('tutorial-')) return false;
+    return true;
+  }
+  if (socketClient && socketClient.connected && !window.isSoloMatch) return true;
+  return false;
+}
+
 export function initGame(socket, socketId, matchConfig, isSolo = false, isTutorial = false) {
   socketClient = socket;
   myId = socketId;
@@ -1904,14 +1916,15 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     (matchConfig && matchConfig.id && matchConfig.id.startsWith('tutorial-')) ||
     (matchConfig && matchConfig.settings && matchConfig.settings.isTutorial)
   );
-  const totalPlayersCount = Object.keys(matchConfig.players || {}).length;
   window.isSoloMatch = Boolean(
     isSolo ||
     window.isTutorialMatch ||
     (matchConfig && matchConfig.id && matchConfig.id.startsWith('solo-')) ||
-    (sessionStorage.getItem('rejoinIsSolo') === 'true') ||
-    totalPlayersCount <= 1
+    (sessionStorage.getItem('rejoinIsSolo') === 'true')
   );
+  if (!window.isSoloMatch && matchConfig) {
+    matchConfig.isMultiplayer = true;
+  }
   // Info Screen (Breakers, Keys, and 4-Digit Code) must ALWAYS be visible across all modes!
   const objBar = document.querySelector('.compact-objective-bar');
   if (objBar) objBar.style.display = 'flex';
@@ -2443,7 +2456,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       ) {
         ptrOverlay.style.display = 'none';
       } else {
-        const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
+        const isMultiplayer = isMatchMultiplayer();
         const warnEl = document.getElementById('multiplayer-pause-warning');
         if (warnEl) warnEl.style.display = isMultiplayer ? 'block' : 'none';
 
@@ -8061,7 +8074,7 @@ function setupControls() {
       pauseOpenedTime = performance.now();
       resetPlayerMovementState();
 
-      const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
+      const isMultiplayer = isMatchMultiplayer();
       const warnEl = document.getElementById('multiplayer-pause-warning');
       if (warnEl) warnEl.style.display = isMultiplayer ? 'block' : 'none';
 
@@ -8747,7 +8760,7 @@ function triggerHumanEscape() {
     socketClient.emit('human_escaped', { id: socketClient.id });
   }
 
-  const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-') && !window.isTutorialMatch);
+  const isMultiplayer = isMatchMultiplayer();
 
   playEscapeCinematic(() => {
     document.getElementById('hud-overlay').style.display = 'none';
@@ -14744,9 +14757,13 @@ function animate() {
   const isInteractiveOverlay = isKeypadOpen || isMinimapOpen;
 
   // Solo Offline Matches: Truly PAUSE game simulation ONLY when the dedicated pause menu is open.
-  // Never pause for in-game interactive terminals or tactical map, and never in multiplayer!
-  const isMultiplayer = Boolean(currentLobby && currentLobby.id && !currentLobby.id.startsWith('solo-'));
+  const isMultiplayer = isMatchMultiplayer();
   const isSoloPaused = !isMultiplayer && isPauseMenuOpen && !isInteractiveOverlay && !window.isSpectating && window.gameReady;
+
+  if (isPauseMenuOpen) {
+    const warnEl = document.getElementById('multiplayer-pause-warning');
+    if (warnEl) warnEl.style.display = isMultiplayer ? 'block' : 'none';
+  }
 
   if (isSoloPaused) {
     if (!wasSoloPaused) {

@@ -83,6 +83,17 @@ body, html {
   opacity: 0.4;
 }
 
+@keyframes livePulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4), inset 0 0 10px rgba(239, 68, 68, 0.15);
+    border-color: #ef4444;
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.8), inset 0 0 18px rgba(239, 68, 68, 0.35);
+    border-color: #f87171;
+  }
+}
+
 /* Main UI Wrapper */
 #ui-overlay {
   position: absolute;
