@@ -876,10 +876,10 @@ export function loadGhostGLBAsset() {
         group.remove(spriteChild);
         
         // Wrap the centered model in an anchor group so the centering isn't lost during rotation
-        // Model naturally faces -Z, matching Three.js lookAt forward direction (-Z)
+        // Raw GLB faces +Z, rotating by PI aligns front face & arms with Three.js forward (-Z)
         const clone = SkeletonUtils.clone(preloadedGhostModel);
         const anchorGroup = new THREE.Group();
-        anchorGroup.rotation.y = 0; // Reverted: Model faces -Z naturally, matching Three.js lookAt forward direction (-Z)
+        anchorGroup.rotation.y = Math.PI; // Rotate 180 deg: raw GLB faces +Z, rotating by PI aligns front face & arms with Three.js forward (-Z)
         anchorGroup.add(clone);
         
         group.add(anchorGroup);
@@ -902,6 +902,9 @@ export function loadGhostGLBAsset() {
       Object.values(players3D).forEach(p => {
         if (p.userData && p.userData.type === 'Ghost') replaceSpriteWithModel(p);
       });
+    }
+    if (typeof localPlayerVisual !== 'undefined' && localPlayerVisual && localPlayerVisual.userData && localPlayerVisual.userData.type === 'Ghost') {
+      replaceSpriteWithModel(localPlayerVisual);
     }
 
     console.log("Ghost 3D model loaded successfully!");
@@ -13200,7 +13203,7 @@ function createGhostMeshGroup(skinId) {
   if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
-    anchorGroup.rotation.y = 0; // Reverted: Model faces -Z naturally, matching Three.js lookAt forward direction (-Z)
+    anchorGroup.rotation.y = Math.PI; // Rotate 180 deg: raw GLB faces +Z, rotating by PI aligns front face & arms with Three.js forward (-Z)
     anchorGroup.add(clone);
     group.add(anchorGroup);
   } else {
