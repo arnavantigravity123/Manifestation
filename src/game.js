@@ -1009,18 +1009,20 @@ function addGLBModelToForest(forestContainer) {
     forestCloneWrapper.scale.set(scale, scale, scale);
 
     const forestClone = preloadedForestModel.clone(true);
-    // CRUCIAL FIX: GLTFLoader already parses Node 0's -90 deg X-axis rotation matrix from Sketchfab.
-    // Setting rotation.x = 0 keeps the model upright (Y-up) without inverted flipping.
-    // Rotating around Y by 315 deg (7*PI/4) points the magnificent white marble sitting rotunda,
-    // peaceful lake, and pine mountain amphitheater directly toward the open vault doorway!
+    // Align model so the player enters directly from the mountain trail side (facing the rotunda & lake)
+    // Rotating around Y by 212.4 deg aligns the entrance vector directly with Three.js forward (-Z)
     forestClone.rotation.x = 0;
-    forestClone.rotation.y = (315 * Math.PI) / 180;
+    forestClone.rotation.y = (212.4 * Math.PI) / 180;
     forestClone.rotation.z = 0;
-    // Perfectly aligns the white marble sitting pavilion and water 18m in front of the doorway threshold
-    forestClone.position.set(-629.33, -930.10, -1718.69);
+    // Perfectly aligns the mountain entrance threshold at the vault doorway and rotunda at Z = -20.7m
+    forestClone.position.set(716.65, -920.0, -1500.0);
 
     forestClone.traverse(child => {
       if (child.isMesh) {
+        // Hide the flat 2D mountain billboard plane (Object_16) so it never appears as a floating 2D prop
+        if (child.name === 'Object_16') {
+          child.visible = false;
+        }
         child.castShadow = true;
         child.receiveShadow = true;
         child.frustumCulled = false;
@@ -12549,8 +12551,8 @@ function playEscapeCinematic(callback) {
         const localCamPos = new THREE.Vector3(0, localY, localZ);
         
         // Look ahead and frame the majestic white marble sitting rotunda and pine trees
-        const lookZ = -22.5;
-        const lookY = 1.95 + eased * 0.15;
+        const lookZ = -20.75;
+        const lookY = 2.45 + eased * 0.15;
         const localLookTarget = new THREE.Vector3(0, lookY, lookZ);
 
         camera.position.copy(vaultGroupRef.localToWorld(localCamPos));
