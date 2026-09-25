@@ -1106,17 +1106,17 @@ export function attachVaultDoorModel(vaultGroup) {
       child.receiveShadow = true;
       if (child.material) {
         child.material = child.material.clone();
-        // Give the entire vault a cohesive, imposing dark grey finish while preserving PBR texture maps
+        // Give the entire vault a cohesive, refined industrial steel & granite finish with high visibility
         if (child.name && (child.name.toLowerCase().includes('door2ay') || child.name === 'Door2ay_lambert2_0')) {
-          // Dark grey chiseled stone wall face
-          child.material.color.setHex(0x363b42);
-          child.material.roughness = 0.85;
-          child.material.metalness = 0.15;
+          // Architectural granite architrave wall face
+          child.material.color.setHex(0x828b98);
+          child.material.roughness = 0.72;
+          child.material.metalness = 0.12;
         } else {
-          // Dark grey reinforced industrial steel vault door disc, spokes, and locking clamps
-          child.material.color.setHex(0x282c34);
-          child.material.roughness = 0.58;
-          child.material.metalness = 0.82;
+          // Brushed industrial titanium/steel vault door disc, spokes, and locking clamps
+          child.material.color.setHex(0xa8b2c0);
+          child.material.roughness = 0.38;
+          child.material.metalness = 0.45;
         }
         child.material.needsUpdate = true;
       }
@@ -5759,15 +5759,15 @@ function generateMaze(keysCount = 8) {
 
   // 1. Heavy Gothic Wrought Iron & Stone Architrave Frame with Solid Bulkhead Masonry
   const frameMat = new THREE.MeshStandardMaterial({
-    color: 0x22262d,
-    metalness: 0.5,
-    roughness: 0.7
+    color: 0x5a6372,
+    metalness: 0.35,
+    roughness: 0.65
   });
 
   const bulkheadMat = new THREE.MeshStandardMaterial({
-    color: 0x2c3038, // Matching heavy dark grey stone
-    roughness: 0.82,
-    metalness: 0.18
+    color: 0x6b7482, // Distinct heavy stone masonry with high visibility
+    roughness: 0.75,
+    metalness: 0.15
   });
 
   // Solid Left Bulkhead Wall: completely seals space between left edge of vault frame (X = -1.713) and corridor wall (X = -3.0)
@@ -5813,14 +5813,14 @@ function generateMaze(keysCount = 8) {
     const vaultTex = getLoadedTexture('/assets/vault_door.png', null, true);
     const doorFrontMat = new THREE.MeshStandardMaterial({
       map: vaultTex,
-      color: 0x2e333a,
-      metalness: 0.80,
-      roughness: 0.65
+      color: 0x9aa4b2,
+      metalness: 0.45,
+      roughness: 0.45
     });
     const doorBackMat = new THREE.MeshStandardMaterial({
-      color: 0x181e26,
-      metalness: 0.8,
-      roughness: 0.4
+      color: 0x2d3440,
+      metalness: 0.6,
+      roughness: 0.5
     });
     const doorMaterials = [
       doorBackMat,
@@ -5839,10 +5839,23 @@ function generateMaze(keysCount = 8) {
     gateMeshRef = gateMesh;
   }
 
-  // 3. Subtle atmospheric extraction beacon casting gentle radiance onto the threshold
-  const exitBeacon = new THREE.PointLight(0x38bdf8, 0.12, 4.0);
+  // 3. High-visibility industrial vault chamber lighting rig
+  // A. Overhead focused work spotlight illuminating the door disc, spokes, and threshold
+  const vaultSpotlight = new THREE.SpotLight(0xfff7ed, 3.8, 12.0, Math.PI / 3.0, 0.4, 1.2);
+  vaultSpotlight.position.set(0, 3.4, 2.0);
+  vaultSpotlight.target.position.set(0, 1.6, 0);
+  vaultGroup.add(vaultSpotlight);
+  vaultGroup.add(vaultSpotlight.target);
+
+  // B. Atmospheric extraction security beacon
+  const exitBeacon = new THREE.PointLight(0x38bdf8, 1.8, 7.0);
   exitBeacon.position.set(0, 3.1, 0.8);
   vaultGroup.add(exitBeacon);
+
+  // C. Warm inspection fill light near keypad & door center
+  const vaultFillLight = new THREE.PointLight(0xfef3c7, 1.4, 5.0);
+  vaultFillLight.position.set(1.4, 1.8, 0.9);
+  vaultGroup.add(vaultFillLight);
 
   // 4. 3D Keypad Terminal Station (Grounded Gothic Cast-Iron Pedestal + Heavy Wall Anchor)
   const padGroup = new THREE.Group();
@@ -5850,7 +5863,7 @@ function generateMaze(keysCount = 8) {
   padGroup.rotation.y = -0.15; // Angled invitingly towards approaching player
   vaultGroup.add(padGroup);
 
-  const padMountMat = new THREE.MeshStandardMaterial({ color: 0x181e29, metalness: 0.8, roughness: 0.35 });
+  const padMountMat = new THREE.MeshStandardMaterial({ color: 0x374151, metalness: 0.6, roughness: 0.45 });
 
   // A. Floor Base Flange Plate resting firmly on dungeon floor
   const baseFlangeGeo = new THREE.BoxGeometry(0.44, 0.06, 0.44);
