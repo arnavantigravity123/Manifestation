@@ -879,7 +879,7 @@ export function loadGhostGLBAsset() {
         // Model naturally faces +Z (backwards), so we rotate it by Math.PI to face -Z (Three.js forward)
         const clone = SkeletonUtils.clone(preloadedGhostModel);
         const anchorGroup = new THREE.Group();
-        anchorGroup.rotation.y = Math.PI;
+        anchorGroup.rotation.y = 0; // Reverted: Model faces -Z naturally, matching Three.js lookAt forward direction (-Z)
         anchorGroup.add(clone);
         
         group.add(anchorGroup);
@@ -12872,7 +12872,7 @@ function createGhostMeshGroup(skinId) {
   if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
-    anchorGroup.rotation.y = Math.PI; // Model naturally faces +Z (backwards), so we rotate it by Math.PI to face -Z (Three.js forward)
+    anchorGroup.rotation.y = 0; // Reverted: Model faces -Z naturally, matching Three.js lookAt forward direction (-Z)
     anchorGroup.add(clone);
     group.add(anchorGroup);
   } else {
@@ -16026,7 +16026,7 @@ function animate() {
           } else if (gClass === 'Juggernaut') {
             ghost.userData.speedBoostTimer = gParams.rageDurationBot;
           } else if (gClass === 'Phantom') {
-            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(ghost.quaternion);
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(ghost.quaternion);
             const maxLeap = gParams.leapDistanceBot;
             const stepSize = 0.3;
             let safeLeapDist = 0;
@@ -16305,12 +16305,14 @@ function animate() {
         }
       }
       
-      // Face the human player if chasing OR investigating with sight/proximity, otherwise face movement direction / waypoint
-      if ((ghost.userData.aiState === 'CHASE' || ghost.userData.aiState === 'INVESTIGATE') && targetPos && (hasDirectLos || inProximity)) {
+      // Reverted Ghost Facing Behavior:
+      // 1. In hunting mode (CHASE): mostly all the time face the human player directly!
+      // 2. While moving along waypoints (wander/investigate): always look straight in the movement direction!
+      if (ghost.userData.aiState === 'CHASE' && targetPos) {
         ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
       } else if (path && path.length > 0 && pathIdx < path.length) {
         ghost.lookAt(path[pathIdx].x, ghost.position.y, path[pathIdx].z);
-      } else if (targetPos && hasDirectLos) {
+      } else if (targetPos && (hasDirectLos || inProximity)) {
         ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
       }
 
