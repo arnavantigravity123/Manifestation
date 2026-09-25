@@ -876,10 +876,10 @@ export function loadGhostGLBAsset() {
         group.remove(spriteChild);
         
         // Wrap the centered model in an anchor group so the centering isn't lost during rotation
-        // Model naturally faces +Z (backwards), so we rotate it by Math.PI to face -Z (Three.js forward)
+        // Model naturally faces +Z (backwards) in GLB, so rotate by Math.PI to face -Z (Three.js forward)
         const clone = SkeletonUtils.clone(preloadedGhostModel);
         const anchorGroup = new THREE.Group();
-        anchorGroup.rotation.y = 0; // Reverted: Model faces -Z naturally, matching Three.js lookAt forward direction (-Z)
+        anchorGroup.rotation.y = Math.PI; // Face forward direction (-Z)
         anchorGroup.add(clone);
         
         group.add(anchorGroup);
@@ -12997,7 +12997,7 @@ function createGhostMeshGroup(skinId) {
   if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
-    anchorGroup.rotation.y = 0; // Reverted: Model faces -Z naturally, matching Three.js lookAt forward direction (-Z)
+    anchorGroup.rotation.y = Math.PI; // Face forward direction (-Z)
     anchorGroup.add(clone);
     group.add(anchorGroup);
   } else {
@@ -16096,7 +16096,7 @@ function animate() {
               let mimicGroup = ghost.userData.mimicGroup;
               if (!mimicGroup) {
                 mimicGroup = createHumanMeshGroup(chosenSkin, chosenUsername, chosenIsVip);
-                mimicGroup.rotation.y = Math.PI; // Aligns human model facing forward (+Z in ghost space) matching ghost lookAt direction
+                mimicGroup.rotation.y = 0; // Aligns human model facing forward (-Z) matching ghost forward direction
                 
                 // Thermal camera material setup (Cyan for teammates)
                 const meshThermalMat = new THREE.MeshBasicMaterial({ 
