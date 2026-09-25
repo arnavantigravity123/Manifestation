@@ -9690,22 +9690,160 @@ function useActiveItem() {
     socketClient.emit('sound_scramble', { position: { x: camera.position.x, z: camera.position.z } });
     abilityCooldowns[item] = now + gParams.scrambleCooldown;
   } else if (item === "Chalk / UV Spray") {
-    deployChalkDecal(camera.position);
-    socketClient.emit('chalk_spray', { position: { x: camera.position.x, z: camera.position.z } });
+    deployChalkDecal();
     removeItem(activeSlot);
   } else {
     triggerNotification(`${item} cannot be deployed yet.`);
   }
 }
 
-function deployChalkDecal(pos) {
+/**
+ * Calculates the exact floor position where the player is aiming,
+ * clamped within effective radius and verified against maze wall obstacles.
+ */
+function getFloorPlacementPosition(maxRadius = 3.5, minRadius = 0.8) {
+  const renderCam = (activeViewCamera && currentViewIndex > 0) ? activeViewCamera : camera;
+  const pX = camera.position.x;
+  const pZ = camera.position.z;
+
+  const camDir = new THREE.Vector3();
+  renderCam.getWorldDirection(camDir);
+
+  const floorY = 0.05;
+  const camY = renderCam.position.y;
+  
+  let targetX, targetZ;
+
+  // If looking down towards the floor (pitch down):
+  if (camDir.y < -0.04) {
+    const t = (floorY - camY) / camDir.y;
+    const hitX = renderCam.position.x + camDir.x * t;
+    const hitZ = renderCam.position.z + camDir.z * t;
+
+    const dX = hitX - pX;
+    const dZ = hitZ - pZ;
+    const dist = Math.hypot(dX, dZ);
+
+    if (dist > maxRadius) {
+      const scale = maxRadius / dist;
+      targetX = pX + dX * scale;
+      targetZ = pZ + dZ * scale;
+    } else if (dist < minRadius) {
+      const scale = (dist > 0.001) ? (minRadius / dist) : 1;
+      targetX = pX + dX * scale;
+      targetZ = pZ + dZ * scale;
+    } else {
+      targetX = hitX;
+      targetZ = hitZ;
+    }
+  } else {
+    // Looking horizontal or up: place forward along horizontal gaze at comfortable distance
+    const hLen = Math.hypot(camDir.x, camDir.z);
+    const forwardX = (hLen > 0.001) ? (camDir.x / hLen) : 0;
+    const forwardZ = (hLen > 0.001) ? (camDir.z / hLen) : 1;
+    const defaultDist = Math.min(2.2, maxRadius);
+    targetX = pX + forwardX * defaultDist;
+    targetZ = pZ + forwardZ * defaultDist;
+  }
+
+  // Maze wall obstacle collision safety check (prevent placing inside or through walls)
+  const blockSize = mazeBlockSize || 6.0;
+  const wallHalfSize = blockSize / 2;
+  const totalCols = (mazeLayout && mazeLayout[0]) ? mazeLayout[0].length : mazeSizeGlobal;
+  const totalRows = mazeLayout ? mazeLayout.length : mazeSizeGlobal;
+
+  const isPointSafe = (tx, tz, margin = 0.5) => {
+    if (!mazeLayout || !mazeLayout[0]) return true;
+    const gC = Math.floor((tx / blockSize) + totalCols / 2);
+    const gR = Math.floor((tz / blockSize) + totalRows / 2);
+
+    for (let r = Math.max(0, gR - 1); r <= Math.min(totalRows - 1, gR + 1); r++) {
+      for (let c = Math.max(0, gC - 1); c <= Math.min(totalCols - 1, gC + 1); c++) {
+        if (mazeLayout[r] && (mazeLayout[r][c] === 1 || mazeLayout[r][c] === 2)) {
+          const wx = (c - totalCols / 2) * blockSize + blockSize / 2;
+          const wz = (r - totalRows / 2) * blockSize + blockSize / 2;
+          if (Math.abs(tx - wx) < (wallHalfSize + margin) && Math.abs(tz - wz) < (wallHalfSize + margin)) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  };
+
+  // If initial target hits a wall, step backwards along the aim ray towards the player
+  let finalX = targetX;
+  let finalZ = targetZ;
+  const steps = 16;
+  for (let i = steps; i >= 1; i--) {
+    const frac = i / steps;
+    const testX = pX + (targetX - pX) * frac;
+    const testZ = pZ + (targetZ - pZ) * frac;
+    if (isPointSafe(testX, testZ, 0.45)) {
+      finalX = testX;
+      finalZ = testZ;
+      break;
+    }
+  }
+
+  return new THREE.Vector3(finalX, floorY, finalZ);
+}
+
+function playPlacementSound(type) {
+  if (!audioCtx || isMasterMuted || masterAudioVolume <= 0.001) return;
+  try {
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    const now = audioCtx.currentTime;
+    if (type === 'spray') {
+      const bufferSize = Math.floor(audioCtx.sampleRate * 0.16);
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.4));
+      }
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(3200, now);
+      filter.Q.setValueAtTime(2.0, now);
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.35 * masterAudioVolume, now);
+      gain.gain.linearRampToValueAtTime(0.01, now + 0.16);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+      noise.start(now);
+    } else {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(140, now + 0.14);
+      gain.gain.setValueAtTime(0.4 * masterAudioVolume, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.14);
+    }
+  } catch(e) {}
+}
+
+function deployChalkDecal(customPos = null) {
+  const target = customPos || getFloorPlacementPosition(3.5, 0.8);
   const geo = new THREE.PlaneGeometry(1.5, 1.5);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
+  const mat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.rotation.x = -Math.PI / 2;
-  mesh.position.set(pos.x, 0.05, pos.z);
+  mesh.position.set(target.x, 0.05, target.z);
   scene.add(mesh);
   chalkDecals.push(mesh);
+  playPlacementSound('spray');
+
+  if (!customPos && typeof socketClient !== 'undefined' && socketClient.emit) {
+    socketClient.emit('chalk_spray', { position: { x: target.x, z: target.z } });
+  }
 }
 
 function removeItem(index) {
@@ -9713,15 +9851,21 @@ function removeItem(index) {
   renderHUDInventory();
 }
 
-function deploySaltTrap() {
+function deploySaltTrap(customPos = null) {
+  const pos = customPos || getFloorPlacementPosition(3.5, 0.8);
   const saltGeo = new THREE.CylinderGeometry(2.0, 2.0, 0.05, 16);
   const saltMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const salt = new THREE.Mesh(saltGeo, saltMat);
-  salt.position.set(camera.position.x, 0.05, camera.position.z);
+  salt.position.set(pos.x, 0.05, pos.z);
   salt.userData = { triggered: false };
   scene.add(salt);
   saltTraps.push(salt);
-  triggerNotification("salt barrier deployed.");
+  triggerNotification("Salt barrier deployed.");
+  playPlacementSound('salt');
+
+  if (!customPos && typeof socketClient !== 'undefined' && socketClient.emit) {
+    socketClient.emit('salt_deployed', { position: { x: pos.x, y: 0.05, z: pos.z } });
+  }
 }
 
 // Keypad dialog helpers — queried lazily to avoid null refs at module load time
@@ -10264,13 +10408,9 @@ function dropActiveItem() {
   inventory[activeSlot] = "";
   renderHUDInventory();
 
-  // Calculate spawn position in front of player
-  const dir = new THREE.Vector3();
-  camera.getWorldDirection(dir);
-  const spawnPos = new THREE.Vector3()
-    .copy(camera.position)
-    .addScaledVector(dir, 1.8);
-  spawnPos.y = 0.3; // Floor height
+  // Calculate spawn position on the floor where player is looking within radius
+  const spawnPos = getFloorPlacementPosition(2.5, 0.8);
+  spawnPos.y = 0.3; // Floor pickup height
 
   const itemId = 'item_' + Math.random().toString(36).substr(2, 9);
   
@@ -10370,9 +10510,9 @@ function dropKey() {
   const kt = KEY_TYPES.find(k => k.label === poppedKey.typeName) || KEY_TYPES[0];
   const mesh = createKeyMeshGroup(kt.color, kt.emissive);
   
-  // Drop it slightly in front of the player
-  const dropPos = new THREE.Vector3(0, 0, -2).applyQuaternion(camera.quaternion).add(camera.position);
-  mesh.position.set(dropPos.x, 1.0, dropPos.z);
+  // Drop it on the floor where player is looking within reach
+  const dropPos = getFloorPlacementPosition(2.2, 0.8);
+  mesh.position.set(dropPos.x, 0.45, dropPos.z);
   scene.add(mesh);
 
   const preservedId = poppedKey.id || ('key_' + poppedKey.symbol);
@@ -11746,6 +11886,10 @@ function setupSocketListeners() {
 
   socketClient.on('human_chalk_spray', ({ id, position }) => {
     deployChalkDecal(position);
+  });
+
+  socketClient.on('human_salt_deployed', ({ id, position }) => {
+    deploySaltTrap(position);
   });
 
   socketClient.on('breaker_remote_triggered', () => {

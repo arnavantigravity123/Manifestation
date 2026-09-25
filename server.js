@@ -1222,6 +1222,11 @@ io.on('connection', (socket) => {
     socket.to(socket.roomId).emit('human_chalk_spray', { id: socket.id, position });
   });
 
+  socket.on('salt_deployed', ({ position }) => {
+    console.log(`[Lobby ${socket.roomId}] Player ${socket.id} deployed Salt Barrier at [${position.x.toFixed(1)}, ${position.z.toFixed(1)}].`);
+    socket.to(socket.roomId).emit('human_salt_deployed', { id: socket.id, position });
+  });
+
   socket.on('sound_produced', ({ volume, position }) => {
     console.log(`[Lobby ${socket.roomId}] Microphone Audio detected (Volume: ${volume.toFixed(2)}) - Ghosts alerted to [X:${position.x.toFixed(1)}, Z:${position.z.toFixed(1)}]`);
     socket.to(socket.roomId).emit('sound_beacon', { producerId: socket.id, volume, position });
