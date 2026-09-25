@@ -1288,6 +1288,35 @@ io.on('connection', (socket) => {
         });
       }
 
+      // If game is active, handle player leaving (AI ghost replacement or operative cleanup)
+      if (lobby.gameStarted && leftPlayer) {
+        if (leftPlayer.team === 'Ghost') {
+          const aiId = 'ai_ghost_' + Math.random().toString(36).substr(2, 9);
+          const aiGhostClass = leftPlayer.characterClass || 'Stalker';
+          const aiPos = leftPlayer.lastPosition || null;
+
+          lobby.settings = lobby.settings || {};
+          lobby.settings.botGhostsCount = (lobby.settings.botGhostsCount || 0) + 1;
+
+          console.log(`[Lobby ${roomId}] Human Ghost ${leftPlayer.username} (${socket.id}) disconnected. Spawning replacement AI Ghost ${aiId} (${aiGhostClass}).`);
+
+          io.to(roomId).emit('ghost_player_replaced_with_ai', {
+            id: aiId,
+            originalPlayerId: socket.id,
+            username: leftPlayer.username,
+            ghostClass: aiGhostClass,
+            position: aiPos,
+            skinId: leftPlayer.skinId || 'skin_ghost'
+          });
+        } else {
+          io.to(roomId).emit('player_left_match', {
+            id: socket.id,
+            username: leftPlayer.username,
+            team: leftPlayer.team
+          });
+        }
+      }
+
       const remainingPlayers = Object.keys(lobby.players);
 
       if (remainingPlayers.length === 0) {

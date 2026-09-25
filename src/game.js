@@ -11248,6 +11248,131 @@ function setupSocketListeners() {
     drawMinimap();
   });
 
+  socketClient.on('ghost_player_replaced_with_ai', ({ id, originalPlayerId, username, ghostClass, position, skinId }) => {
+    console.log(`[Ghost AI Substitution] Player ${username} (${originalPlayerId}) disconnected. Replacing with AI Ghost [${ghostClass}] ID: ${id}`);
+
+    // If local client was the one who disconnected, ignore
+    if (originalPlayerId === myId) return;
+
+    // 1. Determine spawn location (prioritize existing 3D mesh position, then server pos, then fallback)
+    let spawnX = 0;
+    let spawnZ = 0;
+    let hasValidPos = false;
+
+    if (players3D[originalPlayerId] && players3D[originalPlayerId].position) {
+      spawnX = players3D[originalPlayerId].position.x;
+      spawnZ = players3D[originalPlayerId].position.z;
+      hasValidPos = true;
+    } else if (position && position.x !== undefined && position.z !== undefined) {
+      spawnX = position.x;
+      spawnZ = position.z;
+      hasValidPos = true;
+    }
+
+    if (!hasValidPos) {
+      const farPool = typeof getFarGhostSpawnPool === 'function' ? getFarGhostSpawnPool() : null;
+      const spawnNode = farPool && farPool.length > 0 ? farPool[Math.floor(Math.random() * farPool.length)] : { x: 0, z: 0 };
+      spawnX = spawnNode.x;
+      spawnZ = spawnNode.z;
+    }
+
+    // 2. Cleanly dispose and remove departing player's 3D mesh
+    if (players3D[originalPlayerId]) {
+      scene.remove(players3D[originalPlayerId]);
+      players3D[originalPlayerId].traverse(child => {
+        if (child.isMesh || child.isSprite) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      });
+      delete players3D[originalPlayerId];
+    }
+
+    if (currentLobby && currentLobby.players && currentLobby.players[originalPlayerId]) {
+      delete currentLobby.players[originalPlayerId];
+    }
+
+    // 3. Avoid duplicate spawning if already exists in ghosts3D
+    if (typeof ghosts3D !== 'undefined' && Array.isArray(ghosts3D)) {
+      const existingAI = ghosts3D.find(g => g.userData && g.userData.id === id);
+      if (existingAI) return;
+    }
+
+    // 4. Create and configure replacement AI Ghost
+    const chosenSkin = skinId || 'skin_ghost';
+    const ghostGroup = createGhostMeshGroup(chosenSkin);
+
+    // Setup thermal materials for X-Ray
+    const meshThermalMat = new THREE.MeshBasicMaterial({ 
+      color: 0xffffff, fog: false, depthTest: false, side: THREE.DoubleSide 
+    });
+    ghostGroup.traverse(c => {
+      if (c.isMesh) {
+        c.userData.normalMat = c.material;
+        c.userData.thermalMat = meshThermalMat;
+      } else if (c.isSprite) {
+        c.userData.normalMat = c.material;
+        c.userData.thermalMat = new THREE.SpriteMaterial({
+          map: c.material.map,
+          color: 0xffffff,
+          fog: false,
+          depthTest: false,
+          transparent: true,
+          blending: THREE.AdditiveBlending
+        });
+      }
+    });
+
+    ghostGroup.position.set(spawnX, 0, spawnZ);
+    ghostGroup.userData.id = id;
+    ghostGroup.userData.ghostClass = ghostClass || 'Stalker';
+    ghostGroup.userData.aiState = 'WANDER';
+    ghostGroup.userData.targetGrid = null;
+    ghostGroup.userData.loseSightTimer = 0;
+    ghostGroup.userData.lastSoundTime = 0;
+    ghostGroup.userData.abilityCooldown = 6.0 + Math.random() * 8.0;
+    ghostGroup.userData.isAiReplacement = true;
+
+    scene.add(ghostGroup);
+    if (typeof ghosts3D !== 'undefined' && Array.isArray(ghosts3D)) {
+      ghosts3D.push(ghostGroup);
+    }
+
+    // 5. In-game notification banner
+    const cName = (ghostClass || 'Stalker').toUpperCase();
+    triggerNotification(`👻 Ghost operative [${username || 'Entity'}] vanished! Manifested feral AI [${cName}] in their place!`);
+
+    drawMinimap();
+  });
+
+  socketClient.on('player_left_match', ({ id, username, team }) => {
+    if (id === myId) return;
+
+    if (players3D[id]) {
+      scene.remove(players3D[id]);
+      players3D[id].traverse(child => {
+        if (child.isMesh || child.isSprite) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+            else child.material.dispose();
+          }
+        }
+      });
+      delete players3D[id];
+    }
+
+    if (currentLobby && currentLobby.players && currentLobby.players[id]) {
+      delete currentLobby.players[id];
+    }
+
+    triggerNotification(`⚠️ [${username || 'Operative'}] has disconnected from the match.`);
+    drawMinimap();
+  });
+
   socketClient.on('player_revived_sync', ({ targetId, medicName, revivedName, position }) => {
     if (currentLobby && currentLobby.players && currentLobby.players[targetId]) {
       currentLobby.players[targetId].isCaptured = false;
