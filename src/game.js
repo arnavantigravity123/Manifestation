@@ -876,10 +876,10 @@ export function loadGhostGLBAsset() {
         group.remove(spriteChild);
         
         // Wrap the centered model in an anchor group so the centering isn't lost during rotation
-        // Model naturally faces +Z (backwards) in GLB, so rotate by Math.PI to face -Z (Three.js forward)
+        // Model naturally faces -Z, matching Three.js lookAt forward direction (-Z)
         const clone = SkeletonUtils.clone(preloadedGhostModel);
         const anchorGroup = new THREE.Group();
-        anchorGroup.rotation.y = Math.PI; // Face forward direction (-Z)
+        anchorGroup.rotation.y = 0; // Reverted: Model faces -Z naturally, matching Three.js lookAt forward direction (-Z)
         anchorGroup.add(clone);
         
         group.add(anchorGroup);
@@ -13073,7 +13073,7 @@ function createGhostMeshGroup(skinId) {
   if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
-    anchorGroup.rotation.y = Math.PI; // Face forward direction (-Z)
+    anchorGroup.rotation.y = 0; // Reverted: Model faces -Z naturally, matching Three.js lookAt forward direction (-Z)
     anchorGroup.add(clone);
     group.add(anchorGroup);
   } else {
@@ -16172,7 +16172,7 @@ function animate() {
               let mimicGroup = ghost.userData.mimicGroup;
               if (!mimicGroup) {
                 mimicGroup = createHumanMeshGroup(chosenSkin, chosenUsername, chosenIsVip);
-                mimicGroup.rotation.y = 0; // Aligns human model facing forward (-Z) matching ghost forward direction
+                mimicGroup.rotation.y = Math.PI; // Aligns human model facing forward (+Z in ghost space) matching ghost lookAt direction
                 
                 // Thermal camera material setup (Cyan for teammates)
                 const meshThermalMat = new THREE.MeshBasicMaterial({ 
@@ -16507,14 +16507,20 @@ function animate() {
       }
       
       // Reverted Ghost Facing Behavior:
-      // 1. In hunting mode (CHASE): mostly all the time face the human player directly!
-      // 2. While moving along waypoints (wander/investigate): always look straight in the movement direction!
+      // 1. In hunting mode (CHASE): ALWAYS face the human player directly!
+      // 2. While moving along waypoints (wander/investigate): ALWAYS look straight in the movement direction!
+      // 3. Fallback: If displacing along any vector, look straight in the displacement direction!
       if (ghost.userData.aiState === 'CHASE' && targetPos) {
         ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
       } else if (path && path.length > 0 && pathIdx < path.length) {
         ghost.lookAt(path[pathIdx].x, ghost.position.y, path[pathIdx].z);
       } else if (targetPos && (hasDirectLos || inProximity)) {
         ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
+      } else {
+        const moveDistSq = (ghost.position.x - prevGhostX) ** 2 + (ghost.position.z - prevGhostZ) ** 2;
+        if (moveDistSq > 0.0001) {
+          ghost.lookAt(ghost.position.x + (ghost.position.x - prevGhostX), ghost.position.y, ghost.position.z + (ghost.position.z - prevGhostZ));
+        }
       }
 
       // Final robust grid-plane, corner, dynamic door, and prop collision enforcement
