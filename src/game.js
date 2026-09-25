@@ -14384,9 +14384,9 @@ function drawMinimap() {
     });
   }
 
-  // Draw Teammates
+  // Draw Teammates (Only players on the same team are visible on minimap)
   Object.values(players3D).forEach((p, idx) => {
-    if (p.userData && (p.userData.type === myTeam || myTeam === 'Ghost')) {
+    if (p.userData && p.userData.type === myTeam) {
       const tc = (p.position.x / blockSize) + (totalCols / 2);
       const tr = (p.position.z / blockSize) + (totalRows / 2);
       
