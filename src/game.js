@@ -65,13 +65,17 @@ let hazmatAOTexture = null;
 let hazmatSuitMaterial = null;
 let hazmatVisorMaterial = null;
 
-// Universal Fast Tap / Click Listener: eliminates 300ms mobile touch delay and responds in < 1ms
+// Universal Fast Tap / Click Listener: responds on clean tap without hijacking scroll/drag gestures
 export function addFastTapListener(el, callback) {
   if (!el) return;
   let lastTrigger = 0;
+  let startX = 0;
+  let startY = 0;
+  let isScrolling = false;
+
   const fire = (e) => {
     const now = performance.now();
-    if (now - lastTrigger < 120) return;
+    if (now - lastTrigger < 150) return;
     lastTrigger = now;
     try {
       callback(e);
@@ -79,13 +83,35 @@ export function addFastTapListener(el, callback) {
       console.error('[FAST-TAP] Error executing callback:', el.id || el, err);
     }
   };
+
   el.addEventListener('pointerdown', (e) => {
-    e.stopPropagation();
-    fire(e);
+    startX = e.clientX;
+    startY = e.clientY;
+    isScrolling = false;
+  }, { passive: true });
+
+  el.addEventListener('pointermove', (e) => {
+    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) > 8) {
+      isScrolling = true;
+    }
+  }, { passive: true });
+
+  el.addEventListener('pointercancel', () => {
+    isScrolling = true;
+  }, { passive: true });
+
+  el.addEventListener('pointerup', (e) => {
+    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) <= 8) {
+      e.stopPropagation();
+      fire(e);
+    }
   });
+
   el.addEventListener('click', (e) => {
-    e.stopPropagation();
-    fire(e);
+    if (!isScrolling) {
+      e.stopPropagation();
+      fire(e);
+    }
   });
 }
 
@@ -3194,15 +3220,35 @@ function renderHUDInventory() {
     slot.className = index === activeSlot ? 'inventory-slot active' : 'inventory-slot';
     if (isCd) slot.classList.add('on-cooldown');
     slot.style.pointerEvents = 'auto';
+    let slotStartX = 0;
+    let slotStartY = 0;
+    let slotScrolled = false;
+
+    slot.addEventListener('pointerdown', (e) => {
+      slotStartX = e.clientX;
+      slotStartY = e.clientY;
+      slotScrolled = false;
+    }, { passive: true });
+
+    slot.addEventListener('pointermove', (e) => {
+      if (!slotScrolled && Math.hypot(e.clientX - slotStartX, e.clientY - slotStartY) > 8) {
+        slotScrolled = true;
+      }
+    }, { passive: true });
+
+    slot.addEventListener('pointercancel', () => {
+      slotScrolled = true;
+    }, { passive: true });
+
     const selectSlot = (e) => {
       e.stopPropagation();
-      if (e.cancelable) e.preventDefault();
+      if (slotScrolled) return;
       if (activeSlot !== index) {
         activeSlot = index;
         renderHUDInventory();
       }
     };
-    slot.addEventListener('pointerdown', selectSlot);
+    slot.addEventListener('pointerup', selectSlot);
     slot.addEventListener('click', selectSlot);
     
     const idxSpan = document.createElement('span');
@@ -7897,15 +7943,18 @@ function setupControls() {
       }
     }
 
-    // Helper for robust, instant tap response without double-fires or missed touches
+    // Helper for robust, instant tap response without accidental fires during scroll/drag gestures
     function addTapListener(el, callback) {
       if (!el) return;
       el.setAttribute('tabindex', '-1');
       let lastTrigger = 0;
+      let startX = 0;
+      let startY = 0;
+      let isScrolling = false;
 
       const fire = (e) => {
         const now = performance.now();
-        if (now - lastTrigger < 90) return; // Prevent duplicate triggers within 90ms
+        if (now - lastTrigger < 150) return; // Prevent duplicate triggers within 150ms
         lastTrigger = now;
         try {
           callback(e);
@@ -7914,44 +7963,38 @@ function setupControls() {
         }
       };
 
-      // 1. Pointer Down (Universal modern standard across mobile touch and desktop click)
       el.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
+        startX = e.clientX;
+        startY = e.clientY;
+        isScrolling = false;
         el.classList.add('btn-pressed');
-        fire(e);
-      });
+      }, { passive: true });
 
-      el.addEventListener('pointerup', (e) => {
-        e.stopPropagation();
-        el.classList.remove('btn-pressed');
-      });
+      el.addEventListener('pointermove', (e) => {
+        if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) > 8) {
+          isScrolling = true;
+          el.classList.remove('btn-pressed');
+        }
+      }, { passive: true });
 
       el.addEventListener('pointercancel', () => {
-        el.classList.remove('btn-pressed');
-      });
-
-      // 2. Direct touchstart for mobile WebViews (zero latency, fires immediately on contact)
-      el.addEventListener('touchstart', (e) => {
-        if (e.cancelable) e.preventDefault();
-        e.stopPropagation();
-        el.classList.add('btn-pressed');
-        fire(e);
-      }, { passive: false });
-
-      el.addEventListener('touchend', (e) => {
-        if (e.cancelable) e.preventDefault();
-        e.stopPropagation();
-        el.classList.remove('btn-pressed');
-      }, { passive: false });
-
-      el.addEventListener('touchcancel', () => {
+        isScrolling = true;
         el.classList.remove('btn-pressed');
       }, { passive: true });
 
-      // 3. Fallback click for desktop
+      el.addEventListener('pointerup', (e) => {
+        el.classList.remove('btn-pressed');
+        if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) <= 8) {
+          e.stopPropagation();
+          fire(e);
+        }
+      });
+
       el.addEventListener('click', (e) => {
-        e.stopPropagation();
-        fire(e);
+        if (!isScrolling) {
+          e.stopPropagation();
+          fire(e);
+        }
       });
     }
 

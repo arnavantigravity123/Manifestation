@@ -302,14 +302,17 @@ if (soloClassSelect) {
   updateClassIntelCard(soloClassSelect.value || 'Locksmith');
 }
 
-// Universal fast button listener: fires immediately on pointerdown / touch (0ms delay)
+// Universal fast button listener: responds on clean tap without hijacking scroll/drag gestures
 function addFastButtonListener(btn, callback) {
   if (!btn) return;
   let lastTrigger = 0;
+  let startX = 0;
+  let startY = 0;
+  let isScrolling = false;
+
   const fire = (e) => {
-    if (e && e.cancelable && e.type === 'touchstart') e.preventDefault();
     const now = performance.now();
-    if (now - lastTrigger < 120) return;
+    if (now - lastTrigger < 150) return;
     lastTrigger = now;
     requestAppFullscreen();
     try {
@@ -318,8 +321,34 @@ function addFastButtonListener(btn, callback) {
       console.error('[FAST-BTN] Error executing callback for element:', btn.id || btn, err);
     }
   };
-  btn.addEventListener('pointerdown', fire);
-  btn.addEventListener('click', fire);
+
+  btn.addEventListener('pointerdown', (e) => {
+    startX = e.clientX;
+    startY = e.clientY;
+    isScrolling = false;
+  }, { passive: true });
+
+  btn.addEventListener('pointermove', (e) => {
+    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) > 8) {
+      isScrolling = true;
+    }
+  }, { passive: true });
+
+  btn.addEventListener('pointercancel', () => {
+    isScrolling = true;
+  }, { passive: true });
+
+  btn.addEventListener('pointerup', (e) => {
+    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) <= 8) {
+      fire(e);
+    }
+  });
+
+  btn.addEventListener('click', (e) => {
+    if (!isScrolling) {
+      fire(e);
+    }
+  });
 }
 window.addFastButtonListener = addFastButtonListener;
 
