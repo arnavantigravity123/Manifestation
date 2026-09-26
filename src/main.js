@@ -329,7 +329,7 @@ function addFastButtonListener(btn, callback) {
   }, { passive: true });
 
   btn.addEventListener('pointermove', (e) => {
-    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) > 8) {
+    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) > 22) {
       isScrolling = true;
     }
   }, { passive: true });
@@ -339,15 +339,17 @@ function addFastButtonListener(btn, callback) {
   }, { passive: true });
 
   btn.addEventListener('pointerup', (e) => {
-    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) <= 8) {
+    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) <= 22) {
       fire(e);
     }
+    isScrolling = false;
   });
 
   btn.addEventListener('click', (e) => {
     if (!isScrolling) {
       fire(e);
     }
+    isScrolling = false;
   });
 }
 window.addFastButtonListener = addFastButtonListener;

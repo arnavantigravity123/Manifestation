@@ -91,7 +91,7 @@ export function addFastTapListener(el, callback) {
   }, { passive: true });
 
   el.addEventListener('pointermove', (e) => {
-    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) > 8) {
+    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) > 22) {
       isScrolling = true;
     }
   }, { passive: true });
@@ -101,17 +101,19 @@ export function addFastTapListener(el, callback) {
   }, { passive: true });
 
   el.addEventListener('pointerup', (e) => {
-    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) <= 8) {
-      e.stopPropagation();
+    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) <= 22) {
+      if (e.stopPropagation) e.stopPropagation();
       fire(e);
     }
+    isScrolling = false;
   });
 
   el.addEventListener('click', (e) => {
     if (!isScrolling) {
-      e.stopPropagation();
+      if (e.stopPropagation) e.stopPropagation();
       fire(e);
     }
+    isScrolling = false;
   });
 }
 
@@ -3233,7 +3235,7 @@ function renderHUDInventory() {
     }, { passive: true });
 
     slot.addEventListener('pointermove', (e) => {
-      if (!slotScrolled && Math.hypot(e.clientX - slotStartX, e.clientY - slotStartY) > 8) {
+      if (!slotScrolled && Math.hypot(e.clientX - slotStartX, e.clientY - slotStartY) > 22) {
         slotScrolled = true;
       }
     }, { passive: true });
@@ -7974,58 +7976,40 @@ function setupControls() {
       }
     }
 
-    // Helper for robust, instant tap response without accidental fires during scroll/drag gestures
+    // Helper for instant, 0ms-latency action button response on mobile touch & desktop click
     function addTapListener(el, callback) {
       if (!el) return;
       el.setAttribute('tabindex', '-1');
       let lastTrigger = 0;
-      let startX = 0;
-      let startY = 0;
-      let isScrolling = false;
 
       const fire = (e) => {
         const now = performance.now();
-        if (now - lastTrigger < 150) return; // Prevent duplicate triggers within 150ms
+        if (now - lastTrigger < 120) return; // Prevent duplicate triggers within 120ms
         lastTrigger = now;
         try {
           callback(e);
         } catch (err) {
-          console.error('[TAP] Error executing callback for element:', el.id, err);
+          console.error('[ACTION-BTN] Error executing callback for element:', el.id || el, err);
         }
       };
 
       el.addEventListener('pointerdown', (e) => {
-        startX = e.clientX;
-        startY = e.clientY;
-        isScrolling = false;
+        if (e.stopPropagation) e.stopPropagation();
         el.classList.add('btn-pressed');
-      }, { passive: true });
+        fire(e);
+      });
 
-      el.addEventListener('pointermove', (e) => {
-        if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) > 8) {
-          isScrolling = true;
-          el.classList.remove('btn-pressed');
-        }
-      }, { passive: true });
+      el.addEventListener('pointerup', () => {
+        el.classList.remove('btn-pressed');
+      });
 
       el.addEventListener('pointercancel', () => {
-        isScrolling = true;
         el.classList.remove('btn-pressed');
-      }, { passive: true });
-
-      el.addEventListener('pointerup', (e) => {
-        el.classList.remove('btn-pressed');
-        if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) <= 8) {
-          e.stopPropagation();
-          fire(e);
-        }
       });
 
       el.addEventListener('click', (e) => {
-        if (!isScrolling) {
-          e.stopPropagation();
-          fire(e);
-        }
+        if (e.stopPropagation) e.stopPropagation();
+        fire(e);
       });
     }
 
@@ -8162,38 +8146,30 @@ function setupControls() {
         }
       };
 
-      specialBtn.addEventListener('touchstart', (e) => {
-        if (e.cancelable) e.preventDefault();
-        startSpecialHold(e);
-      }, { passive: false });
-
-      specialBtn.addEventListener('touchend', (e) => {
-        if (e.cancelable) e.preventDefault();
-        endSpecialHold(e);
-      }, { passive: false });
-
-      specialBtn.addEventListener('touchcancel', () => {
-        resetSpecialButtonState();
-        specialHoldTriggered = false;
-      }, { passive: true });
+      let activePointerId = null;
 
       specialBtn.addEventListener('pointerdown', (e) => {
-        if (e.pointerType === 'touch' || isMobileDevice) {
-          startSpecialHold(e);
-        }
+        if (e.stopPropagation) e.stopPropagation();
+        if (activePointerId !== null) return;
+        activePointerId = e.pointerId;
+        try { specialBtn.setPointerCapture(e.pointerId); } catch (err) {}
+        startSpecialHold(e);
       });
 
       specialBtn.addEventListener('pointerup', (e) => {
-        if (e.pointerType === 'touch' || isMobileDevice) {
-          endSpecialHold(e);
-        }
+        if (e.stopPropagation) e.stopPropagation();
+        if (activePointerId === null || e.pointerId !== activePointerId) return;
+        activePointerId = null;
+        try { specialBtn.releasePointerCapture(e.pointerId); } catch (err) {}
+        endSpecialHold(e);
       });
 
-      specialBtn.addEventListener('pointercancel', () => {
-        if (isMobileDevice) {
-          resetSpecialButtonState();
-          specialHoldTriggered = false;
-        }
+      specialBtn.addEventListener('pointercancel', (e) => {
+        if (activePointerId === null || e.pointerId !== activePointerId) return;
+        activePointerId = null;
+        try { specialBtn.releasePointerCapture(e.pointerId); } catch (err) {}
+        resetSpecialButtonState();
+        specialHoldTriggered = false;
       });
     }
 
