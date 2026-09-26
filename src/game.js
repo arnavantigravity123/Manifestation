@@ -1433,7 +1433,8 @@ export function setMobileMode(mode) {
   }
   window.isMobileDevice = isMobileDevice;
   if (renderer) {
-    renderer.setPixelRatio((isMobileDevice || isLowEndHardware) ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
+    const isMobile = isMobileDevice || isLowEndHardware;
+    renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio || 1, 0.95) : Math.min(window.devicePixelRatio || 1, 1.25));
   }
   
   const mobileCtrl = document.getElementById('mobile-controls-container');
@@ -2740,7 +2741,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     precision: isLowEnd ? "mediump" : "highp",
     depth: true
   });
-  renderer.setPixelRatio(isLowEnd ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
+  renderer.setPixelRatio(isLowEnd ? Math.min(window.devicePixelRatio || 1, 0.95) : Math.min(window.devicePixelRatio || 1, 1.25));
   renderer.setSize(w, h);
   const savedShadowsSetting = localStorage.getItem('manifestation_shadows_enabled');
   // High-performance default: dynamic shadows are opt-in via Settings to maintain smooth 60 FPS
@@ -3072,7 +3073,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
         activeViewCamera.aspect = w / h;
         activeViewCamera.updateProjectionMatrix();
       }
-      renderer.setPixelRatio((isMobileDevice || isLowEndHardware) ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.25));
+      renderer.setPixelRatio((isMobileDevice || isLowEndHardware) ? Math.min(window.devicePixelRatio || 1, 0.95) : Math.min(window.devicePixelRatio || 1, 1.25));
       renderer.setSize(w, h, false);
     });
   });
@@ -3201,6 +3202,7 @@ function renderHUDInventory() {
   const invGrid = document.getElementById('hud-inventory');
   if (!invGrid) return;
   invGrid.innerHTML = '';
+  _cachedInvSlots = null;
   const now = Date.now();
 
   const isQM = inventory.length >= 10;
@@ -3289,43 +3291,53 @@ function renderHUDInventory() {
   }
 }
 
+let _cachedInvSlots = null;
+let _cachedUseBtn = null;
+let _lastCooldownHUDTime = 0;
+
 function updateCooldownHUD() {
   const invGrid = document.getElementById('hud-inventory');
   if (!invGrid) return;
   const now = Date.now();
-  const slots = invGrid.querySelectorAll('.inventory-slot');
+  if (!_cachedInvSlots || _cachedInvSlots.length === 0) {
+    const rawSlots = invGrid.querySelectorAll('.inventory-slot');
+    _cachedInvSlots = Array.from(rawSlots).map(slot => ({
+      slot,
+      overlay: slot.querySelector('.slot-cooldown-overlay'),
+      text: slot.querySelector('.slot-cooldown-text')
+    }));
+  }
   
-  slots.forEach((slot, index) => {
+  for (let index = 0; index < _cachedInvSlots.length; index++) {
+    const entry = _cachedInvSlots[index];
     const item = inventory[index];
-    const overlay = slot.querySelector('.slot-cooldown-overlay');
-    const text = slot.querySelector('.slot-cooldown-text');
-    if (!overlay || !text) return;
+    if (!entry.overlay || !entry.text) continue;
 
     if (item && abilityCooldowns[item] && abilityCooldowns[item] > now) {
       const remainingMs = abilityCooldowns[item] - now;
       const seconds = Math.ceil(remainingMs / 1000);
-      overlay.style.display = 'flex';
-      text.textContent = `${seconds}s`;
-      slot.classList.add('on-cooldown');
+      if (entry.overlay.style.display !== 'flex') entry.overlay.style.display = 'flex';
+      entry.text.textContent = `${seconds}s`;
+      entry.slot.classList.add('on-cooldown');
     } else {
-      if (overlay.style.display !== 'none') {
-        overlay.style.display = 'none';
-        slot.classList.remove('on-cooldown');
+      if (entry.overlay.style.display !== 'none') {
+        entry.overlay.style.display = 'none';
+        entry.slot.classList.remove('on-cooldown');
       }
     }
-  });
+  }
 
   // Update mobile action button timer if applicable
-  const useBtn = document.getElementById('btn-mobile-use');
-  if (useBtn) {
+  if (!_cachedUseBtn) _cachedUseBtn = document.getElementById('btn-mobile-use');
+  if (_cachedUseBtn) {
     const activeItem = inventory[activeSlot];
     if (activeItem && abilityCooldowns[activeItem] && abilityCooldowns[activeItem] > now) {
       const remaining = Math.ceil((abilityCooldowns[activeItem] - now) / 1000);
-      useBtn.textContent = `USE (${remaining}s)`;
-      useBtn.style.opacity = '0.6';
+      _cachedUseBtn.textContent = `USE (${remaining}s)`;
+      _cachedUseBtn.style.opacity = '0.6';
     } else {
-      useBtn.textContent = 'USE';
-      useBtn.style.opacity = '1';
+      if (_cachedUseBtn.textContent !== 'USE') _cachedUseBtn.textContent = 'USE';
+      if (_cachedUseBtn.style.opacity !== '1') _cachedUseBtn.style.opacity = '1';
     }
   }
 }
@@ -3911,6 +3923,19 @@ let _lastAppliedFear = -1;
 let _cachedOverlayEl = null;
 let _cachedChromaticEl = null;
 let _cachedStaticEl = null;
+let _cachedSanityVal = null;
+let _cachedSanityBar = null;
+let _lastReportedSanity = -1;
+let _cachedFlBar = null;
+let _cachedFlVal = null;
+let _lastReportedBattery = -1;
+let _cachedStaminaBar = null;
+let _cachedStaminaVal = null;
+let _lastReportedStamina = -1;
+let _lastSprintExhausted = false;
+let _cachedKeypadModalEl = null;
+let _cachedPtrOverlayEl = null;
+let _cachedWarnEl = null;
 
 function updateGhostHorrorEffects(delta) {
   if (!_cachedOverlayEl) {
@@ -11140,11 +11165,17 @@ function processSanity(delta) {
     }
   }
 
-  // Update HUD
-  const sanityVal = document.getElementById('sanity-value');
-  const sanityBar = document.getElementById('sanity-bar');
-  if (sanityVal) sanityVal.textContent = `${Math.floor(currentSanity)}%`;
-  if (sanityBar) sanityBar.style.width = `${currentSanity}%`;
+  // Update HUD (cached and throttled to value changes)
+  if (!_cachedSanityVal) {
+    _cachedSanityVal = document.getElementById('sanity-value');
+    _cachedSanityBar = document.getElementById('sanity-bar');
+  }
+  const floorSanity = Math.floor(currentSanity);
+  if (floorSanity !== _lastReportedSanity) {
+    _lastReportedSanity = floorSanity;
+    if (_cachedSanityVal) _cachedSanityVal.textContent = `${floorSanity}%`;
+    if (_cachedSanityBar) _cachedSanityBar.style.width = `${currentSanity}%`;
+  }
 
   // Apply visual distortion ONLY to the 3D canvas viewport, NEVER to document.body!
   // This ensures the pause menu, UI overlays, inventory hotbar, and settings dialog stay 100% clean.
@@ -11186,11 +11217,17 @@ function processFlashlightBattery(delta) {
     // ~0.5% per second = 200 second total battery life from 100% to 0%
     flashlightBattery = Math.max(0, flashlightBattery - delta * 0.5);
 
-    // Update battery bar UI
-    const flBar = document.getElementById('flashlight-bar');
-    const flVal = document.getElementById('flashlight-value');
-    if (flBar) flBar.style.width = `${flashlightBattery}%`;
-    if (flVal) flVal.textContent = `${Math.ceil(flashlightBattery)}%`;
+    // Update battery bar UI (cached and throttled to value changes)
+    if (!_cachedFlBar) {
+      _cachedFlBar = document.getElementById('flashlight-bar');
+      _cachedFlVal = document.getElementById('flashlight-value');
+    }
+    const ceilBattery = Math.ceil(flashlightBattery);
+    if (ceilBattery !== _lastReportedBattery) {
+      _lastReportedBattery = ceilBattery;
+      if (_cachedFlBar) _cachedFlBar.style.width = `${flashlightBattery}%`;
+      if (_cachedFlVal) _cachedFlVal.textContent = `${ceilBattery}%`;
+    }
 
     if (flashlightBattery <= 0) {
       // Fully dead
@@ -15143,11 +15180,11 @@ function animate() {
 
   const time = performance.now();
 
-  // Mobile / Low-End Thermal Guard: Cap frame rate to 60 FPS
-  // High-refresh mobile displays (90Hz / 120Hz / 144Hz) push phone GPUs past thermal limits.
-  // Throttling to smooth 60 FPS halves GPU work, keeps the phone cool, and conserves battery!
+  // Mobile / Low-End Thermal Guard: Cap high-refresh displays (90Hz / 120Hz / 144Hz) to 60 FPS
+  // Using 12.5ms threshold ensures standard 60Hz displays (16.6ms ± 1.5ms jitter) NEVER drop frames,
+  // while smoothly capping 90Hz/120Hz screens to 60 FPS without GPU overheating!
   const isMobile = isMobileDevice || isLowEndHardware;
-  if (isMobile && (time - lastRenderTime < 15.5)) {
+  if (isMobile && (time - lastRenderTime < 12.5)) {
     return;
   }
   lastRenderTime = time;
@@ -15156,11 +15193,11 @@ function animate() {
   prevTime = time;
   const delta = Math.min(0.05, Math.max(0.0001, rawDelta)); // Clamp delta to prevent time jumps
 
-  const keypadModalEl = document.getElementById('keypad-modal-ui');
-  const isKeypadOpen = Boolean(keypadModalEl && keypadModalEl.style.display !== 'none');
+  if (!_cachedKeypadModalEl) _cachedKeypadModalEl = document.getElementById('keypad-modal-ui');
+  const isKeypadOpen = Boolean(_cachedKeypadModalEl && _cachedKeypadModalEl.style.display !== 'none');
   const isMinimapOpen = Boolean(isMinimapExpanded);
-  const ptrOverlay = document.getElementById('pointer-lock-overlay');
-  const isPauseMenuOpen = Boolean(ptrOverlay && ptrOverlay.style.display === 'flex');
+  if (!_cachedPtrOverlayEl) _cachedPtrOverlayEl = document.getElementById('pointer-lock-overlay');
+  const isPauseMenuOpen = Boolean(_cachedPtrOverlayEl && _cachedPtrOverlayEl.style.display === 'flex');
 
   // Interactive overlays (keypad terminal cipher, tactical minimap) are live in-game actions:
   // AI ghosts must continue pathfinding, stalking, and attacking even while the player views these overlays!
@@ -15171,8 +15208,11 @@ function animate() {
   const isSoloPaused = !isMultiplayer && isPauseMenuOpen && !isInteractiveOverlay && !window.isSpectating && window.gameReady;
 
   if (isPauseMenuOpen) {
-    const warnEl = document.getElementById('multiplayer-pause-warning');
-    if (warnEl) warnEl.style.display = isMultiplayer ? 'block' : 'none';
+    if (!_cachedWarnEl) _cachedWarnEl = document.getElementById('multiplayer-pause-warning');
+    const targetDisp = isMultiplayer ? 'block' : 'none';
+    if (_cachedWarnEl && _cachedWarnEl.style.display !== targetDisp) {
+      _cachedWarnEl.style.display = targetDisp;
+    }
   }
 
   if (isSoloPaused) {
@@ -15457,24 +15497,24 @@ function animate() {
           isSprintExhausted = false;
         }
       }
-      // Update stamina bar
-      const stBar = document.getElementById('stamina-bar');
-      const stVal = document.getElementById('stamina-value');
-      if (stBar) {
-        stBar.style.width = `${stamina}%`;
-        if (isSprintExhausted) {
-          stBar.style.background = 'linear-gradient(90deg, #ef4444, #dc2626)';
-        } else {
-          stBar.style.background = 'linear-gradient(90deg, #f59e0b, #fbbf24)';
-        }
+      // Update stamina bar (cached and throttled to value changes)
+      if (!_cachedStaminaBar) {
+        _cachedStaminaBar = document.getElementById('stamina-bar');
+        _cachedStaminaVal = document.getElementById('stamina-value');
       }
-      if (stVal) {
-        if (isSprintExhausted) {
-          stVal.textContent = `${Math.ceil(stamina)}% (EXHAUSTED)`;
-          stVal.style.color = '#ef4444';
-        } else {
-          stVal.textContent = `${Math.ceil(stamina)}%`;
-          stVal.style.color = '';
+      const ceilStamina = Math.ceil(stamina);
+      if (ceilStamina !== _lastReportedStamina || isSprintExhausted !== _lastSprintExhausted) {
+        _lastReportedStamina = ceilStamina;
+        _lastSprintExhausted = isSprintExhausted;
+        if (_cachedStaminaBar) {
+          _cachedStaminaBar.style.width = `${stamina}%`;
+          _cachedStaminaBar.style.background = isSprintExhausted 
+            ? 'linear-gradient(90deg, #ef4444, #dc2626)' 
+            : 'linear-gradient(90deg, #f59e0b, #fbbf24)';
+        }
+        if (_cachedStaminaVal) {
+          _cachedStaminaVal.textContent = isSprintExhausted ? `${ceilStamina}% (EXHAUSTED)` : `${ceilStamina}%`;
+          _cachedStaminaVal.style.color = isSprintExhausted ? '#ef4444' : '';
         }
       }
     }
@@ -16832,7 +16872,8 @@ function animate() {
           if (b && b.mesh && b.mesh.userData && b.mesh.userData.statusLight) {
             const dx = b.mesh.position.x - pX;
             const dz = b.mesh.position.z - pZ;
-            b.mesh.userData.statusLight.visible = (dx * dx + dz * dz) < 196; // 14m
+            const inRange = (dx * dx + dz * dz) < 196; // 14m
+            b.mesh.userData.statusLight.intensity = inRange ? (b.isFixed ? 1.4 : 1.2) : 0;
           }
         }
       }
@@ -16843,7 +16884,7 @@ function animate() {
           if (s && s.light) {
             const dx = s.x - pX;
             const dz = s.z - pZ;
-            s.light.visible = (dx * dx + dz * dz) < 324; // 18m
+            s.light.intensity = (dx * dx + dz * dz) < 324 ? 4.2 : 0;
           }
         }
       }
@@ -17037,7 +17078,10 @@ function animate() {
       }
       drawMinimap();
     }
-    updateCooldownHUD();
+    if (time - _lastCooldownHUDTime > 100) {
+      _lastCooldownHUDTime = time;
+      updateCooldownHUD();
+    }
   }
 
   renderer.render(scene, activeViewCamera || camera);
