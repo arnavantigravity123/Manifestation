@@ -1012,6 +1012,11 @@ if (vipStoreBtn) {
 if (closeVipBtn) {
   addFastButtonListener(closeVipBtn, () => {
     vipPaywallModal.style.display = 'none';
+    if (window._postVipExitCallback) {
+      const cb = window._postVipExitCallback;
+      window._postVipExitCallback = null;
+      cb();
+    }
   });
 }
 
@@ -1248,10 +1253,15 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
   }
 
   // Check if player is VIP (VIPs completely skip all interstitial ads!)
-  const isVip = (currentUser && currentUser.isVip) || (localStorage.getItem('manifestation_is_vip') === 'true');
+  const isVip = isVipActive();
   if (!isRewarded && isVip) {
     if (onComplete) onComplete();
     return;
+  }
+
+  // Ensure pointer lock is released so player can click Skip, Close, or Unlock VIP
+  if (document.pointerLockElement) {
+    try { document.exitPointerLock(); } catch (_) {}
   }
 
   if (activeAdInterval) clearInterval(activeAdInterval);
@@ -1270,7 +1280,7 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
   if (adSkipBtn) adSkipBtn.style.display = 'none';
 
   let remaining = duration;
-  if (adTimerCountdown) adTimerCountdown.textContent = `Closing in ${remaining}s...`;
+  if (adTimerCountdown) adTimerCountdown.textContent = isRewarded ? `Closing in ${remaining}s...` : `Continuing in ${remaining}s...`;
   if (adProgressBar) adProgressBar.style.width = '0%';
 
   const startTime = Date.now();
@@ -1282,7 +1292,11 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
     if (adProgressBar) adProgressBar.style.width = `${progress}%`;
 
     const secondsLeft = Math.max(0, Math.ceil((totalMs - elapsed) / 1000));
-    if (adTimerCountdown) adTimerCountdown.textContent = `Entering in ${secondsLeft}s...`;
+    if (adTimerCountdown) {
+      adTimerCountdown.textContent = isRewarded 
+        ? `Granting reward in ${secondsLeft}s...` 
+        : `Continuing in ${secondsLeft}s...`;
+    }
 
     // Allow skipping interstitial ads immediately (zero blocking delay)
     if (!isRewarded && adSkipBtn) {
@@ -1315,10 +1329,14 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
       dismissAdModal();
       if (!currentUser) {
         promptGuestToCreateAccount('VIP Pass via RevenueCat');
+        if (onComplete) onComplete();
       } else {
         if (vipPaywallModal) {
           updateVipCustomerCenterUI();
           vipPaywallModal.style.display = 'block';
+          window._postVipExitCallback = onComplete;
+        } else if (onComplete) {
+          onComplete();
         }
       }
     };
@@ -1326,14 +1344,34 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
 }
 
 window.showInterstitialAd = (onComplete) => {
-  // Never freeze button responses or block match start / exit with 5s delay!
-  if (onComplete) onComplete();
+  // If player is VIP, completely skip all interstitial ads
+  if (isVipActive()) {
+    if (onComplete) onComplete();
+    return;
+  }
+  // Never interrupt active tutorial onboarding
+  if (window.isTutorialMatch || window.isTutorialMode) {
+    if (onComplete) onComplete();
+    return;
+  }
+  // Free Operative Tier: Show the RevenueCat sponsored interstitial ad
+  playAdSequence({ duration: 4, isRewarded: false, onComplete });
 };
 
 window.leaveGameWithAd = (callback) => {
-  // Execute navigation/exit immediately with zero latency (0ms delay)
-  if (callback) callback();
-  else window.location.reload();
+  const exitAction = callback || (() => window.location.reload());
+  // If player is VIP, exit immediately with zero ads
+  if (isVipActive()) {
+    exitAction();
+    return;
+  }
+  // Never interrupt active tutorial onboarding
+  if (window.isTutorialMatch || window.isTutorialMode) {
+    exitAction();
+    return;
+  }
+  // Free Operative Tier: Show the RevenueCat sponsored interstitial ad before exiting
+  playAdSequence({ duration: 4, isRewarded: false, onComplete: exitAction });
 };
 
 window.showRewardedAd = (onReward) => {
