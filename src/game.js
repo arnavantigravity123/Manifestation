@@ -10022,10 +10022,10 @@ function openVaultDoorAnimated() {
   const radarPanel = document.getElementById('radar-panel');
   if (radarPanel) radarPanel.style.display = 'none';
 
-  // 1. Freeze all ghosts immediately for the entire cutscene + safe buffer duration
+  // 1. Freeze all ghosts immediately for the entire 12.0833s unsealing cutscene + safe buffer duration
   window.ghostsFrozen = true;
-  ghostsFrozenRemaining = 6.5;
-  window.ghostsFrozenRemaining = 6.5;
+  ghostsFrozenRemaining = 16.0;
+  window.ghostsFrozenRemaining = 16.0;
   ghosts3D.forEach(g => {
     g.children.forEach(c => { if (c.isPointLight) c.intensity = 0; });
   });
@@ -10195,11 +10195,11 @@ function openVaultDoorAnimated() {
 
           // Measure vault 3D animation clip duration (Take 001 = 12.0833s) and effective playback pace
           const animDuration = (preloadedVaultAnimClip && preloadedVaultAnimClip.duration) ? preloadedVaultAnimClip.duration : 12.0833;
-          const animTimeScale = (vaultOpenAction && vaultOpenAction.timeScale) ? vaultOpenAction.timeScale : 3.2;
-          const effectiveAnimDuration = animDuration / animTimeScale; // 12.0833 / 3.2 = 3.776s
-          const audioDuration = buffer.duration || 14.016;
+          const animTimeScale = (vaultOpenAction && vaultOpenAction.timeScale) ? vaultOpenAction.timeScale : 1.0;
+          const effectiveAnimDuration = animDuration / animTimeScale; // Exactly 12.0833s
+          const audioDuration = buffer.duration || 12.0833;
           // Synchronize audio speed 1:1 so sound begins and finishes at the exact same millisecond as the 3D door animation
-          src.playbackRate.value = audioDuration / effectiveAnimDuration;
+          src.playbackRate.value = audioDuration / effectiveAnimDuration; // Exactly 1.0!
 
           // Small gain node so we can set volume
           const gain = audioCtx.createGain();
@@ -10221,10 +10221,10 @@ function openVaultDoorAnimated() {
     };
     playVaultCreak();
 
-    // Play 3D model opening animation (Take 001: gear spin, bolt retract, door swing)
+    // Play 3D model opening animation (Take 001: gear spin, bolt retract, door swing) at exact 12.0833s natural pace
     if (vaultOpenAction) {
       vaultOpenAction.reset();
-      vaultOpenAction.timeScale = 3.2; // Smooth cinematic pace
+      vaultOpenAction.timeScale = 1.0; // 1.0x speed matching the 12.0833s audio exactly!
       vaultOpenAction.play();
     } else {
       // Procedural door swing fallback: directly rotates door hinge node (group1)
@@ -10232,14 +10232,14 @@ function openVaultDoorAnimated() {
       const group1Node = (doorScene && doorScene.getObjectByName) ? doorScene.getObjectByName('group1') : null;
       const swingAnim = (now) => {
         const elapsed = (now - startT) / 1000;
-        if (elapsed >= 1.5 && elapsed <= 3.6) {
-          const p = (elapsed - 1.5) / 2.1;
+        if (elapsed >= 5.0 && elapsed <= 12.0833) {
+          const p = (elapsed - 5.0) / 7.0833;
           const eased = 1 - Math.pow(1 - p, 2.5);
           if (group1Node) {
             group1Node.rotation.y = -1.48 * eased;
           }
         }
-        if (elapsed < 3.8) {
+        if (elapsed < 12.0833) {
           requestAnimationFrame(swingAnim);
         } else if (group1Node) {
           group1Node.rotation.y = -1.48;
@@ -10249,7 +10249,7 @@ function openVaultDoorAnimated() {
     }
 
     // Camera rumble effect while the heavy gears rotate and locking bolts slide
-    const rumbleDuration = 3500;
+    const rumbleDuration = 12000;
     const rumbleAnim = (now) => {
       const elapsed = now - startT;
       if (elapsed < rumbleDuration) {
@@ -10266,7 +10266,7 @@ function openVaultDoorAnimated() {
     };
     requestAnimationFrame(rumbleAnim);
 
-    // 5. At 3.8s: Door is completely open! Unlock player POV, remove blocker, and enable escape prompt!
+    // 5. At exactly 12.0833s: Door is completely open! Unlock player POV, remove blocker, and enable escape prompt!
     setTimeout(() => {
       // Remove collision wall so players can walk through seamlessly
       if (gateBlockerRef) {
