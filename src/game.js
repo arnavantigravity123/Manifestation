@@ -2738,7 +2738,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   renderer = new THREE.WebGLRenderer({ 
     antialias: !isLowEnd,
     powerPreference: "high-performance",
-    precision: isLowEnd ? "mediump" : "highp",
+    precision: "highp", // Force highp: ensures 32-bit floats across all mobile/desktop GPUs, eliminating 16-bit vertex truncation and carpet Z-fighting!
     depth: true
   });
   renderer.setPixelRatio(isLowEnd ? Math.min(window.devicePixelRatio || 1, 0.95) : Math.min(window.devicePixelRatio || 1, 1.25));
@@ -4135,7 +4135,7 @@ function makeDungeonMat(colorPath, normalPath, roughPath, opts = {}) {
 function createSeamlessRugGeo(width = 2.0, length = 6.0) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0.035, 0);
+  geo.translate(0, 0.040, 0);
   const uvAttr = geo.attributes.uv;
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
@@ -4151,7 +4151,7 @@ function createSeamlessRugGeo(width = 2.0, length = 6.0) {
 function createArmRugGeo(width = 2.0, length = 2.0) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0.035, 0);
+  geo.translate(0, 0.040, 0);
   const uvAttr = geo.attributes.uv;
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
@@ -4166,7 +4166,7 @@ function createArmRugGeo(width = 2.0, length = 2.0) {
 function createPureRedTileGeo(width = 2.0, length = 2.0) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0.035, 0);
+  geo.translate(0, 0.040, 0);
   const uvAttr = geo.attributes.uv;
   for (let i = 0; i < uvAttr.count; i++) {
     const u = uvAttr.getX(i);
@@ -4182,7 +4182,7 @@ function createPureRedTileGeo(width = 2.0, length = 2.0) {
 function createBorderStripGeo(length = 2.0, width = 0.20) {
   const geo = new THREE.PlaneGeometry(width, length);
   geo.rotateX(-Math.PI / 2);
-  geo.translate(0, 0.039, 0); // Elevated over red base prevents any z-fighting
+  geo.translate(0, 0.044, 0); // Elevated over red base prevents any z-fighting
   const uvAttr = geo.attributes.uv;
   // Match the exact texture scale of createSeamlessRugGeo and createArmRugGeo:
   // In a 2.0m runner, U spans (0.4512 - 0.0488) over 2.0m.
@@ -4209,7 +4209,7 @@ function createCrestRugGeo(width = 2.0, length = 6.0) {
   // 1. South runner arm
   const southGeo = new THREE.PlaneGeometry(width, runnerLen);
   southGeo.rotateX(-Math.PI / 2);
-  southGeo.translate(0, 0.035, (crestLen + runnerLen) / 2);
+  southGeo.translate(0, 0.040, (crestLen + runnerLen) / 2);
   const southUV = southGeo.attributes.uv;
   for (let i = 0; i < southUV.count; i++) {
     const u = southUV.getX(i);
@@ -4222,7 +4222,7 @@ function createCrestRugGeo(width = 2.0, length = 6.0) {
   // 2. Center crest panel (authentic golden winged crest from panel 4, head facing forward down corridor)
   const crestGeo = new THREE.PlaneGeometry(width, crestLen);
   crestGeo.rotateX(-Math.PI / 2);
-  crestGeo.translate(0, 0.039, 0);
+  crestGeo.translate(0, 0.044, 0);
   const crestUV = crestGeo.attributes.uv;
   for (let i = 0; i < crestUV.count; i++) {
     const u = crestUV.getX(i);
@@ -4235,7 +4235,7 @@ function createCrestRugGeo(width = 2.0, length = 6.0) {
   // 3. North runner arm
   const northGeo = new THREE.PlaneGeometry(width, runnerLen);
   northGeo.rotateX(-Math.PI / 2);
-  northGeo.translate(0, 0.035, -(crestLen + runnerLen) / 2);
+  northGeo.translate(0, 0.040, -(crestLen + runnerLen) / 2);
   const northUV = northGeo.attributes.uv;
   for (let i = 0; i < northUV.count; i++) {
     const u = northUV.getX(i);
@@ -4322,8 +4322,8 @@ function initDungeonMaterialsAndRugs() {
   dungeonRugMat.depthWrite = true;
   dungeonRugMat.depthTest = true;
   dungeonRugMat.polygonOffset = true;
-  dungeonRugMat.polygonOffsetFactor = -1.0;
-  dungeonRugMat.polygonOffsetUnits = -1.0;
+  dungeonRugMat.polygonOffsetFactor = -0.5;
+  dungeonRugMat.polygonOffsetUnits = -2.0;
   dungeonRugMat.needsUpdate = true;
 }
 
@@ -4913,6 +4913,8 @@ function spawnDungeonProps(layout, blockSize) {
       instancedRug.setMatrixAt(i, dummyMatrix);
     }
     instancedRug.instanceMatrix.needsUpdate = true;
+    instancedRug.computeBoundingBox();
+    instancedRug.computeBoundingSphere();
     instancedRug.receiveShadow = false;
     instancedRug.frustumCulled = false;
     instancedRug.renderOrder = 2;
@@ -4933,6 +4935,8 @@ function spawnDungeonProps(layout, blockSize) {
       instancedPillars.setMatrixAt(i, _scratchDummy.matrix);
     }
     instancedPillars.instanceMatrix.needsUpdate = true;
+    instancedPillars.computeBoundingBox();
+    instancedPillars.computeBoundingSphere();
     instancedPillars.castShadow = false; // Massively reduces shadow map pass overhead
     instancedPillars.receiveShadow = true;
     instancedPillars.frustumCulled = false; // Ensure pillars remain visible throughout the maze
@@ -4953,6 +4957,8 @@ function spawnDungeonProps(layout, blockSize) {
       instancedStatues.setMatrixAt(i, _scratchDummy.matrix);
     }
     instancedStatues.instanceMatrix.needsUpdate = true;
+    instancedStatues.computeBoundingBox();
+    instancedStatues.computeBoundingSphere();
     instancedStatues.castShadow = false; // Massively reduces shadow map pass overhead
     instancedStatues.receiveShadow = true;
     instancedStatues.frustumCulled = false; // Ensure statues remain visible throughout the maze
