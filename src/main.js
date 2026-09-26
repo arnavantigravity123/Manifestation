@@ -1961,23 +1961,10 @@ function setupMobileDownloadButton() {
     // 1. If native beforeinstallprompt is ready (Chrome on Android / Edge / Samsung Browser)
     if (deferredInstallPrompt) {
       downloadBtn.innerHTML = '⏳ OPENING INSTALLER...';
-      
-      const watchdog = setTimeout(() => {
-        triggerDirectApkDownload();
-      }, 2000);
 
       try {
-        const promptPromise = deferredInstallPrompt.prompt();
-        if (promptPromise && promptPromise.catch) {
-          promptPromise.catch((err) => {
-            console.warn('[PWA] prompt() rejection note:', err);
-            clearTimeout(watchdog);
-            triggerDirectApkDownload();
-          });
-        }
-
+        await deferredInstallPrompt.prompt();
         const choice = await deferredInstallPrompt.userChoice;
-        clearTimeout(watchdog);
 
         if (choice && choice.outcome === 'accepted') {
           downloadBtn.innerHTML = '✓ APP INSTALLED!';
@@ -1986,11 +1973,11 @@ function setupMobileDownloadButton() {
           downloadBtn.style.pointerEvents = 'none';
           deferredInstallPrompt = null;
         } else {
-          // If dismissed, offer the direct APK download immediately
-          triggerDirectApkDownload();
+          // If the user tapped Cancel/Dismiss, respect their choice and reset the button!
+          downloadBtn.innerHTML = '📲 INSTALL MOBILE APP';
+          downloadBtn.disabled = false;
         }
       } catch (err) {
-        clearTimeout(watchdog);
         console.warn('[PWA] Prompt error, falling back to direct APK download:', err);
         triggerDirectApkDownload();
       }
