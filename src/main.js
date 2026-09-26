@@ -1837,6 +1837,117 @@ if (menuOpenControlsTrigger) {
   });
 }
 
+// Mobile-only PWA App Download & Install Handler
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  console.log('📲 [PWA] App install prompt captured for mobile dashboard download button!');
+  const downloadBtn = document.getElementById('mobile-download-app-btn');
+  if (downloadBtn && document.body.classList.contains('is-mobile')) {
+    downloadBtn.style.display = 'flex';
+  }
+});
+
+window.addEventListener('appinstalled', () => {
+  console.log('🎉 [PWA] Manifestation installed successfully on device!');
+  deferredInstallPrompt = null;
+  const downloadBtn = document.getElementById('mobile-download-app-btn');
+  if (downloadBtn) {
+    downloadBtn.innerHTML = '✓ APP INSTALLED';
+    downloadBtn.style.background = 'rgba(16, 185, 129, 0.2)';
+    downloadBtn.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+    downloadBtn.style.pointerEvents = 'none';
+  }
+});
+
+function setupMobileDownloadButton() {
+  const downloadBtn = document.getElementById('mobile-download-app-btn');
+  const installModal = document.getElementById('download-install-modal');
+  const closeInstallModalBtn = document.getElementById('close-download-modal-btn');
+  const modalDesc = document.getElementById('download-modal-desc');
+
+  if (!downloadBtn) return;
+
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (isStandalone) {
+    downloadBtn.style.display = 'none';
+    return;
+  }
+
+  const showInstallModal = (platform) => {
+    if (!installModal || !modalDesc) return;
+    if (platform === 'ios') {
+      modalDesc.innerHTML = `
+        <div style="font-weight: 700; color: #38bdf8; margin-bottom: 0.5rem; font-size: 0.95rem;">How to Install on iPhone / iPad:</div>
+        <ol style="margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.45rem;">
+          <li>Tap the <strong>Share</strong> button <span style="font-size: 1.15rem; color: #38bdf8;">⎋</span> at the bottom of Safari.</li>
+          <li>Scroll down and tap <strong>Add to Home Screen</strong> <span style="font-size: 1.15rem; color: #34d399;">➕</span>.</li>
+          <li>Tap <strong>Add</strong> in the top-right corner!</li>
+        </ol>
+        <div style="margin-top: 0.65rem; font-size: 0.78rem; color: #94a3b8;">Manifestation will appear on your home screen and run fullscreen in high-performance mode!</div>
+      `;
+    } else {
+      modalDesc.innerHTML = `
+        <div style="font-weight: 700; color: #38bdf8; margin-bottom: 0.5rem; font-size: 0.95rem;">How to Install on Android / Chrome:</div>
+        <ol style="margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.45rem;">
+          <li>Tap the <strong>3 dots menu</strong> <span style="font-size: 1.15rem; color: #38bdf8;">⋮</span> in your browser's top-right corner.</li>
+          <li>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong> <span style="font-size: 1.15rem; color: #34d399;">📲</span>.</li>
+          <li>Tap <strong>Install</strong> to confirm!</li>
+        </ol>
+        <div style="margin-top: 0.65rem; font-size: 0.78rem; color: #94a3b8;">Manifestation will install on your phone with automatic background updates!</div>
+      `;
+    }
+    installModal.style.display = 'flex';
+  };
+
+  if (closeInstallModalBtn && installModal) {
+    addFastButtonListener(closeInstallModalBtn, () => {
+      installModal.style.display = 'none';
+    });
+  }
+
+  addFastButtonListener(downloadBtn, async () => {
+    // 1. If native beforeinstallprompt is ready (Chrome on Android / Edge / Samsung Browser)
+    if (deferredInstallPrompt) {
+      downloadBtn.innerHTML = '⏳ OPENING INSTALLER...';
+      try {
+        deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          downloadBtn.innerHTML = '✓ APP INSTALLED!';
+          downloadBtn.style.background = 'rgba(16, 185, 129, 0.3)';
+          downloadBtn.style.border = '1px solid rgba(16, 185, 129, 0.5)';
+          downloadBtn.style.pointerEvents = 'none';
+          deferredInstallPrompt = null;
+        } else {
+          downloadBtn.innerHTML = '📲 DOWNLOAD APP';
+        }
+      } catch (err) {
+        console.warn('[PWA] Prompt error, falling back to modal:', err);
+        showInstallModal('android');
+      }
+      return;
+    }
+
+    // 2. iOS Safari detection
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (isIOS) {
+      showInstallModal('ios');
+      return;
+    }
+
+    // 3. Fallback for mobile Android when prompt not fired or already handled
+    showInstallModal('android');
+  });
+}
+
+try {
+  setupMobileDownloadButton();
+} catch (err) {
+  console.warn('[PWA] Setup download button warning:', err);
+}
+
 addFastButtonListener(createPublicBtn, () => {
   isSoloMode = false;
   isTutorialMode = false;
