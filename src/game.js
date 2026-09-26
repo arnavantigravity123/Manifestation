@@ -1706,6 +1706,8 @@ let gateKeypadLed = null; // Status LED on the 3D keypad terminal
 let gateSolved = false;
 let hasEscaped = false;
 let codeEntered = "";
+let keypadListenersSetup = false;
+let lastKeypadInputTime = 0;
 let functionalKeysRevealed = [];
 let foundKeysList = [];
 let carriedKeys = [];      // Keys currently carried (max 3)
@@ -7394,6 +7396,10 @@ function setupControls() {
       if (event.code.startsWith('Digit') || event.code.startsWith('Numpad')) {
         const num = event.code.replace('Digit', '').replace('Numpad', '');
         if (num.length === 1 && num >= '0' && num <= '9') {
+          event.preventDefault();
+          const now = performance.now();
+          if (now - lastKeypadInputTime < 120) return;
+          lastKeypadInputTime = now;
           if (codeEntered.length < 4) {
             codeEntered += num;
             const scr = document.getElementById('keypad-screen-display');
@@ -7402,6 +7408,10 @@ function setupControls() {
           return; // Prevent other actions like changing inventory
         }
       } else if (event.key === 'Backspace') {
+        event.preventDefault();
+        const now = performance.now();
+        if (now - lastKeypadInputTime < 120) return;
+        lastKeypadInputTime = now;
         if (codeEntered.length > 0) {
           codeEntered = codeEntered.slice(0, -1);
           const scr = document.getElementById('keypad-screen-display');
@@ -7409,6 +7419,10 @@ function setupControls() {
         }
         return;
       } else if (event.key === 'Enter') {
+        event.preventDefault();
+        const now = performance.now();
+        if (now - lastKeypadInputTime < 250) return;
+        lastKeypadInputTime = now;
         submitKeypadCode(codeEntered);
         return;
       }
@@ -10483,6 +10497,9 @@ function submitKeypadCode(code) {
 }
 
 function setupKeypadListeners() {
+  if (keypadListenersSetup) return; // Prevent duplicate listeners across match restarts!
+  keypadListenersSetup = true;
+
   keypadUI        = document.getElementById('keypad-modal-ui');
   keypadScreen    = document.getElementById('keypad-screen-display');
   keypadBtns      = document.querySelectorAll('.keypad-grid .keypad-btn');
@@ -10492,7 +10509,8 @@ function setupKeypadListeners() {
 
   if (!keypadUI) return; // guard: element not in DOM yet
 
-  const closeKeypad = () => {
+  const closeKeypad = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     const modal = document.getElementById('keypad-modal-ui');
     if (modal) modal.style.display = 'none';
     codeEntered = '';
@@ -10501,42 +10519,60 @@ function setupKeypadListeners() {
     }
   };
 
-  keypadCloseBtn.addEventListener('click', closeKeypad);
+  if (keypadCloseBtn) keypadCloseBtn.addEventListener('click', closeKeypad);
 
   // ESC key closes the keypad
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Escape' && keypadUI && keypadUI.style.display !== 'none') {
+      e.preventDefault();
       closeKeypad();
     }
   });
 
-  keypadClearBtn.addEventListener('click', () => {
-    codeEntered = "";
-    keypadScreen.textContent = getKeypadDisplayString();
-  });
+  if (keypadClearBtn) {
+    keypadClearBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const now = performance.now();
+      if (now - lastKeypadInputTime < 120) return;
+      lastKeypadInputTime = now;
+      codeEntered = "";
+      if (keypadScreen) keypadScreen.textContent = getKeypadDisplayString();
+      if (keypadClearBtn.blur) keypadClearBtn.blur();
+    });
+  }
+
+  if (keypadSubmitBtn) {
+    keypadSubmitBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const now = performance.now();
+      if (now - lastKeypadInputTime < 250) return;
+      lastKeypadInputTime = now;
+      submitKeypadCode(codeEntered);
+      if (keypadSubmitBtn.blur) keypadSubmitBtn.blur();
+    });
+  }
 
   keypadBtns.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const val = e.target.textContent;
-      if (val === 'CLR') {
-        codeEntered = "";
-        keypadScreen.textContent = getKeypadDisplayString();
-        return;
-      }
-      if (val === 'ENT') {
-        submitKeypadCode(codeEntered);
-        return;
-      }
-      // Let players type all 4 digits freely — no auto-fill from clue notes
-      if (codeEntered.length < 4) {
-        codeEntered += val;
-        keypadScreen.textContent = getKeypadDisplayString();
-      }
-    });
-  });
+    // CLR and ENT have dedicated handlers above
+    if (btn.id === 'keypad-clear' || btn.id === 'keypad-submit') return;
 
-  keypadSubmitBtn.addEventListener('click', () => {
-    submitKeypadCode(codeEntered);
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const now = performance.now();
+      if (now - lastKeypadInputTime < 120) return; // Strict debounce against hardware/touch double-fire!
+      lastKeypadInputTime = now;
+
+      const val = (e.currentTarget ? e.currentTarget.textContent : e.target.textContent || '').trim();
+      // Let players type all 4 digits freely — no auto-fill from clue notes
+      if (codeEntered.length < 4 && val.length === 1 && val >= '0' && val <= '9') {
+        codeEntered += val;
+        if (keypadScreen) keypadScreen.textContent = getKeypadDisplayString();
+      }
+      if (btn.blur) btn.blur(); // Remove focus outline so Enter/Space doesn't re-trigger it
+    });
   });
 }
 
