@@ -3188,18 +3188,14 @@ function renderHUDInventory() {
     slot.style.pointerEvents = 'auto';
     const selectSlot = (e) => {
       e.stopPropagation();
-      if (activeSlot === index) {
-        if (!isCaptured && !window.isSpectating) {
-          useActiveItem();
-        }
-        return;
+      if (e.cancelable) e.preventDefault();
+      if (activeSlot !== index) {
+        activeSlot = index;
+        renderHUDInventory();
       }
-      activeSlot = index;
-      renderHUDInventory();
     };
-    slot.addEventListener('click', selectSlot);
-    slot.addEventListener('touchstart', selectSlot, { passive: true });
     slot.addEventListener('pointerdown', selectSlot);
+    slot.addEventListener('click', selectSlot);
     
     const idxSpan = document.createElement('span');
     idxSpan.className = 'inventory-slot-index';
