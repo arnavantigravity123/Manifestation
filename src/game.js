@@ -16854,15 +16854,29 @@ function animate() {
         }
       }
       
-      // Authentic Ghost Facing Behavior:
-      // 1. In hunting mode (CHASE): 
-      //    - If in the same cell, direct line-of-sight, or close melee proximity (< 5.5m): face targetPos directly!
-      //    - If navigating waypoints around blind corners: face the path waypoint so it never moonwalks backwards down hallways!
-      // 2. While moving along waypoints (wander/investigate): look straight at the waypoint!
-      // 3. Fallback: If displacing along any vector, look straight in the displacement direction!
-      if (ghost.userData.aiState === 'CHASE' && targetPos && (hasDirectLos || sameCell || distToPlayer < 5.5)) {
-        ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
+      // =========================================================================
+      // MAXIMUM SAFEGUARD: GHOST FACING & LOOK-AT BEHAVIOR
+      // Requirement: In hunting mode (CHASE), when it sees the player, it ALWAYS
+      // looks directly at the player NO MATTER WHAT!
+      // =========================================================================
+      const isHunting = (ghost.userData.aiState === 'CHASE');
+      const seesPlayer = Boolean(
+        targetPos && (
+          canSeePlayer || 
+          hasDirectLos || 
+          sameCell || 
+          distToPlayer < 15.0 || 
+          (distToPlayer < effectiveSightRange && hasGridLineOfSight(ghost.position.x, ghost.position.z, targetPos.x, targetPos.z))
+        )
+      );
+
+      if (isHunting && targetPos && seesPlayer) {
+        // MAXIMUM SAFEGUARD: ALWAYS look directly at the player in hunting mode!
+        if (distToPlayer > 0.05) {
+          ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
+        }
       } else if (path && path.length > 0 && pathIdx < path.length) {
+        // Only face path waypoints when blind-cornering around walls far away where player cannot be seen
         ghost.lookAt(path[pathIdx].x, ghost.position.y, path[pathIdx].z);
       } else if (targetPos && (hasDirectLos || inProximity)) {
         ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
@@ -16872,6 +16886,10 @@ function animate() {
           ghost.lookAt(ghost.position.x + (ghost.position.x - prevGhostX), ghost.position.y, ghost.position.z + (ghost.position.z - prevGhostZ));
         }
       }
+
+      // Safeguard: Lock pitch (X) and roll (Z) so ghost remains completely vertical and stable
+      ghost.rotation.x = 0;
+      ghost.rotation.z = 0;
 
       // Final robust grid-plane, corner, dynamic door, and prop collision enforcement
       resolveGhostCollision(ghost);
