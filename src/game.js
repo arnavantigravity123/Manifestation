@@ -1369,6 +1369,15 @@ window.isMobileDevice = isMobileDevice;
 
 let lastFullscreenCall = 0;
 export function requestAppFullscreen() {
+  const isStandalone = (typeof window !== 'undefined') && (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.matchMedia('(display-mode: fullscreen)').matches ||
+    Boolean(window.navigator.standalone) ||
+    document.referrer.includes('android-app://') ||
+    Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())
+  );
+  if (isStandalone) return; // Already running in standalone PWA or native container; never trigger browser domain toast!
+
   const now = performance.now();
   if (now - lastFullscreenCall < 2000) return;
   lastFullscreenCall = now;

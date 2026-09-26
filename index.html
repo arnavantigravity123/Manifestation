@@ -22,9 +22,16 @@
                        (('ontouchstart' in window) && navigator.maxTouchPoints > 1);
         if (!isMobile) return;
 
+        var isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                           window.matchMedia('(display-mode: fullscreen)').matches ||
+                           Boolean(window.navigator.standalone) ||
+                           document.referrer.includes('android-app://') ||
+                           Boolean(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
         var hasRequested = false;
         window.__manifestationRequestFullscreen = function() {
-          if (hasRequested) return;
+          // If already installed as PWA or native app, OS already handles fullscreen without browser toast!
+          if (isStandalone || hasRequested) return;
           var doc = document;
           var el = doc.documentElement;
           var rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
@@ -40,13 +47,15 @@
           }
         };
 
-        var onFirstTouch = function() {
-          window.__manifestationRequestFullscreen();
-          window.removeEventListener('touchstart', onFirstTouch);
-          window.removeEventListener('click', onFirstTouch);
-        };
-        window.addEventListener('touchstart', onFirstTouch, { passive: true, once: true });
-        window.addEventListener('click', onFirstTouch, { passive: true, once: true });
+        if (!isStandalone) {
+          var onFirstTouch = function() {
+            window.__manifestationRequestFullscreen();
+            window.removeEventListener('touchstart', onFirstTouch);
+            window.removeEventListener('click', onFirstTouch);
+          };
+          window.addEventListener('touchstart', onFirstTouch, { passive: true, once: true });
+          window.addEventListener('click', onFirstTouch, { passive: true, once: true });
+        }
       })();
     </script>
   </head>
