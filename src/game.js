@@ -2487,6 +2487,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     if (
       isMobileDevice || 
       window.isEscaping || 
+      window.isVaultOpeningCutscene || 
       (isCaptured && !window.isSpectating) || 
       window.isCapturedAnimation || 
       (!window.gameReady && !window.isSpectating)
@@ -2500,7 +2501,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     } else {
       pauseOpenedTime = performance.now();
       resetPlayerMovementState(true);
-      // Don't show pause overlay if dying, captured, escaping, keypad modal, minimap, settings modal, or game-over is open
+      // Don't show pause overlay if dying, captured, escaping, vault cutscene, keypad modal, minimap, settings modal, or game-over is open
       const keypadEl = document.getElementById('keypad-modal-ui');
       const isKeypadOpen = Boolean(keypadEl && keypadEl.style.display !== 'none');
       const settingsModal = document.getElementById('settings-modal');
@@ -2513,6 +2514,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       const isCaptureAnimOpen = Boolean(captureAnimOverlay && captureAnimOverlay.style.display !== 'none');
 
       if (
+        window.isVaultOpeningCutscene || 
         isKeypadOpen || 
         isMinimapExpanded || 
         isSettingsOpen || 
@@ -10096,10 +10098,13 @@ function openVaultDoorAnimated() {
     }
   }
 
-  // Ensure user pointer lock is released during unsealing so mouse does not fight cutscene
-  if (document.pointerLockElement) {
-    try { document.exitPointerLock(); } catch (_) {}
-  }
+  // Hide any pause overlay or menus so cutscene visuals are 100% visible
+  const ptrOverlayEl = document.getElementById('pointer-lock-overlay');
+  if (ptrOverlayEl) ptrOverlayEl.style.display = 'none';
+  const pauseSettingsEl = document.getElementById('settings-modal');
+  if (pauseSettingsEl) pauseSettingsEl.style.display = 'none';
+  const controlsGuideEl = document.getElementById('controls-guide-modal');
+  if (controlsGuideEl) controlsGuideEl.style.display = 'none';
 
   playTutorialChime();
 
@@ -10196,7 +10201,7 @@ function openVaultDoorAnimated() {
       ambientLight.intensity = Math.max(ambientLight.intensity, 1.8);
     }
 
-    const startT = performance.now();
+    let startT = performance.now();
 
     // Play vault door creak at the EXACT moment the door physically begins to move
     const playVaultCreak = () => {
@@ -10240,94 +10245,114 @@ function openVaultDoorAnimated() {
         }
       }
     };
-    playVaultCreak();
 
-    // Play 3D model opening animation (Take 001: gear spin, bolt retract, door swing) at exact 12.0833s natural pace
-    if (vaultOpenAction) {
-      vaultOpenAction.reset();
-      vaultOpenAction.timeScale = 1.0; // 1.0x speed matching the 12.0833s audio exactly!
-      vaultOpenAction.play();
-    } else {
-      // Procedural door swing fallback: directly rotates door hinge node (group1)
-      const doorScene = vaultDoorMeshRef;
-      const group1Node = (doorScene && doorScene.getObjectByName) ? doorScene.getObjectByName('group1') : null;
-      const swingAnim = (now) => {
-        const elapsed = (now - startT) / 1000;
-        if (elapsed >= 5.0 && elapsed <= 12.0833) {
-          const p = (elapsed - 5.0) / 7.0833;
-          const eased = 1 - Math.pow(1 - p, 2.5);
-          if (group1Node) {
-            group1Node.rotation.y = -1.48 * eased;
+    const beginVisualsAndAudio = () => {
+      // Re-verify that pause overlay is not covering the screen; wait until player resumes so sound ONLY starts when visuals start!
+      const currentPtr = document.getElementById('pointer-lock-overlay');
+      if (currentPtr && currentPtr.style.display === 'flex') {
+        const checkResume = () => {
+          const checkPtr = document.getElementById('pointer-lock-overlay');
+          if (!checkPtr || checkPtr.style.display !== 'flex') {
+            beginVisualsAndAudio();
+          } else {
+            setTimeout(checkResume, 100);
           }
-        }
-        if (elapsed < 12.0833) {
-          requestAnimationFrame(swingAnim);
-        } else if (group1Node) {
-          group1Node.rotation.y = -1.48;
+        };
+        setTimeout(checkResume, 100);
+        return;
+      }
+
+      startT = performance.now();
+      playVaultCreak();
+
+      // Play 3D model opening animation (Take 001: gear spin, bolt retract, door swing) at exact 12.0833s natural pace
+      if (vaultOpenAction) {
+        vaultOpenAction.reset();
+        vaultOpenAction.timeScale = 1.0; // 1.0x speed matching the 12.0833s audio exactly!
+        vaultOpenAction.play();
+      } else {
+        // Procedural door swing fallback: directly rotates door hinge node (group1)
+        const doorScene = vaultDoorMeshRef;
+        const group1Node = (doorScene && doorScene.getObjectByName) ? doorScene.getObjectByName('group1') : null;
+        const swingAnim = (now) => {
+          const elapsed = (now - startT) / 1000;
+          if (elapsed >= 5.0 && elapsed <= 12.0833) {
+            const p = (elapsed - 5.0) / 7.0833;
+            const eased = 1 - Math.pow(1 - p, 2.5);
+            if (group1Node) {
+              group1Node.rotation.y = -1.48 * eased;
+            }
+          }
+          if (elapsed < 12.0833) {
+            requestAnimationFrame(swingAnim);
+          } else if (group1Node) {
+            group1Node.rotation.y = -1.48;
+          }
+        };
+        requestAnimationFrame(swingAnim);
+      }
+
+      // Camera rumble effect while the heavy gears rotate and locking bolts slide
+      const rumbleDuration = 12000;
+      const rumbleAnim = (now) => {
+        const elapsed = now - startT;
+        if (elapsed < rumbleDuration) {
+          const p = 1 - (elapsed / rumbleDuration);
+          const rX = (Math.random() - 0.5) * p * 1.4;
+          const rY = (Math.random() - 0.5) * p * 1.4;
+          const container = document.getElementById('canvas-container');
+          if (container) container.style.transform = `translate(${rX}px, ${rY}px)`;
+          requestAnimationFrame(rumbleAnim);
+        } else {
+          const container = document.getElementById('canvas-container');
+          if (container) container.style.transform = '';
         }
       };
-      requestAnimationFrame(swingAnim);
-    }
+      requestAnimationFrame(rumbleAnim);
 
-    // Camera rumble effect while the heavy gears rotate and locking bolts slide
-    const rumbleDuration = 12000;
-    const rumbleAnim = (now) => {
-      const elapsed = now - startT;
-      if (elapsed < rumbleDuration) {
-        const p = 1 - (elapsed / rumbleDuration);
-        const rX = (Math.random() - 0.5) * p * 1.4;
-        const rY = (Math.random() - 0.5) * p * 1.4;
-        const container = document.getElementById('canvas-container');
-        if (container) container.style.transform = `translate(${rX}px, ${rY}px)`;
-        requestAnimationFrame(rumbleAnim);
-      } else {
-        const container = document.getElementById('canvas-container');
-        if (container) container.style.transform = '';
-      }
-    };
-    requestAnimationFrame(rumbleAnim);
-
-    // 5. At exactly 12.0833s: Door is completely open! Unlock player POV, remove blocker, and enable escape prompt!
-    setTimeout(() => {
-      // Remove collision wall so players can walk through seamlessly
-      if (gateBlockerRef) {
-        const idx = walls.indexOf(gateBlockerRef);
-        if (idx !== -1) walls.splice(idx, 1);
-        scene.remove(gateBlockerRef);
-        gateBlockerRef = null;
-      }
-
-      window.isVaultOpeningCutscene = false;
-      window.vaultDoorOpen = true;
-      const restoredRadar = document.getElementById('radar-panel');
-      if (restoredRadar && inventory[activeSlot] === 'EMF Radar' && !hasEscaped && !window.isEscaping) {
-        restoredRadar.style.display = 'block';
-      }
-
-      if (isCameraLocked) {
-
-        // Retract letterbox bars smoothly
-        const cutOverlay = document.getElementById('vault-cutscene-overlay');
-        const lbTop = document.getElementById('vault-letterbox-top');
-        const lbBottom = document.getElementById('vault-letterbox-bottom');
-        const banner = document.getElementById('vault-cutscene-banner');
-        if (lbTop && lbBottom) {
-          lbTop.style.top = '-14vh';
-          lbBottom.style.bottom = '-14vh';
-          if (banner) banner.style.opacity = '0';
-          setTimeout(() => {
-            if (cutOverlay) cutOverlay.style.display = 'none';
-          }, 600);
+      // 5. At exactly 12.0833s: Door is completely open! Unlock player POV, remove blocker, and enable escape prompt!
+      setTimeout(() => {
+        // Remove collision wall so players can walk through seamlessly
+        if (gateBlockerRef) {
+          const idx = walls.indexOf(gateBlockerRef);
+          if (idx !== -1) walls.splice(idx, 1);
+          scene.remove(gateBlockerRef);
+          gateBlockerRef = null;
         }
 
-        // Resync camera Euler angles from quaternion so mouse look resumes without hitching
-        camera.rotation.setFromQuaternion(camera.quaternion, 'YXZ');
-      }
+        window.isVaultOpeningCutscene = false;
+        window.vaultDoorOpen = true;
+        const restoredRadar = document.getElementById('radar-panel');
+        if (restoredRadar && inventory[activeSlot] === 'EMF Radar' && !hasEscaped && !window.isEscaping) {
+          restoredRadar.style.display = 'block';
+        }
 
-      playTutorialChime();
-      triggerNotification("🚪 THE MASTER VAULT IS OPEN — PRESS [E] OR STEP THROUGH TO ESCAPE!");
-      updateGateHUD();
-    }, 3800);
+        if (isCameraLocked) {
+          // Retract letterbox bars smoothly
+          const cutOverlay = document.getElementById('vault-cutscene-overlay');
+          const lbTop = document.getElementById('vault-letterbox-top');
+          const lbBottom = document.getElementById('vault-letterbox-bottom');
+          const banner = document.getElementById('vault-cutscene-banner');
+          if (lbTop && lbBottom) {
+            lbTop.style.top = '-14vh';
+            lbBottom.style.bottom = '-14vh';
+            if (banner) banner.style.opacity = '0';
+            setTimeout(() => {
+              if (cutOverlay) cutOverlay.style.display = 'none';
+            }, 600);
+          }
+
+          // Resync camera Euler angles from quaternion so mouse look resumes without hitching
+          camera.rotation.setFromQuaternion(camera.quaternion, 'YXZ');
+        }
+
+        playTutorialChime();
+        triggerNotification("🚪 THE MASTER VAULT IS OPEN — PRESS [E] OR STEP THROUGH TO ESCAPE!");
+        updateGateHUD();
+      }, 12083);
+    };
+
+    beginVisualsAndAudio();
   }, 800);
 }
 
