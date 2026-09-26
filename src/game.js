@@ -1144,17 +1144,17 @@ export function attachVaultDoorModel(vaultGroup) {
       child.receiveShadow = true;
       if (child.material) {
         child.material = child.material.clone();
-        // Give the entire vault a cohesive, refined industrial steel & granite finish with high visibility
+        // Rich high-contrast industrial steel & dark gothic iron portal finish
         if (child.name && (child.name.toLowerCase().includes('door2ay') || child.name === 'Door2ay_lambert2_0')) {
-          // Architectural granite architrave wall face
-          child.material.color.setHex(0x828b98);
-          child.material.roughness = 0.72;
-          child.material.metalness = 0.12;
-        } else {
-          // Brushed industrial titanium/steel vault door disc, spokes, and locking clamps
-          child.material.color.setHex(0xa8b2c0);
-          child.material.roughness = 0.38;
+          // Heavy forged gothic iron & dark slate architrave portal (bold, dark framing)
+          child.material.color.setHex(0x282f3a);
+          child.material.roughness = 0.70;
           child.material.metalness = 0.45;
+        } else {
+          // Brushed industrial titanium/steel vault door disc, spokes, and locking clamps (bright gleaming steel)
+          child.material.color.setHex(0x828f9f);
+          child.material.roughness = 0.28;
+          child.material.metalness = 0.75;
         }
         child.material.needsUpdate = true;
       }
@@ -1192,15 +1192,15 @@ export function attachForestToVault() {
   // Kept strictly 100% hidden during normal maze gameplay — only revealed when escaping through the vault!
   forestContainer.visible = false;
 
-  // 1. Outdoor Natural Sunlight & Sky Light
-  const outdoorSun = new THREE.DirectionalLight(0xfffae0, 3.4);
+  // 1. Outdoor Natural Sunlight & Sky Light with Rich Atmospheric Contrast
+  const outdoorSun = new THREE.DirectionalLight(0xfffae6, 3.8);
   outdoorSun.position.set(18, 40, -30);
   outdoorSun.target.position.set(0, 2, -15);
   outdoorSun.visible = false;
   forestContainer.add(outdoorSun);
   forestContainer.add(outdoorSun.target);
 
-  const skyHemisphere = new THREE.HemisphereLight(0xbfe3ff, 0x245229, 2.4);
+  const skyHemisphere = new THREE.HemisphereLight(0x60a5fa, 0x14532d, 2.4);
   skyHemisphere.position.set(0, 40, -20);
   skyHemisphere.visible = false;
   forestContainer.add(skyHemisphere);
@@ -1213,7 +1213,7 @@ export function attachForestToVault() {
   const rayMat = new THREE.MeshBasicMaterial({
     color: 0xfffae0,
     transparent: true,
-    opacity: 0.018,
+    opacity: 0.035, // Rich visible sunbeams streaming through the door threshold
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -5865,16 +5865,18 @@ function generateMaze(keysCount = 8) {
   vaultGroupRef = vaultGroup;
 
   // 1. Heavy Gothic Wrought Iron & Stone Architrave Frame with Solid Bulkhead Masonry
-  const frameMat = new THREE.MeshStandardMaterial({
-    color: 0x5a6372,
-    metalness: 0.35,
-    roughness: 0.65
-  });
+  // 1. Heavy Gothic Wrought Iron & Stone Architrave Frame with Solid Bulkhead Masonry
+  const dungeonWallTex = getLoadedTexture('/assets/dungeon/textures/WallColor.png', null, true);
+  const dungeonWallNormal = getLoadedTexture('/assets/dungeon/textures/WallNormal.png');
+  const dungeonWallRoughness = getLoadedTexture('/assets/dungeon/textures/WallRoughness.png');
 
   const bulkheadMat = new THREE.MeshStandardMaterial({
-    color: 0x6b7482, // Distinct heavy stone masonry with high visibility
-    roughness: 0.75,
-    metalness: 0.15
+    map: dungeonWallTex,
+    normalMap: dungeonWallNormal,
+    roughnessMap: dungeonWallRoughness,
+    color: 0x48505e, // Dark gothic stone masonry matching dungeon corridor walls
+    roughness: 0.85,
+    metalness: 0.1
   });
 
   // Solid Left Bulkhead Wall: completely seals space between left edge of vault frame (X = -1.713) and corridor wall (X = -3.0)
@@ -5920,13 +5922,13 @@ function generateMaze(keysCount = 8) {
     const vaultTex = getLoadedTexture('/assets/vault_door.png', null, true);
     const doorFrontMat = new THREE.MeshStandardMaterial({
       map: vaultTex,
-      color: 0x9aa4b2,
-      metalness: 0.45,
-      roughness: 0.45
+      color: 0x6e7a8c,
+      metalness: 0.65,
+      roughness: 0.35
     });
     const doorBackMat = new THREE.MeshStandardMaterial({
-      color: 0x2d3440,
-      metalness: 0.6,
+      color: 0x1f242d,
+      metalness: 0.7,
       roughness: 0.5
     });
     const doorMaterials = [
@@ -5946,21 +5948,21 @@ function generateMaze(keysCount = 8) {
     gateMeshRef = gateMesh;
   }
 
-  // 3. High-visibility industrial vault chamber lighting rig
-  // A. Overhead focused work spotlight illuminating the door disc, spokes, and threshold
-  const vaultSpotlight = new THREE.SpotLight(0xfff7ed, 3.8, 12.0, Math.PI / 3.0, 0.4, 1.2);
-  vaultSpotlight.position.set(0, 3.4, 2.0);
+  // 3. High-contrast industrial vault chamber lighting rig
+  // A. Overhead focused work spotlight illuminating the door disc, spokes, and threshold with deep shadow definition
+  const vaultSpotlight = new THREE.SpotLight(0xfff1de, 2.2, 14.0, Math.PI / 3.4, 0.5, 1.2);
+  vaultSpotlight.position.set(0, 3.4, 2.2);
   vaultSpotlight.target.position.set(0, 1.6, 0);
   vaultGroup.add(vaultSpotlight);
   vaultGroup.add(vaultSpotlight.target);
 
-  // B. Atmospheric extraction security beacon
-  const exitBeacon = new THREE.PointLight(0x38bdf8, 1.8, 7.0);
+  // B. Atmospheric extraction security beacon (crisp cyan accent)
+  const exitBeacon = new THREE.PointLight(0x0ea5e9, 1.2, 6.0);
   exitBeacon.position.set(0, 3.1, 0.8);
   vaultGroup.add(exitBeacon);
 
   // C. Warm inspection fill light near keypad & door center
-  const vaultFillLight = new THREE.PointLight(0xfef3c7, 1.4, 5.0);
+  const vaultFillLight = new THREE.PointLight(0xfde68a, 0.8, 4.5);
   vaultFillLight.position.set(1.4, 1.8, 0.9);
   vaultGroup.add(vaultFillLight);
 
