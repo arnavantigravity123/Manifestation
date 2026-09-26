@@ -1833,6 +1833,45 @@ export function toggleMasterAudioMute() {
 }
 window.toggleMasterAudioMute = toggleMasterAudioMute;
 
+export function silenceAllGameAudio() {
+  try {
+    if (footstepAudio && footstepAudio.isPlaying) {
+      footstepAudio.stop();
+    }
+    if (globalAudioListener) {
+      globalAudioListener.setMasterVolume(0);
+    }
+    if (audioCtx && audioCtx.state === 'running') {
+      audioCtx.suspend().catch(() => {});
+    }
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('audio').forEach(el => {
+        try {
+          el.pause();
+          el.currentTime = 0;
+        } catch (_) {}
+      });
+    }
+  } catch (err) {
+    console.warn('Error silencing game audio:', err);
+  }
+}
+window.silenceAllGameAudio = silenceAllGameAudio;
+
+export function restoreGameAudio() {
+  try {
+    if (globalAudioListener) {
+      globalAudioListener.setMasterVolume(isMasterMuted ? 0 : masterAudioVolume);
+    }
+    if (audioCtx && audioCtx.state === 'suspended' && !isMasterMuted && masterAudioVolume > 0) {
+      audioCtx.resume().catch(() => {});
+    }
+  } catch (err) {
+    console.warn('Error restoring game audio:', err);
+  }
+}
+window.restoreGameAudio = restoreGameAudio;
+
 // Minimap variables
 let visitedCells = new Set();
 let mapMarks = [];
@@ -2045,6 +2084,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   window.isSpectating = false;
   hasEscaped = false;
   window.isEscaping = false;
+  restoreGameAudio();
   if (ceilingMesh) ceilingMesh.visible = true;
   if (floorMesh) floorMesh.visible = true;
   stamina = 100;
@@ -8883,6 +8923,9 @@ function triggerHumanEscape() {
   hasEscaped = true;
   window.isEscaping = true;
 
+  // Immediately silence all game audio, footsteps, and audio nodes
+  silenceAllGameAudio();
+
   // Immediately silence EMF and hide radar indicators
   const blip = document.getElementById('radar-blip-element');
   if (blip) blip.style.opacity = '0';
@@ -12445,6 +12488,9 @@ function playEscapeCinematic(callback) {
   window.isEscaping = true;
   hasEscaped = true;
 
+  // Immediately cut and silence ALL game sounds once the forest animation begins
+  silenceAllGameAudio();
+
   // Immediately silence EMF and hide radar indicators
   const blip = document.getElementById('radar-blip-element');
   if (blip) blip.style.opacity = '0';
@@ -12614,23 +12660,8 @@ function playEscapeCinematic(callback) {
     }
   }
 
-  // Vault audio: only play if it hasn't already played and the door was not already open
-  if (vaultDoorAudio && audioCtx && !window._vaultAudioPlayed && !window.vaultDoorOpen) {
-    window._vaultAudioPlayed = true;
-    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-    const gain = audioCtx.createGain();
-    gain.gain.value = 1.8 * (typeof masterAudioVolume !== 'undefined' ? masterAudioVolume : 1.0);
-    const src = audioCtx.createBufferSource();
-    src.buffer = vaultDoorAudio;
-    const animDuration = (preloadedVaultAnimClip && preloadedVaultAnimClip.duration) ? preloadedVaultAnimClip.duration : 12.0833;
-    const animTimeScale = (vaultOpenAction && vaultOpenAction.timeScale) ? vaultOpenAction.timeScale : 3.2;
-    const effectiveAnimDuration = animDuration / animTimeScale;
-    const audioDuration = vaultDoorAudio.duration || 14.016;
-    src.playbackRate.value = audioDuration / effectiveAnimDuration;
-    src.connect(gain);
-    gain.connect(audioCtx.destination);
-    src.start(0);
-  }
+  // All sounds are strictly cut once the forest animation starts — no vault audio or ambient noise
+  silenceAllGameAudio();
 
   // Remove the collision blocker immediately so the camera glides through seamlessly
   if (gateBlockerRef) {
@@ -13785,6 +13816,7 @@ function isInsideSanctuary(pos) {
 }
 
 function playTutorialChime() {
+  if (window.isEscaping || hasEscaped) return;
   try {
     if (!audioCtx) {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
