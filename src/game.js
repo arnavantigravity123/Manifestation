@@ -3198,7 +3198,29 @@ export function updateMatchRoleAndLevelHUD() {
     pauseLevel.textContent = levelDisplay;
     pauseLevel.className = diffClass;
   }
+
+  // 4. Compact Layout Protection: Hide duplicate top-left pill on mobile or screens <= 1150px
+  const roleBadge = document.getElementById('hud-match-role-badge');
+  if (roleBadge) {
+    if (window.isMobileDevice || document.body.classList.contains('is-mobile') || window.innerWidth <= 1150) {
+      roleBadge.style.display = 'none';
+    } else {
+      roleBadge.style.display = 'flex';
+    }
+  }
 }
+
+// Window resize listener to prevent role badge from ever overlapping centered top controls
+window.addEventListener('resize', () => {
+  const roleBadge = document.getElementById('hud-match-role-badge');
+  if (roleBadge) {
+    if (window.isMobileDevice || document.body.classList.contains('is-mobile') || window.innerWidth <= 1150) {
+      roleBadge.style.display = 'none';
+    } else {
+      roleBadge.style.display = 'flex';
+    }
+  }
+});
 
 function renderHUDInventory() {
   const invGrid = document.getElementById('hud-inventory');
@@ -15735,14 +15757,16 @@ function animate() {
         if (isEffectivelyMoving) {
           const moveSpeed = (isSprinting ? 12 : 7) * THREE.MathUtils.clamp(localPlayerGroundSpeed / 7.0, 0.5, 1.4);
           localPlayerVisual.userData.walkCycle = (localPlayerVisual.userData.walkCycle || 0) + delta * moveSpeed;
-          const baseFootY = myTeam === 'Ghost' ? 0.35 : 0;
-          localPlayerVisual.position.y = baseFootY + Math.abs(Math.sin(localPlayerVisual.userData.walkCycle)) * 0.06;
-          const rollSway = Math.sin(localPlayerVisual.userData.walkCycle * 0.5) * 0.04;
-          const pitchLean = isSprinting ? -0.08 : -0.025;
+          const isGhostTeam = myTeam === 'Ghost';
+          const baseFootY = isGhostTeam ? 0.35 : 0;
+          localPlayerVisual.position.y = baseFootY + (isGhostTeam ? 0 : Math.abs(Math.sin(localPlayerVisual.userData.walkCycle)) * 0.06);
+          const rollSway = isGhostTeam ? 0 : Math.sin(localPlayerVisual.userData.walkCycle * 0.5) * 0.04;
+          const pitchLean = isGhostTeam ? 0 : (isSprinting ? -0.08 : -0.025);
           localPlayerVisual.rotation.set(pitchLean, camera.rotation.y, rollSway, 'YXZ');
         } else {
-          const baseFootY = myTeam === 'Ghost' ? 0.35 : 0;
-          localPlayerVisual.position.y = baseFootY + Math.sin(time * 0.003) * 0.015;
+          const isGhostTeam = myTeam === 'Ghost';
+          const baseFootY = isGhostTeam ? 0.35 : 0;
+          localPlayerVisual.position.y = baseFootY + (isGhostTeam ? 0 : Math.sin(time * 0.003) * 0.015);
           localPlayerVisual.rotation.set(0, camera.rotation.y, 0, 'YXZ');
         }
       }
@@ -16725,8 +16749,7 @@ function animate() {
               ghost.userData.path = null;
               ghost.userData.pathTime = 0;
             } else {
-              // During active search: rotate slightly to scan the dark corridors
-              ghost.rotation.y += Math.sin(time * 0.005) * 0.04;
+              // During active search: hold steady position
               ghost.userData.pathTime = time; // Hold path time so it doesn't immediately repath away
             }
           }
@@ -16876,16 +16899,13 @@ function animate() {
   // --- Active bobbing and walk cycle limb animations ---
   // Bob AI ghosts + flickering visibility + fluid spectral levitation hover
   ghosts3D.forEach(g => {
-    const acc = g.userData.bobAccumulator || 0;
-    // Multi-frequency harmonic eerie floating bobbing (height strictly clamped between 0.01m and 0.105m, keeping head well below 3.5m ceiling)
-    const hoverY = 0.05 + Math.sin(time * 0.0022 + acc) * 0.04 + Math.sin(time * 0.0045 + acc * 1.5) * 0.015;
-    g.position.y = hoverY;
-
-    // Subtle spectral roll and pitch float sway
-    g.rotation.z = Math.sin(time * 0.0018 + acc) * 0.045;
-    g.rotation.x = Math.cos(time * 0.0014 + acc) * 0.035;
+    // Keep ghost steady, completely upright and stable: NO bobbing, NO roll sway, NO pitch sway
+    g.position.y = 0.05;
+    g.rotation.z = 0;
+    g.rotation.x = 0;
 
     // Flickering visibility — ghost pulses in and out
+    const acc = g.userData.bobAccumulator || 0;
     const flickerPhase = Math.sin(time * 0.004 + acc) * 0.5 
                        + Math.sin(time * 0.011 + acc * 2) * 0.3 
                        + Math.sin(time * 0.027 + acc * 3) * 0.2;
@@ -16903,10 +16923,10 @@ function animate() {
       g.userData.groundRing.scale.set(ringScale, ringScale, 1);
     }
 
-    // Arm sway
+    // Steady arm pose — no swinging or swaying
     g.children.forEach(c => {
       if (c.geometry && c.geometry.type === 'CylinderGeometry' && Math.abs(c.position.x) > 0.3) {
-        c.rotation.x = -0.2 + Math.sin(time * 0.002 + acc) * 0.25;
+        c.rotation.x = -0.2;
       }
     });
   });
@@ -16917,12 +16937,12 @@ function animate() {
     if (!p.userData) return;
     
     if (p.userData.type === 'Ghost') {
-      const acc = p.userData.bobAccumulator || 0;
-      const hoverY = 0.05 + Math.sin(time * 0.0022 + acc) * 0.04 + Math.sin(time * 0.0045 + acc * 1.5) * 0.015;
-      p.position.y = hoverY;
-      p.rotation.z = Math.sin(time * 0.0018 + acc) * 0.045;
-      p.rotation.x = Math.cos(time * 0.0014 + acc) * 0.035;
+      // Keep network ghost steady and upright without bobbing or swaying
+      p.position.y = 0.05;
+      p.rotation.z = 0;
+      p.rotation.x = 0;
 
+      const acc = p.userData.bobAccumulator || 0;
       const flickerPhase = Math.sin(time * 0.004 + acc) * 0.5 
                          + Math.sin(time * 0.011 + acc * 2) * 0.3;
       const glitchBurst = Math.random() < 0.003 ? 0.25 : 0;

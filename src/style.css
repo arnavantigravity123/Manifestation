@@ -3944,12 +3944,19 @@ kbd {
     padding: 0.8rem 1.2rem;
   }
 
-  /* 1. Top-Left Vitals & Match Meta Pill (Desktop) */
-  body.is-pc:not(.is-mobile) #hud-match-role-badge,
-  body.is-pc:not(.is-mobile) .match-meta-pill,
-  body:not(.is-mobile) #hud-match-role-badge,
-  body:not(.is-mobile) .match-meta-pill {
-    display: flex !important;
+  /* 1. Top-Left Vitals & Match Meta Pill (Desktop wide screens only, >= 1151px) */
+  @media (min-width: 1151px) {
+    body.is-pc:not(.is-mobile) #hud-match-role-badge,
+    body:not(.is-mobile) #hud-match-role-badge {
+      display: flex !important;
+    }
+  }
+
+  @media (max-width: 1150px) {
+    #hud-match-role-badge,
+    .match-meta-pill {
+      display: none !important;
+    }
   }
 
   body.is-pc:not(.is-mobile) .vitals-box,
