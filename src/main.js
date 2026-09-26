@@ -1344,34 +1344,14 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
 }
 
 window.showInterstitialAd = (onComplete) => {
-  // If player is VIP, completely skip all interstitial ads
-  if (isVipActive()) {
-    if (onComplete) onComplete();
-    return;
-  }
-  // Never interrupt active tutorial onboarding
-  if (window.isTutorialMatch || window.isTutorialMode) {
-    if (onComplete) onComplete();
-    return;
-  }
-  // Free Operative Tier: Show the RevenueCat sponsored interstitial ad
-  playAdSequence({ duration: 4, isRewarded: false, onComplete });
+  // Execute navigation/action immediately with zero latency (0ms delay)
+  if (onComplete) onComplete();
 };
 
 window.leaveGameWithAd = (callback) => {
-  const exitAction = callback || (() => window.location.reload());
-  // If player is VIP, exit immediately with zero ads
-  if (isVipActive()) {
-    exitAction();
-    return;
-  }
-  // Never interrupt active tutorial onboarding
-  if (window.isTutorialMatch || window.isTutorialMode) {
-    exitAction();
-    return;
-  }
-  // Free Operative Tier: Show the RevenueCat sponsored interstitial ad before exiting
-  playAdSequence({ duration: 4, isRewarded: false, onComplete: exitAction });
+  // Execute navigation/exit immediately with zero latency (0ms delay)
+  if (callback) callback();
+  else window.location.reload();
 };
 
 window.showRewardedAd = (onReward) => {
