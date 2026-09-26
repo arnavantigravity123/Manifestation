@@ -902,10 +902,10 @@ export function loadGhostGLBAsset() {
         group.remove(spriteChild);
         
         // Wrap the centered model in an anchor group so the centering isn't lost during rotation
-        // Raw GLB faces +Z, rotating by PI aligns front face & arms with Three.js forward (-Z)
+        // Model naturally faces +Z (front face with glowing blue eyes & forward reaching claws), matching Three.js Object3D.lookAt (+Z)
         const clone = SkeletonUtils.clone(preloadedGhostModel);
         const anchorGroup = new THREE.Group();
-        anchorGroup.rotation.y = Math.PI; // Rotate 180 deg: raw GLB faces +Z, rotating by PI aligns front face & arms with Three.js forward (-Z)
+        anchorGroup.rotation.y = 0; // Model faces +Z naturally, matching Three.js Object3D.lookAt forward direction (+Z)
         anchorGroup.add(clone);
         
         group.add(anchorGroup);
@@ -13282,7 +13282,7 @@ function createGhostMeshGroup(skinId) {
   if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
-    anchorGroup.rotation.y = Math.PI; // Rotate 180 deg: raw GLB faces +Z, rotating by PI aligns front face & arms with Three.js forward (-Z)
+    anchorGroup.rotation.y = 0; // Model faces +Z naturally, matching Three.js Object3D.lookAt forward direction (+Z)
     anchorGroup.add(clone);
     group.add(anchorGroup);
   } else {
@@ -16436,7 +16436,7 @@ function animate() {
           } else if (gClass === 'Juggernaut') {
             ghost.userData.speedBoostTimer = gParams.rageDurationBot;
           } else if (gClass === 'Phantom') {
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(ghost.quaternion);
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(ghost.quaternion); // Ghost faces +Z (matching lookAt)
             const maxLeap = gParams.leapDistanceBot;
             const stepSize = 0.3;
             let safeLeapDist = 0;
@@ -16715,11 +16715,13 @@ function animate() {
         }
       }
       
-      // Reverted Ghost Facing Behavior:
-      // 1. In hunting mode (CHASE): ALWAYS face the human player directly!
-      // 2. While moving along waypoints (wander/investigate): ALWAYS look straight in the movement direction!
+      // Authentic Ghost Facing Behavior:
+      // 1. In hunting mode (CHASE): 
+      //    - If in the same cell, direct line-of-sight, or close melee proximity (< 5.5m): face targetPos directly!
+      //    - If navigating waypoints around blind corners: face the path waypoint so it never moonwalks backwards down hallways!
+      // 2. While moving along waypoints (wander/investigate): look straight at the waypoint!
       // 3. Fallback: If displacing along any vector, look straight in the displacement direction!
-      if (ghost.userData.aiState === 'CHASE' && targetPos) {
+      if (ghost.userData.aiState === 'CHASE' && targetPos && (hasDirectLos || sameCell || distToPlayer < 5.5)) {
         ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
       } else if (path && path.length > 0 && pathIdx < path.length) {
         ghost.lookAt(path[pathIdx].x, ghost.position.y, path[pathIdx].z);
