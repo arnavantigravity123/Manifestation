@@ -1837,6 +1837,17 @@ if (menuOpenControlsTrigger) {
   });
 }
 
+// Register lightweight network-first service worker for PWA installability compliance
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      console.log('✓ [PWA] Service Worker active:', reg.scope);
+    }).catch((err) => {
+      console.warn('[PWA] Service Worker registration note:', err);
+    });
+  });
+}
+
 // Mobile-only PWA App Download & Install Handler
 let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -1911,9 +1922,27 @@ function setupMobileDownloadButton() {
     // 1. If native beforeinstallprompt is ready (Chrome on Android / Edge / Samsung Browser)
     if (deferredInstallPrompt) {
       downloadBtn.innerHTML = '⏳ OPENING INSTALLER...';
+      
+      // Watchdog timer: guarantees button never stays stuck if browser delays or user dismisses native dialog
+      const watchdog = setTimeout(() => {
+        downloadBtn.innerHTML = '📲 DOWNLOAD APP';
+        downloadBtn.disabled = false;
+      }, 2500);
+
       try {
-        deferredInstallPrompt.prompt();
+        const promptPromise = deferredInstallPrompt.prompt();
+        if (promptPromise && promptPromise.catch) {
+          promptPromise.catch((err) => {
+            console.warn('[PWA] prompt() rejection note:', err);
+            clearTimeout(watchdog);
+            downloadBtn.innerHTML = '📲 DOWNLOAD APP';
+            showInstallModal('android');
+          });
+        }
+
         const choice = await deferredInstallPrompt.userChoice;
+        clearTimeout(watchdog);
+
         if (choice && choice.outcome === 'accepted') {
           downloadBtn.innerHTML = '✓ APP INSTALLED!';
           downloadBtn.style.background = 'rgba(16, 185, 129, 0.3)';
@@ -1924,7 +1953,9 @@ function setupMobileDownloadButton() {
           downloadBtn.innerHTML = '📲 DOWNLOAD APP';
         }
       } catch (err) {
-        console.warn('[PWA] Prompt error, falling back to modal:', err);
+        clearTimeout(watchdog);
+        console.warn('[PWA] Prompt error, showing guide:', err);
+        downloadBtn.innerHTML = '📲 DOWNLOAD APP';
         showInstallModal('android');
       }
       return;
