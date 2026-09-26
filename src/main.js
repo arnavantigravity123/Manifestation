@@ -1918,16 +1918,35 @@ function setupMobileDownloadButton() {
     });
   }
 
+  const triggerDirectApkDownload = () => {
+    downloadBtn.innerHTML = '⬇️ DOWNLOADING APK...';
+    downloadBtn.disabled = true;
+
+    const apkUrl = 'https://github.com/arnavantigravity123/Manifestation/releases/download/v1.0.0/app-debug.apk';
+    const a = document.createElement('a');
+    a.href = apkUrl;
+    a.download = 'Manifestation.apk';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      if (a.parentNode) a.parentNode.removeChild(a);
+      downloadBtn.innerHTML = '✓ APK DOWNLOADING';
+      setTimeout(() => {
+        downloadBtn.innerHTML = '📲 DOWNLOAD APP (APK)';
+        downloadBtn.disabled = false;
+      }, 3500);
+    }, 1200);
+  };
+
   addFastButtonListener(downloadBtn, async () => {
     // 1. If native beforeinstallprompt is ready (Chrome on Android / Edge / Samsung Browser)
     if (deferredInstallPrompt) {
       downloadBtn.innerHTML = '⏳ OPENING INSTALLER...';
       
-      // Watchdog timer: guarantees button never stays stuck if browser delays or user dismisses native dialog
       const watchdog = setTimeout(() => {
-        downloadBtn.innerHTML = '📲 DOWNLOAD APP';
-        downloadBtn.disabled = false;
-      }, 2500);
+        triggerDirectApkDownload();
+      }, 2000);
 
       try {
         const promptPromise = deferredInstallPrompt.prompt();
@@ -1935,8 +1954,7 @@ function setupMobileDownloadButton() {
           promptPromise.catch((err) => {
             console.warn('[PWA] prompt() rejection note:', err);
             clearTimeout(watchdog);
-            downloadBtn.innerHTML = '📲 DOWNLOAD APP';
-            showInstallModal('android');
+            triggerDirectApkDownload();
           });
         }
 
@@ -1950,26 +1968,26 @@ function setupMobileDownloadButton() {
           downloadBtn.style.pointerEvents = 'none';
           deferredInstallPrompt = null;
         } else {
-          downloadBtn.innerHTML = '📲 DOWNLOAD APP';
+          // If dismissed, offer the direct APK download immediately
+          triggerDirectApkDownload();
         }
       } catch (err) {
         clearTimeout(watchdog);
-        console.warn('[PWA] Prompt error, showing guide:', err);
-        downloadBtn.innerHTML = '📲 DOWNLOAD APP';
-        showInstallModal('android');
+        console.warn('[PWA] Prompt error, falling back to direct APK download:', err);
+        triggerDirectApkDownload();
       }
       return;
     }
 
-    // 2. iOS Safari detection
+    // 2. iOS Safari detection (iOS cannot install APKs directly)
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     if (isIOS) {
       showInstallModal('ios');
       return;
     }
 
-    // 3. Fallback for mobile Android when prompt not fired or already handled
-    showInstallModal('android');
+    // 3. Android / other mobile: Trigger direct APK download immediately with zero steps!
+    triggerDirectApkDownload();
   });
 }
 
