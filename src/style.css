@@ -1104,17 +1104,9 @@ input[type="text"]:focus {
 }
 
 @media (max-width: 768px) {
-  .match-meta-pill {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
-    padding: 3px 6px;
-    font-size: 0.48rem;
-    max-width: 120px;
-    white-space: normal;
-  }
-  .match-meta-pill .meta-separator {
-    display: none;
+  .match-meta-pill,
+  #hud-match-role-badge {
+    display: none !important;
   }
   .hud-meta-ribbon {
     font-size: 0.55rem;
@@ -1932,6 +1924,12 @@ body.is-mobile .sleek-hotbar-container.quartermaster-inventory .key-pocket-label
     pointer-events: auto;
   }
 
+  /* Prevent role badge overlap on mobile screens: role and level are already displayed in .hud-meta-ribbon */
+  #hud-match-role-badge,
+  .match-meta-pill {
+    display: none !important;
+  }
+
   .vitals-box {
     min-width: 95px;
     max-width: 120px;
@@ -1964,7 +1962,7 @@ body.is-mobile .sleek-hotbar-container.quartermaster-inventory .key-pocket-label
   }
 
   .top-controls-group {
-    gap: 8px;
+    gap: 6px;
     pointer-events: auto !important;
     z-index: 250 !important;
   }
@@ -1973,10 +1971,10 @@ body.is-mobile .sleek-hotbar-container.quartermaster-inventory .key-pocket-label
   .unified-cam-btn,
   .unified-mute-btn,
   .unified-controls-btn {
-    min-height: 38px;
-    min-width: 68px;
-    padding: 0.45rem 0.85rem;
-    font-size: 0.72rem;
+    min-height: 36px;
+    min-width: 62px;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.7rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -3946,7 +3944,14 @@ kbd {
     padding: 0.8rem 1.2rem;
   }
 
-  /* 1. Top-Left Vitals (Health, Sanity, Battery, Stamina) */
+  /* 1. Top-Left Vitals & Match Meta Pill (Desktop) */
+  body.is-pc:not(.is-mobile) #hud-match-role-badge,
+  body.is-pc:not(.is-mobile) .match-meta-pill,
+  body:not(.is-mobile) #hud-match-role-badge,
+  body:not(.is-mobile) .match-meta-pill {
+    display: flex !important;
+  }
+
   body.is-pc:not(.is-mobile) .vitals-box,
   body:not(.is-mobile) .vitals-box {
     min-width: 320px;
@@ -4307,6 +4312,11 @@ body.is-mobile .vitals-box {
 
 body.is-mobile .compact-objective-bar {
   background: rgba(10, 15, 30, 0.96) !important;
+}
+
+body.is-mobile #hud-match-role-badge,
+body.is-mobile .match-meta-pill {
+  display: none !important;
 }
 
 /* ==========================================================================
