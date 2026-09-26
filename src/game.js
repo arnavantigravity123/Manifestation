@@ -1060,6 +1060,14 @@ let vaultDoorMeshRef = null;
 let isVaultDoorOpeningOrOpen = false;
 
 export function loadVaultDoorAsset() {
+  if (!vaultDoorAudio) {
+    const audioLoader = new THREE.AudioLoader();
+    audioLoader.load('/assets/vault_door.m4a', (buffer) => {
+      vaultDoorAudio = buffer;
+      console.log('🔊 [VAULT AUDIO] Vault door sound buffer preloaded successfully!');
+    }, undefined, () => {});
+  }
+
   if (preloadedVaultModel || isVaultLoading) return;
   isVaultLoading = true;
 
@@ -10055,6 +10063,9 @@ function openVaultDoorAnimated() {
     // Play vault door creak at the EXACT moment the door physically begins to move
     const playVaultCreak = () => {
       if (isMasterMuted || masterAudioVolume <= 0.001) return;
+      if (window._vaultAudioPlayed) return;
+      window._vaultAudioPlayed = true;
+
       if (!audioCtx) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (AudioContextClass) audioCtx = new AudioContextClass();
@@ -10064,7 +10075,15 @@ function openVaultDoorAnimated() {
         const fireSound = (buffer) => {
           const src = audioCtx.createBufferSource();
           src.buffer = buffer;
-          src.playbackRate.value = 1.8; // Speed up to match the fast door swing animation
+
+          // Measure vault 3D animation clip duration (Take 001 = 12.0833s) and effective playback pace
+          const animDuration = (preloadedVaultAnimClip && preloadedVaultAnimClip.duration) ? preloadedVaultAnimClip.duration : 12.0833;
+          const animTimeScale = (vaultOpenAction && vaultOpenAction.timeScale) ? vaultOpenAction.timeScale : 3.2;
+          const effectiveAnimDuration = animDuration / animTimeScale; // 12.0833 / 3.2 = 3.776s
+          const audioDuration = buffer.duration || 14.016;
+          // Synchronize audio speed 1:1 so sound begins and finishes at the exact same millisecond as the 3D door animation
+          src.playbackRate.value = audioDuration / effectiveAnimDuration;
+
           // Small gain node so we can set volume
           const gain = audioCtx.createGain();
           gain.gain.value = 1.8 * masterAudioVolume;
@@ -12503,19 +12522,25 @@ function playEscapeCinematic(callback) {
 
   // Gate opens — ensure 3D animated vault door action plays and collision barrier is removed
   if (vaultOpenAction) {
-    if (!vaultOpenAction.isRunning()) {
-      vaultOpenAction.timeScale = 2.5;
+    if (!vaultOpenAction.isRunning() && !window.vaultDoorOpen) {
+      vaultOpenAction.timeScale = 3.2;
       vaultOpenAction.play();
     }
   }
 
-  if (vaultDoorAudio && audioCtx && !window._vaultAudioPlayed) {
+  // Vault audio: only play if it hasn't already played and the door was not already open
+  if (vaultDoorAudio && audioCtx && !window._vaultAudioPlayed && !window.vaultDoorOpen) {
     window._vaultAudioPlayed = true;
     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
     const gain = audioCtx.createGain();
-    gain.gain.value = 1.8;
+    gain.gain.value = 1.8 * (typeof masterAudioVolume !== 'undefined' ? masterAudioVolume : 1.0);
     const src = audioCtx.createBufferSource();
     src.buffer = vaultDoorAudio;
+    const animDuration = (preloadedVaultAnimClip && preloadedVaultAnimClip.duration) ? preloadedVaultAnimClip.duration : 12.0833;
+    const animTimeScale = (vaultOpenAction && vaultOpenAction.timeScale) ? vaultOpenAction.timeScale : 3.2;
+    const effectiveAnimDuration = animDuration / animTimeScale;
+    const audioDuration = vaultDoorAudio.duration || 14.016;
+    src.playbackRate.value = audioDuration / effectiveAnimDuration;
     src.connect(gain);
     gain.connect(audioCtx.destination);
     src.start(0);
