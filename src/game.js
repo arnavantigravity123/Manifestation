@@ -8401,6 +8401,12 @@ function setupControls() {
   }
 }
 
+// Pre-allocated scratch vectors for zero-GC interaction checks
+const _lookCamDir = new THREE.Vector3();
+const _lookToTargetCam = new THREE.Vector3();
+const _lookPlayerFaceDir = new THREE.Vector3();
+const _lookToTargetHoriz = new THREE.Vector3();
+
 // Universal Interaction Helper: Works seamlessly across FPS, Third-Person (TPS), and Top-Down cameras!
 function isLookingAtTarget(targetPos, maxDist = 4.5, maxAngle = 0.7) {
   if (!targetPos) return { looking: false, dist: Infinity };
@@ -8431,19 +8437,17 @@ function isLookingAtTarget(targetPos, maxDist = 4.5, maxAngle = 0.7) {
 
   // 2. Camera View Vector Check (check the camera the player is actually viewing through)
   const renderCam = activeViewCamera || camera;
-  const camDir = new THREE.Vector3();
-  renderCam.getWorldDirection(camDir);
-  const toTargetFromCam = targetPos.clone().sub(renderCam.position).normalize();
-  const camAngle = camDir.angleTo(toTargetFromCam);
+  renderCam.getWorldDirection(_lookCamDir);
+  _lookToTargetCam.subVectors(targetPos, renderCam.position).normalize();
+  const camAngle = _lookCamDir.angleTo(_lookToTargetCam);
 
   // 3. Horizontal Facing Check (direction player body is facing)
-  const playerFaceDir = new THREE.Vector3();
-  camera.getWorldDirection(playerFaceDir);
-  playerFaceDir.y = 0;
-  playerFaceDir.normalize();
+  camera.getWorldDirection(_lookPlayerFaceDir);
+  _lookPlayerFaceDir.y = 0;
+  _lookPlayerFaceDir.normalize();
 
-  const toTargetHoriz = new THREE.Vector3(targetPos.x - playerX, 0, targetPos.z - playerZ).normalize();
-  const bodyAngle = playerFaceDir.angleTo(toTargetHoriz);
+  _lookToTargetHoriz.set(targetPos.x - playerX, 0, targetPos.z - playerZ).normalize();
+  const bodyAngle = _lookPlayerFaceDir.angleTo(_lookToTargetHoriz);
 
   // In top-down mode (activeViewCamera looking down from above), horizontal proximity is king
   const isTopDown = (typeof viewModes !== 'undefined' && viewModes[currentViewIndex] === 'top_down');
@@ -8786,7 +8790,9 @@ function getBestInteractionTarget() {
 
   // 6. Master Gate & Keypad Terminal
   if (typeof gateCoordinates !== 'undefined') {
-    const gateVec = new THREE.Vector3(gateCoordinates.x, 1.8, gateCoordinates.z);
+    if (!window._staticGateVec) window._staticGateVec = new THREE.Vector3();
+    window._staticGateVec.set(gateCoordinates.x, 1.8, gateCoordinates.z);
+    const gateVec = window._staticGateVec;
     const padVec = (gateKeypadWorldPos && gateKeypadWorldPos.lengthSq() > 0) ? gateKeypadWorldPos : gateVec;
 
     const resPad = evalInteractionCandidate(padVec, 5.0, 0.95);
@@ -10804,19 +10810,25 @@ function triggerPanicHide() {
 
 // Procedural EMF Loop pings
 let emfPingTimer = 0;
+let _cachedRadarBlipEl = null;
 function processEMFSensors(delta) {
+  if (!_cachedRadarBlipEl) _cachedRadarBlipEl = document.getElementById('radar-blip-element');
+  const blip = _cachedRadarBlipEl;
+
   if (myTeam !== 'Human' || window.isSpectating || inventory[activeSlot] !== 'EMF Radar' || window.isEscaping || hasEscaped || isCaptured || window.isVaultOpeningCutscene) {
-    const blip = document.getElementById('radar-blip-element');
-    if (blip) blip.style.opacity = '0';
+    if (blip && blip.style.opacity !== '0') blip.style.opacity = '0';
     return;
   }
 
   // Track closest ghost
   let closestDist = 9999;
-  ghosts3D.forEach(g => {
-    const dist = camera.position.distanceTo(g.position);
-    if (dist < closestDist) closestDist = dist;
-  });
+  for (let i = 0; i < ghosts3D.length; i++) {
+    const g = ghosts3D[i];
+    if (g && g.position) {
+      const dist = camera.position.distanceTo(g.position);
+      if (dist < closestDist) closestDist = dist;
+    }
+  }
 
   // Check closest human players if playing as ghost, but here we check distance to enemy
   if (closestDist < 50) { // Increased from 25 to 50 so EMF detects ghosts earlier
@@ -10833,9 +10845,8 @@ function processEMFSensors(delta) {
     }
 
     // Dynamic HUD blip sweep frequency matching proximity
-    const blip = document.getElementById('radar-blip-element');
     if (blip) {
-      blip.style.opacity = '1';
+      if (blip.style.opacity !== '1') blip.style.opacity = '1';
       // Scale position randomly close to center relative to proximity
       const angle = Math.random() * Math.PI * 2;
       const offset = (closestDist / 25) * 50; // Max 50px offset
@@ -10843,8 +10854,7 @@ function processEMFSensors(delta) {
       blip.style.top = `calc(50% + ${Math.sin(angle) * offset}px)`;
     }
   } else {
-    const blip = document.getElementById('radar-blip-element');
-    if (blip) blip.style.opacity = '0';
+    if (blip && blip.style.opacity !== '0') blip.style.opacity = '0';
   }
 }
 
@@ -11122,6 +11132,42 @@ function dissolveMirageItem(mirage) {
   }
 }
 
+// Pre-synthesized reusable heartbeat audio buffer (lub-dub) — zero GC allocations during proximity
+let _heartbeatAudioBuffer = null;
+function getHeartbeatAudioBuffer(ctx) {
+  if (_heartbeatAudioBuffer) return _heartbeatAudioBuffer;
+  try {
+    const sampleRate = ctx.sampleRate || 44100;
+    const duration = 0.24;
+    const frameCount = Math.floor(sampleRate * duration);
+    const buffer = ctx.createBuffer(1, frameCount, sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < frameCount; i++) {
+      const t = i / sampleRate;
+      let sample = 0;
+      // Beat 1 (lub): 0.0s to 0.11s, 60Hz -> 35Hz
+      if (t < 0.11) {
+        const p = t / 0.11;
+        const freq = 60 - 25 * p;
+        const env = Math.sin(p * Math.PI) * Math.exp(-p * 3);
+        sample += Math.sin(2 * Math.PI * freq * t) * env * 0.9;
+      }
+      // Beat 2 (dub): 0.12s to 0.22s, 48Hz -> 28Hz
+      else if (t >= 0.12 && t < 0.22) {
+        const p = (t - 0.12) / 0.10;
+        const freq = 48 - 20 * p;
+        const env = Math.sin(p * Math.PI) * Math.exp(-p * 3);
+        sample += Math.sin(2 * Math.PI * freq * t) * env * 0.65;
+      }
+      data[i] = sample;
+    }
+    _heartbeatAudioBuffer = buffer;
+    return _heartbeatAudioBuffer;
+  } catch(e) {
+    return null;
+  }
+}
+
 let lastHeartbeatAudioTime = 0;
 function processGhostProximityAudio(distToGhost) {
   if (isMasterMuted || masterAudioVolume <= 0.001) return;
@@ -11140,68 +11186,62 @@ function processGhostProximityAudio(distToGhost) {
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
     if (!audioCtx) return;
 
-    const t = audioCtx.currentTime;
     const vol = Math.max(0.04, Math.min(0.24, (1.0 - distToGhost / 14.0) * 0.24)) * masterAudioVolume;
-
-    // Beat 1 (lub): 60Hz -> 35Hz
-    const osc1 = audioCtx.createOscillator();
-    const gain1 = audioCtx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(60, t);
-    osc1.frequency.exponentialRampToValueAtTime(35, t + 0.11);
-    gain1.gain.setValueAtTime(vol, t);
-    gain1.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
-    osc1.connect(gain1);
-    gain1.connect(audioCtx.destination);
-    osc1.start(t);
-    osc1.stop(t + 0.11);
-
-    // Beat 2 (dub): 48Hz -> 28Hz
-    const osc2 = audioCtx.createOscillator();
-    const gain2 = audioCtx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(48, t + 0.12);
-    osc2.frequency.exponentialRampToValueAtTime(28, t + 0.22);
-    gain2.gain.setValueAtTime(vol * 0.75, t + 0.12);
-    gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
-    osc2.connect(gain2);
-    gain2.connect(audioCtx.destination);
-    osc2.start(t + 0.12);
-    osc2.stop(t + 0.22);
+    const buf = getHeartbeatAudioBuffer(audioCtx);
+    if (buf) {
+      const source = audioCtx.createBufferSource();
+      source.buffer = buf;
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+      source.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      source.start();
+    }
   } catch(e) {}
 }
 
+let _cachedVigEl = null;
+let _lastVigMode = '';
+let _lastVigOpacity = -1;
+
 function updateGhostProximityVignette(distToGhost, inSanctuary) {
-  let vig = document.getElementById('ghost-proximity-vignette');
-  if (!vig) {
-    vig = document.createElement('div');
-    vig.id = 'ghost-proximity-vignette';
-    vig.style.position = 'fixed';
-    vig.style.top = '0';
-    vig.style.left = '0';
-    vig.style.width = '100vw';
-    vig.style.height = '100vh';
-    vig.style.pointerEvents = 'none';
-    vig.style.zIndex = '45';
-    vig.style.transition = 'opacity 0.25s ease-out';
-    document.body.appendChild(vig);
-  }
+  if (!_cachedVigEl) _cachedVigEl = document.getElementById('ghost-proximity-vignette');
+  const vig = _cachedVigEl;
+  if (!vig) return;
 
   if (window.isSpectating || isCaptured || distToGhost > 14.0 || window.isEscaping || hasEscaped || window.isVaultOpeningCutscene) {
-    vig.style.opacity = '0';
+    if (_lastVigOpacity !== 0) {
+      vig.style.opacity = '0';
+      _lastVigOpacity = 0;
+    }
     return;
   }
 
+  const currentMode = inSanctuary ? 'sanctuary' : 'ghost';
+  if (_lastVigMode !== currentMode) {
+    _lastVigMode = currentMode;
+    if (inSanctuary) {
+      // Warm golden amber sanctuary shield vignette
+      vig.style.background = 'radial-gradient(ellipse at center, transparent 60%, rgba(251, 191, 36, 0.35) 100%)';
+    } else {
+      // Eerie purple threat vignette
+      vig.style.background = 'radial-gradient(ellipse at center, transparent 50%, rgba(147, 51, 234, 0.75) 100%)';
+    }
+  }
+
+  let targetOpacity = 0;
   if (inSanctuary) {
-    // Warm golden amber sanctuary shield vignette
-    vig.style.background = 'radial-gradient(ellipse at center, transparent 65%, rgba(251, 191, 36, 0.25) 100%)';
-    vig.style.opacity = '1';
+    targetOpacity = 0.85;
   } else {
-    // Eerie pulsing purple threat vignette
-    const intensity = Math.max(0.18, (1.0 - distToGhost / 14.0) * 0.65);
-    const pulse = 0.85 + Math.sin(performance.now() * 0.008) * 0.15;
-    vig.style.background = `radial-gradient(ellipse at center, transparent 55%, rgba(147, 51, 234, ${intensity * pulse}) 100%)`;
-    vig.style.opacity = '1';
+    const intensity = Math.max(0.18, (1.0 - distToGhost / 14.0) * 0.85);
+    const pulse = 0.88 + Math.sin(performance.now() * 0.006) * 0.12;
+    targetOpacity = Math.max(0, Math.min(1.0, intensity * pulse));
+  }
+
+  // Hardware-composited opacity: zero CPU rasterization or CSS re-parsing
+  if (Math.abs(targetOpacity - _lastVigOpacity) > 0.02) {
+    _lastVigOpacity = targetOpacity;
+    vig.style.opacity = targetOpacity.toFixed(2);
   }
 }
 
@@ -11295,17 +11335,24 @@ function processSanity(delta) {
     if (_cachedSanityBar) _cachedSanityBar.style.width = `${currentSanity}%`;
   }
 
-  // Apply visual distortion ONLY to the 3D canvas viewport, NEVER to document.body!
-  // This ensures the pause menu, UI overlays, inventory hotbar, and settings dialog stay 100% clean.
-  if (window.sensorsScrambled && !isPauseActive) {
-    if (canvasContainer) canvasContainer.style.filter = "invert(1) hue-rotate(180deg)";
-  } else if (currentSanity < 30 && !isPauseActive) {
-    // Hallucinations overlay on 3D canvas
-    if (canvasContainer) canvasContainer.style.filter = `hue-rotate(${Math.sin(performance.now() * 0.01) * 30}deg) contrast(1.2)`;
-  } else {
-    if (canvasContainer) canvasContainer.style.filter = 'none';
+  // High-performance visual horror distortion: modulate overlay opacity, NEVER use CSS filters on canvasContainer!
+  // Applying CSS filters to a WebGL canvas forces CPU/GPU backbuffer readbacks on every frame.
+  if (canvasContainer && canvasContainer.style.filter !== 'none') {
+    canvasContainer.style.filter = 'none';
   }
-  document.body.style.filter = 'none';
+  if (document.body.style.filter !== 'none') {
+    document.body.style.filter = 'none';
+  }
+
+  if (window.sensorsScrambled && !isPauseActive) {
+    if (_cachedStaticEl) _cachedStaticEl.style.opacity = '0.75';
+  } else if (currentSanity < 30 && !isPauseActive) {
+    // Hallucination chromatic distortion handled via GPU-composited overlay
+    if (_cachedChromaticEl) {
+      const sanityFear = (30 - currentSanity) / 30;
+      _cachedChromaticEl.style.opacity = (sanityFear * 0.65).toFixed(2);
+    }
+  }
 }
 
 function getVisionMultiplier() {
@@ -15055,6 +15102,10 @@ function drawMinimap() {
 }
 
 // Helper function to apply damage if human is near a ghost (hoisted to prevent per-frame closure GC churn)
+let _cachedHpVal = null;
+let _cachedHpBar = null;
+let _lastReportedHp = -1;
+
 function applyGhostDamageToHuman(ghostPos, delta) {
   if (window.isSpectating || window.isEscaping || hasEscaped) return;
   const distToPlayer = Math.hypot(ghostPos.x - camera.position.x, ghostPos.z - camera.position.z);
@@ -15063,20 +15114,23 @@ function applyGhostDamageToHuman(ghostPos, delta) {
     if (window.isTutorialMatch) {
       if (currentHP > 50) {
         currentHP = Math.max(50, currentHP - delta * 15);
-        const hpVal = document.getElementById('hp-value');
-        const hpBar = document.getElementById('hp-bar');
-        if (hpVal) hpVal.textContent = `${Math.ceil(currentHP)} HP`;
-        if (hpBar) hpBar.style.width = `${currentHP}%`;
+      } else {
+        return; // In training drill, ghost proximity demonstrates threat without capturing player
       }
-      return; // In training drill, ghost proximity demonstrates threat without capturing player
+    } else {
+      // Proximity scaling: 100% damage inside 1.8m, scaling down to 40% at outer 2.8m periphery
+      const proximityMultiplier = Math.min(1.0, Math.max(0.4, (2.8 - distToPlayer) / 1.0));
+      currentHP = Math.max(0, currentHP - delta * 45 * proximityMultiplier);
     }
-    // Proximity scaling: 100% damage inside 1.8m, scaling down to 40% at outer 2.8m periphery
-    const proximityMultiplier = Math.min(1.0, Math.max(0.4, (2.8 - distToPlayer) / 1.0));
-    currentHP = Math.max(0, currentHP - delta * 45 * proximityMultiplier);
-    const hpVal = document.getElementById('hp-value');
-    const hpBar = document.getElementById('hp-bar');
-    if (hpVal) hpVal.textContent = `${Math.ceil(currentHP)} HP`;
-    if (hpBar) hpBar.style.width = `${currentHP}%`;
+
+    const ceilHP = Math.ceil(currentHP);
+    if (ceilHP !== _lastReportedHp) {
+      _lastReportedHp = ceilHP;
+      if (!_cachedHpVal) _cachedHpVal = document.getElementById('hp-value');
+      if (!_cachedHpBar) _cachedHpBar = document.getElementById('hp-bar');
+      if (_cachedHpVal) _cachedHpVal.textContent = `${ceilHP} HP`;
+      if (_cachedHpBar) _cachedHpBar.style.width = `${currentHP}%`;
+    }
 
     const activeKeypadModal = document.getElementById('keypad-modal-ui');
     if (activeKeypadModal && activeKeypadModal.style.display !== 'none') {
@@ -15274,6 +15328,200 @@ function checkChalkDecals(ghostPos) {
         decal.userData.fadeTimer = 3.0; // Handled in animate loop via delta
       }
     }
+  }
+}
+
+// Pre-allocated collision recovery directions to prevent per-pass GC allocations
+const GHOST_RECOVERY_DIRS = [
+  { dc: 0, dr: -1, axis: 'z', sign: -1 }, // North
+  { dc: 0, dr: 1, axis: 'z', sign: 1 },   // South
+  { dc: -1, dr: 0, axis: 'x', sign: -1 }, // West
+  { dc: 1, dr: 0, axis: 'x', sign: 1 }    // East
+];
+
+const GHOST_DIAG_CORNERS = [
+  { dc: -1, dr: -1 }, // Northwest
+  { dc: 1, dr: -1 },  // Northeast
+  { dc: -1, dr: 1 },  // Southwest
+  { dc: 1, dr: 1 }    // Southeast
+];
+
+// Deterministic Grid-Plane & Exposed Corner Collision Solver for Ghost AI
+// Guarantees ghosts can NEVER penetrate, corner-squeeze, or phase through walls or alcoves
+function resolveGhostCollision(ghost) {
+  if (!ghost || !ghost.position || !mazeLayout || !mazeLayout[0]) return;
+  const blockSize = mazeBlockSize || 6.0;
+  const ghostRadius = 0.55;
+  const totalCols = mazeLayout[0].length;
+  const totalRows = mazeLayout.length;
+  const halfBlock = blockSize / 2;
+  const isSolid = (v) => (v === 1 || v === 2);
+
+  for (let pass = 0; pass < 2; pass++) {
+    const px = ghost.position.x;
+    const pz = ghost.position.z;
+    const col = Math.max(0, Math.min(totalCols - 1, Math.floor((px / blockSize) + totalCols / 2)));
+    const row = Math.max(0, Math.min(totalRows - 1, Math.floor((pz / blockSize) + totalRows / 2)));
+
+    const currentCellVal = mazeLayout[row] ? mazeLayout[row][col] : 1;
+
+    if (isSolid(currentCellVal)) {
+      // Recovery: Ghost has penetrated inside a solid wall cell. Immediately eject to nearest open neighbor!
+      let bestDir = null;
+      let minDisplacement = Infinity;
+
+      for (let i = 0; i < GHOST_RECOVERY_DIRS.length; i++) {
+        const d = GHOST_RECOVERY_DIRS[i];
+        const nc = col + d.dc;
+        const nr = row + d.dr;
+        if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr] && mazeLayout[nr][nc] === 0) {
+          if (d.axis === 'z') {
+            const edgeZ = (d.sign < 0) ? (row - totalRows / 2) * blockSize : (row + 1 - totalRows / 2) * blockSize;
+            const disp = Math.abs(pz - edgeZ);
+            if (disp < minDisplacement) {
+              minDisplacement = disp;
+              bestDir = { axis: d.axis, target: edgeZ + d.sign * ghostRadius };
+            }
+          } else {
+            const edgeX = (d.sign < 0) ? (col - totalCols / 2) * blockSize : (col + 1 - totalCols / 2) * blockSize;
+            const disp = Math.abs(px - edgeX);
+            if (disp < minDisplacement) {
+              minDisplacement = disp;
+              bestDir = { axis: d.axis, target: edgeX + d.sign * ghostRadius };
+            }
+          }
+        }
+      }
+
+      if (bestDir) {
+        if (bestDir.axis === 'z') ghost.position.z = bestDir.target;
+        else ghost.position.x = bestDir.target;
+      }
+    } else {
+      // Ghost is in an open corridor/alcove cell. Apply hard boundary planes against all cardinal solid neighbors!
+      // 1. North neighbor (row - 1)
+      if (row > 0 && isSolid(mazeLayout[row - 1][col])) {
+        const northEdgeZ = (row - totalRows / 2) * blockSize;
+        if (ghost.position.z < northEdgeZ + ghostRadius) {
+          ghost.position.z = northEdgeZ + ghostRadius;
+        }
+      }
+      // 2. South neighbor (row + 1)
+      if (row < totalRows - 1 && isSolid(mazeLayout[row + 1][col])) {
+        const southEdgeZ = (row + 1 - totalRows / 2) * blockSize;
+        if (ghost.position.z > southEdgeZ - ghostRadius) {
+          ghost.position.z = southEdgeZ - ghostRadius;
+        }
+      }
+      // 3. West neighbor (col - 1)
+      if (col > 0 && isSolid(mazeLayout[row][col - 1])) {
+        const westEdgeX = (col - totalCols / 2) * blockSize;
+        if (ghost.position.x < westEdgeX + ghostRadius) {
+          ghost.position.x = westEdgeX + ghostRadius;
+        }
+      }
+      // 4. East neighbor (col + 1)
+      if (col < totalCols - 1 && isSolid(mazeLayout[row][col + 1])) {
+        const eastEdgeX = (col + 1 - totalCols / 2) * blockSize;
+        if (ghost.position.x > eastEdgeX - ghostRadius) {
+          ghost.position.x = eastEdgeX - ghostRadius;
+        }
+      }
+
+      // 5. Diagonal exposed convex corner vertices (smooth rounding around hallway corners)
+      for (let i = 0; i < GHOST_DIAG_CORNERS.length; i++) {
+        const dg = GHOST_DIAG_CORNERS[i];
+        const diagC = col + dg.dc;
+        const diagR = row + dg.dr;
+        if (diagR >= 0 && diagR < totalRows && diagC >= 0 && diagC < totalCols) {
+          if (isSolid(mazeLayout[diagR][diagC])) {
+            const card1Open = !isSolid(mazeLayout[row][diagC]);
+            const card2Open = !isSolid(mazeLayout[diagR][col]);
+            if (card1Open || card2Open) {
+              const cornerX = (col + (dg.dc > 0 ? 1 : 0) - totalCols / 2) * blockSize;
+              const cornerZ = (row + (dg.dr > 0 ? 1 : 0) - totalRows / 2) * blockSize;
+              const dx = ghost.position.x - cornerX;
+              const dz = ghost.position.z - cornerZ;
+              if (dx * dg.dc < 0 && dz * dg.dr < 0) {
+                const distSq = dx * dx + dz * dz;
+                if (distSq < ghostRadius * ghostRadius && distSq > 0.0001) {
+                  const dist = Math.sqrt(distSq);
+                  ghost.position.x = cornerX + (dx / dist) * ghostRadius;
+                  ghost.position.z = cornerZ + (dz / dist) * ghostRadius;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Dynamic sliding door meshes collision (if raised)
+    if (walls && walls.length > 0) {
+      for (let i = 0; i < walls.length; i++) {
+        const wall = walls[i];
+        if (wall.position.y < -0.5) continue; // Skip lowered doors
+        const wx = wall.position.x;
+        const wz = wall.position.z;
+        const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : halfBlock;
+        const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : halfBlock;
+
+        const minX = wx - hx - ghostRadius;
+        const maxX = wx + hx + ghostRadius;
+        const minZ = wz - hz - ghostRadius;
+        const maxZ = wz + hz + ghostRadius;
+
+        if (ghost.position.x > minX && ghost.position.x < maxX &&
+            ghost.position.z > minZ && ghost.position.z < maxZ) {
+          const penLeft = ghost.position.x - minX;
+          const penRight = maxX - ghost.position.x;
+          const penTop = ghost.position.z - minZ;
+          const penBottom = maxZ - ghost.position.z;
+
+          const minPenX = penLeft < penRight ? -penLeft : penRight;
+          const minPenZ = penTop < penBottom ? -penTop : penBottom;
+          if (Math.abs(minPenX) < Math.abs(minPenZ)) {
+            ghost.position.x += minPenX;
+          } else {
+            ghost.position.z += minPenZ;
+          }
+        }
+      }
+    }
+
+    // Dungeon Props Collision (Spatial grid check - O(1))
+    if (dungeonPropGrid && dungeonPropGrid.size > 0) {
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const bucket = dungeonPropGrid.get(((row + dr) * 1000) + (col + dc));
+          if (!bucket) continue;
+          for (let i = 0; i < bucket.length; i++) {
+            const prop = bucket[i];
+            if (prop.slidingWallRef && prop.slidingWallRef.position.y < -0.5) continue;
+            const dx = ghost.position.x - prop.x;
+            const dz = ghost.position.z - prop.z;
+            const maxD = prop.radius + ghostRadius;
+            if (Math.abs(dx) > maxD || Math.abs(dz) > maxD) continue;
+            const dist = Math.hypot(dx, dz);
+            if (dist < maxD && dist > 0.0001) {
+              const overlap = maxD - dist;
+              ghost.position.x += (dx / dist) * overlap;
+              ghost.position.z += (dz / dist) * overlap;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Hard Map Boundary Safety Clamp
+  const maxPlayableLimit = (mazeSizeGlobal / 2 - 1.0) * blockSize;
+  ghost.position.x = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, ghost.position.x));
+  ghost.position.z = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, ghost.position.z));
+  if (isNaN(ghost.position.x) || isNaN(ghost.position.z) || ghost.position.y < -2.0) {
+    const farPool = getFarGhostSpawnPool();
+    const spawnCell = farPool[Math.floor(Math.random() * farPool.length)] || { x: 0, z: 0 };
+    ghost.position.set(spawnCell.x, 0.35, spawnCell.z);
   }
 }
 
@@ -16014,196 +16262,6 @@ function animate() {
       }
     });
 
-    // Deterministic Grid-Plane & Exposed Corner Collision Solver for Ghost AI
-    // Guarantees ghosts can NEVER penetrate, corner-squeeze, or phase through walls or alcoves
-    function resolveGhostCollision(ghost) {
-      if (!ghost || !ghost.position || !mazeLayout || !mazeLayout[0]) return;
-      const blockSize = mazeBlockSize || 6.0;
-      const ghostRadius = 0.55;
-      const totalCols = mazeLayout[0].length;
-      const totalRows = mazeLayout.length;
-      const halfBlock = blockSize / 2;
-      const isSolid = (v) => (v === 1 || v === 2);
-
-      for (let pass = 0; pass < 2; pass++) {
-        const px = ghost.position.x;
-        const pz = ghost.position.z;
-        const col = Math.max(0, Math.min(totalCols - 1, Math.floor((px / blockSize) + totalCols / 2)));
-        const row = Math.max(0, Math.min(totalRows - 1, Math.floor((pz / blockSize) + totalRows / 2)));
-
-        const currentCellVal = mazeLayout[row] ? mazeLayout[row][col] : 1;
-
-        if (isSolid(currentCellVal)) {
-          // Recovery: Ghost has penetrated inside a solid wall cell. Immediately eject to nearest open neighbor!
-          const dirs = [
-            { dc: 0, dr: -1, axis: 'z', sign: -1 }, // North
-            { dc: 0, dr: 1, axis: 'z', sign: 1 },   // South
-            { dc: -1, dr: 0, axis: 'x', sign: -1 }, // West
-            { dc: 1, dr: 0, axis: 'x', sign: 1 }    // East
-          ];
-          let bestDir = null;
-          let minDisplacement = Infinity;
-
-          for (const d of dirs) {
-            const nc = col + d.dc;
-            const nr = row + d.dr;
-            if (nr >= 0 && nr < totalRows && nc >= 0 && nc < totalCols && mazeLayout[nr] && mazeLayout[nr][nc] === 0) {
-              if (d.axis === 'z') {
-                const edgeZ = (d.sign < 0) ? (row - totalRows / 2) * blockSize : (row + 1 - totalRows / 2) * blockSize;
-                const disp = Math.abs(pz - edgeZ);
-                if (disp < minDisplacement) {
-                  minDisplacement = disp;
-                  bestDir = { ...d, target: edgeZ + d.sign * ghostRadius };
-                }
-              } else {
-                const edgeX = (d.sign < 0) ? (col - totalCols / 2) * blockSize : (col + 1 - totalCols / 2) * blockSize;
-                const disp = Math.abs(px - edgeX);
-                if (disp < minDisplacement) {
-                  minDisplacement = disp;
-                  bestDir = { ...d, target: edgeX + d.sign * ghostRadius };
-                }
-              }
-            }
-          }
-
-          if (bestDir) {
-            if (bestDir.axis === 'z') ghost.position.z = bestDir.target;
-            else ghost.position.x = bestDir.target;
-          }
-        } else {
-          // Ghost is in an open corridor/alcove cell. Apply hard boundary planes against all cardinal solid neighbors!
-          // 1. North neighbor (row - 1)
-          if (row > 0 && isSolid(mazeLayout[row - 1][col])) {
-            const northEdgeZ = (row - totalRows / 2) * blockSize;
-            if (ghost.position.z < northEdgeZ + ghostRadius) {
-              ghost.position.z = northEdgeZ + ghostRadius;
-            }
-          }
-          // 2. South neighbor (row + 1)
-          if (row < totalRows - 1 && isSolid(mazeLayout[row + 1][col])) {
-            const southEdgeZ = (row + 1 - totalRows / 2) * blockSize;
-            if (ghost.position.z > southEdgeZ - ghostRadius) {
-              ghost.position.z = southEdgeZ - ghostRadius;
-            }
-          }
-          // 3. West neighbor (col - 1)
-          if (col > 0 && isSolid(mazeLayout[row][col - 1])) {
-            const westEdgeX = (col - totalCols / 2) * blockSize;
-            if (ghost.position.x < westEdgeX + ghostRadius) {
-              ghost.position.x = westEdgeX + ghostRadius;
-            }
-          }
-          // 4. East neighbor (col + 1)
-          if (col < totalCols - 1 && isSolid(mazeLayout[row][col + 1])) {
-            const eastEdgeX = (col + 1 - totalCols / 2) * blockSize;
-            if (ghost.position.x > eastEdgeX - ghostRadius) {
-              ghost.position.x = eastEdgeX - ghostRadius;
-            }
-          }
-
-          // 5. Diagonal exposed convex corner vertices (smooth rounding around hallway corners)
-          const diags = [
-            { dc: -1, dr: -1 }, // Northwest
-            { dc: 1, dr: -1 },  // Northeast
-            { dc: -1, dr: 1 },  // Southwest
-            { dc: 1, dr: 1 }   // Southeast
-          ];
-
-          for (const dg of diags) {
-            const diagC = col + dg.dc;
-            const diagR = row + dg.dr;
-            if (diagR >= 0 && diagR < totalRows && diagC >= 0 && diagC < totalCols) {
-              if (isSolid(mazeLayout[diagR][diagC])) {
-                const card1Open = !isSolid(mazeLayout[row][diagC]);
-                const card2Open = !isSolid(mazeLayout[diagR][col]);
-                if (card1Open || card2Open) {
-                  const cornerX = (col + (dg.dc > 0 ? 1 : 0) - totalCols / 2) * blockSize;
-                  const cornerZ = (row + (dg.dr > 0 ? 1 : 0) - totalRows / 2) * blockSize;
-                  const dx = ghost.position.x - cornerX;
-                  const dz = ghost.position.z - cornerZ;
-                  if (dx * dg.dc < 0 && dz * dg.dr < 0) {
-                    const distSq = dx * dx + dz * dz;
-                    if (distSq < ghostRadius * ghostRadius && distSq > 0.0001) {
-                      const dist = Math.sqrt(distSq);
-                      ghost.position.x = cornerX + (dx / dist) * ghostRadius;
-                      ghost.position.z = cornerZ + (dz / dist) * ghostRadius;
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // Dynamic sliding door meshes collision (if raised)
-        if (walls && walls.length > 0) {
-          for (let i = 0; i < walls.length; i++) {
-            const wall = walls[i];
-            if (wall.position.y < -0.5) continue; // Skip lowered doors
-            const wx = wall.position.x;
-            const wz = wall.position.z;
-            const hx = (wall.userData && wall.userData.halfSizeX) ? wall.userData.halfSizeX : halfBlock;
-            const hz = (wall.userData && wall.userData.halfSizeZ) ? wall.userData.halfSizeZ : halfBlock;
-
-            const minX = wx - hx - ghostRadius;
-            const maxX = wx + hx + ghostRadius;
-            const minZ = wz - hz - ghostRadius;
-            const maxZ = wz + hz + ghostRadius;
-
-            if (ghost.position.x > minX && ghost.position.x < maxX &&
-                ghost.position.z > minZ && ghost.position.z < maxZ) {
-              const penLeft = ghost.position.x - minX;
-              const penRight = maxX - ghost.position.x;
-              const penTop = ghost.position.z - minZ;
-              const penBottom = maxZ - ghost.position.z;
-
-              const minPenX = penLeft < penRight ? -penLeft : penRight;
-              const minPenZ = penTop < penBottom ? -penTop : penBottom;
-              if (Math.abs(minPenX) < Math.abs(minPenZ)) {
-                ghost.position.x += minPenX;
-              } else {
-                ghost.position.z += minPenZ;
-              }
-            }
-          }
-        }
-
-        // Dungeon Props Collision (Spatial grid check - O(1))
-        if (dungeonPropGrid && dungeonPropGrid.size > 0) {
-          for (let dr = -1; dr <= 1; dr++) {
-            for (let dc = -1; dc <= 1; dc++) {
-              const bucket = dungeonPropGrid.get(((row + dr) * 1000) + (col + dc));
-              if (!bucket) continue;
-              for (let i = 0; i < bucket.length; i++) {
-                const prop = bucket[i];
-                if (prop.slidingWallRef && prop.slidingWallRef.position.y < -0.5) continue;
-                const dx = ghost.position.x - prop.x;
-                const dz = ghost.position.z - prop.z;
-                const maxD = prop.radius + ghostRadius;
-                if (Math.abs(dx) > maxD || Math.abs(dz) > maxD) continue;
-                const dist = Math.hypot(dx, dz);
-                if (dist < maxD && dist > 0.0001) {
-                  const overlap = maxD - dist;
-                  ghost.position.x += (dx / dist) * overlap;
-                  ghost.position.z += (dz / dist) * overlap;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // Hard Map Boundary Safety Clamp
-      const maxPlayableLimit = (mazeSizeGlobal / 2 - 1.0) * blockSize;
-      ghost.position.x = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, ghost.position.x));
-      ghost.position.z = Math.max(-maxPlayableLimit, Math.min(maxPlayableLimit, ghost.position.z));
-      if (isNaN(ghost.position.x) || isNaN(ghost.position.z) || ghost.position.y < -2.0) {
-        const farPool = getFarGhostSpawnPool();
-        const spawnCell = farPool[Math.floor(Math.random() * farPool.length)] || { x: 0, z: 0 };
-        ghost.position.set(spawnCell.x, 0.35, spawnCell.z);
-      }
-    }
-
     // 4. Update AI Bots pathing behaviors toward nearest human
     ghosts3D.forEach((ghost, idx) => {
       // Handle Mimic disguise countdown (delta-based so it pauses cleanly in solo matches)
@@ -16281,9 +16339,14 @@ function animate() {
       const distToPlayer = minDist !== Infinity ? minDist : 9999;
       const targetPos = nearestHumanPos;
 
-      // Distance culling for ghost dynamic light: prevents 8 simultaneous point lights melting GPU (hidden while Mimic is disguised)
+      // Distance culling for ghost dynamic light: prevents multiple simultaneous point lights melting GPU (hidden while Mimic is disguised)
       if (ghost.userData && ghost.userData.auraLight) {
-        ghost.userData.auraLight.visible = !ghost.userData.isMimicDisguised && (distToPlayer < 14.0);
+        const isMobile = isMobileDevice || isLowEndHardware;
+        const maxLightDist = isMobile ? 6.0 : 10.0;
+        const shouldBeVisible = !ghost.userData.isMimicDisguised && (distToPlayer < maxLightDist);
+        if (ghost.userData.auraLight.visible !== shouldBeVisible) {
+          ghost.userData.auraLight.visible = shouldBeVisible;
+        }
       }
 
       // Damage check uses actual distance to PLAYER (only damages humans)
@@ -16998,8 +17061,11 @@ function animate() {
           if (b && b.mesh && b.mesh.userData && b.mesh.userData.statusLight) {
             const dx = b.mesh.position.x - pX;
             const dz = b.mesh.position.z - pZ;
-            const inRange = (dx * dx + dz * dz) < 196; // 14m
-            b.mesh.userData.statusLight.intensity = inRange ? (b.isFixed ? 1.4 : 1.2) : 0;
+            const inRange = (dx * dx + dz * dz) < 144; // 12m
+            b.mesh.userData.statusLight.visible = inRange;
+            if (inRange) {
+              b.mesh.userData.statusLight.intensity = b.isFixed ? 1.4 : 1.2;
+            }
           }
         }
       }
@@ -17010,7 +17076,11 @@ function animate() {
           if (s && s.light) {
             const dx = s.x - pX;
             const dz = s.z - pZ;
-            s.light.intensity = (dx * dx + dz * dz) < 324 ? 4.2 : 0;
+            const inRange = (dx * dx + dz * dz) < 225; // 15m
+            s.light.visible = inRange;
+            if (inRange) {
+              s.light.intensity = 4.2;
+            }
           }
         }
       }
