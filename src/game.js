@@ -1708,6 +1708,20 @@ let hasEscaped = false;
 let codeEntered = "";
 let keypadListenersSetup = false;
 let lastKeypadInputTime = 0;
+let lastKeypadDigitAdded = ''; // Track last digit to detect instant duplication
+// Centralized gatekeeper: ALL keypad digit additions MUST go through this function
+function appendKeypadDigit(digit) {
+  const now = performance.now();
+  if (now - lastKeypadInputTime < 200) return false;  // 200ms hard debounce
+  if (codeEntered.length >= 4) return false;
+  if (digit.length !== 1 || digit < '0' || digit > '9') return false;
+  lastKeypadInputTime = now;
+  lastKeypadDigitAdded = digit;
+  codeEntered += digit;
+  const scr = document.getElementById('keypad-screen-display');
+  if (scr) scr.textContent = getKeypadDisplayString();
+  return true;
+}
 let functionalKeysRevealed = [];
 let foundKeysList = [];
 let carriedKeys = [];      // Keys currently carried (max 3)
@@ -7397,14 +7411,7 @@ function setupControls() {
         const num = event.code.replace('Digit', '').replace('Numpad', '');
         if (num.length === 1 && num >= '0' && num <= '9') {
           event.preventDefault();
-          const now = performance.now();
-          if (now - lastKeypadInputTime < 120) return;
-          lastKeypadInputTime = now;
-          if (codeEntered.length < 4) {
-            codeEntered += num;
-            const scr = document.getElementById('keypad-screen-display');
-            if (scr) scr.textContent = getKeypadDisplayString();
-          }
+          appendKeypadDigit(num);
           return; // Prevent other actions like changing inventory
         }
       } else if (event.key === 'Backspace') {
@@ -10561,16 +10568,8 @@ function setupKeypadListeners() {
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const now = performance.now();
-      if (now - lastKeypadInputTime < 120) return; // Strict debounce against hardware/touch double-fire!
-      lastKeypadInputTime = now;
-
       const val = (e.currentTarget ? e.currentTarget.textContent : e.target.textContent || '').trim();
-      // Let players type all 4 digits freely — no auto-fill from clue notes
-      if (codeEntered.length < 4 && val.length === 1 && val >= '0' && val <= '9') {
-        codeEntered += val;
-        if (keypadScreen) keypadScreen.textContent = getKeypadDisplayString();
-      }
+      appendKeypadDigit(val); // Centralized gatekeeper handles debounce + validation
       if (btn.blur) btn.blur(); // Remove focus outline so Enter/Space doesn't re-trigger it
     });
   });
