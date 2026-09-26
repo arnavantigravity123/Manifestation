@@ -907,7 +907,7 @@ export function loadGhostGLBAsset() {
         // Model naturally faces +Z (front face with glowing blue eyes & forward reaching claws), matching Three.js Object3D.lookAt (+Z)
         const clone = SkeletonUtils.clone(preloadedGhostModel);
         const anchorGroup = new THREE.Group();
-        anchorGroup.rotation.y = 0; // Model faces +Z naturally, matching Three.js Object3D.lookAt forward direction (+Z)
+        anchorGroup.rotation.y = Math.PI; // Model faces +Z in raw GLB; rotating by PI aligns front face & claws with Three.js lookAt forward vector (-Z)
         anchorGroup.add(clone);
         
         group.add(anchorGroup);
@@ -13425,7 +13425,7 @@ function createGhostMeshGroup(skinId) {
   if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
-    anchorGroup.rotation.y = 0; // Model faces +Z naturally, matching Three.js Object3D.lookAt forward direction (+Z)
+    anchorGroup.rotation.y = Math.PI; // Model faces +Z in raw GLB; rotating by PI aligns front face & claws with Three.js lookAt forward vector (-Z)
     anchorGroup.add(clone);
     group.add(anchorGroup);
   } else {
@@ -16585,7 +16585,7 @@ function animate() {
           } else if (gClass === 'Juggernaut') {
             ghost.userData.speedBoostTimer = gParams.rageDurationBot;
           } else if (gClass === 'Phantom') {
-            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(ghost.quaternion); // Ghost faces +Z (matching lookAt)
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(ghost.quaternion); // Ghost faces -Z (Three.js standard lookAt direction)
             const maxLeap = gParams.leapDistanceBot;
             const stepSize = 0.3;
             let safeLeapDist = 0;
