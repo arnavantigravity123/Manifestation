@@ -904,10 +904,10 @@ export function loadGhostGLBAsset() {
         group.remove(spriteChild);
         
         // Wrap the centered model in an anchor group so the centering isn't lost during rotation
-        // Model naturally faces +Z (front face with glowing blue eyes & forward reaching claws), matching Three.js Object3D.lookAt (+Z)
+        // Model naturally faces -Z (front face with glowing eyes & forward reaching claws), perfectly matching Three.js lookAt vector (-Z)
         const clone = SkeletonUtils.clone(preloadedGhostModel);
         const anchorGroup = new THREE.Group();
-        anchorGroup.rotation.y = Math.PI; // Model faces +Z in raw GLB; rotating by PI aligns front face & claws with Three.js lookAt forward vector (-Z)
+        anchorGroup.rotation.y = 0; // Aligns front face and claws with Three.js lookAt forward vector (-Z)
         anchorGroup.add(clone);
         
         group.add(anchorGroup);
@@ -13472,7 +13472,7 @@ function createGhostMeshGroup(skinId) {
   if (preloadedGhostModel) {
     const clone = SkeletonUtils.clone(preloadedGhostModel);
     const anchorGroup = new THREE.Group();
-    anchorGroup.rotation.y = Math.PI; // Model faces +Z in raw GLB; rotating by PI aligns front face & claws with Three.js lookAt forward vector (-Z)
+    anchorGroup.rotation.y = 0; // Aligns front face and claws with Three.js lookAt forward vector (-Z)
     anchorGroup.add(clone);
     group.add(anchorGroup);
   } else {
