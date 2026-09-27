@@ -15525,6 +15525,16 @@ function resolveGhostCollision(ghost) {
   }
 }
 
+// Robust, Gimbal-lock-free Euler yaw orientation for ghosts in the XZ ground plane
+function setGhostFacing(ghost, targetX, targetZ) {
+  if (!ghost || !ghost.position) return;
+  const dx = targetX - ghost.position.x;
+  const dz = targetZ - ghost.position.z;
+  if (dx * dx + dz * dz > 0.0001) {
+    ghost.rotation.set(0, Math.atan2(dx, dz) + Math.PI, 0, 'YXZ');
+  }
+}
+
 // 3D Game Loop rendering
 let animationFrameId = null;
 let networkTimer = 0;
@@ -16850,11 +16860,22 @@ function animate() {
         }
       }
 
-      // Follow the path waypoints
+      // Follow the path waypoints or pursue player directly if visible/close
       const path = ghost.userData.path;
       const pathIdx = (typeof ghost.userData.pathIdx === 'number') ? ghost.userData.pathIdx : 0;
 
-      if (path && path.length > 0 && pathIdx < path.length) {
+      // When actively chasing and player is directly visible or within close proximity (<= 6.0m):
+      // Pursue player directly so juking behind the ghost causes it to immediately turn and follow!
+      const canDirectPursue = (ghost.userData.aiState === 'CHASE' && targetPos && (hasDirectLos || sameCell || distToPlayer < 6.0));
+
+      if (canDirectPursue) {
+        ghost.userData.path = null;
+        if (distToPlayer > 0.5) {
+          _scratchVec3_1.set(targetPos.x - ghost.position.x, 0, targetPos.z - ghost.position.z).normalize();
+          ghost.position.addScaledVector(_scratchVec3_1, delta * moveSpeed);
+          resolveGhostCollision(ghost);
+        }
+      } else if (path && path.length > 0 && pathIdx < path.length) {
         const waypoint = path[pathIdx];
         const dx = waypoint.x - ghost.position.x;
         const dz = waypoint.z - ghost.position.z;
@@ -16928,8 +16949,8 @@ function animate() {
       
       // =========================================================================
       // MAXIMUM SAFEGUARD: GHOST FACING & LOOK-AT BEHAVIOR
-      // Requirement: In hunting mode (CHASE), when it sees the player, it ALWAYS
-      // looks directly at the player NO MATTER WHAT!
+      // In hunting mode (CHASE) or whenever seeing the player, it ALWAYS
+      // turns directly to face the player using pure, Gimbal-lock-free Euler yaw!
       // =========================================================================
       const isHunting = (ghost.userData.aiState === 'CHASE');
       const seesPlayer = Boolean(
@@ -16943,25 +16964,18 @@ function animate() {
       );
 
       if (isHunting && targetPos && seesPlayer) {
-        // MAXIMUM SAFEGUARD: ALWAYS look directly at the player in hunting mode!
-        if (distToPlayer > 0.05) {
-          ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
-        }
+        // MAXIMUM SAFEGUARD: ALWAYS face directly toward the player in hunting mode!
+        setGhostFacing(ghost, targetPos.x, targetPos.z);
       } else if (path && path.length > 0 && pathIdx < path.length) {
-        // Only face path waypoints when blind-cornering around walls far away where player cannot be seen
-        ghost.lookAt(path[pathIdx].x, ghost.position.y, path[pathIdx].z);
+        setGhostFacing(ghost, path[pathIdx].x, path[pathIdx].z);
       } else if (targetPos && (hasDirectLos || inProximity)) {
-        ghost.lookAt(targetPos.x, ghost.position.y, targetPos.z);
+        setGhostFacing(ghost, targetPos.x, targetPos.z);
       } else {
         const moveDistSq = (ghost.position.x - prevGhostX) ** 2 + (ghost.position.z - prevGhostZ) ** 2;
         if (moveDistSq > 0.0001) {
-          ghost.lookAt(ghost.position.x + (ghost.position.x - prevGhostX), ghost.position.y, ghost.position.z + (ghost.position.z - prevGhostZ));
+          setGhostFacing(ghost, ghost.position.x + (ghost.position.x - prevGhostX), ghost.position.z + (ghost.position.z - prevGhostZ));
         }
       }
-
-      // Safeguard: Lock pitch (X) and roll (Z) so ghost remains completely vertical and stable
-      ghost.rotation.x = 0;
-      ghost.rotation.z = 0;
 
       // Final robust grid-plane, corner, dynamic door, and prop collision enforcement
       resolveGhostCollision(ghost);
