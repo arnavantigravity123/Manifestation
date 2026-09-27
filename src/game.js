@@ -2981,12 +2981,14 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
 
   // Detect Special Callsigns (Shipaton Demo & Ariadne Developer Protocols)
   const myPlayer = (currentLobby && currentLobby.players) ? currentLobby.players[myId] : null;
+  const usernameInputEl = (typeof document !== 'undefined') ? document.getElementById('username-input') : null;
   const rawName = (myPlayer && myPlayer.username) 
+    || (usernameInputEl && usernameInputEl.value)
     || localStorage.getItem('manifestation_username') 
     || sessionStorage.getItem('rejoinUsername') 
     || '';
-  const cleanName = rawName.trim().toLowerCase();
-  const isShipaton = cleanName === 'shipaton' || cleanName.includes('shipaton') || cleanName === 'revenuecat' || cleanName.includes('revenuecat');
+  const cleanName = rawName.trim().toLowerCase().replace(/[-_ ]/g, '');
+  const isShipaton = cleanName.includes('shipaton') || cleanName.includes('revenuecat') || cleanName.includes('shipathon') || Boolean(window.isShipatonDemo);
   window.isShipatonDemo = isShipaton;
 
   if (isShipaton) {
@@ -4710,7 +4712,9 @@ function spawnDungeonProps(layout, blockSize) {
   // Helper: prevent spawning props inside or within collision radius of player spawn hub
   function isNearSpawn(x, z, minDist = 1.8) {
     if (!window.humanSpawnPos) return false;
-    return Math.hypot(x - window.humanSpawnPos.x, z - window.humanSpawnPos.z) < minDist;
+    const spawnDist = Math.hypot(x - window.humanSpawnPos.x, z - window.humanSpawnPos.z);
+    if (window.isShipatonDemo && spawnDist < 8.0) return true; // Keep spawn corridor clean for demo breaker & clue!
+    return spawnDist < minDist;
   }
 
   // Helper: prevent spawning props directly in front of or blocking the master vault entrance
@@ -6816,18 +6820,72 @@ function generateCircuitBreakers() {
   const shuffledCandidates = shuffleArray(wallCandidates);
   const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
   const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+
+  // Shipaton Demo: Guarantee Breaker 0 mounts on a wall directly along the corridor branching from spawn
+  let demoPrimeCandidate = null;
+  if (window.isShipatonDemo) {
+    const centerCol = Math.floor((sx / blockSize) + totalCols / 2);
+    const centerRow = Math.floor((sz / blockSize) + totalRows / 2);
+
+    // Prefer North corridor (in front of camera view at spawn), then West, East, South
+    const branchCells = [
+      { r: centerRow - 1, c: centerCol }, // North branch
+      { r: centerRow, c: centerCol - 1 }, // West branch
+      { r: centerRow, c: centerCol + 1 }, // East branch
+      { r: centerRow + 1, c: centerCol }  // South branch
+    ];
+
+    for (const cell of branchCells) {
+      if (demoPrimeCandidate) break;
+      if (cell.r < 1 || cell.r >= totalRows - 1 || cell.c < 1 || cell.c >= totalCols - 1) continue;
+      if (!mazeLayout[cell.r] || mazeLayout[cell.r][cell.c] !== 0) continue;
+
+      const corrX = (cell.c - totalCols / 2) * blockSize + blockSize / 2;
+      const corrZ = (cell.r - totalRows / 2) * blockSize + blockSize / 2;
+
+      const testDirs = [
+        { dc: -1, dr: 0, candX: corrX - wallFaceOffset, candZ: corrZ, rotY: Math.PI / 2 },  // West wall, faces East
+        { dc: 1, dr: 0,  candX: corrX + wallFaceOffset, candZ: corrZ, rotY: -Math.PI / 2 }, // East wall, faces West
+        { dc: 0, dr: -1, candX: corrX, candZ: corrZ - wallFaceOffset, rotY: 0 },          // North wall, faces South
+        { dc: 0, dr: 1,  candX: corrX, candZ: corrZ + wallFaceOffset, rotY: Math.PI }      // South wall, faces North
+      ];
+
+      for (const td of testDirs) {
+        const adjR = cell.r + td.dr;
+        const adjC = cell.c + td.dc;
+        if (adjR >= 0 && adjR < totalRows && adjC >= 0 && adjC < totalCols && mazeLayout[adjR][adjC] === 1) {
+          demoPrimeCandidate = {
+            x: td.candX,
+            z: td.candZ,
+            rotY: td.rotY,
+            corrX,
+            corrZ
+          };
+          if (dungeonPropColliders && dungeonPropColliders.length > 0) {
+            dungeonPropColliders = dungeonPropColliders.filter(p => Math.hypot(p.x - td.candX, p.z - td.candZ) >= 1.5);
+          }
+          break;
+        }
+      }
+    }
+  }
+
   if (window.isTutorialMatch || window.isShipatonDemo) {
     shuffledCandidates.sort((a, b) => Math.hypot(a.x - sx, a.z - sz) - Math.hypot(b.x - sx, b.z - sz));
   }
 
   for (let i = 0; i < totalBreakersRequired; i++) {
-    // Attempt spacing with 10m threshold, then 6m, then any candidate
     let chosen = null;
-    for (const minSpacing of [10.0, 6.0, 0.0]) {
-      chosen = shuffledCandidates.find(cand => {
-        return !circuitBreakers.some(b => Math.hypot(b.mesh.position.x - cand.x, b.mesh.position.z - cand.z) < minSpacing);
-      });
-      if (chosen) break;
+    if (i === 0 && demoPrimeCandidate) {
+      chosen = demoPrimeCandidate;
+    } else {
+      // Attempt spacing with 10m threshold, then 6m, then any candidate
+      for (const minSpacing of [10.0, 6.0, 0.0]) {
+        chosen = shuffledCandidates.find(cand => {
+          return !circuitBreakers.some(b => Math.hypot(b.mesh.position.x - cand.x, b.mesh.position.z - cand.z) < minSpacing);
+        });
+        if (chosen) break;
+      }
     }
 
     // Failsafe: if no candidates survived prop filter, select any open wall face

@@ -1802,6 +1802,11 @@ function startLocalSoloMatch(isTutorial = false) {
   isSoloMode = true;
   isTutorialMode = isTutorial;
   
+  const rawU = ((usernameInput && usernameInput.value) || localStorage.getItem('manifestation_username') || '').trim().toLowerCase().replace(/[-_ ]/g, '');
+  if (rawU.includes('shipaton') || rawU.includes('revenuecat') || rawU.includes('shipathon')) {
+    window.isShipatonDemo = true;
+  }
+
   if (soloLoadingOverlay) soloLoadingOverlay.style.display = 'none';
   if (authView) {
     authView.style.setProperty('display', 'none', 'important');
