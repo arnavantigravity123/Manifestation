@@ -1996,7 +1996,7 @@ function shuffleArray(array) {
   return array;
 }
 
-export function getNearGhostSpawnPool(minDist = 12.0, maxDist = 18.0) {
+export function getNearGhostSpawnPool(minDist = 30.0, maxDist = 42.0) {
   const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
   const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
   if (typeof openCorridors === 'undefined' || !openCorridors || openCorridors.length === 0) {
@@ -2007,15 +2007,15 @@ export function getNearGhostSpawnPool(minDist = 12.0, maxDist = 18.0) {
     return d >= minDist && d <= maxDist;
   });
   if (near.length > 0) return near;
-  // Fallback: corridors sorted from human spawn, choosing candidates at accessible distance (>= 8m)
+  // Fallback: corridors sorted from human spawn, choosing candidates at distance >= 24m
   const sorted = [...openCorridors].sort((a, b) => Math.hypot(a.x - sx, a.z - sz) - Math.hypot(b.x - sx, b.z - sz));
-  const pool = sorted.filter(c => Math.hypot(c.x - sx, c.z - sz) >= 8.0);
-  return pool.length > 0 ? pool.slice(0, 5) : sorted.slice(1, 4);
+  const pool = sorted.filter(c => Math.hypot(c.x - sx, c.z - sz) >= 24.0);
+  return pool.length > 0 ? pool.slice(0, 5) : sorted.slice(Math.floor(sorted.length * 0.5));
 }
 
 export function getFarGhostSpawnPool(minDistOverride) {
   if (window.isShipatonDemo) {
-    return getNearGhostSpawnPool(12.0, 18.0);
+    return getNearGhostSpawnPool(30.0, 42.0);
   }
   const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
   const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
@@ -16558,9 +16558,27 @@ function animate() {
       const ghostGrid = worldToGrid(ghost.position.x, ghost.position.z);
       const targetGrid = targetPos ? worldToGrid(targetPos.x, targetPos.z) : null;
       const sameCell = Boolean(targetGrid && ghostGrid.col === targetGrid.col && ghostGrid.row === targetGrid.row);
-      const inProximity = Boolean(targetPos && distToPlayer < proximityRange);
+      let inProximity = Boolean(targetPos && distToPlayer < proximityRange);
       // Seeing the player requires unblocked Line of Sight (LOS) or sharing the exact corridor cell!
-      const canSeePlayer = Boolean(targetPos && (hasDirectLos || sameCell));
+      let canSeePlayer = Boolean(targetPos && (hasDirectLos || sameCell));
+
+      // Shipaton Demo Opening Grace Window: Ghost wanders its distant sector for the first 25 seconds
+      // so creator can showcase the breaker and clue notes at spawn without instant aggro!
+      // (If creator walks within 8m of ghost or fixes a breaker, the ghost engages immediately)
+      if (window.isShipatonDemo) {
+        if (ghost.userData.demoGraceTimer === undefined) {
+          ghost.userData.demoGraceTimer = 25.0;
+        }
+        if (ghost.userData.demoGraceTimer > 0) {
+          if (distToPlayer <= 8.0 || fixedBreakersCount > 0) {
+            ghost.userData.demoGraceTimer = 0;
+          } else {
+            ghost.userData.demoGraceTimer -= delta;
+            canSeePlayer = false;
+            inProximity = false;
+          }
+        }
+      }
 
       // Unreachable target cooldown ticker
       if (ghost.userData.unreachableCooldown > 0) {
@@ -16825,7 +16843,7 @@ function animate() {
 
         if (ghost.userData.aiState === 'INVESTIGATE') hearingRadius *= 1.35; // Heightened hearing when already investigating
 
-        if (distToSound <= hearingRadius) {
+        if (distToSound <= hearingRadius && (!window.isShipatonDemo || !ghost.userData.demoGraceTimer || ghost.userData.demoGraceTimer <= 0)) {
           const soundGrid = worldToGrid(latestSoundBeacon.position.x, latestSoundBeacon.position.z);
           const isLoudScream = (latestSoundBeacon.volume > 35);
           // If loud scream (under 18m), or speech (under 10m), or has direct LOS: engage CHASE!
