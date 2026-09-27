@@ -1370,6 +1370,7 @@ window.isMobileDevice = isMobileDevice;
 let lastFullscreenCall = 0;
 export function requestAppFullscreen() {
   const isStandalone = (typeof window !== 'undefined') && (
+    (typeof window.isAlreadyInApp === 'function' && window.isAlreadyInApp()) ||
     window.matchMedia('(display-mode: standalone)').matches ||
     window.matchMedia('(display-mode: fullscreen)').matches ||
     Boolean(window.navigator.standalone) ||

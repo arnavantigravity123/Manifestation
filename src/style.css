@@ -4328,27 +4328,26 @@ body.is-mobile .match-meta-pill {
 
 /* ==========================================================================
    MOBILE-ONLY DASHBOARD DOWNLOAD APP BUTTON
+   - Hidden by default on all devices.
+   - STRICTLY hidden inside native apps (Capacitor/APK), installed PWAs, or standalone containers.
+   - Only shown on mobile web browsers when the user is NOT already in the app.
    ========================================================================== */
-.mobile-only-download-btn {
+.mobile-only-download-btn,
+html.is-native-app .mobile-only-download-btn,
+html.is-standalone .mobile-only-download-btn,
+body.is-native-app .mobile-only-download-btn,
+body.is-standalone .mobile-only-download-btn,
+body.is-capacitor .mobile-only-download-btn,
+body:not(.is-mobile) .mobile-only-download-btn {
   display: none !important;
 }
 
-body.is-mobile .mobile-only-download-btn {
+body.is-mobile.is-mobile-web:not(.is-native-app):not(.is-standalone):not(.is-capacitor) .mobile-only-download-btn.can-download-app {
   display: flex !important;
   align-items: center;
   justify-content: center;
   gap: 8px;
   animation: pulseDownloadGlow 2.8s infinite ease-in-out;
-}
-
-@media (max-width: 820px) {
-  .mobile-only-download-btn {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    animation: pulseDownloadGlow 2.8s infinite ease-in-out;
-  }
 }
 
 @keyframes pulseDownloadGlow {
@@ -4359,5 +4358,6 @@ body.is-mobile .mobile-only-download-btn {
     box-shadow: 0 0 22px rgba(52, 211, 153, 0.7);
   }
 }
+
 
 

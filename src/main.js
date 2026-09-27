@@ -54,11 +54,83 @@ let myId = null;
 let isSoloMode = false;
 let isTutorialMode = false;
 
+// Comprehensive Native / Standalone App Detection
+export function isAlreadyInApp() {
+  if (typeof window === 'undefined') return false;
+
+  // 1. Native Capacitor runtime detection
+  try {
+    if (Capacitor && typeof Capacitor.isNativePlatform === 'function' && Capacitor.isNativePlatform()) {
+      return true;
+    }
+  } catch (_) {}
+  try {
+    if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) {
+      return true;
+    }
+  } catch (_) {}
+
+  // 2. Standalone PWA / installed home screen modes
+  try {
+    if (window.matchMedia && (
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.matchMedia('(display-mode: fullscreen)').matches ||
+      window.matchMedia('(display-mode: minimal-ui)').matches
+    )) {
+      return true;
+    }
+  } catch (_) {}
+  if (window.navigator && window.navigator.standalone === true) {
+    return true;
+  }
+  if (typeof document !== 'undefined' && document.referrer && document.referrer.includes('android-app://')) {
+    return true;
+  }
+
+  // 3. Embedded Native Container / Capacitor Scheme Check
+  if (typeof window !== 'undefined' && window.location) {
+    const proto = window.location.protocol || '';
+    const host = window.location.hostname || '';
+    if (proto === 'capacitor:' || proto === 'ionic:' || proto === 'file:') {
+      return true;
+    }
+    // Android Capacitor local asset bridge
+    if ((host === 'localhost' || host === '127.0.0.1') && (
+      Boolean(window.Capacitor) ||
+      (typeof navigator !== 'undefined' && navigator.userAgent && /;\s*wv\b|Version\/[\d.]+\s+Chrome/i.test(navigator.userAgent))
+    )) {
+      return true;
+    }
+  }
+
+  return false;
+}
+window.isAlreadyInApp = isAlreadyInApp;
+
 const isTouchCapable = detectMobileDevice();
 if (isTouchCapable) {
   document.body.classList.add('is-mobile');
 } else {
   document.body.classList.remove('is-mobile');
+}
+
+const inApp = isAlreadyInApp();
+if (inApp) {
+  document.documentElement.classList.add('is-native-app', 'is-standalone', 'is-capacitor');
+  document.body.classList.add('is-native-app', 'is-standalone', 'is-capacitor');
+  document.body.classList.remove('is-mobile-web');
+  const initialDownloadBtn = document.getElementById('mobile-download-app-btn');
+  if (initialDownloadBtn) {
+    initialDownloadBtn.style.setProperty('display', 'none', 'important');
+    initialDownloadBtn.remove();
+  }
+  const initialInstallModal = document.getElementById('download-install-modal');
+  if (initialInstallModal) {
+    initialInstallModal.style.setProperty('display', 'none', 'important');
+    initialInstallModal.remove();
+  }
+} else if (isTouchCapable) {
+  document.body.classList.add('is-mobile-web');
 }
 
 // Pre-warm backend socket connection immediately on app load to eliminate 15s cold-start latency
@@ -1869,12 +1941,17 @@ if ('serviceWorker' in navigator) {
 // Mobile-only PWA App Download & Install Handler
 let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
+  if (isAlreadyInApp()) {
+    e.preventDefault();
+    return;
+  }
   e.preventDefault();
   deferredInstallPrompt = e;
-  console.log('📲 [PWA] App install prompt captured for mobile dashboard download button!');
+  console.log('📲 [PWA] App install prompt captured for mobile web dashboard download button!');
   const downloadBtn = document.getElementById('mobile-download-app-btn');
-  if (downloadBtn && document.body.classList.contains('is-mobile')) {
-    downloadBtn.style.display = 'flex';
+  if (downloadBtn && document.body.classList.contains('is-mobile-web') && !isAlreadyInApp()) {
+    downloadBtn.classList.add('can-download-app');
+    downloadBtn.style.setProperty('display', 'flex', 'important');
   }
 });
 
@@ -1883,11 +1960,17 @@ window.addEventListener('appinstalled', () => {
   deferredInstallPrompt = null;
   const downloadBtn = document.getElementById('mobile-download-app-btn');
   if (downloadBtn) {
-    downloadBtn.innerHTML = '✓ APP INSTALLED';
-    downloadBtn.style.background = 'rgba(16, 185, 129, 0.2)';
-    downloadBtn.style.border = '1px solid rgba(16, 185, 129, 0.4)';
-    downloadBtn.style.pointerEvents = 'none';
+    downloadBtn.style.setProperty('display', 'none', 'important');
+    downloadBtn.remove();
   }
+  const installModal = document.getElementById('download-install-modal');
+  if (installModal) {
+    installModal.style.setProperty('display', 'none', 'important');
+    installModal.remove();
+  }
+  document.documentElement.classList.add('is-native-app', 'is-standalone');
+  document.body.classList.add('is-native-app', 'is-standalone');
+  document.body.classList.remove('is-mobile-web');
 });
 
 function setupMobileDownloadButton() {
@@ -1896,11 +1979,27 @@ function setupMobileDownloadButton() {
   const closeInstallModalBtn = document.getElementById('close-download-modal-btn');
   const modalDesc = document.getElementById('download-modal-desc');
 
+  // If already in native app or installed standalone PWA, destroy and hide immediately!
+  if (isAlreadyInApp()) {
+    if (downloadBtn) {
+      downloadBtn.style.setProperty('display', 'none', 'important');
+      downloadBtn.remove();
+    }
+    if (installModal) {
+      installModal.style.setProperty('display', 'none', 'important');
+      installModal.remove();
+    }
+    return;
+  }
+
   if (!downloadBtn) return;
 
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  if (isStandalone) {
-    downloadBtn.style.display = 'none';
+  // On mobile web browsers only, reveal the download button
+  if (document.body.classList.contains('is-mobile-web')) {
+    downloadBtn.classList.add('can-download-app');
+    downloadBtn.style.setProperty('display', 'flex', 'important');
+  } else {
+    downloadBtn.style.setProperty('display', 'none', 'important');
     return;
   }
 
