@@ -1996,7 +1996,27 @@ function shuffleArray(array) {
   return array;
 }
 
+export function getNearGhostSpawnPool(minDist = 12.0, maxDist = 18.0) {
+  const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+  const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+  if (typeof openCorridors === 'undefined' || !openCorridors || openCorridors.length === 0) {
+    return [{ x: sx + minDist, z: sz }];
+  }
+  const near = openCorridors.filter(c => {
+    const d = Math.hypot(c.x - sx, c.z - sz);
+    return d >= minDist && d <= maxDist;
+  });
+  if (near.length > 0) return near;
+  // Fallback: corridors sorted from human spawn, choosing candidates at accessible distance (>= 8m)
+  const sorted = [...openCorridors].sort((a, b) => Math.hypot(a.x - sx, a.z - sz) - Math.hypot(b.x - sx, b.z - sz));
+  const pool = sorted.filter(c => Math.hypot(c.x - sx, c.z - sz) >= 8.0);
+  return pool.length > 0 ? pool.slice(0, 5) : sorted.slice(1, 4);
+}
+
 export function getFarGhostSpawnPool(minDistOverride) {
+  if (window.isShipatonDemo) {
+    return getNearGhostSpawnPool(12.0, 18.0);
+  }
   const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
   const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
   const mazeDim = (typeof mazeSizeGlobal !== 'undefined' ? mazeSizeGlobal : 15);
@@ -2959,6 +2979,23 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     functionalKeysRevealed = matchConfig.puzzleState.realKeySymbols;
   }
 
+  // Detect Special Callsigns (Shipaton Demo & Ariadne Developer Protocols)
+  const myPlayer = (currentLobby && currentLobby.players) ? currentLobby.players[myId] : null;
+  const rawName = (myPlayer && myPlayer.username) 
+    || localStorage.getItem('manifestation_username') 
+    || sessionStorage.getItem('rejoinUsername') 
+    || '';
+  const cleanName = rawName.trim().toLowerCase();
+  const isShipaton = cleanName === 'shipaton' || cleanName.includes('shipaton') || cleanName === 'revenuecat' || cleanName.includes('revenuecat');
+  window.isShipatonDemo = isShipaton;
+
+  if (isShipaton) {
+    console.log("🏆 [SHIPATON PROTOCOL] Demo callsign active for video recording:", rawName);
+    setTimeout(() => {
+      triggerNotification("🏆 SHIPATON DEMO CALLSIGN ACTIVE: Nearby Breaker, Key, Clue & Ghost ready for demo recording.");
+    }, 1500);
+  }
+
   // Create Labyrinth
   generateMaze(matchConfig.puzzleState.keysCount);
   updateGateHUD();
@@ -2999,12 +3036,6 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
   }
 
   // Easter Egg: Ariadne's Thread to the Vault (Path through labyrinth corridors for Ariadne_999 / Aridane_999)
-  const myPlayer = (currentLobby && currentLobby.players) ? currentLobby.players[myId] : null;
-  const rawName = (myPlayer && myPlayer.username) 
-    || localStorage.getItem('manifestation_username') 
-    || sessionStorage.getItem('rejoinUsername') 
-    || '';
-  const cleanName = rawName.trim().toLowerCase();
   const isAriadne = cleanName === 'ariadne_999' || cleanName === 'aridane_999' || cleanName.includes('ariadne') || cleanName.includes('aridane');
   window.isAriadneDev = isAriadne;
   const showAriadneThread = isAriadne;
@@ -6374,15 +6405,17 @@ function generateCollectibles(keysCount) {
     // Key has built-in emissive materials & additive ground beacon ring (zero shader recompilation on pickup)
 
     let corr;
-    if (window.isTutorialMatch) {
+    const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+    const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+    if (window.isTutorialMatch || window.isShipatonDemo) {
       if (realKeys[0] && kt.label === realKeys[0]) {
         // Place Key 1 along an accessible corridor (6m to 14m from spawn)
-        const nearCorrs = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+        const nearCorrs = [...openCorridors].sort((a, b) => Math.hypot(a.x - sx, a.z - sz) - Math.hypot(b.x - sx, b.z - sz));
         corr = nearCorrs.find(c => {
-          const d = Math.hypot(c.x, c.z);
+          const d = Math.hypot(c.x - sx, c.z - sz);
           return d >= 6 && d <= 14 && !isLocationOccupied(c.x, c.z, 3.5);
         }) || nearCorrs[0];
-      } else if (realKeys[1] && kt.label === realKeys[1] && gateCoordinates) {
+      } else if (realKeys[1] && kt.label === realKeys[1] && gateCoordinates && !window.isShipatonDemo) {
         // Place Key 2 near the Master Vault sector (6m to 16m from gate)
         const gateCorrs = [...openCorridors].sort((a, b) => 
           Math.hypot(a.x - gateCoordinates.x, a.z - gateCoordinates.z) - Math.hypot(b.x - gateCoordinates.x, b.z - gateCoordinates.z)
@@ -6621,12 +6654,14 @@ function generateCodeClues() {
 
   for (let i = 0; i < 4; i++) {
     let corr;
-    if (window.isTutorialMatch && i === 0 && openCorridors.length > 0) {
-      const nearCorridors = [...openCorridors].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+    const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+    const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+    if ((window.isTutorialMatch || window.isShipatonDemo) && i === 0 && openCorridors.length > 0) {
+      const nearCorridors = [...openCorridors].sort((a, b) => Math.hypot(a.x - sx, a.z - sz) - Math.hypot(b.x - sx, b.z - sz));
       corr = nearCorridors.find(c => {
-        const d = Math.hypot(c.x, c.z);
-        return d >= 6 && d <= 16 && !isLocationOccupied(c.x, c.z, 3.5);
-      }) || nearCorridors[Math.min(2, nearCorridors.length - 1)];
+        const d = Math.hypot(c.x - sx, c.z - sz);
+        return d >= 5 && d <= 14 && !isLocationOccupied(c.x, c.z, 3.5);
+      }) || nearCorridors[Math.min(1, nearCorridors.length - 1)];
     } else {
       const available = shuffleArray(getAvailableCorridors(window.isTutorialMatch ? 2.5 : 4.5));
       corr = available.length > 0 ? available[0] : (openCorridors[i % openCorridors.length] || { x: 0, z: 0 });
@@ -6756,10 +6791,10 @@ function generateCircuitBreakers() {
             if (Math.hypot(d.candX - gateCoordinates.x, d.candZ - gateCoordinates.z) < 6.0) continue;
           }
 
-          // Avoid Human spawn center
+          // Avoid Human spawn center (unless Shipaton demo where a nearby breaker is requested)
           const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
           const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
-          if (Math.hypot(d.candX - sx, d.candZ - sz) < 5.0) continue;
+          if (Math.hypot(d.candX - sx, d.candZ - sz) < 5.0 && !window.isShipatonDemo) continue;
 
           // Avoid Light Sanctuary centers
           if (typeof sanctuaryZones !== 'undefined' && Array.isArray(sanctuaryZones)) {
@@ -6779,8 +6814,10 @@ function generateCircuitBreakers() {
   }
 
   const shuffledCandidates = shuffleArray(wallCandidates);
-  if (window.isTutorialMatch) {
-    shuffledCandidates.sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
+  const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
+  const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
+  if (window.isTutorialMatch || window.isShipatonDemo) {
+    shuffledCandidates.sort((a, b) => Math.hypot(a.x - sx, a.z - sz) - Math.hypot(b.x - sx, b.z - sz));
   }
 
   for (let i = 0; i < totalBreakersRequired; i++) {
