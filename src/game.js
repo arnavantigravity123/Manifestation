@@ -15532,7 +15532,7 @@ function setGhostFacing(ghost, targetX, targetZ) {
   const dx = targetX - ghost.position.x;
   const dz = targetZ - ghost.position.z;
   if (dx * dx + dz * dz > 0.0001) {
-    ghost.rotation.set(0, Math.atan2(dx, dz) + Math.PI, 0, 'YXZ');
+    ghost.rotation.set(0, Math.atan2(dx, dz), 0, 'YXZ');
   }
 }
 
