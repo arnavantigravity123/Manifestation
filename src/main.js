@@ -1296,12 +1296,12 @@ function dismissAdModal() {
     activeAdInterval = null;
   }
   if (gameAdBackdrop) {
-    gameAdBackdrop.style.display = 'none';
+    gameAdBackdrop.style.setProperty('display', 'none', 'important');
     gameAdBackdrop.style.backdropFilter = 'none';
     gameAdBackdrop.style.webkitBackdropFilter = 'none';
   }
   if (gameAdModal) {
-    gameAdModal.style.display = 'none';
+    gameAdModal.style.setProperty('display', 'none', 'important');
   }
 }
 
@@ -1311,8 +1311,8 @@ if (adEmergencyCloseBtn) {
   };
 }
 
-function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, onReward = null }) {
-  if (!gameAdModal) {
+function playAdSequence({ duration = 4, isRewarded = false, onComplete = null, onReward = null }) {
+  if (!gameAdModal || !gameAdBackdrop) {
     if (isRewarded && onReward) onReward();
     if (onComplete) onComplete();
     return;
@@ -1338,22 +1338,24 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
 
   if (activeAdInterval) clearInterval(activeAdInterval);
 
-  if (gameAdBackdrop) {
-    gameAdBackdrop.style.display = 'flex';
-    gameAdBackdrop.style.backdropFilter = 'blur(14px)';
-    gameAdBackdrop.style.webkitBackdropFilter = 'blur(14px)';
-  }
-  gameAdModal.style.display = 'block';
+  gameAdBackdrop.style.setProperty('display', 'flex', 'important');
+  gameAdBackdrop.style.backdropFilter = 'blur(14px)';
+  gameAdBackdrop.style.webkitBackdropFilter = 'blur(14px)';
+  gameAdModal.style.setProperty('display', 'block', 'important');
+
   if (adRewardLabel) {
     adRewardLabel.textContent = isRewarded 
       ? "🎁 Watch full broadcast to earn +50 Credits 💰"
       : "📢 Sponsored Interstitial (Free Operative Tier)";
   }
-  if (adSkipBtn) adSkipBtn.style.display = 'none';
 
   let remaining = duration;
   if (adTimerCountdown) adTimerCountdown.textContent = isRewarded ? `Closing in ${remaining}s...` : `Continuing in ${remaining}s...`;
   if (adProgressBar) adProgressBar.style.width = '0%';
+
+  if (adSkipBtn) {
+    adSkipBtn.style.display = isRewarded ? 'none' : 'inline-block';
+  }
 
   const startTime = Date.now();
   const totalMs = duration * 1000;
@@ -1368,11 +1370,6 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
       adTimerCountdown.textContent = isRewarded 
         ? `Granting reward in ${secondsLeft}s...` 
         : `Continuing in ${secondsLeft}s...`;
-    }
-
-    // Allow skipping interstitial ads immediately (zero blocking delay)
-    if (!isRewarded && adSkipBtn) {
-      adSkipBtn.style.display = 'inline-block';
     }
 
     if (elapsed >= totalMs) {
@@ -1416,14 +1413,27 @@ function playAdSequence({ duration = 5, isRewarded = false, onComplete = null, o
 }
 
 window.showInterstitialAd = (onComplete) => {
-  // Execute navigation/action immediately with zero latency (0ms delay)
-  if (onComplete) onComplete();
+  // If player is VIP or in tutorial, execute action immediately with zero delay
+  if (isVipActive() || window.isTutorialMatch || window.isTutorialMode) {
+    if (onComplete) onComplete();
+    return;
+  }
+  // For non-VIP players, show sponsored interstitial ad before proceeding
+  playAdSequence({ duration: 4, isRewarded: false, onComplete });
 };
 
 window.leaveGameWithAd = (callback) => {
-  // Execute navigation/exit immediately with zero latency (0ms delay)
-  if (callback) callback();
-  else window.location.reload();
+  const onDone = () => {
+    if (callback) callback();
+    else window.location.reload();
+  };
+  // If player is VIP or in tutorial, leave immediately with zero delay
+  if (isVipActive() || window.isTutorialMatch || window.isTutorialMode) {
+    onDone();
+    return;
+  }
+  // For non-VIP players, show sponsored interstitial ad on match exit
+  playAdSequence({ duration: 4, isRewarded: false, onComplete: onDone });
 };
 
 window.showRewardedAd = (onReward) => {
@@ -1910,7 +1920,13 @@ if (tutorialBtn) {
 
 if (soloBtn) {
   addFastButtonListener(soloBtn, () => {
-    startLocalSoloMatch(false);
+    if (!isVipActive()) {
+      window.showInterstitialAd(() => {
+        startLocalSoloMatch(false);
+      });
+    } else {
+      startLocalSoloMatch(false);
+    }
   });
 }
 
@@ -2102,31 +2118,52 @@ try {
 }
 
 addFastButtonListener(createPublicBtn, () => {
-  isSoloMode = false;
-  isTutorialMode = false;
-  resetLobbyRoleToHumanLocksmith();
-  const s = initializeSocketConnection();
-  const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  const preferredDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
-  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: true, isVip: isVipActive(), difficulty: preferredDiff });
+  const doCreate = () => {
+    isSoloMode = false;
+    isTutorialMode = false;
+    resetLobbyRoleToHumanLocksmith();
+    const s = initializeSocketConnection();
+    const roomId = Math.floor(100000 + Math.random() * 900000).toString();
+    const preferredDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
+    s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: true, isVip: isVipActive(), difficulty: preferredDiff });
+  };
+  if (!isVipActive()) {
+    window.showInterstitialAd(doCreate);
+  } else {
+    doCreate();
+  }
 });
 
 addFastButtonListener(joinPublicBtn, () => {
-  isSoloMode = false;
-  isTutorialMode = false;
-  resetLobbyRoleToHumanLocksmith();
-  const s = initializeSocketConnection();
-  s.emit('join_public_matchmaking', { username: getUsername(), skinId: getSkinId(), isVip: isVipActive() });
+  const doJoin = () => {
+    isSoloMode = false;
+    isTutorialMode = false;
+    resetLobbyRoleToHumanLocksmith();
+    const s = initializeSocketConnection();
+    s.emit('join_public_matchmaking', { username: getUsername(), skinId: getSkinId(), isVip: isVipActive() });
+  };
+  if (!isVipActive()) {
+    window.showInterstitialAd(doJoin);
+  } else {
+    doJoin();
+  }
 });
 
 addFastButtonListener(createPrivateBtn, () => {
-  isSoloMode = false;
-  isTutorialMode = false;
-  resetLobbyRoleToHumanLocksmith();
-  const s = initializeSocketConnection();
-  const roomId = Math.floor(100000 + Math.random() * 900000).toString();
-  const preferredDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
-  s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive(), difficulty: preferredDiff });
+  const doCreatePrivate = () => {
+    isSoloMode = false;
+    isTutorialMode = false;
+    resetLobbyRoleToHumanLocksmith();
+    const s = initializeSocketConnection();
+    const roomId = Math.floor(100000 + Math.random() * 900000).toString();
+    const preferredDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
+    s.emit('join_room', { roomId, username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive(), difficulty: preferredDiff });
+  };
+  if (!isVipActive()) {
+    window.showInterstitialAd(doCreatePrivate);
+  } else {
+    doCreatePrivate();
+  }
 });
 
 addFastButtonListener(joinPrivateBtn, () => {
@@ -2135,12 +2172,19 @@ addFastButtonListener(joinPrivateBtn, () => {
     alert("Please enter a room code first.");
     return;
   }
-  isSoloMode = false;
-  isTutorialMode = false;
-  resetLobbyRoleToHumanLocksmith();
-  const s = initializeSocketConnection();
-  const preferredDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
-  s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive(), difficulty: preferredDiff });
+  const doJoinPrivate = () => {
+    isSoloMode = false;
+    isTutorialMode = false;
+    resetLobbyRoleToHumanLocksmith();
+    const s = initializeSocketConnection();
+    const preferredDiff = (lobbyDifficultySelect && lobbyDifficultySelect.value) || localStorage.getItem('manifestation_difficulty') || 'easy';
+    s.emit('join_room', { roomId: roomId.toLowerCase(), username: getUsername(), skinId: getSkinId(), isPublic: false, isVip: isVipActive(), difficulty: preferredDiff });
+  };
+  if (!isVipActive()) {
+    window.showInterstitialAd(doJoinPrivate);
+  } else {
+    doJoinPrivate();
+  }
 });
 
 let lobbySyncTimer = null;
