@@ -1303,6 +1303,9 @@ function dismissAdModal() {
   if (gameAdModal) {
     gameAdModal.style.setProperty('display', 'none', 'important');
   }
+  if (window.restoreGameAudio && !window.isAudioSuppressed?.()) {
+    window.restoreGameAudio();
+  }
 }
 
 if (adEmergencyCloseBtn) {
@@ -1329,6 +1332,10 @@ function playAdSequence({ duration = 4, isRewarded = false, onComplete = null, o
   if (!isRewarded && isVip) {
     if (onComplete) onComplete();
     return;
+  }
+
+  if (window.silenceAllGameAudio) {
+    window.silenceAllGameAudio();
   }
 
   // Ensure pointer lock is released so player can click Skip, Close, or Unlock VIP
@@ -1423,6 +1430,8 @@ window.showInterstitialAd = (onComplete) => {
 };
 
 window.leaveGameWithAd = (callback) => {
+  window.isExitingGame = true;
+  if (window.silenceAllGameAudio) window.silenceAllGameAudio();
   const onDone = () => {
     if (callback) callback();
     else window.location.reload();
@@ -2205,6 +2214,8 @@ function ensureLobbySyncLoop() {
 
 // ====== Quit Handlers ======
 function quitToMenu() {
+  window.isExitingGame = true;
+  if (window.silenceAllGameAudio) window.silenceAllGameAudio();
   if (lobbySyncTimer) {
     clearInterval(lobbySyncTimer);
     lobbySyncTimer = null;
@@ -2651,6 +2662,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const canvasContainer = document.getElementById('canvas-container');
     if (canvasContainer) canvasContainer.style.filter = 'none';
     document.body.style.filter = 'none';
+    if (window.silenceAllGameAudio) window.silenceAllGameAudio();
     if (settingsModal) settingsModal.style.display = 'flex';
     updateAudioControlsUI();
   };
@@ -2658,6 +2670,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const hideSettings = () => {
     if (settingsModal) settingsModal.style.display = 'none';
+    if (window.restoreGameAudio && !window.isAudioSuppressed?.()) {
+      window.restoreGameAudio();
+    }
     if (controlSelect) {
       const selectedMode = controlSelect.value;
       localStorage.setItem('control_mode', selectedMode);

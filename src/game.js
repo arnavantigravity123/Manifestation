@@ -1859,10 +1859,50 @@ export function toggleMasterAudioMute() {
 }
 window.toggleMasterAudioMute = toggleMasterAudioMute;
 
+export function isAudioSuppressed() {
+  if (typeof window === 'undefined') return true;
+  // 1. Pause states
+  if (window.isGamePaused) return true;
+  const ptrOverlay = document.getElementById('pointer-lock-overlay');
+  if (ptrOverlay && ptrOverlay.style.display === 'flex') return true;
+
+  // 2. Death / Capture states
+  if (isCaptured || window.isCapturedAnimation) return true;
+  const capOverlay = document.getElementById('captured-overlay');
+  if (capOverlay && capOverlay.style.display === 'flex') return true;
+  const ghostCapAnim = document.getElementById('ghost-capture-overlay');
+  if (ghostCapAnim && ghostCapAnim.style.display !== 'none' && ghostCapAnim.style.display !== '') return true;
+
+  // 3. Victory / Escape states
+  if (hasEscaped || window.isEscaping || window.isVaultOpeningCutscene) return true;
+
+  // 4. End Game / Match Exit states
+  const endOverlay = document.getElementById('end-game-overlay');
+  if (endOverlay && endOverlay.style.display === 'flex') return true;
+
+  // 5. In-game menu / modal states (settings, guide, ads, paywall)
+  const settingsModal = document.getElementById('settings-modal');
+  if (settingsModal && settingsModal.style.display === 'flex') return true;
+  const guideModal = document.getElementById('controls-guide-modal');
+  if (guideModal && guideModal.style.display === 'flex') return true;
+  const adBackdrop = document.getElementById('game-ad-backdrop');
+  if (adBackdrop && adBackdrop.style.display === 'flex') return true;
+  const vipModal = document.getElementById('vip-paywall-modal');
+  if (vipModal && vipModal.style.display === 'block') return true;
+
+  // 6. Game not ready / exiting
+  if (!window.gameReady && !window.isSpectating) return true;
+  if (window.isExitingGame) return true;
+
+  return false;
+}
+window.isAudioSuppressed = isAudioSuppressed;
+
 export function silenceAllGameAudio() {
   try {
-    if (footstepAudio && footstepAudio.isPlaying) {
-      footstepAudio.stop();
+    if (footstepAudio) {
+      if (footstepAudio.isPlaying) footstepAudio.stop();
+      if (typeof footstepAudio.pause === 'function') footstepAudio.pause();
     }
     if (globalAudioListener) {
       globalAudioListener.setMasterVolume(0);
@@ -1885,6 +1925,7 @@ export function silenceAllGameAudio() {
 window.silenceAllGameAudio = silenceAllGameAudio;
 
 export function restoreGameAudio() {
+  if (isAudioSuppressed()) return;
   try {
     if (globalAudioListener) {
       globalAudioListener.setMasterVolume(isMasterMuted ? 0 : masterAudioVolume);
@@ -2352,6 +2393,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     resetPlayerMovementState();
     window.gameReady = true;
     window.mobileGameActive = true;
+    window.isGamePaused = false;
 
     if (window.isSpectating) {
       if (ptrOverlay) ptrOverlay.style.display = 'none';
@@ -2363,6 +2405,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
       } else {
         requestCanvasOrBodyPointerLock();
       }
+      restoreGameAudio();
       return;
     }
 
@@ -2403,7 +2446,7 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     const reticle = document.getElementById('crosshair') || document.getElementById('reticle');
     if (reticle) reticle.style.display = 'block';
 
-    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    restoreGameAudio();
   };
   window.handleEnterGame = handleEnterGame;
 
@@ -2549,6 +2592,8 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
         const canvasContainer = document.getElementById('canvas-container');
         if (canvasContainer) canvasContainer.style.filter = 'none';
         document.body.style.filter = 'none';
+        window.isGamePaused = true;
+        silenceAllGameAudio();
         ptrOverlay.style.display = 'flex';
       }
     }
@@ -2559,6 +2604,17 @@ export function initGame(socket, socketId, matchConfig, isSolo = false, isTutori
     if (typeof document.hasFocus === 'function' && document.hasFocus()) return;
     currentlyHeldKeys.clear();
     resetPlayerMovementState(true);
+    silenceAllGameAudio();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      silenceAllGameAudio();
+    } else {
+      if (!isAudioSuppressed()) {
+        restoreGameAudio();
+      }
+    }
   });
 
   document.addEventListener('pointerlockerror', () => {
@@ -3558,10 +3614,10 @@ function setupProceduralAudio() {
 }
 
 function playEMFSound(frequency) {
-  if (window.isEscaping || hasEscaped || isCaptured || window.isVaultOpeningCutscene || window.isSpectating) return;
+  if (isAudioSuppressed() || window.isEscaping || hasEscaped || isCaptured || window.isVaultOpeningCutscene || window.isSpectating) return;
   if (!audioCtx || isMasterMuted || masterAudioVolume <= 0.001) return;
   if (audioCtx.state === 'suspended') {
-    audioCtx.resume();
+    audioCtx.resume().catch(() => {});
   }
 
   window.lastEmfBeepTime = performance.now();
@@ -3587,10 +3643,10 @@ function playEMFSound(frequency) {
 // Horror stinger procedural audio synthesizer: Dissonant Diminished Fifth (Tritone) + Sub-Bass Thump
 let lastGhostSightStingerTime = 0;
 function playGhostSightStinger() {
-  if (window.isEscaping || hasEscaped || isCaptured || window.isVaultOpeningCutscene || window.isSpectating) return;
+  if (isAudioSuppressed() || window.isEscaping || hasEscaped || isCaptured || window.isVaultOpeningCutscene || window.isSpectating) return;
   if (!audioCtx || isMasterMuted || masterAudioVolume <= 0.001) return;
   if (audioCtx.state === 'suspended') {
-    audioCtx.resume();
+    audioCtx.resume().catch(() => {});
   }
 
   try {
@@ -8298,6 +8354,8 @@ function setupControls() {
       }
 
       window.mobileGameActive = false;
+      window.isGamePaused = true;
+      silenceAllGameAudio();
       pauseOpenedTime = performance.now();
       resetPlayerMovementState();
 
@@ -9968,7 +10026,7 @@ function getFloorPlacementPosition(maxRadius = 3.5, minRadius = 0.8) {
 }
 
 function playPlacementSound(type) {
-  if (!audioCtx || isMasterMuted || masterAudioVolume <= 0.001) return;
+  if (isAudioSuppressed() || !audioCtx || isMasterMuted || masterAudioVolume <= 0.001) return;
   try {
     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
     const now = audioCtx.currentTime;
@@ -11171,7 +11229,7 @@ function getHeartbeatAudioBuffer(ctx) {
 
 let lastHeartbeatAudioTime = 0;
 function processGhostProximityAudio(distToGhost) {
-  if (isMasterMuted || masterAudioVolume <= 0.001) return;
+  if (isAudioSuppressed() || isMasterMuted || masterAudioVolume <= 0.001) return;
   if (distToGhost > 14.0 || window.isSpectating || isCaptured || window.isEscaping || hasEscaped || window.isVaultOpeningCutscene) return;
   const now = performance.now();
   // Dynamic heartbeat interval: 450ms when close, 1200ms at 14m perimeter
@@ -12852,6 +12910,7 @@ function playEscapeCinematic(callback) {
 // ==========================================
 function playGhostCaptureAnimation(callback) {
   window.isCapturedAnimation = true;
+  silenceAllGameAudio();
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
   if (ptrOverlay) ptrOverlay.style.display = 'none';
 
@@ -13628,6 +13687,7 @@ export function setupControlsGuideModal() {
     if (document.pointerLockElement) {
       try { document.exitPointerLock(); } catch(err) {}
     }
+    silenceAllGameAudio();
   };
 
   const hideModal = (e) => {
@@ -13642,6 +13702,9 @@ export function setupControlsGuideModal() {
       if (ptrOverlay) ptrOverlay.style.display = 'none';
       window.handleEnterGame(e);
       return;
+    }
+    if (!isAudioSuppressed()) {
+      restoreGameAudio();
     }
     const isPaused = ptrOverlay && ptrOverlay.style.display === 'flex';
     if (!isMobileDevice && window.gameReady && !isCaptured && !isPaused && window.requestGamePointerLock) {
@@ -15148,6 +15211,7 @@ function applyGhostDamageToHuman(ghostPos, delta) {
 }
 
 export function showSoloDeathEndScreen() {
+  silenceAllGameAudio();
   const ptrOverlay = document.getElementById('pointer-lock-overlay');
   if (ptrOverlay) ptrOverlay.style.display = 'none';
   if (document.pointerLockElement) {
@@ -15214,6 +15278,7 @@ window.showSoloDeathEndScreen = showSoloDeathEndScreen;
 function triggerLocalPlayerCapture() {
   if (isCaptured) return;
   isCaptured = true;
+  silenceAllGameAudio();
 
   const myUsername = (currentLobby && currentLobby.players && currentLobby.players[myId]?.username) || 'Operative';
   const mySkin = (currentLobby && currentLobby.players && currentLobby.players[myId]?.skinId) || null;
@@ -16071,7 +16136,7 @@ function animate() {
       // Play local footstep audio, dynamically matching speed to walking vs sprinting
       if (typeof footstepAudio !== 'undefined' && footstepAudio && footstepAudio.buffer) {
         const cutsceneActive = window.isVaultOpeningCutscene || window.isEscaping || hasEscaped || isCaptured;
-        const footstepDisabled = isFootstepsMuted || isMasterMuted || (masterAudioVolume <= 0.001);
+        const footstepDisabled = isFootstepsMuted || isMasterMuted || (masterAudioVolume <= 0.001) || isAudioSuppressed();
         if (isEffectivelyMoving && myTeam === 'Human' && !cutsceneActive && !footstepDisabled) {
           if (!footstepAudio.isPlaying) footstepAudio.play();
           const baseVol = isSprinting ? 0.8 : 0.4;
