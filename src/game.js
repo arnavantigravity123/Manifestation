@@ -2014,14 +2014,24 @@ export function getNearGhostSpawnPool(minDist = 30.0, maxDist = 42.0) {
 }
 
 export function getFarGhostSpawnPool(minDistOverride) {
-  if (window.isShipatonDemo) {
-    return getNearGhostSpawnPool(30.0, 42.0);
-  }
   const sx = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.x)) ? window.humanSpawnPos.x : 0;
   const sz = (window.humanSpawnPos && !isNaN(window.humanSpawnPos.z)) ? window.humanSpawnPos.z : 0;
   const mazeDim = (typeof mazeSizeGlobal !== 'undefined' ? mazeSizeGlobal : 15);
   const bSize = (window.mazeBlockSize || 6.0);
   const mazeRadius = (mazeDim / 2) * bSize;
+
+  if (window.isShipatonDemo) {
+    // For Shipaton demo callsign: spawn ghosts at the extreme far perimeter of the maze (50m - 75m+ away)
+    // giving the creator complete freedom to demonstrate breakers, clues, and keys without being rushed
+    const targetMinDist = Math.max(48.0, mazeRadius * 0.82);
+    let far = (typeof openCorridors !== 'undefined' && openCorridors) ? openCorridors.filter(c => Math.hypot(c.x - sx, c.z - sz) >= targetMinDist) : [];
+    if (far.length === 0 && typeof openCorridors !== 'undefined' && openCorridors && openCorridors.length > 0) {
+      const sorted = [...openCorridors].sort((a, b) => Math.hypot(b.x - sx, b.z - sz) - Math.hypot(a.x - sx, a.z - sz));
+      far = sorted.slice(0, Math.max(1, Math.floor(sorted.length * 0.15)));
+    }
+    if (far.length > 0) return far;
+  }
+
   const defaultMinDist = Math.max(30.0, mazeRadius * 0.65);
   const targetMinDist = minDistOverride || defaultMinDist;
 
@@ -16625,7 +16635,7 @@ function animate() {
       // (If creator walks within 8m of ghost or fixes a breaker, the ghost engages immediately)
       if (window.isShipatonDemo) {
         if (ghost.userData.demoGraceTimer === undefined) {
-          ghost.userData.demoGraceTimer = 25.0;
+          ghost.userData.demoGraceTimer = 45.0;
         }
         if (ghost.userData.demoGraceTimer > 0) {
           if (distToPlayer <= 8.0 || fixedBreakersCount > 0) {
