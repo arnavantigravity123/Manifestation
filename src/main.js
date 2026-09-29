@@ -384,7 +384,7 @@ function addFastButtonListener(btn, callback) {
 
   const fire = (e) => {
     const now = performance.now();
-    if (now - lastTrigger < 150) return;
+    if (now - lastTrigger < 350) return;
     lastTrigger = now;
     requestAppFullscreen();
     try {
@@ -401,7 +401,7 @@ function addFastButtonListener(btn, callback) {
   }, { passive: true });
 
   btn.addEventListener('pointermove', (e) => {
-    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) > 22) {
+    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) > 28) {
       isScrolling = true;
     }
   }, { passive: true });
@@ -411,7 +411,7 @@ function addFastButtonListener(btn, callback) {
   }, { passive: true });
 
   btn.addEventListener('pointerup', (e) => {
-    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) <= 22) {
+    if (!isScrolling && Math.hypot(e.clientX - startX, e.clientY - startY) <= 28) {
       fire(e);
     }
     isScrolling = false;
@@ -1706,8 +1706,14 @@ function initializeSocketConnection() {
     sessionStorage.setItem('rejoinIsPublic', isPublic ? 'true' : 'false');
     sessionStorage.setItem('rejoinIsSolo', isSoloMode ? 'true' : 'false');
 
-    authView.style.display = 'none';
-    lobbyView.style.display = 'grid';
+    if (authView) {
+      authView.style.setProperty('display', 'none', 'important');
+      authView.classList.add('hidden');
+    }
+    if (lobbyView) {
+      lobbyView.style.setProperty('display', 'grid', 'important');
+      lobbyView.classList.remove('hidden');
+    }
     roomDisplay.textContent = roomId.toUpperCase();
     lobbyTypeLabel.textContent = isPublic ? "Public Matchmaking Lobby" : "Private Lobby";
     ensureLobbySyncLoop();
@@ -2148,6 +2154,8 @@ try {
 }
 
 addFastButtonListener(createPublicBtn, () => {
+  const originalHtml = createPublicBtn.innerHTML;
+  createPublicBtn.innerHTML = '⏳ CREATING...';
   const doCreate = () => {
     isSoloMode = false;
     isTutorialMode = false;
@@ -2162,9 +2170,12 @@ addFastButtonListener(createPublicBtn, () => {
   } else {
     doCreate();
   }
+  setTimeout(() => { if (createPublicBtn) createPublicBtn.innerHTML = originalHtml; }, 5000);
 });
 
 addFastButtonListener(joinPublicBtn, () => {
+  const originalHtml = joinPublicBtn.innerHTML;
+  joinPublicBtn.innerHTML = '⏳ SEARCHING...';
   const doJoin = () => {
     isSoloMode = false;
     isTutorialMode = false;
@@ -2177,6 +2188,7 @@ addFastButtonListener(joinPublicBtn, () => {
   } else {
     doJoin();
   }
+  setTimeout(() => { if (joinPublicBtn) joinPublicBtn.innerHTML = originalHtml; }, 5000);
 });
 
 addFastButtonListener(createPrivateBtn, () => {

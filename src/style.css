@@ -140,6 +140,20 @@ body, html {
   box-sizing: border-box;
 }
 
+#auth-view.hidden,
+#auth-view[style*="display: none"],
+#auth-view[style*="display:none"],
+#lobby-view.hidden,
+#lobby-view[style*="display: none"],
+#lobby-view[style*="display:none"],
+#ui-overlay.hidden,
+#ui-overlay[style*="display: none"],
+#ui-overlay[style*="display:none"] {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
 .auth-core-panel {
   width: 92%;
   max-width: 460px;
@@ -3652,7 +3666,7 @@ kbd {
     box-sizing: border-box !important;
   }
 
-  #auth-view {
+  #auth-view:not(.hidden):not([style*="display: none"]):not([style*="display:none"]) {
     display: flex !important;
     flex-direction: row !important;
     justify-content: center !important;
@@ -3668,6 +3682,14 @@ kbd {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
+  }
+
+  #auth-view.hidden,
+  #auth-view[style*="display: none"],
+  #auth-view[style*="display:none"] {
+    display: none !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
   }
 
   /* Left and Right Wings visible and compact on mobile landscape */
@@ -3860,12 +3882,87 @@ kbd {
     font-size: 0.85rem !important;
   }
 
-  /* Main Menu Footer Links */
-  .auth-core-panel > div:last-of-type,
-  .auth-core-panel div[style*="margin-top: 0.5rem"] {
-    margin-top: 0.15rem !important;
-    font-size: 0.58rem !important;
-    gap: 0.4rem !important;
+  /* Mobile Landscape Lobby Deck Optimization */
+  body.is-mobile #lobby-view:not(.hidden):not([style*="display: none"]):not([style*="display:none"]),
+  #lobby-view:not(.hidden):not([style*="display: none"]):not([style*="display:none"]) {
+    display: grid !important;
+    grid-template-columns: 1.35fr 1fr !important;
+    width: 98% !important;
+    max-width: 980px !important;
+    padding: 0.6rem 0.8rem !important;
+    gap: 0.75rem !important;
+    max-height: 96vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    box-sizing: border-box !important;
+  }
+
+  body.is-mobile .lobby-header,
+  .lobby-header {
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding-bottom: 0.4rem !important;
+  }
+
+  body.is-mobile .lobby-header h2,
+  .lobby-header h2 {
+    font-size: 1rem !important;
+    margin: 0 !important;
+  }
+
+  body.is-mobile #lobby-type-label,
+  #lobby-type-label {
+    font-size: 0.68rem !important;
+    margin-top: 0.1rem !important;
+  }
+
+  body.is-mobile .scaling-matrix-card {
+    padding: 0.4rem 0.6rem !important;
+    margin-bottom: 0.3rem !important;
+  }
+
+  body.is-mobile .scaling-metrics {
+    gap: 0.35rem !important;
+  }
+
+  body.is-mobile .metric-box {
+    padding: 0.3rem !important;
+  }
+
+  body.is-mobile .metric-box h4 {
+    font-size: 1.1rem !important;
+  }
+
+  body.is-mobile .metric-box p {
+    font-size: 0.55rem !important;
+  }
+
+  body.is-mobile .formula-breakdown-table {
+    gap: 0.3rem !important;
+    margin-top: 0.3rem !important;
+  }
+
+  body.is-mobile .formula-pill {
+    padding: 0.25rem 0.4rem !important;
+  }
+
+  body.is-mobile .players-grid {
+    max-height: 100px !important;
+    overflow-y: auto !important;
+  }
+
+  body.is-mobile .lobby-chat {
+    max-height: 110px !important;
+  }
+
+  body.is-mobile .customizer-box {
+    padding: 0.5rem !important;
+  }
+
+  body.is-mobile #ready-start-btn {
+    padding: 0.6rem !important;
+    font-size: 0.9rem !important;
   }
 }
 
