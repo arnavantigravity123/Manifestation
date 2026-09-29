@@ -1977,9 +1977,9 @@ window.addEventListener('beforeinstallprompt', (e) => {
   }
   e.preventDefault();
   deferredInstallPrompt = e;
-  console.log('📲 [PWA] App install prompt captured for mobile web dashboard download button!');
+  console.log('📲 [PWA] App install prompt captured for website dashboard download button!');
   const downloadBtn = document.getElementById('mobile-download-app-btn');
-  if (downloadBtn && document.body.classList.contains('is-mobile-web') && !isAlreadyInApp()) {
+  if (downloadBtn && !isAlreadyInApp()) {
     downloadBtn.classList.add('can-download-app');
     downloadBtn.style.setProperty('display', 'flex', 'important');
   }
@@ -2009,7 +2009,7 @@ function setupMobileDownloadButton() {
   const closeInstallModalBtn = document.getElementById('close-download-modal-btn');
   const modalDesc = document.getElementById('download-modal-desc');
 
-  // If already in native app or installed standalone PWA, destroy and hide immediately!
+  // If already in native app or installed standalone PWA (web app version), destroy and hide immediately!
   if (isAlreadyInApp()) {
     if (downloadBtn) {
       downloadBtn.style.setProperty('display', 'none', 'important');
@@ -2024,14 +2024,9 @@ function setupMobileDownloadButton() {
 
   if (!downloadBtn) return;
 
-  // On mobile web browsers only, reveal the download button
-  if (document.body.classList.contains('is-mobile-web')) {
-    downloadBtn.classList.add('can-download-app');
-    downloadBtn.style.setProperty('display', 'flex', 'important');
-  } else {
-    downloadBtn.style.setProperty('display', 'none', 'important');
-    return;
-  }
+  // On website version (not in-app), show the download button
+  downloadBtn.classList.add('can-download-app');
+  downloadBtn.style.setProperty('display', 'flex', 'important');
 
   const showInstallModal = (platform) => {
     if (!installModal || !modalDesc) return;
@@ -2045,6 +2040,20 @@ function setupMobileDownloadButton() {
         </ol>
         <div style="margin-top: 0.65rem; font-size: 0.78rem; color: #94a3b8;">Manifestation will appear on your home screen and run fullscreen in high-performance mode!</div>
       `;
+    } else if (platform === 'desktop') {
+      modalDesc.innerHTML = `
+        <div style="font-weight: 700; color: #38bdf8; margin-bottom: 0.5rem; font-size: 0.95rem;">Get the Manifestation App:</div>
+        <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+          <div style="background: rgba(30, 41, 59, 0.6); padding: 0.6rem; border-radius: 6px; border: 1px solid rgba(56, 189, 248, 0.2);">
+            <strong style="color: #38bdf8;">📱 Android Mobile / Tablet:</strong>
+            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.2rem;">Download and install the native Android APK directly below.</div>
+          </div>
+          <div style="background: rgba(30, 41, 59, 0.6); padding: 0.6rem; border-radius: 6px; border: 1px solid rgba(52, 211, 153, 0.2);">
+            <strong style="color: #34d399;">💻 Desktop Web App (PC / Mac):</strong>
+            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 0.2rem;">In Chrome or Edge, click the <strong>Install App icon (⊕)</strong> on the right side of the address bar to install as a desktop app!</div>
+          </div>
+        </div>
+      `;
     } else {
       modalDesc.innerHTML = `
         <div style="font-weight: 700; color: #38bdf8; margin-bottom: 0.5rem; font-size: 0.95rem;">How to Install on Android / Chrome:</div>
@@ -2053,7 +2062,7 @@ function setupMobileDownloadButton() {
           <li>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong> <span style="font-size: 1.15rem; color: #34d399;">📲</span>.</li>
           <li>Tap <strong>Install</strong> to confirm!</li>
         </ol>
-        <div style="margin-top: 0.65rem; font-size: 0.78rem; color: #94a3b8;">Manifestation will install on your phone with automatic background updates!</div>
+        <div style="margin-top: 0.65rem; font-size: 0.78rem; color: #94a3b8;">Or tap Download APK below to install the native Android build directly!</div>
       `;
     }
     installModal.style.display = 'flex';
@@ -2087,7 +2096,7 @@ function setupMobileDownloadButton() {
   };
 
   addFastButtonListener(downloadBtn, async () => {
-    // 1. If native beforeinstallprompt is ready (Chrome on Android / Edge / Samsung Browser)
+    // 1. If native beforeinstallprompt is ready (Chrome on Android / Edge / Samsung Browser / Desktop Chrome)
     if (deferredInstallPrompt) {
       downloadBtn.innerHTML = '⏳ OPENING INSTALLER...';
 
@@ -2103,7 +2112,7 @@ function setupMobileDownloadButton() {
           deferredInstallPrompt = null;
         } else {
           // If the user tapped Cancel/Dismiss, respect their choice and reset the button!
-          downloadBtn.innerHTML = '📲 INSTALL MOBILE APP';
+          downloadBtn.innerHTML = '📲 DOWNLOAD APP';
           downloadBtn.disabled = false;
         }
       } catch (err) {
@@ -2120,7 +2129,14 @@ function setupMobileDownloadButton() {
       return;
     }
 
-    // 3. Android / other mobile: Trigger direct APK download immediately with zero steps!
+    // 3. Desktop browser (PC / Mac)
+    const isDesktop = !/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isDesktop) {
+      showInstallModal('desktop');
+      return;
+    }
+
+    // 4. Android / other mobile: Trigger direct APK download immediately with zero steps!
     triggerDirectApkDownload();
   });
 }

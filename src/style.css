@@ -4327,27 +4327,47 @@ body.is-mobile .match-meta-pill {
 }
 
 /* ==========================================================================
-   MOBILE-ONLY DASHBOARD DOWNLOAD APP BUTTON
-   - Hidden by default on all devices.
-   - STRICTLY hidden inside native apps (Capacitor/APK), installed PWAs, or standalone containers.
-   - Only shown on mobile web browsers when the user is NOT already in the app.
+   WEBSITE DASHBOARD DOWNLOAD APP BUTTON
+   - Displayed on the website version (web browsers on desktop, laptop, mobile web).
+   - STRICTLY hidden inside the web app version (installed PWA / standalone window)
+     or native app version (Capacitor Android/iOS).
    ========================================================================== */
-.mobile-only-download-btn,
-html.is-native-app .mobile-only-download-btn,
-html.is-standalone .mobile-only-download-btn,
-body.is-native-app .mobile-only-download-btn,
-body.is-standalone .mobile-only-download-btn,
-body.is-capacitor .mobile-only-download-btn,
-body:not(.is-mobile) .mobile-only-download-btn {
-  display: none !important;
-}
-
-body.is-mobile.is-mobile-web:not(.is-native-app):not(.is-standalone):not(.is-capacitor) .mobile-only-download-btn.can-download-app {
+.website-download-app-btn,
+.mobile-only-download-btn {
   display: flex !important;
   align-items: center;
   justify-content: center;
   gap: 8px;
   animation: pulseDownloadGlow 2.8s infinite ease-in-out;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.website-download-app-btn:hover,
+.mobile-only-download-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+/* STRICTLY hidden inside web app (PWA standalone) or native app (Capacitor) */
+html.is-native-app .website-download-app-btn,
+html.is-native-app .mobile-only-download-btn,
+html.is-standalone .website-download-app-btn,
+html.is-standalone .mobile-only-download-btn,
+body.is-native-app .website-download-app-btn,
+body.is-native-app .mobile-only-download-btn,
+body.is-standalone .website-download-app-btn,
+body.is-standalone .mobile-only-download-btn,
+body.is-capacitor .website-download-app-btn,
+body.is-capacitor .mobile-only-download-btn {
+  display: none !important;
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui), (display-mode: window-controls-overlay) {
+  .website-download-app-btn,
+  .mobile-only-download-btn {
+    display: none !important;
+  }
 }
 
 @keyframes pulseDownloadGlow {
