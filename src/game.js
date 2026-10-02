@@ -5309,7 +5309,12 @@ function syncActiveViewCamera(delta = 0.016) {
     const safeTopDownY = Math.min(3.15, ceilingY - 0.35);
     activeViewCamera.position.set(camera.position.x, safeTopDownY, camera.position.z);
     activeViewCamera.rotation.set(-Math.PI / 2, camera.rotation.y, 0, 'YXZ');
-    if (localPlayerVisual) localPlayerVisual.visible = true;
+    if (localPlayerVisual) {
+      localPlayerVisual.visible = true;
+      localPlayerVisual.traverse(c => {
+        if (c.userData && c.userData.isUsernameTag) c.visible = false;
+      });
+    }
     _tpsCurrentDist = null;
     return;
   }
@@ -7547,8 +7552,11 @@ function toggleCameraView() {
   
   if (mode !== 'fps' && !localPlayerVisual) {
     const isVip = window.isVipActive ? window.isVipActive() : false;
-    localPlayerVisual = myTeam === 'Ghost' ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, pUsername, isVip);
+    localPlayerVisual = myTeam === 'Ghost' ? createGhostMeshGroup(pSkinId) : createHumanMeshGroup(pSkinId, null, isVip);
     localPlayerVisual.userData.isVip = isVip;
+    localPlayerVisual.traverse(c => {
+      if (c.userData && c.userData.isUsernameTag) c.visible = false;
+    });
     const glowPref = window.isVipGlowEnabled ? window.isVipGlowEnabled() : true;
     if (isVip && glowPref) {
       applyVipGlow(localPlayerVisual, true);
@@ -7562,8 +7570,14 @@ function toggleCameraView() {
   if (mode === 'fps') {
     if (localPlayerVisual) localPlayerVisual.visible = false;
   } else {
-    if (localPlayerVisual) localPlayerVisual.visible = true;
+    if (localPlayerVisual) {
+      localPlayerVisual.visible = true;
+      localPlayerVisual.traverse(c => {
+        if (c.userData && c.userData.isUsernameTag) c.visible = false;
+      });
+    }
   }
+  updateNametagVisibility();
   triggerNotification("Camera View: " + mode.toUpperCase());
 }
 
@@ -13396,7 +13410,8 @@ function createHumanMeshGroup(skinId, username, isVip) {
 }
 
 export function updateNametagVisibility() {
-  const show = (typeof myTeam === 'undefined' || myTeam !== 'Ghost');
+  const isTopDown = (typeof viewModes !== 'undefined' && viewModes[currentViewIndex] === 'top_down');
+  const show = (typeof myTeam === 'undefined' || myTeam !== 'Ghost') && !isTopDown;
   if (typeof players3D !== 'undefined') {
     Object.values(players3D).forEach(p => {
       if (!p) return;
@@ -13405,6 +13420,13 @@ export function updateNametagVisibility() {
           c.visible = show;
         }
       });
+    });
+  }
+  if (typeof localPlayerVisual !== 'undefined' && localPlayerVisual) {
+    localPlayerVisual.traverse(c => {
+      if (c.userData && c.userData.isUsernameTag) {
+        c.visible = false;
+      }
     });
   }
 }
